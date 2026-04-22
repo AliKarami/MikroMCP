@@ -1,0 +1,29 @@
+# MikroMCP Router Registry
+# Copy to routers.yaml and configure your routers.
+# Credentials are resolved from environment variables by default.
+
+routers:
+  core-01:
+    host: "10.0.0.1"
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: false  # Set true if using valid CA certificate
+      # ca: "/path/to/ca.pem"   # Optional: pin CA certificate
+    credentials:
+      source: "env"              # "env" | "vault"
+      envPrefix: "ROUTER_CORE01" # -> ROUTER_CORE01_USER, ROUTER_CORE01_PASS
+    tags: ["datacenter", "core"]
+    rosVersion: "7.14"
+
+  # edge-02:
+  #   host: "192.168.1.1"
+  #   port: 443
+  #   tls:
+  #     enabled: true
+  #     rejectUnauthorized: false
+  #   credentials:
+  #     source: "env"
+  #     envPrefix: "ROUTER_EDGE02"
+  #   tags: ["branch-office", "edge"]
+  #   rosVersion: "7.12"
