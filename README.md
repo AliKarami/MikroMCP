@@ -68,6 +68,162 @@ MCP Client (Claude, Cursor, etc.)
 
 ---
 
+## End-to-end setup guide
+
+This section walks you from a bare MikroTik router to a working AI assistant that can query and configure it.
+
+### Step 1 — Create a dedicated API user on the router
+
+Connect to your router via SSH, WinBox terminal, or the web console and run:
+
+```
+# Create a restricted group (read + write + REST API access, nothing else)
+/user group add name=mcp-api policy=read,write,api,rest-api,!local,!telnet,!ssh,!ftp,!reboot,!password,!sniff,!sensitive,!romon
+
+# Create the user
+/user add name=mcp-api group=mcp-api password="<strong-password>"
+```
+
+For a **read-only** setup (safer for monitoring-only use):
+
+```
+/user group add name=mcp-readonly policy=read,api,rest-api
+/user add name=mcp-readonly group=mcp-readonly password="<strong-password>"
+```
+
+> **Tip:** Never use the `admin` account for API access. A dedicated account limits blast radius and makes credential rotation painless.
+
+### Step 2 — Enable the REST API service
+
+MikroMCP talks to the RouterOS REST API over HTTPS. Enable the `www-ssl` service (port 443):
+
+```
+/ip service enable www-ssl
+/ip service set www-ssl port=443
+```
+
+For local-network/lab use you can use plain HTTP instead:
+
+```
+/ip service enable www
+/ip service set www port=80
+```
+
+Verify: open `https://<router-ip>/rest/system/identity` in a browser (or `curl -k`). You should get a JSON response after entering credentials.
+
+### Step 3 — Install and build MikroMCP
+
+```bash
+git clone https://github.com/alikarami/MikroMCP.git
+cd MikroMCP
+npm install
+npm run build
+```
+
+### Step 4 — Configure your routers
+
+```bash
+cp config/routers.example.yaml config/routers.yaml
+```
+
+Edit `config/routers.yaml` — add one entry per router (see [Configuration](#configuration) for all options):
+
+```yaml
+routers:
+  core-01:
+    host: "10.0.0.1"
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: false   # set true if you have a valid cert
+    credentials:
+      source: "env"
+      envPrefix: "ROUTER_CORE01"
+    rosVersion: "7.14"
+```
+
+### Step 5 — Set credentials
+
+```bash
+export ROUTER_CORE01_USER=mcp-api
+export ROUTER_CORE01_PASS=<strong-password>
+```
+
+Add these to your shell profile or a `.env` file (never commit it).
+
+### Step 6 — Run the server
+
+**Development (hot-reload):**
+
+```bash
+npm run dev
+```
+
+**Production:**
+
+```bash
+npm start
+```
+
+You should see a log line like `MikroMCP server started` and no errors. If you see `ROUTER_AUTH_FAILED` or `ROUTER_UNREACHABLE`, go back to steps 1–2.
+
+### Step 7 — Connect to Claude or another MCP client
+
+**Claude Desktop** — edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mikrotik": {
+      "command": "node",
+      "args": ["/absolute/path/to/MikroMCP/dist/main.js"],
+      "env": {
+        "MIKROMCP_CONFIG_PATH": "/absolute/path/to/MikroMCP/config/routers.yaml",
+        "ROUTER_CORE01_USER": "mcp-api",
+        "ROUTER_CORE01_PASS": "your-password"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The MikroTik tools appear in the tools panel (hammer icon).
+
+**Claude Code (CLI):**
+
+```bash
+claude mcp add mikrotik node /absolute/path/to/MikroMCP/dist/main.js \
+  -e MIKROMCP_CONFIG_PATH=/absolute/path/to/MikroMCP/config/routers.yaml \
+  -e ROUTER_CORE01_USER=mcp-api \
+  -e ROUTER_CORE01_PASS=your-password
+```
+
+**Other MCP clients** — any client that supports the MCP stdio transport works. Point `command` to `node` and `args` to the built `dist/main.js`, passing credentials via `env`.
+
+### Step 8 — Verify it's working
+
+Ask your AI assistant:
+
+> *"Use the get_system_status tool on core-01 and tell me the RouterOS version and CPU load."*
+
+A successful response looks like:
+
+```
+Router: core-01 | Identity: MyRouter
+RouterOS: 7.14 (stable)
+Uptime: 14d 3h 22m
+CPU load: 4%
+Free memory: 186.2 MiB / 256.0 MiB
+```
+
+If the tool call fails, check:
+- Router IP / port reachable from where the server is running (`curl -k https://<ip>/rest/system/identity`)
+- Credentials correct and the user has `api` and `rest-api` policies
+- `MIKROMCP_CONFIG_PATH` points to the right file
+- `MIKROMCP_LOG_LEVEL=debug` for verbose output
+
+---
+
 ## Installation
 
 ```bash
@@ -369,6 +525,45 @@ npm test
 ```
 
 Tests live in `test/unit/` and cover the adapter layer (circuit breaker, retry engine, query builder, response parser) and the error taxonomy. No network or real router required.
+
+### Debugging with MCP Inspector
+
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector) is an interactive browser UI for exploring and calling MCP tools without a full AI client. It's the fastest way to verify a tool is wired up correctly, check its input schema, and inspect raw responses.
+
+**Install and launch against the built server:**
+
+```bash
+npm run build
+
+ROUTER_CORE01_USER=mcp-api \
+ROUTER_CORE01_PASS=your-password \
+MIKROMCP_CONFIG_PATH=config/routers.yaml \
+  npx @modelcontextprotocol/inspector node dist/main.js
+```
+
+**Or run it against the dev server (hot-reload):**
+
+```bash
+ROUTER_CORE01_USER=mcp-api \
+ROUTER_CORE01_PASS=your-password \
+MIKROMCP_CONFIG_PATH=config/routers.yaml \
+  npx @modelcontextprotocol/inspector npm run dev
+```
+
+Inspector opens a browser at `http://localhost:5173`. From there you can:
+
+- Browse all registered tools and their JSON schemas under the **Tools** tab
+- Fill in parameters and call any tool directly — no prompt engineering needed
+- Inspect the full MCP response including `structuredContent`
+- Toggle `dryRun: true` on write tools to preview changes safely
+
+**Typical debugging workflow when contributing a new tool:**
+
+1. Add your tool and run `npm run dev`.
+2. Launch Inspector with the command above.
+3. Find your tool in the list, call it with sample inputs, and confirm the response shape.
+4. Fix any issues, then write the unit test to cover that shape.
+5. Run `npm test` and `npm run typecheck` before opening a PR.
 
 ---
 

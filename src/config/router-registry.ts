@@ -22,11 +22,11 @@ export class RouterRegistry {
 
     try {
       const raw = readFileSync(configPath, "utf-8");
-      const parsed = parse(raw) as { routers?: RouterConfig[] } | null;
+      const parsed = parse(raw) as { routers?: Record<string, Omit<RouterConfig, "id">> } | null;
 
-      if (parsed?.routers && Array.isArray(parsed.routers)) {
-        for (const router of parsed.routers) {
-          this.routers.set(router.id, router);
+      if (parsed?.routers && typeof parsed.routers === "object" && !Array.isArray(parsed.routers)) {
+        for (const [id, config] of Object.entries(parsed.routers)) {
+          this.routers.set(id, { ...config, id });
         }
         log.info({ count: this.routers.size }, "Loaded routers from config");
       }

@@ -75,7 +75,8 @@ export class RouterOSRestClient {
       >;
     }
 
-    const parsed = parseRecords<T>(raw);
+    const rawArray = Array.isArray(raw) ? raw : [raw as Record<string, string>];
+    const parsed = parseRecords<T>(rawArray);
 
     // Client-side pagination
     if (options?.limit !== undefined || options?.offset !== undefined) {
