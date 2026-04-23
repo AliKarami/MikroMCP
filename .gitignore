@@ -7,3 +7,4 @@ config/routers.yaml
 .env.*
 coverage/
 .DS_Store
+.worktrees/
