@@ -54,13 +54,11 @@ const listDhcpLeasesTool: ToolDefinition = {
     );
 
     try {
-      // Fetch all leases from the RouterOS API
       let leases = await context.routerClient.get<RouterOSRecord>("ip/dhcp-server/lease", {
-        limit: undefined, // Fetch all, then paginate client-side
+        limit: undefined,
         offset: undefined,
       });
 
-      // Filter by server if provided (exact match on server field)
       if (parsed.server) {
         leases = leases.filter((lease) => {
           const rec = lease as Record<string, unknown>;
@@ -68,7 +66,6 @@ const listDhcpLeasesTool: ToolDefinition = {
         });
       }
 
-      // Filter by status if not "all" (match on status field)
       if (parsed.status !== "all") {
         leases = leases.filter((lease) => {
           const rec = lease as Record<string, unknown>;
@@ -76,7 +73,6 @@ const listDhcpLeasesTool: ToolDefinition = {
         });
       }
 
-      // Filter by MAC address if provided (case-insensitive)
       if (parsed.macAddress) {
         const upperMac = parsed.macAddress.toUpperCase();
         leases = leases.filter((lease) => {
@@ -86,14 +82,11 @@ const listDhcpLeasesTool: ToolDefinition = {
         });
       }
 
-      // Count total after filtering
       const total = leases.length;
 
-      // Apply pagination
       const paginated = leases.slice(parsed.offset, parsed.offset + parsed.limit);
       const hasMore = parsed.offset + parsed.limit < total;
 
-      // Format human-readable output
       const lines: string[] = [
         `DHCP leases on ${context.routerId}: ${total} total, showing ${paginated.length} (offset ${parsed.offset})`,
       ];
@@ -101,17 +94,13 @@ const listDhcpLeasesTool: ToolDefinition = {
       for (const lease of paginated) {
         const rec = lease as Record<string, unknown>;
 
-        // Get address (prefer address, fall back to active-address)
         const address = rec.address ?? rec["active-address"] ?? "unknown";
 
-        // Get MAC address (prefer mac-address, fall back to active-mac-address)
         const macAddress = rec["mac-address"] ?? rec["active-mac-address"] ?? "unknown";
 
-        // Get hostname (omit if missing or empty)
         const hostname = rec["host-name"];
         const hostnameStr = hostname && hostname !== "" ? ` (${hostname})` : "";
 
-        // Get status
         const status = rec.status ?? "unknown";
 
         lines.push(`  ${address}  ${macAddress}${hostnameStr}  [${status}]`);

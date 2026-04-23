@@ -1,98 +1,130 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, type MockedFunction } from "vitest";
+import { dhcpTools } from "../../../src/domain/tools/dhcp-tools.js";
+import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
+import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { z } from "zod";
 
-// Inline schema for testing (matches the implementation)
-const inputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  server: z.string().optional()
-    .describe("Filter by DHCP server name"),
-  status: z.enum(["bound", "waiting", "offered", "blocked", "all"]).default("all")
-    .describe("Filter by lease status"),
-  macAddress: z.string().optional()
-    .describe("Filter by MAC address (exact match, case-insensitive)"),
-  limit: z.number().int().min(1).max(500).default(100)
-    .describe("Maximum number of leases to return"),
-  offset: z.number().int().min(0).default(0)
-    .describe("Offset for pagination"),
+const tool = dhcpTools[0];
+
+// Inline schema for isolated validation tests (avoids importing internal implementation detail)
+const listDhcpInputSchema = z.object({
+  routerId: z.string(),
+  server: z.string().optional(),
+  status: z.enum(["bound", "waiting", "offered", "blocked", "all"]).default("all"),
+  macAddress: z.string().optional(),
+  limit: z.number().int().min(1).max(500).default(100),
+  offset: z.number().int().min(0).default(0),
 }).strict();
 
-// Import the tool after we know it should exist
-import { dhcpTools } from "../../../src/domain/tools/dhcp-tools.js";
+function makeContext(leases: Record<string, unknown>[]): ToolContext {
+  const mockGet = vi.fn().mockResolvedValue(leases);
+  return {
+    routerId: "test-router",
+    correlationId: "test-corr",
+    routerClient: { get: mockGet } as unknown as RouterOSRestClient,
+  };
+}
 
-describe("dhcp-tools", () => {
-  describe("list_dhcp_leases", () => {
+describe("list_dhcp_leases tool", () => {
+  describe("metadata", () => {
     it("has correct name and annotations", () => {
-      const tool = dhcpTools.find((t) => t.name === "list_dhcp_leases");
-      expect(tool).toBeDefined();
-      expect(tool?.name).toBe("list_dhcp_leases");
-      expect(tool?.annotations.readOnlyHint).toBe(true);
-      expect(tool?.annotations.destructiveHint).toBe(false);
-      expect(tool?.annotations.idempotentHint).toBe(true);
-      expect(tool?.annotations.openWorldHint).toBe(false);
+      expect(tool.name).toBe("list_dhcp_leases");
+      expect(tool.annotations.readOnlyHint).toBe(true);
+      expect(tool.annotations.destructiveHint).toBe(false);
+      expect(tool.annotations.idempotentHint).toBe(true);
+      expect(tool.annotations.openWorldHint).toBe(false);
+    });
+  });
+
+  describe("input schema", () => {
+    it("accepts minimal input with correct defaults", () => {
+      const r = listDhcpInputSchema.parse({ routerId: "core-01" });
+      expect(r.status).toBe("all");
+      expect(r.limit).toBe(100);
+      expect(r.offset).toBe(0);
     });
 
-    describe("input schema", () => {
-      it("accepts minimal input with defaults", () => {
-        const result = inputSchema.safeParse({ routerId: "core-01" });
-        expect(result.success).toBe(true);
-        if (result.success) {
-          expect(result.data.routerId).toBe("core-01");
-          expect(result.data.status).toBe("all");
-          expect(result.data.limit).toBe(100);
-          expect(result.data.offset).toBe(0);
-        }
+    it("accepts all optional fields", () => {
+      const r = listDhcpInputSchema.parse({
+        routerId: "core-01",
+        server: "dhcp1",
+        status: "bound",
+        macAddress: "AA:BB:CC:DD:EE:FF",
+        limit: 50,
+        offset: 10,
       });
+      expect(r.server).toBe("dhcp1");
+      expect(r.status).toBe("bound");
+      expect(r.limit).toBe(50);
+    });
 
-      it("accepts all optional fields", () => {
-        const result = inputSchema.safeParse({
-          routerId: "core-01",
-          server: "dhcp-server-1",
-          status: "bound",
-          macAddress: "AA:BB:CC:DD:EE:FF",
-          limit: 50,
-          offset: 10,
-        });
-        expect(result.success).toBe(true);
-        if (result.success) {
-          expect(result.data.server).toBe("dhcp-server-1");
-          expect(result.data.status).toBe("bound");
-          expect(result.data.macAddress).toBe("AA:BB:CC:DD:EE:FF");
-          expect(result.data.limit).toBe(50);
-          expect(result.data.offset).toBe(10);
-        }
-      });
+    it("rejects unknown status", () => {
+      expect(() => listDhcpInputSchema.parse({ routerId: "r", status: "expired" })).toThrow();
+    });
 
-      it("rejects invalid status", () => {
-        const result = inputSchema.safeParse({
-          routerId: "core-01",
-          status: "invalid",
-        });
-        expect(result.success).toBe(false);
-      });
+    it("rejects limit 0 and 501", () => {
+      expect(() => listDhcpInputSchema.parse({ routerId: "r", limit: 0 })).toThrow();
+      expect(() => listDhcpInputSchema.parse({ routerId: "r", limit: 501 })).toThrow();
+    });
 
-      it("rejects limit less than 1", () => {
-        const result = inputSchema.safeParse({
-          routerId: "core-01",
-          limit: 0,
-        });
-        expect(result.success).toBe(false);
-      });
+    it("rejects extra fields", () => {
+      expect(() => listDhcpInputSchema.parse({ routerId: "r", unknownField: true })).toThrow();
+    });
+  });
 
-      it("rejects limit greater than 500", () => {
-        const result = inputSchema.safeParse({
-          routerId: "core-01",
-          limit: 501,
-        });
-        expect(result.success).toBe(false);
-      });
+  describe("handler", () => {
+    const sampleLeases = [
+      { ".id": "*1", address: "192.168.1.10", "mac-address": "AA:BB:CC:DD:EE:01", "host-name": "laptop", server: "dhcp1", status: "bound" },
+      { ".id": "*2", address: "192.168.1.11", "mac-address": "AA:BB:CC:DD:EE:02", server: "dhcp1", status: "waiting" },
+      { ".id": "*3", address: "192.168.1.12", "mac-address": "AA:BB:CC:DD:EE:03", "host-name": "phone", server: "dhcp2", status: "bound" },
+    ];
 
-      it("rejects unknown fields", () => {
-        const result = inputSchema.safeParse({
-          routerId: "core-01",
-          unknownField: true,
-        });
-        expect(result.success).toBe(false);
-      });
+    it("returns all leases with no filters", async () => {
+      const ctx = makeContext(sampleLeases);
+      const result = await tool.handler({ routerId: "test-router" }, ctx);
+      expect(result.isError).toBeFalsy();
+      expect((result.structuredContent as Record<string, unknown>).total).toBe(3);
+      expect(((result.structuredContent as Record<string, unknown>).leases as unknown[]).length).toBe(3);
+    });
+
+    it("filters by status", async () => {
+      const ctx = makeContext(sampleLeases);
+      const result = await tool.handler({ routerId: "test-router", status: "bound" }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).total).toBe(2);
+    });
+
+    it("filters by server", async () => {
+      const ctx = makeContext(sampleLeases);
+      const result = await tool.handler({ routerId: "test-router", server: "dhcp2" }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
+    });
+
+    it("filters by macAddress (case-insensitive)", async () => {
+      const ctx = makeContext(sampleLeases);
+      const result = await tool.handler({ routerId: "test-router", macAddress: "aa:bb:cc:dd:ee:01" }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
+    });
+
+    it("paginates and sets hasMore", async () => {
+      const ctx = makeContext(sampleLeases);
+      const result = await tool.handler({ routerId: "test-router", limit: 2, offset: 0 }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.total).toBe(3);
+      expect((sc.leases as unknown[]).length).toBe(2);
+      expect(sc.hasMore).toBe(true);
+    });
+
+    it("formats host-name in content when present", async () => {
+      const ctx = makeContext([sampleLeases[0]]);
+      const result = await tool.handler({ routerId: "test-router" }, ctx);
+      expect(result.content).toContain("laptop");
+    });
+
+    it("omits host-name in content when missing", async () => {
+      const ctx = makeContext([sampleLeases[1]]);
+      const result = await tool.handler({ routerId: "test-router" }, ctx);
+      expect(result.content).not.toContain("undefined");
+      expect(result.content).not.toContain("()");
     });
   });
 });
