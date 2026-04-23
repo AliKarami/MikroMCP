@@ -154,7 +154,20 @@ export function enrichError(
   // --- HTTP-style errors (e.g. undici responses) ---
   if (typeof raw === "object" && raw !== null && typeof raw.statusCode === "number") {
     const statusCode = raw.statusCode as number;
-    const category = categoryFromStatus(statusCode);
+    let category = categoryFromStatus(statusCode);
+
+    // RouterOS returns 500 for permission errors — detect and reclassify.
+    if (statusCode >= 500 && typeof raw.responseBody === "string") {
+      try {
+        const body = JSON.parse(raw.responseBody) as Record<string, unknown>;
+        if (typeof body.detail === "string" && body.detail.startsWith("not enough permissions")) {
+          category = ErrorCategory.PERMISSION_DENIED;
+        }
+      } catch {
+        // non-JSON body — leave category as-is
+      }
+    }
+
     return new MikroMCPError({
       category,
       code: `HTTP_${statusCode}`,

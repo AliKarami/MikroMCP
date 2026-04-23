@@ -71,9 +71,10 @@ const listInterfacesTool: ToolDefinition = {
       // Filter by status client-side
       if (parsed.status !== "all") {
         interfaces = interfaces.filter((iface) => {
-          const running = (iface as Record<string, string>).running;
-          if (parsed.status === "up") return running === "true";
-          if (parsed.status === "down") return running !== "true";
+          const running = (iface as Record<string, unknown>).running;
+          const isUp = running === true || running === "true";
+          if (parsed.status === "up") return isUp;
+          if (parsed.status === "down") return !isUp;
           return true;
         });
       }
@@ -105,7 +106,7 @@ const listInterfacesTool: ToolDefinition = {
         const rec = iface as Record<string, string>;
         const name = rec.name ?? rec[".id"] ?? "unknown";
         const type = rec.type ?? parsed.type;
-        const running = rec.running === "true" ? "UP" : "DOWN";
+        const running = rec.running === true || rec.running === "true" ? "UP" : "DOWN";
         lines.push(`  ${name} [${type}] ${running}`);
       }
 

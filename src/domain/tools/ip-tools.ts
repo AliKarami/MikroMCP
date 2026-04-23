@@ -15,8 +15,10 @@ const inputSchema = z.object({
   routerId: z.string().describe("Target router identifier from the router registry"),
   action: z.enum(["add", "update", "remove"])
     .describe("Action to perform: add, update, or remove an IP address"),
-  address: z.string().regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/)
-    .describe("IP address in CIDR notation (e.g., 192.168.1.1/24)"),
+  address: z.string()
+    .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/, "Must be a valid IPv4 address, optionally with a prefix length (e.g. 192.168.1.1/24). Defaults to /32 if omitted.")
+    .transform((v) => (v.includes("/") ? v : `${v}/32`))
+    .describe("IP address with optional prefix length in CIDR notation (e.g., 192.168.1.1/24). Defaults to /32 if prefix is omitted."),
   interface: z.string()
     .describe("Interface to assign the IP address to"),
   network: z.string().optional()
@@ -79,7 +81,7 @@ const manageIpAddressTool: ToolDefinition = {
       if (parsed.action === "add") {
         if (existing) {
           const rec = existing as Record<string, string>;
-          const sameDisabled = rec.disabled === (parsed.disabled ? "true" : "false");
+          const sameDisabled = (rec.disabled === true || rec.disabled === "true") === parsed.disabled;
           const sameComment = (rec.comment ?? "") === (comment ?? "");
           const sameNetwork = !parsed.network || rec.network === parsed.network;
 
