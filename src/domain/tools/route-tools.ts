@@ -159,7 +159,11 @@ async function findExisting(
   const results = await context.routerClient.get<RouterOSRecord>("ip/route", {
     filter: { "dst-address": dstAddress },
   });
-  return results.find(r => (r as Record<string, unknown>).gateway === gateway);
+  return results.find((r) => {
+    const rec = r as Record<string, string>;
+    const gw = rec.gateway ?? rec["immediate-gw"];
+    return gw === gateway;
+  });
 }
 
 const manageRouteTool: ToolDefinition = {
@@ -191,13 +195,36 @@ const manageRouteTool: ToolDefinition = {
       // -----------------------------------------------------------------------
       if (parsed.action === "add") {
         if (existing) {
-          return {
-            content: `Route ${parsed.dstAddress} via ${parsed.gateway} already exists with matching configuration. No changes made.`,
-            structuredContent: {
-              action: "already_exists",
-              route: existing,
+          const rec = existing as Record<string, unknown>;
+          const existingDistance = rec.distance ?? "1";
+          const existingDisabled = rec.disabled === "true" || rec.disabled === true;
+          const sameDistance = existingDistance === String(parsed.distance);
+          const sameDisabled = existingDisabled === parsed.disabled;
+
+          if (sameDistance && sameDisabled) {
+            return {
+              content: `Route ${parsed.dstAddress} via ${parsed.gateway} already exists. No changes made.`,
+              structuredContent: {
+                action: "already_exists",
+                route: existing,
+              },
+            };
+          }
+
+          throw new MikroMCPError({
+            category: ErrorCategory.CONFLICT,
+            code: "ROUTE_CONFLICT",
+            message: `Route ${parsed.dstAddress} via ${parsed.gateway} already exists but with different configuration (distance=${existingDistance}, disabled=${existingDisabled}). Requested distance=${parsed.distance}, disabled=${parsed.disabled}.`,
+            details: {
+              existing: { distance: existingDistance, disabled: String(existingDisabled) },
+              requested: { distance: String(parsed.distance), disabled: String(parsed.disabled) },
             },
-          };
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Remove the existing route first, or use manage_route with action=remove before re-adding.",
+              alternativeTools: ["manage_route with action=remove"],
+            },
+          });
         }
 
         // Dry run for add

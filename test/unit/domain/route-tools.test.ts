@@ -211,16 +211,46 @@ describe("route tools", () => {
       expect((ctx.routerClient as Record<string, unknown>).create).toHaveBeenCalled();
     });
 
-    it("returns already_exists when match found", async () => {
+    it("returns already_exists when match found with same distance and disabled", async () => {
       const ctx = makeContext([sampleRoute]);
       const result = await manageRouteTool.handler({
         routerId: "test-router",
         action: "add",
         dstAddress: "10.0.0.0/8",
         gateway: "192.168.1.1",
+        distance: 1,
+        disabled: false,
       }, ctx);
       expect(result.structuredContent).toHaveProperty("action", "already_exists");
       expect((ctx.routerClient as Record<string, unknown>).create).not.toHaveBeenCalled();
+    });
+
+    it("throws CONFLICT when match found but distance differs", async () => {
+      const ctx = makeContext([sampleRoute]);
+      await expect(
+        manageRouteTool.handler({
+          routerId: "test-router",
+          action: "add",
+          dstAddress: "10.0.0.0/8",
+          gateway: "192.168.1.1",
+          distance: 5,
+          disabled: false,
+        }, ctx),
+      ).rejects.toThrow();
+    });
+
+    it("throws CONFLICT when match found but disabled differs", async () => {
+      const ctx = makeContext([sampleRoute]);
+      await expect(
+        manageRouteTool.handler({
+          routerId: "test-router",
+          action: "add",
+          dstAddress: "10.0.0.0/8",
+          gateway: "192.168.1.1",
+          distance: 1,
+          disabled: true,
+        }, ctx),
+      ).rejects.toThrow();
     });
 
     it("returns dry_run when dryRun is true", async () => {
