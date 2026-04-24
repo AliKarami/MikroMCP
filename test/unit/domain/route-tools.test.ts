@@ -24,6 +24,7 @@ const manageRouteInputSchema = z.object({
     .transform((v) => (v.includes("/") ? v : `${v}/32`)),
   gateway: z.string(),
   distance: z.number().int().min(1).max(255).default(1),
+  routingTable: z.string().optional(),
   comment: z.string().max(255).optional(),
   disabled: z.boolean().default(false),
   dryRun: z.boolean().default(false),
@@ -93,6 +94,17 @@ describe("route tools", () => {
       expect(r.action).toBe("add");
       expect(r.distance).toBe(1);
       expect(r.disabled).toBe(false);
+    });
+
+    it("accepts optional routingTable", () => {
+      const r = manageRouteInputSchema.parse({
+        routerId: "r",
+        action: "add",
+        dstAddress: "0.0.0.0/0",
+        gateway: "10.0.0.1",
+        routingTable: "vpn",
+      });
+      expect(r.routingTable).toBe("vpn");
     });
 
     it("accepts plain IP dstAddress and transforms to /32", () => {

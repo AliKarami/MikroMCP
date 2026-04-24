@@ -141,6 +141,8 @@ const manageRouteInputSchema = z.object({
     .describe("Route distance/metric (1-255)"),
   comment: z.string().max(255).optional()
     .describe("Optional comment for the route"),
+  routingTable: z.string().optional()
+    .describe("Routing table name (default: main). Use for policy routing with separate tables."),
   disabled: z.boolean().default(false)
     .describe("Whether the route should be disabled"),
   dryRun: z.boolean().default(false)
@@ -156,10 +158,11 @@ async function findExisting(
   context: ToolContext,
   dstAddress: string,
   gateway: string,
+  routingTable?: string,
 ): Promise<RouterOSRecord | undefined> {
-  const results = await context.routerClient.get<RouterOSRecord>("ip/route", {
-    filter: { "dst-address": dstAddress },
-  });
+  const filter: Record<string, string> = { "dst-address": dstAddress };
+  if (routingTable) filter["routing-table"] = routingTable;
+  const results = await context.routerClient.get<RouterOSRecord>("ip/route", { filter });
   return results.find((r) => {
     const rec = r as Record<string, string>;
     const gw = rec.gateway ?? rec["immediate-gw"];
@@ -189,7 +192,7 @@ const manageRouteTool: ToolDefinition = {
     );
 
     try {
-      const existing = await findExisting(context, parsed.dstAddress, parsed.gateway);
+      const existing = await findExisting(context, parsed.dstAddress, parsed.gateway, parsed.routingTable);
 
       // -----------------------------------------------------------------------
       // ADD
@@ -235,11 +238,12 @@ const manageRouteTool: ToolDefinition = {
             { property: "gateway", before: null, after: parsed.gateway },
             { property: "distance", before: null, after: String(parsed.distance) },
             { property: "disabled", before: null, after: parsed.disabled ? "true" : "false" },
+            ...(parsed.routingTable ? [{ property: "routing-table", before: null, after: parsed.routingTable }] : []),
             ...(comment ? [{ property: "comment", before: null, after: comment }] : []),
           ];
 
           return {
-            content: `Dry run: Would add route ${parsed.dstAddress} via ${parsed.gateway}.`,
+            content: `Dry run: Would add route ${parsed.dstAddress} via ${parsed.gateway}${parsed.routingTable ? ` (table: ${parsed.routingTable})` : ""}.`,
             structuredContent: { action: "dry_run", diff },
           };
         }
@@ -251,6 +255,7 @@ const manageRouteTool: ToolDefinition = {
           distance: String(parsed.distance),
           disabled: parsed.disabled ? "true" : "false",
         };
+        if (parsed.routingTable) body["routing-table"] = parsed.routingTable;
         if (comment) body.comment = comment;
 
         const created = await context.routerClient.create("ip/route", body);
