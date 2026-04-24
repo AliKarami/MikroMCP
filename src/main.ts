@@ -5,6 +5,7 @@
 import { loadAppConfig } from "./config/app-config.js";
 import { createMcpServer } from "./mcp/server.js";
 import { connectStdio } from "./mcp/transports/stdio.js";
+import { connectHttp } from "./mcp/transports/http.js";
 import { createLogger } from "./observability/logger.js";
 
 const log = createLogger("main");
@@ -18,9 +19,9 @@ async function main(): Promise<void> {
   if (config.transport === "stdio") {
     await connectStdio(server);
     log.info("MikroMCP server running via stdio");
-  } else {
-    log.error("HTTP transport not yet implemented. Use MIKROMCP_TRANSPORT=stdio");
-    process.exit(1);
+  } else if (config.transport === "http") {
+    await connectHttp(server, config.port);
+    log.info({ port: config.port }, "MikroMCP server running via HTTP/SSE");
   }
 
   const shutdown = () => {
