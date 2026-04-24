@@ -585,14 +585,18 @@ src/
 │   ├── tool-registry.ts       # Tool registration + execution pipeline
 │   ├── response-formatter.ts  # MCP response shaping
 │   └── transports/
-│       └── stdio.ts           # stdio transport
+│       ├── stdio.ts           # stdio transport
+│       └── http.ts            # HTTP/SSE transport
 ├── domain/
 │   ├── tools/
 │   │   ├── index.ts           # Tool aggregation
 │   │   ├── tool-definition.ts # Tool interface
 │   │   ├── system-tools.ts    # get_system_status
 │   │   ├── interface-tools.ts # list_interfaces, create_vlan
-│   │   └── ip-tools.ts        # manage_ip_address
+│   │   ├── ip-tools.ts        # manage_ip_address
+│   │   ├── dhcp-tools.ts      # list_dhcp_leases
+│   │   ├── route-tools.ts     # list_routes, manage_route
+│   │   └── firewall-tools.ts  # list_firewall_rules, manage_firewall_rule
 │   └── errors/
 │       ├── error-types.ts     # MikroMCPError + ErrorCategory
 │       └── error-enricher.ts  # HTTP/network error → MikroMCPError
