@@ -71,7 +71,10 @@ const listFirewallRulesTool: ToolDefinition = {
 
     try {
       const path = tableToPath(parsed.table);
-      let rules = await context.routerClient.get<RouterOSRecord>(path);
+      let rules = await context.routerClient.get<RouterOSRecord>(path, {
+        limit: undefined,
+        offset: undefined,
+      });
 
       if (parsed.chain !== undefined) {
         rules = rules.filter((r) => {
@@ -335,7 +338,7 @@ const manageFirewallRuleTool: ToolDefinition = {
         }
 
         const id = existing[".id"];
-        const isDisabled = existing.disabled === true as unknown as string || existing.disabled === "true";
+        const isDisabled = existing.disabled === "true";
 
         if (isDisabled === wantDisabled) {
           return {
