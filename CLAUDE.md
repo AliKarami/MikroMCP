@@ -1,5 +1,7 @@
 # MikroMCP — Claude Code Guide
 
+> For the full feature roadmap (milestones v0.3–v1.0, planned tools and subsystems) see **[ROADMAP.md](./ROADMAP.md)**.
+
 ## Commands
 
 ```bash
@@ -227,12 +229,35 @@ Two transports:
 | Data | REST path |
 |---|---|
 | System identity/resource | `system/identity`, `system/resource` |
+| System clock | `system/clock` |
+| System packages | `system/package` |
+| System scripts | `system/script` |
+| System scheduler | `system/scheduler` |
 | Interfaces | `interface` |
+| Bridge interfaces | `interface/bridge`, `interface/bridge/port` |
+| WiFi interfaces | `interface/wifi` (ROS 7.13+) or `interface/wireless` |
+| WireGuard interfaces | `interface/wireguard`, `interface/wireguard/peers` |
 | IP addresses | `ip/address` |
+| DNS settings / static entries | `ip/dns`, `ip/dns/static` |
 | Routes | `ip/route` |
+| Routing rules | `routing/rule` |
+| Routing tables | `routing/table` |
+| BGP peers | `routing/bgp/peer` |
+| OSPF neighbors | `routing/ospf/neighbor` |
 | DHCP leases | `ip/dhcp-server/lease` |
 | Firewall filter | `ip/firewall/filter` |
 | Firewall NAT | `ip/firewall/nat` |
+| Firewall mangle | `ip/firewall/mangle` |
+| Firewall address lists | `ip/firewall/address-list` |
+| IPSec peers / policies | `ip/ipsec/peer`, `ip/ipsec/policy` |
+| Certificates | `certificate` |
+| Users / groups | `user`, `user/group` |
+| Files | `file` |
+| Containers | `container` |
+| System log | `log` |
+| Ping (tool) | `tool/ping` |
+| Traceroute (tool) | `tool/traceroute` |
+| Torch (tool) | `tool/torch` |
 
 ## What not to do
 
