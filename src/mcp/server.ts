@@ -16,7 +16,7 @@ export function createMcpServer(config: AppConfig): {
 } {
   const server = new McpServer({
     name: "mikrotik-mcp-server",
-    version: "0.1.0",
+    version: "0.2.0",
   });
 
   const registry = new RouterRegistry(config.configPath);
