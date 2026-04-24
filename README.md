@@ -294,11 +294,22 @@ All settings have sensible defaults and are optional:
 
 | Variable | Default | Description |
 |---|---|---|
-| `MIKROMCP_TRANSPORT` | `stdio` | Transport (`stdio` only in v0.1) |
+| `MIKROMCP_TRANSPORT` | `stdio` | Transport: `stdio` or `http` |
 | `MIKROMCP_CONFIG_PATH` | `config/routers.yaml` | Path to router registry YAML |
 | `MIKROMCP_LOG_LEVEL` | `info` | Log level (`trace`, `debug`, `info`, `warn`, `error`) |
 | `MIKROMCP_PORT` | `3000` | HTTP port (reserved for future HTTP transport) |
 | `MIKROMCP_DATA_DIR` | `data` | Data directory (reserved for future use) |
+
+#### HTTP/SSE transport
+
+Set `MIKROMCP_TRANSPORT=http` to run MikroMCP as an HTTP server instead of stdio. The server listens on `MIKROMCP_PORT` (default `3000`) and accepts MCP JSON-RPC at `POST /mcp`. Clients that support Server-Sent Events can connect via `GET /mcp` for streaming.
+
+```bash
+MIKROMCP_TRANSPORT=http MIKROMCP_PORT=3000 \
+MIKROMCP_CONFIG_PATH=config/routers.yaml \
+ROUTER_CORE01_USER=mcp-api ROUTER_CORE01_PASS=secret \
+  npm start
+```
 
 ---
 
@@ -438,6 +449,102 @@ Add, update, or remove an IP address on a router interface. Idempotent for add o
 
 ---
 
+### `list_dhcp_leases`
+
+List DHCP lease assignments from a DHCP server.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | required | Router ID |
+| `server` | string | — | Filter by DHCP server name |
+| `status` | enum | `all` | `bound`, `waiting`, `offered`, `blocked`, `all` |
+| `macAddress` | string | — | Exact MAC address filter (case-insensitive) |
+| `limit` | integer | `100` | Max results (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** *"List all bound DHCP leases on core-01."*
+
+---
+
+### `list_routes`
+
+List routes from the routing table.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | required | Router ID |
+| `activeOnly` | boolean | `false` | Return only active routes |
+| `staticOnly` | boolean | `false` | Return only static (non-dynamic) routes |
+| `limit` | integer | `100` | Max results (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** *"Show all active static routes on core-01."*
+
+---
+
+### `manage_route`
+
+Add or remove a static route. Idempotent for add operations.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | required | Router ID |
+| `action` | enum | required | `add`, `remove` |
+| `dstAddress` | string | required | Destination in CIDR notation (e.g. `0.0.0.0/0`) |
+| `gateway` | string | required | Next-hop IP or exit interface |
+| `distance` | integer | `1` | Administrative distance (1–255) |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Create in disabled state |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** *"Add a default route via 10.0.0.1 on core-01, dry run first."*
+
+---
+
+### `list_firewall_rules`
+
+List firewall filter or NAT rules in evaluation order.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | required | Router ID |
+| `table` | enum | `filter` | `filter`, `nat` |
+| `chain` | string | — | Filter by chain name (e.g. `forward`, `srcnat`) |
+| `disabled` | enum | `all` | `true`, `false`, `all` |
+| `limit` | integer | `100` | Max results (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** *"Show all forward chain rules on core-01."*
+
+---
+
+### `manage_firewall_rule`
+
+Add, remove, disable, or enable a firewall filter or NAT rule. Uses `comment` as the idempotency key — required for remove, disable, and enable actions.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | required | Router ID |
+| `table` | enum | `filter` | `filter`, `nat` |
+| `action` | enum | required | `add`, `remove`, `disable`, `enable` |
+| `chain` | string | required | Chain name (e.g. `forward`, `srcnat`) |
+| `ruleAction` | string | required | RouterOS action (e.g. `drop`, `accept`, `masquerade`) |
+| `srcAddress` | string | — | Source address/range |
+| `dstAddress` | string | — | Destination address/range |
+| `protocol` | enum | — | `tcp`, `udp`, `icmp`, `gre`, `ospf`, `all` |
+| `srcPort` | string | — | Source port or range |
+| `dstPort` | string | — | Destination port or range |
+| `inInterface` | string | — | Incoming interface |
+| `outInterface` | string | — | Outgoing interface |
+| `comment` | string | — | Idempotency key — required for remove/disable/enable |
+| `disabled` | boolean | `false` | Create in disabled state |
+| `placeBefore` | string | — | Rule `.id` or comment to insert before |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** *"Add a firewall rule to drop all traffic from 10.0.0.0/8 in the forward chain on core-01, comment it 'block-rfc1918', dry run first."*
+
+---
+
 ## Error handling
 
 Every error includes a machine-readable category, code, and recovery hint:
@@ -478,14 +585,18 @@ src/
 │   ├── tool-registry.ts       # Tool registration + execution pipeline
 │   ├── response-formatter.ts  # MCP response shaping
 │   └── transports/
-│       └── stdio.ts           # stdio transport
+│       ├── stdio.ts           # stdio transport
+│       └── http.ts            # HTTP/SSE transport
 ├── domain/
 │   ├── tools/
 │   │   ├── index.ts           # Tool aggregation
 │   │   ├── tool-definition.ts # Tool interface
 │   │   ├── system-tools.ts    # get_system_status
 │   │   ├── interface-tools.ts # list_interfaces, create_vlan
-│   │   └── ip-tools.ts        # manage_ip_address
+│   │   ├── ip-tools.ts        # manage_ip_address
+│   │   ├── dhcp-tools.ts      # list_dhcp_leases
+│   │   ├── route-tools.ts     # list_routes, manage_route
+│   │   └── firewall-tools.ts  # list_firewall_rules, manage_firewall_rule
 │   └── errors/
 │       ├── error-types.ts     # MikroMCPError + ErrorCategory
 │       └── error-enricher.ts  # HTTP/network error → MikroMCPError
@@ -643,17 +754,17 @@ export const myTools: ToolDefinition[] = [myTool];
 
 ## Roadmap
 
-**v0.1 (current)**
+**v0.1**
 - stdio transport
 - get_system_status, list_interfaces, create_vlan, manage_ip_address
 - Circuit breaker, retry engine, connection pool
 - Env-var credential source
 
-**v0.2 (planned)**
-- Firewall rule tools
-- Static route tools
-- DHCP lease listing
-- HTTP/SSE transport
+**v0.2 (current)**
+- Firewall rule tools (`list_firewall_rules`, `manage_firewall_rule`)
+- Static route tools (`list_routes`, `manage_route`)
+- DHCP lease listing (`list_dhcp_leases`)
+- HTTP/SSE transport (`MIKROMCP_TRANSPORT=http`)
 
 **v0.3 (planned)**
 - Vault credential source
