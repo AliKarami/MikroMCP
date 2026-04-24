@@ -132,8 +132,9 @@ const manageRouteInputSchema = z.object({
   action: z.enum(["add", "remove"])
     .describe("Action to perform: add or remove a route"),
   dstAddress: z.string()
-    .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/, "Must be CIDR notation, e.g. 0.0.0.0/0")
-    .describe("Destination address in CIDR notation (e.g., 10.0.0.0/8)"),
+    .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/, "Must be an IPv4 address or CIDR notation, e.g. 10.0.0.0/8 or 10.77.0.4")
+    .transform((v) => (v.includes("/") ? v : `${v}/32`))
+    .describe("Destination address in CIDR notation or plain IP (auto-converted to /32), e.g. 10.0.0.0/8 or 10.77.0.4"),
   gateway: z.string()
     .describe("Gateway IP address"),
   distance: z.number().int().min(1).max(255).default(1)

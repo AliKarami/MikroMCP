@@ -20,7 +20,8 @@ const manageRouteInputSchema = z.object({
   routerId: z.string(),
   action: z.enum(["add", "remove"]),
   dstAddress: z.string()
-    .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/, "Must be CIDR notation, e.g. 0.0.0.0/0"),
+    .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/, "Must be an IPv4 address or CIDR notation")
+    .transform((v) => (v.includes("/") ? v : `${v}/32`)),
   gateway: z.string(),
   distance: z.number().int().min(1).max(255).default(1),
   comment: z.string().max(255).optional(),
@@ -94,13 +95,14 @@ describe("route tools", () => {
       expect(r.disabled).toBe(false);
     });
 
-    it("rejects dstAddress without prefix", () => {
-      expect(() => manageRouteInputSchema.parse({
+    it("accepts plain IP dstAddress and transforms to /32", () => {
+      const r = manageRouteInputSchema.parse({
         routerId: "r",
         action: "add",
-        dstAddress: "10.0.0.0",
+        dstAddress: "10.77.0.4",
         gateway: "192.168.1.1",
-      })).toThrow();
+      });
+      expect(r.dstAddress).toBe("10.77.0.4/32");
     });
 
     it("rejects distance 0 and 256", () => {
