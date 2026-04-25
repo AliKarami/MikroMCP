@@ -132,4 +132,190 @@ const tracerouteTool: ToolDefinition = {
   },
 };
 
-export const diagnosticTools: ToolDefinition[] = [pingTool, tracerouteTool];
+// ---------------------------------------------------------------------------
+// torch
+// ---------------------------------------------------------------------------
+
+const torchInputSchema = z.object({
+  routerId: z.string().describe("Target router identifier from the router registry"),
+  interface: z.string().describe("Interface name to monitor (e.g. ether1, bridge1)"),
+  duration: z.number().int().min(1).max(30).default(5).describe("Capture duration in seconds (1–30)"),
+  srcAddress: z.string().optional().describe("Filter by source IP address"),
+  dstAddress: z.string().optional().describe("Filter by destination IP address"),
+}).strict();
+
+const torchTool: ToolDefinition = {
+  name: "torch",
+  title: "Torch",
+  description:
+    "Capture a real-time traffic snapshot on a router interface. The tool call blocks for the duration (seconds) and returns top flows by bytes. readOnlyHint true — auto-retry enabled.",
+  inputSchema: torchInputSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = torchInputSchema.parse(params);
+
+    log.info({ routerId: context.routerId, interface: parsed.interface }, "Running torch");
+
+    try {
+      const body: Record<string, string> = {
+        interface: parsed.interface,
+        duration: String(parsed.duration),
+      };
+      if (parsed.srcAddress !== undefined) body["src-address"] = parsed.srcAddress;
+      if (parsed.dstAddress !== undefined) body["dst-address"] = parsed.dstAddress;
+
+      const results = await context.routerClient.execute<Record<string, string>[]>("tool/torch", body);
+      const flows = Array.isArray(results) ? results : [];
+
+      const lines = [`Torch on ${parsed.interface} (${parsed.duration}s) from ${context.routerId}: ${flows.length} flows`];
+      for (const flow of flows.slice(0, 10)) {
+        const src = flow.src ?? flow["src-address"] ?? "?";
+        const dst = flow.dst ?? flow["dst-address"] ?? "?";
+        const tx = flow["tx-bytes"] ?? "?";
+        const rx = flow["rx-bytes"] ?? "?";
+        lines.push(`  ${src} → ${dst}  tx=${tx} rx=${rx}`);
+      }
+
+      return {
+        content: lines.join("\n"),
+        structuredContent: {
+          routerId: context.routerId,
+          interface: parsed.interface,
+          duration: parsed.duration,
+          flows,
+        },
+      };
+    } catch (err) {
+      throw enrichError(err, { routerId: context.routerId, tool: "torch" });
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// get_log
+// ---------------------------------------------------------------------------
+
+const getLogInputSchema = z.object({
+  routerId: z.string().describe("Target router identifier from the router registry"),
+  limit: z.number().int().min(1).max(500).default(100).describe("Maximum entries to return (1–500)"),
+  offset: z.number().int().min(0).default(0).describe("Pagination offset"),
+  topics: z.array(z.string()).optional()
+    .describe("Filter entries whose topics field contains any of these strings (e.g. [\"firewall\", \"dhcp\"])"),
+  prefix: z.string().optional()
+    .describe("Substring to match against the log message"),
+  sinceMinutes: z.number().int().min(1).max(1440).optional()
+    .describe("Only return entries from the last N minutes (1–1440)"),
+}).strict();
+
+function parseRouterOsTimestamp(ts: string, now: Date): Date | null {
+  const timeOnly = /^(\d{2}):(\d{2}):(\d{2})$/.exec(ts);
+  if (timeOnly) {
+    const d = new Date(now);
+    d.setHours(parseInt(timeOnly[1], 10), parseInt(timeOnly[2], 10), parseInt(timeOnly[3], 10), 0);
+    if (d > now) d.setDate(d.getDate() - 1);
+    return d;
+  }
+
+  const MONTHS: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  };
+  const monthDay = /^([a-z]{3})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/i.exec(ts);
+  if (monthDay) {
+    const month = MONTHS[monthDay[1].toLowerCase()];
+    if (month === undefined) return null;
+    const d = new Date(
+      now.getFullYear(),
+      month,
+      parseInt(monthDay[2], 10),
+      parseInt(monthDay[3], 10),
+      parseInt(monthDay[4], 10),
+      parseInt(monthDay[5], 10),
+    );
+    if (d > now) d.setFullYear(d.getFullYear() - 1);
+    return d;
+  }
+
+  return null;
+}
+
+const getLogTool: ToolDefinition = {
+  name: "get_log",
+  title: "Get Log",
+  description:
+    "Read and filter the system log from a MikroTik router. Supports filtering by topic, message prefix, and a time window (last N minutes). Entries with unparseable timestamps are included conservatively.",
+  inputSchema: getLogInputSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = getLogInputSchema.parse(params);
+
+    log.info({ routerId: context.routerId, topics: parsed.topics, sinceMinutes: parsed.sinceMinutes }, "Getting log");
+
+    try {
+      const allEntries = await context.routerClient.get<Record<string, string>>("log");
+      const now = new Date();
+      const cutoff = parsed.sinceMinutes !== undefined
+        ? new Date(now.getTime() - parsed.sinceMinutes * 60_000)
+        : null;
+
+      let filtered = allEntries.map((e) => e as Record<string, string>);
+
+      if (parsed.topics && parsed.topics.length > 0) {
+        filtered = filtered.filter((e) => {
+          const entryTopics = e.topics ?? "";
+          return parsed.topics!.some((t) => entryTopics.includes(t));
+        });
+      }
+
+      if (parsed.prefix) {
+        const lower = parsed.prefix.toLowerCase();
+        filtered = filtered.filter((e) => (e.message ?? "").toLowerCase().includes(lower));
+      }
+
+      if (cutoff !== null) {
+        filtered = filtered.filter((e) => {
+          const ts = e.time ?? "";
+          const parsedTs = parseRouterOsTimestamp(ts, now);
+          if (parsedTs === null) return true;
+          return parsedTs >= cutoff!;
+        });
+      }
+
+      const total = filtered.length;
+      const paginated = filtered.slice(parsed.offset, parsed.offset + parsed.limit);
+
+      const lines = [
+        `Log on ${context.routerId}: ${total} matching entries, showing ${paginated.length} (offset ${parsed.offset})`,
+      ];
+      for (const entry of paginated) {
+        lines.push(`  [${entry.time ?? "?"}] [${entry.topics ?? "?"}] ${entry.message ?? ""}`);
+      }
+
+      return {
+        content: lines.join("\n"),
+        structuredContent: {
+          routerId: context.routerId,
+          entries: paginated,
+          total,
+          hasMore: parsed.offset + parsed.limit < total,
+          offset: parsed.offset,
+          limit: parsed.limit,
+        },
+      };
+    } catch (err) {
+      throw enrichError(err, { routerId: context.routerId, tool: "get_log" });
+    }
+  },
+};
+
+export const diagnosticTools: ToolDefinition[] = [pingTool, tracerouteTool, torchTool, getLogTool];

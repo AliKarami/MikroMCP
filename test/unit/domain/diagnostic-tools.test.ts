@@ -20,14 +20,15 @@ function makeRouterConfig(): RouterConfig {
   };
 }
 
-function makeContext(executeReturn: unknown = []): ToolContext {
+function makeContext(returnValue: unknown = []): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
     credentials: { username: "admin", password: "secret" },
     routerClient: {
-      execute: vi.fn().mockResolvedValue(executeReturn),
+      execute: vi.fn().mockResolvedValue(returnValue),
+      get: vi.fn().mockResolvedValue(returnValue),
     } as unknown as RouterOSRestClient,
   };
 }
@@ -176,6 +177,178 @@ describe("diagnostic tools", () => {
       const ctx = makeContext(partialResult);
       const result = await tracerouteTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
       expect(result.isError).toBeFalsy();
+    });
+  });
+
+  describe("torch metadata and schema", () => {
+    const torchTool = diagnosticTools[2];
+
+    it("torch is the third tool", () => {
+      expect(torchTool.name).toBe("torch");
+    });
+
+    it("torch has readOnlyHint true", () => {
+      expect(torchTool.annotations.readOnlyHint).toBe(true);
+    });
+  });
+
+  describe("torch input schema", () => {
+    const torchInputSchema = z.object({
+      routerId: z.string(),
+      interface: z.string(),
+      duration: z.number().int().min(1).max(30).default(5),
+      srcAddress: z.string().optional(),
+      dstAddress: z.string().optional(),
+    }).strict();
+
+    it("accepts minimal input with defaults", () => {
+      const r = torchInputSchema.parse({ routerId: "r", interface: "ether1" });
+      expect(r.duration).toBe(5);
+    });
+
+    it("rejects duration > 30", () => {
+      expect(() => torchInputSchema.parse({ routerId: "r", interface: "ether1", duration: 31 })).toThrow();
+    });
+
+    it("rejects duration < 1", () => {
+      expect(() => torchInputSchema.parse({ routerId: "r", interface: "ether1", duration: 0 })).toThrow();
+    });
+
+    it("rejects missing interface", () => {
+      expect(() => torchInputSchema.parse({ routerId: "r" })).toThrow();
+    });
+
+    it("rejects extra fields", () => {
+      expect(() => torchInputSchema.parse({ routerId: "r", interface: "ether1", unknown: 1 })).toThrow();
+    });
+  });
+
+  describe("torch handler", () => {
+    it("returns flows from execute result", async () => {
+      const torchTool = diagnosticTools[2];
+      const flows = [
+        { src: "192.168.1.10", dst: "8.8.8.8", "tx-bytes": "1000", "rx-bytes": "500" },
+        { src: "192.168.1.11", dst: "1.1.1.1", "tx-bytes": "2000", "rx-bytes": "100" },
+      ];
+      const ctx = makeContext(flows);
+      const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
+      expect(result.isError).toBeFalsy();
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.flows as unknown[]).length).toBe(2);
+    });
+
+    it("calls execute with tool/torch path and correct params", async () => {
+      const torchTool = diagnosticTools[2];
+      const ctx = makeContext([]);
+      await torchTool.handler({ routerId: "test-router", interface: "ether1", duration: 10 }, ctx);
+      expect((ctx.routerClient as Record<string, unknown>).execute).toHaveBeenCalledWith(
+        "tool/torch",
+        expect.objectContaining({ interface: "ether1", duration: "10" }),
+      );
+    });
+  });
+
+  describe("get_log metadata and schema", () => {
+    const getLogTool = diagnosticTools[3];
+
+    it("get_log is the fourth tool", () => {
+      expect(getLogTool.name).toBe("get_log");
+    });
+
+    it("get_log has readOnlyHint true", () => {
+      expect(getLogTool.annotations.readOnlyHint).toBe(true);
+    });
+  });
+
+  describe("get_log input schema", () => {
+    const getLogInputSchema = z.object({
+      routerId: z.string(),
+      limit: z.number().int().min(1).max(500).default(100),
+      offset: z.number().int().min(0).default(0),
+      topics: z.array(z.string()).optional(),
+      prefix: z.string().optional(),
+      sinceMinutes: z.number().int().min(1).max(1440).optional(),
+    }).strict();
+
+    it("accepts minimal input with defaults", () => {
+      const r = getLogInputSchema.parse({ routerId: "r" });
+      expect(r.limit).toBe(100);
+      expect(r.offset).toBe(0);
+    });
+
+    it("rejects limit > 500", () => {
+      expect(() => getLogInputSchema.parse({ routerId: "r", limit: 501 })).toThrow();
+    });
+
+    it("rejects sinceMinutes > 1440", () => {
+      expect(() => getLogInputSchema.parse({ routerId: "r", sinceMinutes: 1441 })).toThrow();
+    });
+
+    it("rejects extra fields", () => {
+      expect(() => getLogInputSchema.parse({ routerId: "r", unknown: 1 })).toThrow();
+    });
+  });
+
+  describe("get_log handler", () => {
+    const sampleEntries = [
+      { ".id": "*1", time: "12:00:00", topics: "firewall,info", message: "input dropped" },
+      { ".id": "*2", time: "12:01:00", topics: "dhcp,info", message: "assigned 192.168.1.10" },
+      { ".id": "*3", time: "12:02:00", topics: "firewall,warning", message: "port scan detected" },
+    ];
+
+    it("returns all entries when no filters applied", async () => {
+      const getLogTool = diagnosticTools[3];
+      const ctx = makeContext(sampleEntries);
+      const result = await getLogTool.handler({ routerId: "test-router" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.entries as unknown[]).length).toBe(3);
+    });
+
+    it("filters by topic substring", async () => {
+      const getLogTool = diagnosticTools[3];
+      const ctx = makeContext(sampleEntries);
+      const result = await getLogTool.handler({ routerId: "test-router", topics: ["firewall"] }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.entries as unknown[]).length).toBe(2);
+    });
+
+    it("filters by prefix substring in message", async () => {
+      const getLogTool = diagnosticTools[3];
+      const ctx = makeContext(sampleEntries);
+      const result = await getLogTool.handler({ routerId: "test-router", prefix: "port scan" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.entries as unknown[]).length).toBe(1);
+    });
+
+    it("includes entry with unparseable timestamp when sinceMinutes is set (conservative)", async () => {
+      const getLogTool = diagnosticTools[3];
+      const entriesWithBadTs = [
+        { ".id": "*1", time: "INVALID_TS", topics: "info", message: "something happened" },
+      ];
+      const ctx = makeContext(entriesWithBadTs);
+      const result = await getLogTool.handler({ routerId: "test-router", sinceMinutes: 5 }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.entries as unknown[]).length).toBe(1);
+    });
+
+    it("filters by sinceMinutes using hh:mm:ss time-of-day format", async () => {
+      const now = new Date();
+      const recentDate = new Date(now.getTime() - 60_000);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const recentTs = `${pad(recentDate.getHours())}:${pad(recentDate.getMinutes())}:${pad(recentDate.getSeconds())}`;
+      const oldDate = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+      const oldTs = `${pad(oldDate.getHours())}:${pad(oldDate.getMinutes())}:${pad(oldDate.getSeconds())}`;
+
+      const entries = [
+        { ".id": "*1", time: recentTs, topics: "info", message: "recent event" },
+        { ".id": "*2", time: oldTs, topics: "info", message: "old event" },
+      ];
+      const getLogTool = diagnosticTools[3];
+      const ctx = makeContext(entries);
+      const result = await getLogTool.handler({ routerId: "test-router", sinceMinutes: 30 }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.entries as unknown[]).length).toBe(1);
+      expect(((sc.entries as Record<string, unknown>[])[0] as Record<string, string>).message).toBe("recent event");
     });
   });
 });
