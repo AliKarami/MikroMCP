@@ -9,6 +9,8 @@ import { ipTools } from "./ip-tools.js";
 import { dhcpTools } from "./dhcp-tools.js";
 import { routeTools } from "./route-tools.js";
 import { firewallTools } from "./firewall-tools.js";
+import { diagnosticTools } from "./diagnostic-tools.js";
+import { systemOpsTools } from "./system-ops-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -17,6 +19,8 @@ export const allTools: ToolDefinition[] = [
   ...dhcpTools,
   ...routeTools,
   ...firewallTools,
+  ...diagnosticTools,
+  ...systemOpsTools,
 ];
 
 export type { ToolDefinition, ToolContext, ToolResult, ToolAnnotations } from "./tool-definition.js";
