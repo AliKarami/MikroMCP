@@ -21,6 +21,8 @@ const listInputSchema = z.object({
     .describe("Filter by interface type"),
   status: z.enum(["up", "down", "all"]).default("all")
     .describe("Filter by running status"),
+  macAddress: z.string().optional()
+    .describe("Filter by MAC address (case-insensitive exact match on mac-address field)"),
   includeCounters: z.boolean().default(false)
     .describe("Include traffic counters (tx-byte, rx-byte, etc.)"),
   limit: z.number().int().min(1).max(500).default(100)
@@ -67,6 +69,14 @@ const listInterfacesTool: ToolDefinition = {
         limit: undefined, // Fetch all, then paginate
         offset: undefined,
       });
+
+      if (parsed.macAddress !== undefined) {
+        const target = parsed.macAddress.toLowerCase();
+        interfaces = interfaces.filter((iface) => {
+          const rec = iface as Record<string, string>;
+          return (rec["mac-address"] ?? "").toLowerCase() === target;
+        });
+      }
 
       // Filter by status client-side
       if (parsed.status !== "all") {
