@@ -213,10 +213,48 @@ const manageFirewallRuleTool: ToolDefinition = {
         if (comment !== undefined) {
           const existing = await findRuleByComment(context, path, comment);
           if (existing) {
-            return {
-              content: `Firewall ${parsed.table} rule with comment "${comment}" already exists. No changes made.`,
-              structuredContent: { action: "already_exists", rule: existing },
-            };
+            const sameChain = existing.chain === parsed.chain;
+            const sameRuleAction = existing.action === parsed.ruleAction;
+            const sameSrcPort = (existing["src-port"] ?? "") === (parsed.srcPort ?? "");
+            const sameDstPort = (existing["dst-port"] ?? "") === (parsed.dstPort ?? "");
+            const sameInInterface = (existing["in-interface"] ?? "") === (parsed.inInterface ?? "");
+            const sameOutInterface = (existing["out-interface"] ?? "") === (parsed.outInterface ?? "");
+
+            if (sameChain && sameRuleAction && sameSrcPort && sameDstPort && sameInInterface && sameOutInterface) {
+              return {
+                content: `Firewall ${parsed.table} rule with comment "${comment}" already exists. No changes made.`,
+                structuredContent: { action: "already_exists", rule: existing },
+              };
+            }
+
+            throw new MikroMCPError({
+              category: ErrorCategory.CONFLICT,
+              code: "FIREWALL_RULE_CONFLICT",
+              message: `Firewall ${parsed.table} rule with comment "${comment}" already exists but with different configuration.`,
+              details: {
+                existing: {
+                  chain: existing.chain,
+                  action: existing.action,
+                  "src-port": existing["src-port"],
+                  "dst-port": existing["dst-port"],
+                  "in-interface": existing["in-interface"],
+                  "out-interface": existing["out-interface"],
+                },
+                requested: {
+                  chain: parsed.chain,
+                  action: parsed.ruleAction,
+                  "src-port": parsed.srcPort,
+                  "dst-port": parsed.dstPort,
+                  "in-interface": parsed.inInterface,
+                  "out-interface": parsed.outInterface,
+                },
+              },
+              recoverability: {
+                retryable: false,
+                suggestedAction: "Remove the existing rule first, then re-add with the desired configuration.",
+                alternativeTools: ["manage_firewall_rule with action=remove"],
+              },
+            });
           }
         }
 

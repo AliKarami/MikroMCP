@@ -319,4 +319,75 @@ describe("firewall tools", () => {
       expect(mockUpdate).toHaveBeenCalledWith("ip/firewall/filter", "*1", { disabled: "false" });
     });
   });
+
+  describe("manage_firewall_rule handler - CONFLICT on add", () => {
+    it("throws CONFLICT when rule with same comment exists but srcPort differs", async () => {
+      const existingRule = {
+        ".id": "*5",
+        chain: "forward",
+        action: "accept",
+        protocol: "tcp",
+        "src-port": "80",
+        comment: "allow-http",
+      };
+      const ctx = makeContext([existingRule]);
+      await expect(
+        manageFirewallRuleTool.handler({
+          routerId: "test-router",
+          action: "add",
+          table: "filter",
+          chain: "forward",
+          ruleAction: "accept",
+          protocol: "tcp",
+          srcPort: "443",
+          comment: "allow-http",
+        }, ctx),
+      ).rejects.toThrow();
+    });
+
+    it("throws CONFLICT when rule with same comment exists but inInterface differs", async () => {
+      const existingRule = {
+        ".id": "*6",
+        chain: "forward",
+        action: "accept",
+        "in-interface": "ether1",
+        comment: "allow-ether1",
+      };
+      const ctx = makeContext([existingRule]);
+      await expect(
+        manageFirewallRuleTool.handler({
+          routerId: "test-router",
+          action: "add",
+          table: "filter",
+          chain: "forward",
+          ruleAction: "accept",
+          inInterface: "ether2",
+          comment: "allow-ether1",
+        }, ctx),
+      ).rejects.toThrow();
+    });
+
+    it("returns already_exists when all fields including port match", async () => {
+      const existingRule = {
+        ".id": "*7",
+        chain: "forward",
+        action: "accept",
+        protocol: "tcp",
+        "dst-port": "443",
+        comment: "allow-https",
+      };
+      const ctx = makeContext([existingRule]);
+      const result = await manageFirewallRuleTool.handler({
+        routerId: "test-router",
+        action: "add",
+        table: "filter",
+        chain: "forward",
+        ruleAction: "accept",
+        protocol: "tcp",
+        dstPort: "443",
+        comment: "allow-https",
+      }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    });
+  });
 });
