@@ -15,6 +15,9 @@ export interface RouterConfig {
   };
   tags: string[];
   rosVersion: string;
+  sshPort?: number;
+  cmdAllow?: string[];
+  cmdDeny?: string[];
 }
 
 // Identity (for RBAC - simplified for v0.1)

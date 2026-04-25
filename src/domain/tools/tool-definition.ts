@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
+import type { RouterConfig } from "../../types.js";
 
 export interface ToolAnnotations {
   readOnlyHint: boolean;
@@ -26,6 +27,8 @@ export interface ToolContext {
   routerClient: RouterOSRestClient;
   routerId: string;
   correlationId: string;
+  routerConfig: RouterConfig;
+  credentials: { username: string; password: string };
 }
 
 export interface ToolResult {

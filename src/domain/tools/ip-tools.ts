@@ -81,7 +81,7 @@ const manageIpAddressTool: ToolDefinition = {
       if (parsed.action === "add") {
         if (existing) {
           const rec = existing as Record<string, string>;
-          const sameDisabled = (rec.disabled === true || rec.disabled === "true") === parsed.disabled;
+          const sameDisabled = (rec.disabled === "true") === parsed.disabled;
           const sameComment = (rec.comment ?? "") === (comment ?? "");
           const sameNetwork = !parsed.network || rec.network === parsed.network;
 

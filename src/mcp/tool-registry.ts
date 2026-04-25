@@ -69,7 +69,7 @@ export function registerAllTools(
 
             const executeHandler = () =>
               cb!.execute(() =>
-                tool.handler(args, { routerClient: client, routerId, correlationId }),
+                tool.handler(args, { routerClient: client, routerId, correlationId, routerConfig, credentials }),
               );
 
             // Retry only read-only tools

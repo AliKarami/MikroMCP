@@ -8,6 +8,8 @@ export interface AppConfig {
   logLevel: string;
   configPath: string;
   dataDir: string;
+  cmdAllow: string[];
+  cmdDeny: string[];
   retry: {
     maxRetries: number;
     baseDelayMs: number;
@@ -35,6 +37,10 @@ export function loadAppConfig(): AppConfig {
   const logLevel = env.MIKROMCP_LOG_LEVEL ?? "info";
   const configPath = env.MIKROMCP_CONFIG_PATH ?? "config/routers.yaml";
   const dataDir = env.MIKROMCP_DATA_DIR ?? "data";
+  const cmdAllow = (env.MIKROMCP_CMD_ALLOW ?? "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  const cmdDeny = (env.MIKROMCP_CMD_DENY ?? "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
 
   return {
     transport,
@@ -42,6 +48,8 @@ export function loadAppConfig(): AppConfig {
     logLevel,
     configPath,
     dataDir,
+    cmdAllow,
+    cmdDeny,
     retry: {
       maxRetries: 3,
       baseDelayMs: 200,

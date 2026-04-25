@@ -106,7 +106,7 @@ const listInterfacesTool: ToolDefinition = {
         const rec = iface as Record<string, string>;
         const name = rec.name ?? rec[".id"] ?? "unknown";
         const type = rec.type ?? parsed.type;
-        const running = rec.running === true || rec.running === "true" ? "UP" : "DOWN";
+        const running = rec.running === "true" ? "UP" : "DOWN";
         lines.push(`  ${name} [${type}] ${running}`);
       }
 
