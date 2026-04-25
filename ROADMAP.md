@@ -26,18 +26,18 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.3 — Diagnostics & Day-to-Day Operations
+## ✅ v0.3 — Diagnostics & Day-to-Day Operations
 
 **Goal:** Everything an operator reaches for first when something breaks, plus an escape hatch for tools not yet covered.
 
-- **`run_command`** — general-purpose RouterOS console command tool; lets the AI run any RouterOS CLI command directly. Safety guardrails: dry-run preview, command allowlist/denylist option, output length cap.
+- **`run_command`** — general-purpose RouterOS console command tool via SSH; safety guardrails: command allowlist/denylist, output length cap, dry-run preview
 - **`ping`** — send ICMP echo from the router (`/tool/ping`), return RTT stats and packet loss
 - **`traceroute`** — path tracing from the router (`/tool/traceroute`)
 - **`torch`** — real-time traffic monitor snapshot for an interface (`/tool/torch`)
 - **`get_log`** — read and filter system log (`/log`); filter by topic, prefix, time range
 - **`get_system_clock`**, **`set_system_clock`** — read/set system time and timezone (`/system/clock`)
 - **`reboot`** — controlled router reboot with optional delay and dry-run
-- **Existing tool improvements:** missing parameters on `list_interfaces` (running-only filter, MAC address), `manage_ip_address` (network auto-calculate edge cases), `manage_firewall_rule` (src/dst port ranges, in/out interface for NAT)
+- **Existing tool improvements:** `list_interfaces` gained running-only filter and MAC address filter; `manage_firewall_rule` gained src/dst port ranges and in/out interface for NAT, plus CONFLICT detection on port/interface mismatch; `manage_ip_address` network auto-calculate edge cases hardened
 
 ---
 

@@ -32,7 +32,7 @@ flowchart LR
 
     subgraph MikroMCP["MikroMCP Server"]
         direction TB
-        TR["Tool Registry\n(9 tools)"]
+        TR["Tool Registry\n(17 tools)"]
         PL["Pipeline\nCorrelation ID → Circuit Breaker\n→ Retry Engine → REST Client"]
         TR --> PL
     end
@@ -91,7 +91,7 @@ For the full walkthrough including router user setup, see the **[📖 Setup Guid
 | Tool | Type | Description |
 |---|---|---|
 | `get_system_status` | 👁️ Read | CPU, memory, uptime, identity |
-| `list_interfaces` | 👁️ Read | Network interfaces with filtering and pagination |
+| `list_interfaces` | 👁️ Read | Network interfaces with running/MAC/type filtering and pagination |
 | `create_vlan` | ✏️ Write | Create VLAN interfaces (idempotent) |
 | `manage_ip_address` | ✏️ Write | Add / update / remove IP addresses |
 | `list_dhcp_leases` | 👁️ Read | DHCP lease table with filtering |
@@ -99,6 +99,14 @@ For the full walkthrough including router user setup, see the **[📖 Setup Guid
 | `manage_route` | ✏️ Write | Add or remove static routes (idempotent) |
 | `list_firewall_rules` | 👁️ Read | Filter/NAT rules in evaluation order |
 | `manage_firewall_rule` | ✏️ Write | Add / remove / disable / enable firewall rules |
+| `ping` | 👁️ Read | Send ICMP echo from the router; returns RTT stats and packet loss |
+| `traceroute` | 👁️ Read | Path tracing from the router to a destination |
+| `torch` | 👁️ Read | Real-time traffic snapshot for an interface |
+| `get_log` | 👁️ Read | Read and filter system log by topic, prefix, or time range |
+| `get_system_clock` | 👁️ Read | Read system time and timezone |
+| `set_system_clock` | ✏️ Write | Set system time and timezone (idempotent, dry-run) |
+| `reboot` | ✏️ Write | Controlled router reboot with optional delay and dry-run |
+| `run_command` | ✏️ Write | Run any RouterOS CLI command via SSH with allowlist/denylist guardrails |
 
 Full parameter tables and example prompts: **[📋 Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)**
 
@@ -117,7 +125,7 @@ Full parameter tables and example prompts: **[📋 Available Tools](https://gith
 | [🚨 Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling) | Error categories, circuit breaker, retry engine |
 | [🧪 Development](https://github.com/AliKarami/MikroMCP/wiki/Development) | Project structure, scripts, testing, MCP Inspector |
 | [🤝 Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing) | Adding tools, guidelines, PR checklist |
-| [🗺️ Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1 ✅ · v0.2 ✅ · v0.3–v1.0 planned |
+| [🗺️ Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1 ✅ · v0.2 ✅ · v0.3 ✅ · v0.4–v1.0 planned |
 
 ---
 

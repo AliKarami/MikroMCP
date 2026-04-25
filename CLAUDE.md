@@ -1,6 +1,6 @@
 # MikroMCP — Claude Code Guide
 
-> For the full feature roadmap (milestones v0.3–v1.0, planned tools and subsystems) see **[ROADMAP.md](./ROADMAP.md)**.
+> For the full feature roadmap (milestones v0.4–v1.0, planned tools and subsystems) see **[ROADMAP.md](./ROADMAP.md)**.
 
 ## Commands
 
@@ -258,6 +258,20 @@ Two transports:
 | Ping (tool) | `tool/ping` |
 | Traceroute (tool) | `tool/traceroute` |
 | Torch (tool) | `tool/torch` |
+
+## Keeping documentation in sync
+
+**Every time a milestone is completed or a tool is added/changed, update all of the following together — never leave them out of sync:**
+
+| Document | What to update |
+|---|---|
+| `ROADMAP.md` | Flip `🔜` → `✅` on the completed milestone; update bullet descriptions to match what was actually shipped |
+| `README.md` | Tool count in the mermaid diagram, the Available Tools table (add/modify rows), and the roadmap progress note at the bottom of the docs table |
+| `CLAUDE.md` header line | Update the `> For the full feature roadmap` pointer if the phrasing is stale |
+| GitHub wiki — **Available Tools** page | Add parameter tables and example prompts for every new tool |
+| GitHub wiki — **Roadmap** page | Mirror the same milestone status changes as in `ROADMAP.md` |
+
+Do this as part of the same commit that ships the feature — not as a follow-up.
 
 ## What not to do
 
