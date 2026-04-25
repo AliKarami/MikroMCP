@@ -60,11 +60,6 @@ const listInterfacesTool: ToolDefinition = {
     try {
       const path = parsed.type === "all" ? "interface" : `interface/${parsed.type}`;
 
-      // Build proplist to exclude counters if not requested
-      const proplist = parsed.includeCounters
-        ? undefined
-        : undefined; // We filter counters from results instead
-
       let interfaces = await context.routerClient.get<RouterOSRecord>(path, {
         limit: undefined, // Fetch all, then paginate
         offset: undefined,

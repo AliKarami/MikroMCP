@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { enrichError } from "../errors/error-enricher.js";
-import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
+import { MikroMCPError } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 import { SshClient } from "../../adapter/ssh-client.js";
 import { resolveCommandPolicy, checkCommand } from "./command-guard.js";
