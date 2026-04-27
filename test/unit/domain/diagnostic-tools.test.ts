@@ -131,7 +131,7 @@ describe("diagnostic tools", () => {
       await pingTool.handler({ routerId: "test-router", address: "10.0.0.1", count: 10, size: 128 }, ctx);
       expect((ctx.routerClient as Record<string, unknown>).execute).toHaveBeenCalledWith(
         "tool/ping",
-        expect.objectContaining({ count: "10", "packet-size": "128" }),
+        expect.objectContaining({ count: "10", size: "128" }),
       );
     });
 

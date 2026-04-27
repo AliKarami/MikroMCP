@@ -38,7 +38,7 @@ const pingTool: ToolDefinition = {
       const body: Record<string, string> = {
         address: parsed.address,
         count: String(parsed.count),
-        "packet-size": String(parsed.size),
+        size: String(parsed.size),
       };
       if (parsed.routingTable !== undefined) body["routing-table"] = parsed.routingTable;
 
