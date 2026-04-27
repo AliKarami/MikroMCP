@@ -1,6 +1,13 @@
 # MikroMCP Router Registry
 # Copy to routers.yaml and configure your routers.
 # Credentials are resolved from environment variables by default.
+#
+# Required RouterOS user group policies:
+#   read, write, api, rest-api, test, ssh
+#
+# The `ssh` policy is required for ping, traceroute, and run_command — those
+# tools execute via SSH because RouterOS 7.x REST API blocks tool commands
+# regardless of other policy settings.
 
 routers:
   core-01:

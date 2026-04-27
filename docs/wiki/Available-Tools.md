@@ -76,6 +76,8 @@ Execute an arbitrary RouterOS console command via SSH. Protected by a configurab
 
 **Allow/deny policy:** Per-router `cmdAllow`/`cmdDeny` lists in `routers.yaml` take precedence; `MIKROMCP_CMD_ALLOW` / `MIKROMCP_CMD_DENY` env vars apply globally. Built-in deny list blocks `/system reboot*` and other destructive commands.
 
+**Requires `ssh` policy** on the RouterOS user group.
+
 **Example prompt:** "Run `/ip route print detail` on core-01."
 
 ---
@@ -238,6 +240,8 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 ---
 
 ## Diagnostics
+
+> **SSH policy required.** `ping`, `traceroute`, and `run_command` connect via SSH because RouterOS 7.x REST API returns a permission error for tool commands regardless of user policy. The RouterOS user must have the `ssh` policy in its group in addition to the standard policies.
 
 ### `ping` — Read
 

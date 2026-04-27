@@ -53,6 +53,10 @@ flowchart LR
 
 **Requirements:** Node.js >= 22 · MikroTik RouterOS 7.x with REST API enabled
 
+**Required RouterOS user policies:** `read`, `write`, `api`, `rest-api`, `test`, `ssh`
+
+> `ssh` is needed by `ping`, `traceroute`, and `run_command`, which execute via SSH due to RouterOS 7.x REST API permission limitations for tool commands.
+
 ```bash
 git clone https://github.com/AliKarami/MikroMCP.git
 cd MikroMCP
