@@ -241,7 +241,7 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 
 ## Diagnostics
 
-> **SSH policy required.** `ping`, `traceroute`, and `run_command` connect via SSH because RouterOS 7.x REST API returns a permission error for tool commands regardless of user policy. The RouterOS user must have the `ssh` policy in its group in addition to the standard policies.
+> **SSH policy required.** `ping`, `traceroute`, `torch`, and `run_command` connect via SSH because RouterOS 7.x REST API returns a permission error for tool commands regardless of user policy. The RouterOS user must have the `ssh` policy in its group in addition to the standard policies.
 
 ### `ping` — Read
 

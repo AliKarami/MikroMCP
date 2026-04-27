@@ -159,6 +159,30 @@ const torchInputSchema = z.object({
   dstAddress: z.string().optional().describe("Filter by destination IP address"),
 }).strict();
 
+interface TorchFlow {
+  src: string;
+  dst: string;
+  txBytes: string;
+  rxBytes: string;
+}
+
+function parseTorchOutput(output: string): TorchFlow[] {
+  const flows: TorchFlow[] = [];
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || /^(SRC|src|-{3})/i.test(trimmed)) continue;
+    const cols = trimmed.split(/\s+/);
+    if (cols.length < 4) continue;
+    flows.push({
+      src: cols[0] ?? "?",
+      dst: cols[1] ?? "?",
+      txBytes: cols[2] ?? "?",
+      rxBytes: cols[3] ?? "?",
+    });
+  }
+  return flows;
+}
+
 const torchTool: ToolDefinition = {
   name: "torch",
   title: "Torch",
@@ -177,23 +201,22 @@ const torchTool: ToolDefinition = {
     log.info({ routerId: context.routerId, interface: parsed.interface }, "Running torch");
 
     try {
-      const body: Record<string, string> = {
-        interface: parsed.interface,
-        duration: String(parsed.duration),
-      };
-      if (parsed.srcAddress !== undefined) body["src-address"] = parsed.srcAddress;
-      if (parsed.dstAddress !== undefined) body["dst-address"] = parsed.dstAddress;
+      const parts = [`/tool torch interface=${parsed.interface}`];
+      if (parsed.srcAddress !== undefined) parts.push(`src-address=${parsed.srcAddress}`);
+      if (parsed.dstAddress !== undefined) parts.push(`dst-address=${parsed.dstAddress}`);
 
-      const results = await context.routerClient.execute<Record<string, string>[]>("tool/torch", body);
-      const flows = Array.isArray(results) ? results : [];
+      const ssh = new SshClient(context.routerConfig, context.credentials);
+      // RouterOS torch runs indefinitely — force-close after duration + 1s buffer
+      const raw = await ssh.execute(parts.join(" "), (parsed.duration + 1) * 1000);
+
+      // Strip ANSI escape codes and parse flow rows
+      // eslint-disable-next-line no-control-regex
+      const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+      const flows = parseTorchOutput(clean);
 
       const lines = [`Torch on ${parsed.interface} (${parsed.duration}s) from ${context.routerId}: ${flows.length} flows`];
       for (const flow of flows.slice(0, 10)) {
-        const src = flow.src ?? flow["src-address"] ?? "?";
-        const dst = flow.dst ?? flow["dst-address"] ?? "?";
-        const tx = flow["tx-bytes"] ?? "?";
-        const rx = flow["rx-bytes"] ?? "?";
-        lines.push(`  ${src} → ${dst}  tx=${tx} rx=${rx}`);
+        lines.push(`  ${flow.src} → ${flow.dst}  tx=${flow.txBytes} rx=${flow.rxBytes}`);
       }
 
       return {
@@ -203,6 +226,7 @@ const torchTool: ToolDefinition = {
           interface: parsed.interface,
           duration: parsed.duration,
           flows,
+          raw,
         },
       };
     } catch (err) {

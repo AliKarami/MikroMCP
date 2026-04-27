@@ -241,27 +241,46 @@ describe("diagnostic tools", () => {
   });
 
   describe("torch handler", () => {
-    it("returns flows from execute result", async () => {
+    const TORCH_SSH_OUTPUT =
+      "SRC             DST             TX         RX\n" +
+      "192.168.1.10    8.8.8.8         1000       500\n" +
+      "192.168.1.11    1.1.1.1         2000       100\n";
+
+    function mockSsh(output: string) {
+      vi.mocked(SshClient).mockImplementation(
+        () => ({ execute: vi.fn().mockResolvedValue(output) }) as unknown as SshClient,
+      );
+    }
+
+    it("returns flows from SSH output", async () => {
+      mockSsh(TORCH_SSH_OUTPUT);
       const torchTool = diagnosticTools[2];
-      const flows = [
-        { src: "192.168.1.10", dst: "8.8.8.8", "tx-bytes": "1000", "rx-bytes": "500" },
-        { src: "192.168.1.11", dst: "1.1.1.1", "tx-bytes": "2000", "rx-bytes": "100" },
-      ];
-      const ctx = makeContext(flows);
+      const ctx = makeContext();
       const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
       expect(result.isError).toBeFalsy();
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.flows as unknown[]).length).toBe(2);
     });
 
-    it("calls execute with tool/torch path and correct params", async () => {
+    it("sends interface in the SSH command and uses duration as timeout", async () => {
+      const executeMock = vi.fn().mockResolvedValue(TORCH_SSH_OUTPUT);
+      vi.mocked(SshClient).mockImplementation(() => ({ execute: executeMock }) as unknown as SshClient);
       const torchTool = diagnosticTools[2];
-      const ctx = makeContext([]);
+      const ctx = makeContext();
       await torchTool.handler({ routerId: "test-router", interface: "ether1", duration: 10 }, ctx);
-      expect((ctx.routerClient as Record<string, unknown>).execute).toHaveBeenCalledWith(
-        "tool/torch",
-        expect.objectContaining({ interface: "ether1", duration: "10" }),
+      expect(executeMock).toHaveBeenCalledWith(
+        expect.stringContaining("interface=ether1"),
+        11_000,
       );
+    });
+
+    it("returns empty flows for empty output", async () => {
+      mockSsh("");
+      const torchTool = diagnosticTools[2];
+      const ctx = makeContext();
+      const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.flows as unknown[]).length).toBe(0);
     });
   });
 

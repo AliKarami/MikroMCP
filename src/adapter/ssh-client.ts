@@ -7,14 +7,22 @@ export class SshClient {
     private readonly credentials: { username: string; password: string },
   ) {}
 
-  async execute(command: string): Promise<string> {
+  async execute(command: string, timeoutMs?: number): Promise<string> {
     return new Promise((resolve, reject) => {
       const conn = new Client();
       let output = "";
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      const finish = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        conn.end();
+        resolve(output);
+      };
 
       conn.on("ready", () => {
         conn.exec(command, (err, stream) => {
           if (err) {
+            if (timer !== undefined) clearTimeout(timer);
             conn.end();
             reject(err);
             return;
@@ -28,14 +36,21 @@ export class SshClient {
             output += data.toString();
           });
 
-          stream.on("close", () => {
-            conn.end();
-            resolve(output);
-          });
+          stream.on("close", finish);
+
+          if (timeoutMs !== undefined) {
+            // Force-close after timeout — used for interactive commands like torch
+            timer = setTimeout(() => {
+              stream.close();
+            }, timeoutMs);
+          }
         });
       });
 
-      conn.on("error", reject);
+      conn.on("error", (err) => {
+        if (timer !== undefined) clearTimeout(timer);
+        reject(err);
+      });
 
       conn.connect({
         host: this.config.host,
