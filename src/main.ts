@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { loadAppConfig } from "./config/app-config.js";
-import { createMcpServer } from "./mcp/server.js";
+import { createServerFactory } from "./mcp/server.js";
 import { connectStdio } from "./mcp/transports/stdio.js";
 import { connectHttp } from "./mcp/transports/http.js";
 import { createLogger } from "./observability/logger.js";
@@ -14,13 +14,13 @@ async function main(): Promise<void> {
   const config = loadAppConfig();
   log.info({ transport: config.transport, logLevel: config.logLevel }, "Starting MikroMCP server");
 
-  const { server, pool } = createMcpServer(config);
+  const { makeServer, pool } = createServerFactory(config);
 
   if (config.transport === "stdio") {
-    await connectStdio(server);
+    await connectStdio(makeServer());
     log.info("MikroMCP server running via stdio");
   } else if (config.transport === "http") {
-    await connectHttp(server, config.port);
+    await connectHttp(makeServer, config.port);
     log.info({ port: config.port }, "MikroMCP server running via HTTP/SSE");
   }
 

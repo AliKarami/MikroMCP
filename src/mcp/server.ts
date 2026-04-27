@@ -9,21 +9,23 @@ import { ConnectionPool } from "../adapter/connection-pool.js";
 import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { AppConfig } from "../config/app-config.js";
 
-export function createMcpServer(config: AppConfig): {
-  server: McpServer;
+export function createServerFactory(config: AppConfig): {
+  makeServer: () => McpServer;
   pool: ConnectionPool;
   circuitBreakers: Map<string, CircuitBreaker>;
 } {
-  const server = new McpServer({
-    name: "mikrotik-mcp-server",
-    version: "0.2.0",
-  });
-
   const registry = new RouterRegistry(config.configPath);
   const pool = new ConnectionPool();
   const circuitBreakers = new Map<string, CircuitBreaker>();
 
-  registerAllTools(server, registry, pool, circuitBreakers, config);
+  const makeServer = (): McpServer => {
+    const server = new McpServer({
+      name: "mikrotik-mcp-server",
+      version: "0.2.0",
+    });
+    registerAllTools(server, registry, pool, circuitBreakers, config);
+    return server;
+  };
 
-  return { server, pool, circuitBreakers };
+  return { makeServer, pool, circuitBreakers };
 }

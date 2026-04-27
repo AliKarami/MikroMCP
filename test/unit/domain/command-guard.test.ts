@@ -72,7 +72,7 @@ describe("resolveCommandPolicy", () => {
 });
 
 describe("checkCommand", () => {
-  it("does not throw for an allowed command when no allow list is set", () => {
+  it("does not throw for a safe command when no allow list is configured (default-allow)", () => {
     const policy = resolveCommandPolicy(makeRouterConfig(), [], []);
     expect(() => checkCommand("/ip/route/print", policy)).not.toThrow();
   });

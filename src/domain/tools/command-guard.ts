@@ -62,19 +62,16 @@ export function checkCommand(command: string, policy: CommandPolicy): void {
     }
   }
 
-  if (policy.allow.length > 0) {
-    const allowed = policy.allow.some((p) => globMatch(p, command));
-    if (!allowed) {
-      throw new MikroMCPError({
-        category: ErrorCategory.VALIDATION,
-        code: "COMMAND_NOT_ALLOWED",
-        message: `Command not in allow list`,
-        details: { command, allowPatterns: policy.allow },
-        recoverability: {
-          retryable: false,
-          suggestedAction: "The command does not match any pattern in the configured allow list.",
-        },
-      });
-    }
+  if (policy.allow.length > 0 && !policy.allow.some((p) => globMatch(p, command))) {
+    throw new MikroMCPError({
+      category: ErrorCategory.VALIDATION,
+      code: "COMMAND_NOT_ALLOWED",
+      message: "Command not in allow list",
+      details: { command, allowPatterns: policy.allow },
+      recoverability: {
+        retryable: false,
+        suggestedAction: "The command does not match any pattern in the configured allow list.",
+      },
+    });
   }
 }

@@ -45,6 +45,15 @@ This document describes what has been built and what is planned. Milestones are 
 
 **Goal:** WiFi, bridging, WireGuard, and DNS — the next most-configured subsystems after routing and firewall.
 
+- **Infrastructure fixes (pre-existing bugs):**
+  - RouterOS boolean/number values are returned as strings in some endpoints and as native types in others; audit all idempotency comparisons for type consistency (`=== "true"` not `=== true`) — currently causes false conflict reports in `interface-tools`, `route-tools`, and `ip-tools`
+  - `ZodError` falls through `enrichError` as `INTERNAL`; map it to `VALIDATION` category so callers can distinguish bad input from server faults
+  - Circuit breaker increments its failure count for `VALIDATION`, `NOT_FOUND`, `CONFLICT`, and `COMMAND_DENIED` errors — only router/network failures should trip the breaker
+  - Retry engine wraps circuit execution; one read call can accumulate multiple failure counts — restructure so the circuit wraps the final retry attempt, not each individual attempt
+  - Router registry silently swallows YAML parse errors; validate the loaded config with a Zod schema at startup and exit fast with a descriptive message on bad config
+  - IP/CIDR regex in `ip-tools` and `route-tools` accepts values like `999.999.999.999/99`; replace with a proper CIDR parser
+  - Verify `.proplist`/`.query` filter behavior in RouterOS REST — may require `POST /<path>/print` instead of `GET /<path>` for complex queries
+- **Housekeeping:** Align `package.json` version, `McpServer` version string, README tool count, and wiki Roadmap page — currently all report different values
 - **Bridge:**
   - `list_bridges` — bridge interfaces and their port members
   - `manage_bridge` — create/remove bridge interfaces
@@ -64,9 +73,9 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.5 — Advanced Firewall & Policy Routing
+## 🔜 v0.5 — Advanced Firewall, Policy Routing & Security Hardening
 
-**Goal:** Complete the firewall surface and add advanced routing primitives.
+**Goal:** Complete the firewall surface, add advanced routing primitives, and close the security gaps in the HTTP transport and `run_command`.
 
 - **Firewall Mangle:**
   - `list_mangle_rules` — mangle rules in evaluation order
@@ -82,6 +91,11 @@ This document describes what has been built and what is planned. Milestones are 
 - **Routing Protocols (read-only first):**
   - `list_bgp_peers` — BGP sessions with state, prefix counts, uptime
   - `list_ospf_neighbors` — OSPF neighbor state and adjacency info
+- **Security hardening:**
+  - HTTP transport: enforce body size limit, add `bindHost` config option (`127.0.0.1` by default for new installs), basic rate limiting
+  - `run_command` policy documentation and hardening — clarify that default-allow + builtin denylist is intentional; document the allowlist mode (`cmdAllow`) as the stricter opt-in and add config examples for both modes
+  - SSH: host-key pinning (reject unknown hosts by default), per-command execution timeout, streaming output cap, guaranteed resource cleanup on error paths
+  - TLS: CA pinning and certificate fingerprint pinning as first-class config options; escalate `rejectUnauthorized: false` from a documented example to a loud opt-in with a deprecation warning
 
 ---
 
@@ -114,7 +128,10 @@ This document describes what has been built and what is planned. Milestones are 
 **Goal:** Multi-tenant deployments, stronger credential management, and VPN.
 
 - **Vault credential source** — resolve router credentials from HashiCorp Vault (KV v2) in addition to env vars
-- **RBAC / identity enforcement** — per-identity allowed routers, tool patterns, and action scopes; credentials passed as MCP request context
+- **RBAC / identity enforcement** — per-identity allowed routers, tool patterns, and action scopes; credentials passed as MCP request context; *prerequisite before expanding dangerous write tools beyond this milestone*
+- **HTTP transport authentication** — bearer token or mTLS for the HTTP/SSE endpoint; prerequisite before any non-localhost deployment
+- **Destructive-op confirmation workflow** — structured confirmation step for `reboot`, route removal, firewall removal, and IP removal; gated behind an RBAC scope so unattended automation can opt out intentionally
+- **Backup-before-write** — snapshot the affected resource set (firewall chain, route table, IP addresses, DHCP leases) before applying any write; include the snapshot path in the structured result so callers can roll back
 - **IPSec/VPN:**
   - `list_ipsec_peers` — IPSec peer configuration and state (`/ip/ipsec`)
   - `list_ipsec_policies` — active IPSec policies
@@ -133,9 +150,13 @@ This document describes what has been built and what is planned. Milestones are 
 **Goal:** The stability, observability, and ecosystem milestone for teams running MikroMCP in production.
 
 - **Config snapshot & diff** — snapshot a router's full config at a point in time; diff two snapshots to see what changed; restore from snapshot (with dry-run)
+- **`plan/apply` diff tools** — dry-run a set of write operations against a snapshotted baseline; produce a structured human-readable diff; apply with a single confirmation (extends the snapshot/diff work above)
 - **Bulk operations** — apply a tool call across multiple routers in parallel (fan-out); aggregate results with per-router status
 - **Integration test harness** — RouterOS CHR running in Docker for end-to-end tests without real hardware; CI job that runs the full tool suite against CHR
-- **Prometheus metrics endpoint** — expose tool call latency, circuit breaker state, error rates per router as `/metrics` (when using HTTP transport)
+  - REST adapter tests with mocked HTTP responses (currently only tool-level `routerClient` mocks exist)
+  - Idempotency tests using real parsed RouterOS payloads — including boolean/number field edge cases that the current unit tests do not cover
+  - Negative tests: malformed `routerId`, invalid CIDR, invalid router config at startup, HTTP auth bypass attempts, `run_command` policy bypass attempts
+- **Prometheus metrics endpoint** — expose tool call latency, circuit breaker state, error category counts, and router availability as `/metrics` (when using HTTP transport)
 - **NPM package publication** — publish to npm so `npx mikromcp` works out of the box without cloning
 
 ---

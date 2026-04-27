@@ -199,7 +199,7 @@ const runCommandTool: ToolDefinition = {
   name: "run_command",
   title: "Run Command",
   description:
-    "Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy — built-in deny list blocks destructive commands; use dedicated tools (reboot, etc.) for controlled operations. Output capped at 4000 characters.",
+    "Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy — built-in deny list blocks destructive commands; optionally restrict further with an explicit allow list (cmdAllow in routers.yaml or MIKROMCP_CMD_ALLOW). Use dedicated tools (reboot, etc.) for controlled operations. Output capped at 4000 characters.",
   inputSchema: runCommandInputSchema,
   annotations: {
     readOnlyHint: false,
