@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { SshClient } from "../../adapter/ssh-client.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -35,36 +36,38 @@ const pingTool: ToolDefinition = {
     log.info({ routerId: context.routerId, address: parsed.address }, "Pinging");
 
     try {
-      const body: Record<string, string> = {
-        address: parsed.address,
-        count: String(parsed.count),
-        size: String(parsed.size),
-      };
-      if (parsed.routingTable !== undefined) body["routing-table"] = parsed.routingTable;
+      // RouterOS 7.x REST API for /tool/ping requires internal permissions that cannot
+      // be granted via user policy. Use SSH instead, matching run_command behavior.
+      const parts = [
+        `/tool ping address=${parsed.address}`,
+        `count=${parsed.count}`,
+        `size=${parsed.size}`,
+      ];
+      if (parsed.routingTable !== undefined) parts.push(`routing-table=${parsed.routingTable}`);
 
-      const results = await context.routerClient.execute<Record<string, string>[]>("tool/ping", body);
-      const rows = Array.isArray(results) ? results : [results as Record<string, string>];
-      const summary = rows[0] ?? {};
+      const ssh = new SshClient(context.routerConfig, context.credentials);
+      const output = await ssh.execute(parts.join(" "));
 
-      const packetLoss = summary["packet-loss"] ?? "?";
-      const avgRtt = summary["avg-rtt"] ?? "?";
-      const sent = summary.sent ?? String(parsed.count);
-      const received = summary.received ?? "?";
-
-      const content = `Ping ${parsed.address} from ${context.routerId}: sent=${sent} received=${received} loss=${packetLoss} avg=${avgRtt}`;
+      // Summary line: "sent=N received=N packet-loss=X% min-rtt=Xms avg-rtt=Xms max-rtt=Xms"
+      const s = output.match(/sent=(\d+)/)?.[1] ?? String(parsed.count);
+      const r = output.match(/received=(\d+)/)?.[1] ?? "0";
+      const loss = output.match(/packet-loss=(\S+)/)?.[1] ?? "100%";
+      const minRtt = output.match(/min-rtt=(\S+)/)?.[1] ?? null;
+      const avgRtt = output.match(/avg-rtt=(\S+)/)?.[1] ?? "?";
+      const maxRtt = output.match(/max-rtt=(\S+)/)?.[1] ?? null;
 
       return {
-        content,
+        content: `Ping ${parsed.address} from ${context.routerId}: sent=${s} received=${r} loss=${loss} avg=${avgRtt}`,
         structuredContent: {
           routerId: context.routerId,
           address: parsed.address,
-          sent: Number(sent),
-          received: Number(received),
-          packetLoss,
-          minRtt: summary["min-rtt"] ?? null,
+          sent: Number(s),
+          received: Number(r),
+          packetLoss: loss,
+          minRtt,
           avgRtt,
-          maxRtt: summary["max-rtt"] ?? null,
-          raw: rows,
+          maxRtt,
+          raw: output,
         },
       };
     } catch (err) {
@@ -102,21 +105,32 @@ const tracerouteTool: ToolDefinition = {
     log.info({ routerId: context.routerId, address: parsed.address }, "Tracerouting");
 
     try {
-      const body: Record<string, string> = {
-        address: parsed.address,
-        count: String(parsed.count),
-        "max-hops": String(parsed.maxHops),
-      };
+      // Same REST API permission issue as ping — use SSH.
+      const parts = [
+        `/tool traceroute address=${parsed.address}`,
+        `count=${parsed.count}`,
+        `max-hops=${parsed.maxHops}`,
+      ];
 
-      const results = await context.routerClient.execute<Record<string, string>[]>("tool/traceroute", body);
-      const hops = Array.isArray(results) ? results : [];
+      const ssh = new SshClient(context.routerConfig, context.credentials);
+      const output = await ssh.execute(parts.join(" "));
+
+      // Each hop line starts with a number: " 1 192.168.1.1  echo reply  1ms …"
+      const hopLines = output.split("\n").filter((l) => /^\s*\d+\s+\S+/.test(l));
+      const hops = hopLines.map((line) => {
+        const cols = line.trim().split(/\s+/);
+        return {
+          hop: Number(cols[0]),
+          address: cols[1] ?? "???",
+          status: cols[2] ?? "",
+          rtt1: cols[3] ?? null,
+          rtt2: cols[4] ?? null,
+          rtt3: cols[5] ?? null,
+        };
+      });
 
       const lines = [`Traceroute to ${parsed.address} from ${context.routerId}:`];
-      hops.forEach((hop, i) => {
-        const addr = hop.address ?? "???";
-        const avg = hop.avg ?? "?";
-        lines.push(`  ${i + 1}  ${addr}  ${avg}`);
-      });
+      hops.forEach((h) => lines.push(`  ${h.hop}  ${h.address}  ${h.rtt1 ?? "?"}`));
 
       return {
         content: lines.join("\n"),
@@ -124,6 +138,7 @@ const tracerouteTool: ToolDefinition = {
           routerId: context.routerId,
           address: parsed.address,
           hops,
+          raw: output,
         },
       };
     } catch (err) {

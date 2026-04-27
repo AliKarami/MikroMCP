@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { diagnosticTools } from "../../../src/domain/tools/diagnostic-tools.js";
+import { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import { z } from "zod";
+
+vi.mock("../../../src/adapter/ssh-client.js");
 
 const pingTool = diagnosticTools[0];
 const tracerouteTool = diagnosticTools[1];
@@ -105,41 +108,44 @@ describe("diagnostic tools", () => {
   });
 
   describe("ping handler", () => {
-    const pingResult = [
-      { host: "8.8.8.8", sent: "4", received: "4", "packet-loss": "0%", "min-rtt": "10ms", "avg-rtt": "12ms", "max-rtt": "15ms" },
-    ];
+    const PING_SSH_OUTPUT =
+      "SEQ HOST                SIZE TTL TIME   STATUS\n" +
+      "  0 8.8.8.8               56  56 10ms  echo reply\n" +
+      "  1 8.8.8.8               56  56 14ms  echo reply\n" +
+      "    sent=4 received=4 packet-loss=0% min-rtt=10ms avg-rtt=12ms max-rtt=15ms\n";
+
+    function mockSsh(output: string) {
+      vi.mocked(SshClient).mockImplementation(
+        () => ({ execute: vi.fn().mockResolvedValue(output) }) as unknown as SshClient,
+      );
+    }
 
     it("returns RTT stats on successful ping", async () => {
-      const ctx = makeContext(pingResult);
+      mockSsh(PING_SSH_OUTPUT);
+      const ctx = makeContext();
       const result = await pingTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain("8.8.8.8");
-      expect((result.structuredContent as Record<string, unknown>).routerId).toBe("test-router");
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.routerId).toBe("test-router");
+      expect(sc.avgRtt).toBe("12ms");
     });
 
-    it("calls execute with tool/ping path", async () => {
-      const ctx = makeContext(pingResult);
-      await pingTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
-      expect((ctx.routerClient as Record<string, unknown>).execute).toHaveBeenCalledWith(
-        "tool/ping",
-        expect.objectContaining({ address: "8.8.8.8" }),
-      );
-    });
-
-    it("passes count and size to execute", async () => {
-      const ctx = makeContext(pingResult);
+    it("sends address, count, and size in the SSH command", async () => {
+      const executeMock = vi.fn().mockResolvedValue(PING_SSH_OUTPUT);
+      vi.mocked(SshClient).mockImplementation(() => ({ execute: executeMock }) as unknown as SshClient);
+      const ctx = makeContext();
       await pingTool.handler({ routerId: "test-router", address: "10.0.0.1", count: 10, size: 128 }, ctx);
-      expect((ctx.routerClient as Record<string, unknown>).execute).toHaveBeenCalledWith(
-        "tool/ping",
-        expect.objectContaining({ count: "10", size: "128" }),
+      expect(executeMock).toHaveBeenCalledWith(
+        expect.stringContaining("address=10.0.0.1"),
       );
+      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("count=10"));
+      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("size=128"));
     });
 
     it("treats 100% packet loss as a valid (non-error) response", async () => {
-      const lossResult = [
-        { host: "10.255.255.1", sent: "4", received: "0", "packet-loss": "100%", "min-rtt": "", "avg-rtt": "", "max-rtt": "" },
-      ];
-      const ctx = makeContext(lossResult);
+      mockSsh("    sent=4 received=0 packet-loss=100%\n");
+      const ctx = makeContext();
       const result = await pingTool.handler({ routerId: "test-router", address: "10.255.255.1" }, ctx);
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain("100%");
@@ -147,36 +153,47 @@ describe("diagnostic tools", () => {
   });
 
   describe("traceroute handler", () => {
-    const traceResult = [
-      { address: "192.168.1.1", loss: "0%", "sent": "3", "last": "1ms", "avg": "1ms", "best": "1ms", "worst": "1ms" },
-      { address: "10.0.0.1", loss: "0%", "sent": "3", "last": "5ms", "avg": "5ms", "best": "4ms", "worst": "6ms" },
-    ];
+    const TRACE_SSH_OUTPUT =
+      " # ADDRESS       STATUS     RTT1   RTT2   RTT3\n" +
+      " 1 192.168.1.1  echo reply  1ms    1ms    1ms\n" +
+      " 2 10.0.0.1     echo reply  5ms    5ms    5ms\n";
+
+    function mockSsh(output: string) {
+      vi.mocked(SshClient).mockImplementation(
+        () => ({ execute: vi.fn().mockResolvedValue(output) }) as unknown as SshClient,
+      );
+    }
 
     it("returns hop list", async () => {
-      const ctx = makeContext(traceResult);
+      mockSsh(TRACE_SSH_OUTPUT);
+      const ctx = makeContext();
       const result = await tracerouteTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
       expect(result.isError).toBeFalsy();
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.hops as unknown[]).length).toBe(2);
     });
 
-    it("calls execute with tool/traceroute path", async () => {
-      const ctx = makeContext(traceResult);
-      await tracerouteTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
-      expect((ctx.routerClient as Record<string, unknown>).execute).toHaveBeenCalledWith(
-        "tool/traceroute",
-        expect.objectContaining({ address: "8.8.8.8" }),
-      );
+    it("sends address, count, and max-hops in the SSH command", async () => {
+      const executeMock = vi.fn().mockResolvedValue(TRACE_SSH_OUTPUT);
+      vi.mocked(SshClient).mockImplementation(() => ({ execute: executeMock }) as unknown as SshClient);
+      const ctx = makeContext();
+      await tracerouteTool.handler({ routerId: "test-router", address: "8.8.8.8", count: 2, maxHops: 10 }, ctx);
+      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("address=8.8.8.8"));
+      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("count=2"));
+      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("max-hops=10"));
     });
 
-    it("treats partial hop list (some timeouts) as valid response", async () => {
-      const partialResult = [
-        { address: "192.168.1.1", loss: "0%", "sent": "3", "last": "1ms", "avg": "1ms", "best": "1ms", "worst": "1ms" },
-        { address: "???", loss: "100%", "sent": "3", "last": "", "avg": "", "best": "", "worst": "" },
-      ];
-      const ctx = makeContext(partialResult);
+    it("treats partial hop list (some timeouts shown as ???) as valid response", async () => {
+      mockSsh(
+        " # ADDRESS       STATUS     RTT1\n" +
+        " 1 192.168.1.1  echo reply  1ms\n" +
+        " 2 ???          timeout\n",
+      );
+      const ctx = makeContext();
       const result = await tracerouteTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
       expect(result.isError).toBeFalsy();
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.hops as unknown[]).length).toBe(2);
     });
   });
 
