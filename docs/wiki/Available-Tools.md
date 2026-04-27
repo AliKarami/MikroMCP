@@ -242,6 +242,8 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 ## Diagnostics
 
 > **SSH policy required.** `ping`, `traceroute`, `torch`, and `run_command` connect via SSH because RouterOS 7.x REST API returns a permission error for tool commands regardless of user policy. The RouterOS user must have the `ssh` policy in its group in addition to the standard policies.
+>
+> **`torch` also requires the `sniff` policy.** RouterOS enforces packet-capture permissions separately; without `sniff` the torch command returns a permission error even over SSH.
 
 ### `ping` — Read
 
@@ -285,6 +287,8 @@ Capture a real-time traffic snapshot on an interface. The call blocks for `durat
 | `duration` | integer | `5` | Capture duration in seconds (1–30) |
 | `srcAddress` | string | — | Filter flows by source IP |
 | `dstAddress` | string | — | Filter flows by destination IP |
+
+**Requires `ssh` and `sniff` policies** on the RouterOS user group.
 
 **Example prompt:** "Show me the top traffic flows on ether1 of core-01 for 10 seconds."
 

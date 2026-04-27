@@ -3,11 +3,12 @@
 # Credentials are resolved from environment variables by default.
 #
 # Required RouterOS user group policies:
-#   read, write, api, rest-api, test, ssh
+#   read, write, api, rest-api, test, ssh, sniff
 #
-# The `ssh` policy is required for ping, traceroute, and run_command — those
-# tools execute via SSH because RouterOS 7.x REST API blocks tool commands
+# The `ssh` policy is required for ping, traceroute, torch, and run_command —
+# those tools execute via SSH because RouterOS 7.x REST API blocks tool commands
 # regardless of other policy settings.
+# The `sniff` policy is additionally required for torch (packet-capture access).
 
 routers:
   core-01:

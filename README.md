@@ -53,9 +53,9 @@ flowchart LR
 
 **Requirements:** Node.js >= 22 · MikroTik RouterOS 7.x with REST API enabled
 
-**Required RouterOS user policies:** `read`, `write`, `api`, `rest-api`, `test`, `ssh`
+**Required RouterOS user policies:** `read`, `write`, `api`, `rest-api`, `test`, `ssh`, `sniff`
 
-> `ssh` is needed by `ping`, `traceroute`, and `run_command`, which execute via SSH due to RouterOS 7.x REST API permission limitations for tool commands.
+> `ssh` is needed by `ping`, `traceroute`, `torch`, and `run_command`, which execute via SSH due to RouterOS 7.x REST API permission limitations for tool commands. `sniff` is additionally required by `torch` for packet-capture access.
 
 ```bash
 git clone https://github.com/AliKarami/MikroMCP.git
