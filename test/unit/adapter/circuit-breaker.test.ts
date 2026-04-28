@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { CircuitBreaker } from "../../../src/adapter/circuit-breaker.js";
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
@@ -115,5 +115,13 @@ describe("circuit breaker - failure filtering", () => {
       await expect(cb.execute(() => Promise.reject(unreachable))).rejects.toThrow();
     }
     expect(cb.state).toBe("open");
+  });
+
+  it("does not count plain Error as a transient failure", async () => {
+    const cb = new CircuitBreaker("r1", { failureThreshold: 2, cooldownMs: 30000 });
+    for (let i = 0; i < 2; i++) {
+      await expect(cb.execute(() => Promise.reject(new Error("plain")))).rejects.toThrow("plain");
+    }
+    expect(cb.state).toBe("closed");
   });
 });
