@@ -9,26 +9,32 @@ const log = createLogger("router-registry");
 const RouterConfigSchema = z.object({
   host: z.string().min(1, "host is required"),
   port: z.number().int().min(1).max(65535),
-  tls: z.object({
-    enabled: z.boolean(),
-    rejectUnauthorized: z.boolean(),
-    ca: z.string().optional(),
-  }),
-  credentials: z.object({
-    source: z.enum(["env", "vault"]),
-    envPrefix: z.string().optional(),
-    vaultPath: z.string().optional(),
-  }),
+  tls: z
+    .object({
+      enabled: z.boolean(),
+      rejectUnauthorized: z.boolean(),
+      ca: z.string().optional(),
+    })
+    .strict(),
+  credentials: z
+    .object({
+      source: z.enum(["env", "vault"]),
+      envPrefix: z.string().optional(),
+      vaultPath: z.string().optional(),
+    })
+    .strict(),
   tags: z.array(z.string()).default([]),
   rosVersion: z.string().min(1),
   sshPort: z.number().int().min(1).max(65535).optional(),
   cmdAllow: z.array(z.string()).optional(),
   cmdDeny: z.array(z.string()).optional(),
-});
+}).strict();
 
-const ConfigFileSchema = z.object({
-  routers: z.record(z.string(), RouterConfigSchema),
-});
+const ConfigFileSchema = z
+  .object({
+    routers: z.record(z.string(), RouterConfigSchema),
+  })
+  .strict();
 
 export class RouterRegistry {
   private routers: Map<string, RouterConfig>;
