@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CircuitBreaker } from "../../../src/adapter/circuit-breaker.js";
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
+const transientErr = new MikroMCPError({
+  category: ErrorCategory.ROUTER_UNREACHABLE,
+  code: "ECONNREFUSED",
+  message: "unreachable",
+  recoverability: { retryable: true, suggestedAction: "retry" },
+});
+
 describe("CircuitBreaker", () => {
   let cb: CircuitBreaker;
 
@@ -20,27 +27,23 @@ describe("CircuitBreaker", () => {
   });
 
   it("opens after consecutive failures reach threshold", async () => {
-    const error = new Error("fail");
     for (let i = 0; i < 3; i++) {
-      await expect(cb.execute(() => Promise.reject(error))).rejects.toThrow("fail");
+      await expect(cb.execute(() => Promise.reject(transientErr))).rejects.toThrow("unreachable");
     }
     expect(cb.state).toBe("open");
   });
 
   it("rejects immediately when open", async () => {
-    // Force open
-    const error = new Error("fail");
     for (let i = 0; i < 3; i++) {
-      await expect(cb.execute(() => Promise.reject(error))).rejects.toThrow();
+      await expect(cb.execute(() => Promise.reject(transientErr))).rejects.toThrow();
     }
 
     await expect(cb.execute(() => Promise.resolve("ok"))).rejects.toThrow("Circuit breaker is open");
   });
 
   it("transitions to half-open after cooldown", async () => {
-    const error = new Error("fail");
     for (let i = 0; i < 3; i++) {
-      await expect(cb.execute(() => Promise.reject(error))).rejects.toThrow();
+      await expect(cb.execute(() => Promise.reject(transientErr))).rejects.toThrow();
     }
     expect(cb.state).toBe("open");
 
@@ -50,9 +53,8 @@ describe("CircuitBreaker", () => {
   });
 
   it("closes on success in half-open state", async () => {
-    const error = new Error("fail");
     for (let i = 0; i < 3; i++) {
-      await expect(cb.execute(() => Promise.reject(error))).rejects.toThrow();
+      await expect(cb.execute(() => Promise.reject(transientErr))).rejects.toThrow();
     }
 
     await new Promise((r) => setTimeout(r, 150));
@@ -64,22 +66,20 @@ describe("CircuitBreaker", () => {
   });
 
   it("reopens on failure in half-open state", async () => {
-    const error = new Error("fail");
     for (let i = 0; i < 3; i++) {
-      await expect(cb.execute(() => Promise.reject(error))).rejects.toThrow();
+      await expect(cb.execute(() => Promise.reject(transientErr))).rejects.toThrow();
     }
 
     await new Promise((r) => setTimeout(r, 150));
     expect(cb.state).toBe("half-open");
 
-    await expect(cb.execute(() => Promise.reject(new Error("still broken")))).rejects.toThrow();
+    await expect(cb.execute(() => Promise.reject(transientErr))).rejects.toThrow();
     expect(cb.state).toBe("open");
   });
 
   it("resets to closed", async () => {
-    const error = new Error("fail");
     for (let i = 0; i < 3; i++) {
-      await expect(cb.execute(() => Promise.reject(error))).rejects.toThrow();
+      await expect(cb.execute(() => Promise.reject(transientErr))).rejects.toThrow();
     }
     expect(cb.state).toBe("open");
 

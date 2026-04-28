@@ -15,7 +15,7 @@ const TRANSIENT_CATEGORIES = new Set([
 
 function isTransientFailure(error: unknown): boolean {
   if (!(error instanceof MikroMCPError)) {
-    return true;
+    return false;
   }
   return TRANSIENT_CATEGORIES.has(error.category);
 }
