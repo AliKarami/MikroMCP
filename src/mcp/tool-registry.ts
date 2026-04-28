@@ -67,15 +67,23 @@ export function registerAllTools(
               circuitBreakers.set(routerId, cb);
             }
 
+            const runHandler = () =>
+              tool.handler(args, {
+                routerClient: client,
+                routerId,
+                correlationId,
+                routerConfig,
+                credentials,
+              });
+
             const executeHandler = () =>
-              cb!.execute(() =>
-                tool.handler(args, { routerClient: client, routerId, correlationId, routerConfig, credentials }),
+              cb!.execute(
+                tool.annotations.readOnlyHint
+                  ? () => withRetry(runHandler, config.retry)
+                  : runHandler,
               );
 
-            // Retry only read-only tools
-            const result = tool.annotations.readOnlyHint
-              ? await withRetry(executeHandler, config.retry)
-              : await executeHandler();
+            const result = await executeHandler();
 
             log.info({ tool: tool.name, routerId, correlationId }, "Tool executed successfully");
             return formatToolResult(result);
