@@ -1,13 +1,34 @@
-// ---------------------------------------------------------------------------
-// MikroMCP - Multi-router registry loaded from YAML
-// ---------------------------------------------------------------------------
-
 import { readFileSync, existsSync } from "node:fs";
 import { parse } from "yaml";
+import { z } from "zod";
 import type { RouterConfig } from "../types.js";
 import { createLogger } from "../observability/logger.js";
 
 const log = createLogger("router-registry");
+
+const RouterConfigSchema = z.object({
+  host: z.string().min(1, "host is required"),
+  port: z.number().int().min(1).max(65535),
+  tls: z.object({
+    enabled: z.boolean(),
+    rejectUnauthorized: z.boolean(),
+    ca: z.string().optional(),
+  }),
+  credentials: z.object({
+    source: z.enum(["env", "vault"]),
+    envPrefix: z.string().optional(),
+    vaultPath: z.string().optional(),
+  }),
+  tags: z.array(z.string()).default([]),
+  rosVersion: z.string().min(1),
+  sshPort: z.number().int().min(1).max(65535).optional(),
+  cmdAllow: z.array(z.string()).optional(),
+  cmdDeny: z.array(z.string()).optional(),
+});
+
+const ConfigFileSchema = z.object({
+  routers: z.record(z.string(), RouterConfigSchema),
+});
 
 export class RouterRegistry {
   private routers: Map<string, RouterConfig>;
@@ -20,24 +41,23 @@ export class RouterRegistry {
       return;
     }
 
-    try {
-      const raw = readFileSync(configPath, "utf-8");
-      const parsed = parse(raw) as { routers?: Record<string, Omit<RouterConfig, "id">> } | null;
+    const raw = readFileSync(configPath, "utf-8");
+    const parsed = parse(raw) as unknown;
 
-      if (parsed?.routers && typeof parsed.routers === "object" && !Array.isArray(parsed.routers)) {
-        for (const [id, config] of Object.entries(parsed.routers)) {
-          this.routers.set(id, { ...config, id });
-        }
-        log.info({ count: this.routers.size }, "Loaded routers from config");
-      }
-    } catch (err) {
-      log.error({ configPath, err }, "Failed to parse router config");
+    const result = ConfigFileSchema.safeParse(parsed);
+    if (!result.success) {
+      const issues = result.error.errors
+        .map((e) => `  ${e.path.join(".")}: ${e.message}`)
+        .join("\n");
+      throw new Error(`Invalid router config at ${configPath}:\n${issues}`);
     }
+
+    for (const [id, config] of Object.entries(result.data.routers)) {
+      this.routers.set(id, { ...config, id } as RouterConfig);
+    }
+    log.info({ count: this.routers.size }, "Loaded routers from config");
   }
 
-  /**
-   * Retrieve a router by ID. Throws if not found.
-   */
   getRouter(id: string): RouterConfig {
     const router = this.routers.get(id);
     if (!router) {
@@ -46,21 +66,12 @@ export class RouterRegistry {
     return router;
   }
 
-  /**
-   * List routers, optionally filtered by tags. Returns all routers when no
-   * tags are provided.
-   */
   listRouters(tags?: string[]): RouterConfig[] {
     const all = Array.from(this.routers.values());
-    if (!tags || tags.length === 0) {
-      return all;
-    }
+    if (!tags || tags.length === 0) return all;
     return all.filter((r) => tags.some((t) => r.tags.includes(t)));
   }
 
-  /**
-   * Check whether a router with the given ID exists.
-   */
   hasRouter(id: string): boolean {
     return this.routers.has(id);
   }
