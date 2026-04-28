@@ -2,6 +2,7 @@
 // MikroMCP - Error enrichment
 // ---------------------------------------------------------------------------
 
+import { ZodError } from "zod";
 import { ErrorCategory, MikroMCPError } from "./error-types.js";
 import type { Recoverability } from "./error-types.js";
 
@@ -141,6 +142,21 @@ export function enrichError(
   // Already enriched - pass through.
   if (error instanceof MikroMCPError) {
     return error;
+  }
+
+  if (error instanceof ZodError) {
+    const category = ErrorCategory.VALIDATION;
+    const message = error.errors
+      .map((e) => `${e.path.join(".") || "input"}: ${e.message}`)
+      .join("; ");
+    return new MikroMCPError({
+      category,
+      code: "VALIDATION_ERROR",
+      message,
+      details: buildDetails({ issues: error.errors }, context),
+      recoverability: defaultRecoverability(category),
+      cause: error,
+    });
   }
 
   const raw = error as Record<string, unknown> | null | undefined;
