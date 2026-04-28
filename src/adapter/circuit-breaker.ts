@@ -6,6 +6,20 @@ import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 
 export type CircuitState = "closed" | "open" | "half-open";
 
+const TRANSIENT_CATEGORIES = new Set([
+  ErrorCategory.ROUTER_UNREACHABLE,
+  ErrorCategory.ROUTER_TIMEOUT,
+  ErrorCategory.ROUTER_ERROR,
+  ErrorCategory.ROUTER_BUSY,
+]);
+
+function isTransientFailure(error: unknown): boolean {
+  if (!(error instanceof MikroMCPError)) {
+    return true;
+  }
+  return TRANSIENT_CATEGORIES.has(error.category);
+}
+
 export interface CircuitBreakerOptions {
   /** Number of consecutive failures before opening the circuit (default 5). */
   failureThreshold: number;
@@ -75,7 +89,9 @@ export class CircuitBreaker {
       this.onSuccess();
       return result;
     } catch (error) {
-      this.onFailure();
+      if (isTransientFailure(error)) {
+        this.onFailure();
+      }
       throw error;
     }
   }

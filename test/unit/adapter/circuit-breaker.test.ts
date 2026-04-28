@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CircuitBreaker } from "../../../src/adapter/circuit-breaker.js";
+import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 describe("CircuitBreaker", () => {
   let cb: CircuitBreaker;
@@ -84,5 +85,35 @@ describe("CircuitBreaker", () => {
 
     cb.reset();
     expect(cb.state).toBe("closed");
+  });
+});
+
+describe("circuit breaker - failure filtering", () => {
+  it("does not count VALIDATION errors as failures", async () => {
+    const cb = new CircuitBreaker("r1", { failureThreshold: 2, cooldownMs: 30000 });
+    const validationErr = new MikroMCPError({
+      category: ErrorCategory.VALIDATION,
+      code: "BAD",
+      message: "bad input",
+      recoverability: { retryable: false, suggestedAction: "fix it" },
+    });
+    for (let i = 0; i < 2; i++) {
+      await expect(cb.execute(() => Promise.reject(validationErr))).rejects.toThrow();
+    }
+    expect(cb.state).toBe("closed");
+  });
+
+  it("trips on ROUTER_UNREACHABLE errors", async () => {
+    const cb = new CircuitBreaker("r1", { failureThreshold: 2, cooldownMs: 30000 });
+    const unreachable = new MikroMCPError({
+      category: ErrorCategory.ROUTER_UNREACHABLE,
+      code: "ECONNREFUSED",
+      message: "unreachable",
+      recoverability: { retryable: true, suggestedAction: "retry" },
+    });
+    for (let i = 0; i < 2; i++) {
+      await expect(cb.execute(() => Promise.reject(unreachable))).rejects.toThrow();
+    }
+    expect(cb.state).toBe("open");
   });
 });
