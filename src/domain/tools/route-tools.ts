@@ -8,6 +8,7 @@ import type { RouterOSRecord } from "../../types.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+import { cidrSchema } from "./cidr.js";
 
 const log = createLogger("route-tools");
 
@@ -131,9 +132,7 @@ const manageRouteInputSchema = z.object({
   routerId: z.string().describe("Target router identifier from the router registry"),
   action: z.enum(["add", "remove"])
     .describe("Action to perform: add or remove a route"),
-  dstAddress: z.string()
-    .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/, "Must be an IPv4 address or CIDR notation, e.g. 10.0.0.0/8 or 10.77.0.4")
-    .transform((v) => (v.includes("/") ? v : `${v}/32`))
+  dstAddress: cidrSchema
     .describe("Destination address in CIDR notation or plain IP (auto-converted to /32), e.g. 10.0.0.0/8 or 10.77.0.4"),
   gateway: z.string()
     .describe("Gateway IP address"),

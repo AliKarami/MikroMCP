@@ -8,6 +8,7 @@ import type { RouterOSRecord } from "../../types.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+import { cidrSchema } from "./cidr.js";
 
 const log = createLogger("ip-tools");
 
@@ -15,9 +16,7 @@ const inputSchema = z.object({
   routerId: z.string().describe("Target router identifier from the router registry"),
   action: z.enum(["add", "update", "remove"])
     .describe("Action to perform: add, update, or remove an IP address"),
-  address: z.string()
-    .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/, "Must be a valid IPv4 address, optionally with a prefix length (e.g. 192.168.1.1/24). Defaults to /32 if omitted.")
-    .transform((v) => (v.includes("/") ? v : `${v}/32`))
+  address: cidrSchema
     .describe("IP address with optional prefix length in CIDR notation (e.g., 192.168.1.1/24). Defaults to /32 if prefix is omitted."),
   interface: z.string()
     .describe("Interface to assign the IP address to"),
