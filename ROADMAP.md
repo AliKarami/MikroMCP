@@ -41,7 +41,7 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.4 — Network Services
+## ✅ v0.4 — Network Services
 
 **Goal:** WiFi, bridging, WireGuard, and DNS — the next most-configured subsystems after routing and firewall.
 

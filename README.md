@@ -32,7 +32,7 @@ flowchart LR
 
     subgraph MikroMCP["MikroMCP Server"]
         direction TB
-        TR["Tool Registry\n(17 tools)"]
+        TR["Tool Registry\n(29 tools)"]
         PL["Pipeline\nCorrelation ID → Circuit Breaker\n→ Retry Engine → REST Client"]
         TR --> PL
     end
@@ -111,6 +111,18 @@ For the full walkthrough including router user setup, see the **[📖 Setup Guid
 | `set_system_clock` | ✏️ Write | Set system time and timezone (idempotent, dry-run) |
 | `reboot` | ✏️ Write | Controlled router reboot with optional delay and dry-run |
 | `run_command` | ✏️ Write | Run any RouterOS CLI command via SSH with allowlist/denylist guardrails |
+| `list_bridges` | 👁️ Read | List bridge interfaces and port members |
+| `manage_bridge` | ✏️ Write | Create or remove a bridge interface (idempotent) |
+| `manage_bridge_port` | ✏️ Write | Add or remove an interface as a bridge port (idempotent) |
+| `list_wifi_interfaces` | 👁️ Read | List WiFi/wireless interfaces (ROS-version-aware path) |
+| `list_wifi_clients` | 👁️ Read | List connected WiFi clients with signal strength |
+| `manage_wifi_interface` | ✏️ Write | Enable, disable, or update SSID on a WiFi interface |
+| `list_wireguard_interfaces` | 👁️ Read | List WireGuard interfaces and status |
+| `list_wireguard_peers` | 👁️ Read | List WireGuard peers with handshake and transfer stats |
+| `manage_wireguard_peer` | ✏️ Write | Add or remove a WireGuard peer (idempotent by public key) |
+| `list_dns_entries` | 👁️ Read | List static DNS entries with name/type filtering |
+| `manage_dns_entry` | ✏️ Write | Add or remove a static DNS entry (idempotent by name+type) |
+| `get_dns_settings` | 👁️ Read | Read DNS resolver configuration |
 
 Full parameter tables and example prompts: **[📋 Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)**
 
@@ -125,11 +137,11 @@ Full parameter tables and example prompts: **[📋 Available Tools](https://gith
 | [⚙️ Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration) | Router registry YAML, credentials, env vars, HTTP transport |
 | [▶️ Running](https://github.com/AliKarami/MikroMCP/wiki/Running) | Dev and production scripts |
 | [🔌 Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-an-MCP-Client) | Claude Desktop, Claude Code, and other clients |
-| [🛠️ Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 9 tools with parameters and example prompts |
+| [🛠️ Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 29 tools with parameters and example prompts |
 | [🚨 Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling) | Error categories, circuit breaker, retry engine |
 | [🧪 Development](https://github.com/AliKarami/MikroMCP/wiki/Development) | Project structure, scripts, testing, MCP Inspector |
 | [🤝 Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing) | Adding tools, guidelines, PR checklist |
-| [🗺️ Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1 ✅ · v0.2 ✅ · v0.3 ✅ · v0.4–v1.0 planned |
+| [🗺️ Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1 ✅ · v0.2 ✅ · v0.3 ✅ · v0.4 ✅ · v0.5–v1.0 planned |
 
 ---
 
