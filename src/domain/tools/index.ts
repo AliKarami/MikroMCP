@@ -11,6 +11,7 @@ import { routeTools } from "./route-tools.js";
 import { firewallTools } from "./firewall-tools.js";
 import { diagnosticTools } from "./diagnostic-tools.js";
 import { systemOpsTools } from "./system-ops-tools.js";
+import { bridgeTools } from "./bridge-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -21,6 +22,12 @@ export const allTools: ToolDefinition[] = [
   ...firewallTools,
   ...diagnosticTools,
   ...systemOpsTools,
+  ...bridgeTools,
 ];
 
-export type { ToolDefinition, ToolContext, ToolResult, ToolAnnotations } from "./tool-definition.js";
+export type {
+  ToolDefinition,
+  ToolContext,
+  ToolResult,
+  ToolAnnotations,
+} from "./tool-definition.js";
