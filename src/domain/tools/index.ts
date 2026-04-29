@@ -13,6 +13,7 @@ import { diagnosticTools } from "./diagnostic-tools.js";
 import { systemOpsTools } from "./system-ops-tools.js";
 import { bridgeTools } from "./bridge-tools.js";
 import { wifiTools } from "./wifi-tools.js";
+import { wireguardTools } from "./wireguard-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -25,6 +26,7 @@ export const allTools: ToolDefinition[] = [
   ...systemOpsTools,
   ...bridgeTools,
   ...wifiTools,
+  ...wireguardTools,
 ];
 
 export type {
