@@ -14,6 +14,7 @@ import { systemOpsTools } from "./system-ops-tools.js";
 import { bridgeTools } from "./bridge-tools.js";
 import { wifiTools } from "./wifi-tools.js";
 import { wireguardTools } from "./wireguard-tools.js";
+import { dnsTools } from "./dns-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -27,6 +28,7 @@ export const allTools: ToolDefinition[] = [
   ...bridgeTools,
   ...wifiTools,
   ...wireguardTools,
+  ...dnsTools,
 ];
 
 export type {
