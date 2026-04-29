@@ -31,15 +31,47 @@ function makeContext(ifaces: Record<string, unknown>[]): ToolContext {
   };
 }
 
-const listInterfacesInputSchema = z.object({
-  routerId: z.string(),
-  type: z.enum(["ether", "vlan", "bridge", "bonding", "wireguard", "gre", "all"]).default("all"),
-  status: z.enum(["up", "down", "all"]).default("all"),
-  macAddress: z.string().optional(),
-  includeCounters: z.boolean().default(false),
-  limit: z.number().int().min(1).max(500).default(100),
-  offset: z.number().int().min(0).default(0),
-}).strict();
+const listInterfacesInputSchema = z
+  .object({
+    routerId: z.string(),
+    type: z.enum(["ether", "vlan", "bridge", "bonding", "wireguard", "gre", "all"]).default("all"),
+    status: z.enum(["up", "down", "all"]).default("all"),
+    macAddress: z.string().optional(),
+    includeCounters: z.boolean().default(false),
+    limit: z.number().int().min(1).max(500).default(100),
+    offset: z.number().int().min(0).default(0),
+  })
+  .strict();
+
+describe("create_vlan - idempotency boolean comparison", () => {
+  it("returns already_exists when disabled field is string 'false' and requested is boolean false", async () => {
+    const ctx: ToolContext = {
+      routerId: "test-router",
+      correlationId: "corr",
+      routerConfig: makeRouterConfig(),
+      credentials: { username: "admin", password: "secret" },
+      routerClient: {
+        get: vi.fn().mockResolvedValue([{
+          ".id": "*1",
+          name: "vlan10",
+          "vlan-id": "10",
+          interface: "ether1",
+          disabled: "false",   // RouterOS returns string
+        }]),
+      } as unknown as RouterOSRestClient,
+    };
+    const createVlanTool = interfaceTools[1];
+    const result = await createVlanTool.handler({
+      routerId: "test-router",
+      name: "vlan10",
+      vlanId: 10,
+      parentInterface: "ether1",
+      disabled: false,   // JS boolean
+    }, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.action).toBe("already_exists");
+  });
+});
 
 describe("list_interfaces", () => {
   describe("input schema", () => {
@@ -55,36 +87,57 @@ describe("list_interfaces", () => {
 
   describe("handler - macAddress filter", () => {
     const sampleIfaces = [
-      { ".id": "*1", name: "ether1", type: "ether", running: "true", "mac-address": "AA:BB:CC:DD:EE:FF" },
-      { ".id": "*2", name: "ether2", type: "ether", running: "true", "mac-address": "11:22:33:44:55:66" },
+      {
+        ".id": "*1",
+        name: "ether1",
+        type: "ether",
+        running: "true",
+        "mac-address": "AA:BB:CC:DD:EE:FF",
+      },
+      {
+        ".id": "*2",
+        name: "ether2",
+        type: "ether",
+        running: "true",
+        "mac-address": "11:22:33:44:55:66",
+      },
     ];
 
     it("returns only matching interface when macAddress filter is set", async () => {
       const ctx = makeContext(sampleIfaces);
-      const result = await listInterfacesTool.handler({
-        routerId: "test-router",
-        macAddress: "AA:BB:CC:DD:EE:FF",
-      }, ctx);
+      const result = await listInterfacesTool.handler(
+        {
+          routerId: "test-router",
+          macAddress: "AA:BB:CC:DD:EE:FF",
+        },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.interfaces as unknown[]).length).toBe(1);
     });
 
     it("macAddress match is case-insensitive", async () => {
       const ctx = makeContext(sampleIfaces);
-      const result = await listInterfacesTool.handler({
-        routerId: "test-router",
-        macAddress: "aa:bb:cc:dd:ee:ff",
-      }, ctx);
+      const result = await listInterfacesTool.handler(
+        {
+          routerId: "test-router",
+          macAddress: "aa:bb:cc:dd:ee:ff",
+        },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.interfaces as unknown[]).length).toBe(1);
     });
 
     it("returns empty when no interface matches macAddress", async () => {
       const ctx = makeContext(sampleIfaces);
-      const result = await listInterfacesTool.handler({
-        routerId: "test-router",
-        macAddress: "FF:FF:FF:FF:FF:FF",
-      }, ctx);
+      const result = await listInterfacesTool.handler(
+        {
+          routerId: "test-router",
+          macAddress: "FF:FF:FF:FF:FF:FF",
+        },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.interfaces as unknown[]).length).toBe(0);
     });
