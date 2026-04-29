@@ -23,7 +23,7 @@ MikroMCP exposes MikroTik router management as MCP tools. An AI assistant connec
 ## 🗺️ How it works
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Clients["MCP Clients"]
         A["Claude Desktop"]
         B["Claude Code"]
@@ -31,9 +31,9 @@ flowchart LR
     end
 
     subgraph Server["MikroMCP Server"]
-        REG["Tool Registry\n29 tools"]
-        CB["Circuit Breaker\nper-router"]
-        RE["Retry Engine\nbackoff + jitter"]
+        REG["Tool Registry — 29 tools"]
+        CB["Circuit Breaker — per-router"]
+        RE["Retry Engine — backoff + jitter"]
         RC["RouterOS REST Client"]
         REG --> CB --> RE --> RC
     end
