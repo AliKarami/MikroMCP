@@ -12,6 +12,7 @@ import { firewallTools } from "./firewall-tools.js";
 import { diagnosticTools } from "./diagnostic-tools.js";
 import { systemOpsTools } from "./system-ops-tools.js";
 import { bridgeTools } from "./bridge-tools.js";
+import { wifiTools } from "./wifi-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -23,6 +24,7 @@ export const allTools: ToolDefinition[] = [
   ...diagnosticTools,
   ...systemOpsTools,
   ...bridgeTools,
+  ...wifiTools,
 ];
 
 export type {
