@@ -41,10 +41,11 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ---
 
-## 🔜 v0.4 — Network Services
+## ✅ v0.4 — Network Services
 
 **Goal:** WiFi, bridging, WireGuard, and DNS — the next most-configured subsystems after routing and firewall.
 
+- **Infrastructure fixes:** RouterOS boolean/number type normalization in idempotency comparisons; `ZodError` now maps to `VALIDATION` (not `INTERNAL`); circuit breaker no longer trips on `VALIDATION`/`NOT_FOUND`/`CONFLICT` errors; circuit breaker now wraps the full retry sequence instead of each individual attempt; router registry validates YAML config with Zod at startup and exits fast on bad config; IP/CIDR validation replaced with a proper octet/prefix parser
 - **Bridge:** `list_bridges`, `manage_bridge`, `manage_bridge_port`
 - **WiFi / Wireless:** `list_wifi_interfaces`, `list_wifi_clients`, `manage_wifi_interface`
 - **WireGuard:** `list_wireguard_interfaces`, `list_wireguard_peers`, `manage_wireguard_peer`
@@ -52,9 +53,9 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ---
 
-## 🔜 v0.5 — Advanced Firewall & Policy Routing
+## 🔜 v0.5 — Advanced Firewall, Policy Routing & Security Hardening
 
-**Goal:** Complete the firewall surface and add advanced routing primitives.
+**Goal:** Complete the firewall surface, add advanced routing primitives, and close the security gaps in the HTTP transport and `run_command`.
 
 - **Firewall Mangle:** `list_mangle_rules`, `manage_mangle_rule`
 - **Firewall Address Lists:** `list_address_list_entries`, `manage_address_list_entry`

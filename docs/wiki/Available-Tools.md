@@ -1,6 +1,6 @@
 # Available Tools
 
-All 17 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
+All 29 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -308,3 +308,203 @@ Read and filter the system log. Client-side filtering by topic, message prefix, 
 | `sinceMinutes` | integer | — | Only return entries from the last N minutes (1–1440) |
 
 **Example prompt:** "Show me firewall log entries from the last 30 minutes on core-01."
+
+---
+
+## Bridge
+
+### `list_bridges` — Read
+
+List bridge interfaces and their port members.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "List all bridges on core-01 and show which ports are members."
+
+---
+
+### `manage_bridge` — Write · Idempotent
+
+Create or remove a bridge interface. Returns `already_exists` if the bridge already exists with the same name.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `create` \| `remove` | — | Operation to perform |
+| `name` | string | — | Bridge interface name (alphanumeric, `-`, `_`; max 15 chars) |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Create the bridge in disabled state |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Create a bridge interface named bridge1 on core-01."
+
+---
+
+### `manage_bridge_port` — Write · Idempotent
+
+Add or remove an interface as a bridge port. Returns `already_exists` if the interface is already a member of the bridge.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` | — | Operation to perform |
+| `bridge` | string | — | Bridge interface name |
+| `interface` | string | — | Interface to add or remove |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add ether2 and ether3 to bridge1 on core-01."
+
+---
+
+## WiFi / Wireless
+
+> Path is version-aware: `/interface/wifi` on RouterOS 7.x, `/interface/wireless` on older versions.
+
+### `list_wifi_interfaces` — Read
+
+List WiFi/wireless interfaces with SSID and enabled/disabled status.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show me all WiFi interfaces on edge-01."
+
+---
+
+### `list_wifi_clients` — Read
+
+List currently connected WiFi stations with signal strength and transfer rates.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Filter by WiFi interface name |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "How many clients are connected to wlan1 on edge-01 and what's their signal strength?"
+
+---
+
+### `manage_wifi_interface` — Write · Idempotent
+
+Enable, disable, or change SSID on a WiFi interface. Returns `no_change` if the interface already has the requested configuration. At least one of `disabled` or `ssid` must be provided.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `name` | string | — | WiFi interface name (e.g. `wifi1`, `wlan1`) |
+| `disabled` | boolean | — | `true` to disable, `false` to enable |
+| `ssid` | string | — | New SSID to set (max 32 chars) |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Disable the wifi1 interface on edge-01."
+
+---
+
+## WireGuard
+
+### `list_wireguard_interfaces` — Read
+
+List WireGuard interfaces and their listen port and running state.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "List WireGuard interfaces on core-01."
+
+---
+
+### `list_wireguard_peers` — Read
+
+List WireGuard peers with last handshake time and transfer statistics.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Filter by WireGuard interface name |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show all WireGuard peers on wg0 of core-01 and when they last connected."
+
+---
+
+### `manage_wireguard_peer` — Write · Idempotent
+
+Add or remove a WireGuard peer. Idempotent by public key: `add` returns `already_exists` if a peer with the same public key already exists on the interface.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` | — | Operation to perform |
+| `interface` | string | — | WireGuard interface name (e.g. `wg0`) |
+| `publicKey` | string | — | Peer public key in base64 format (44 chars) |
+| `allowedAddress` | string | — | Allowed IP/CIDR for this peer (e.g. `10.0.0.2/32`) |
+| `endpoint` | string | — | Peer endpoint as `IP:port` (e.g. `1.2.3.4:51820`) |
+| `comment` | string | — | Optional comment |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add a WireGuard peer with public key ABC123... on wg0 of core-01, allowed address 10.8.0.5/32."
+
+---
+
+## DNS
+
+### `list_dns_entries` — Read
+
+List static DNS entries with optional filtering by hostname and record type.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `name` | string | — | Filter by hostname (partial match) |
+| `type` | `A` \| `CNAME` \| `TXT` \| `all` | `all` | Filter by record type |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "List all static DNS A records on core-01."
+
+---
+
+### `manage_dns_entry` — Write · Idempotent
+
+Add or remove a static DNS entry. Idempotent by name+type: `add` returns `already_exists` if the same record already exists.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` | — | Operation to perform |
+| `name` | string | — | Hostname for the DNS record (e.g. `server.example.com`) |
+| `type` | `A` \| `CNAME` \| `TXT` | `A` | DNS record type |
+| `address` | string | — | IP address — required for A records |
+| `cname` | string | — | Target hostname — required for CNAME records |
+| `text` | string | — | Text value — required for TXT records |
+| `ttl` | string | — | TTL value (e.g. `1d`, `00:05:00`) |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Create the entry in disabled state |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add a static DNS A record for printer.lan pointing to 192.168.1.50 on core-01."
+
+---
+
+### `get_dns_settings` — Read
+
+Read DNS resolver configuration: upstream servers, cache size, cache TTL, and whether remote DNS requests are allowed.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+
+**Example prompt:** "What DNS servers is core-01 using and is it allowing remote DNS requests?"
