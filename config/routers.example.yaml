@@ -9,6 +9,18 @@
 # those tools execute via SSH because RouterOS 7.x REST API blocks tool commands
 # regardless of other policy settings.
 # The `sniff` policy is additionally required for torch (packet-capture access).
+#
+# run_command policy modes
+# ─────────────────────────
+# Default (no cmdAllow):  All commands allowed except BUILTIN_DENY_PATTERNS.
+#                         Add cmdDeny entries to block additional patterns.
+# Strict (with cmdAllow): Only commands matching cmdAllow glob patterns are
+#                         permitted. BUILTIN_DENY_PATTERNS and cmdDeny still apply.
+# Example strict mode:
+#   cmdAllow:
+#     - "/ip/route/print*"
+#     - "/interface/print*"
+#     - "/ip/address/print*"
 
 routers:
   core-01:
@@ -16,22 +28,31 @@ routers:
     port: 443
     tls:
       enabled: true
-      rejectUnauthorized: false  # Set true if using valid CA certificate
-      # ca: "/path/to/ca.pem"   # Optional: pin CA certificate
+      rejectUnauthorized: true     # Set false ONLY for self-signed certs (logs a warning)
+      # ca: "/path/to/ca.pem"      # Pin a CA certificate file
+      # fingerprint: "aabbccdd..." # Pin exact server cert SHA256 fingerprint (hex, no colons)
     credentials:
-      source: "env"              # "env" | "vault"
-      envPrefix: "ROUTER_CORE01" # -> ROUTER_CORE01_USER, ROUTER_CORE01_PASS
+      source: "env"                # "env" | "vault"
+      envPrefix: "ROUTER_CORE01"   # -> ROUTER_CORE01_USER, ROUTER_CORE01_PASS
     tags: ["datacenter", "core"]
     rosVersion: "7.14"
+    # sshPort: 22                  # SSH port (default 22)
+    # sshFingerprint: "aabbcc..."  # Pin SSH host key SHA256 fingerprint (hex)
+    # cmdAllow:                    # Strict allow-list for run_command (see above)
+    #   - "/ip/route/print*"
+    # cmdDeny:                     # Additional deny patterns beyond builtins
+    #   - "/tool/fetch*"
 
   # edge-02:
   #   host: "192.168.1.1"
   #   port: 443
   #   tls:
   #     enabled: true
-  #     rejectUnauthorized: false
+  #     rejectUnauthorized: false  # Self-signed cert — fingerprint strongly recommended
+  #     fingerprint: "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
   #   credentials:
   #     source: "env"
   #     envPrefix: "ROUTER_EDGE02"
   #   tags: ["branch-office", "edge"]
   #   rosVersion: "7.12"
+  #   sshFingerprint: "aabbccddeeff..."

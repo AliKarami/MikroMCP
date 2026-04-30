@@ -73,7 +73,7 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔄 v0.5 — Advanced Firewall, Policy Routing & Security Hardening
+## ✅ v0.5 — Advanced Firewall, Policy Routing & Security Hardening
 
 **Goal:** Complete the firewall surface, add advanced routing primitives, and close the security gaps in the HTTP transport and `run_command`.
 
@@ -91,11 +91,11 @@ This document describes what has been built and what is planned. Milestones are 
 - ✅ **Routing Protocols (read-only first):**
   - `list_bgp_peers` — BGP sessions with state, prefix counts, uptime (RouterOS 7+)
   - `list_ospf_neighbors` — OSPF neighbor state and adjacency info (RouterOS 7+)
-- 🔜 **Security hardening (v0.5b):**
-  - HTTP transport: enforce body size limit, add `bindHost` config option (`127.0.0.1` by default for new installs), basic rate limiting
-  - `run_command` policy documentation and hardening — clarify that default-allow + builtin denylist is intentional; document the allowlist mode (`cmdAllow`) as the stricter opt-in and add config examples for both modes
-  - SSH: host-key pinning (reject unknown hosts by default), per-command execution timeout, streaming output cap, guaranteed resource cleanup on error paths
-  - TLS: CA pinning and certificate fingerprint pinning as first-class config options; escalate `rejectUnauthorized: false` from a documented example to a loud opt-in with a deprecation warning
+- ✅ **Security hardening (v0.5b):**
+  - HTTP transport: body size limit (`MIKROMCP_HTTP_MAX_BODY_BYTES`, default 1 MB), bind host (`MIKROMCP_BIND_HOST`, default `127.0.0.1`), per-IP rate limiting (`MIKROMCP_HTTP_RATE_LIMIT_RPM`, default 60 req/min, 0 = disabled)
+  - `run_command` policy modes documented in `routers.example.yaml`: default-allow with builtin denylist, strict allowlist mode (`cmdAllow`), per-router additional deny patterns
+  - SSH: per-command timeout (`MIKROMCP_SSH_COMMAND_TIMEOUT_MS`, default 30 s), output cap (`MIKROMCP_SSH_MAX_OUTPUT_BYTES`, default 512 KB with `[OUTPUT TRUNCATED]` marker), guaranteed `conn.end()` cleanup on all error paths, host-key fingerprint pinning (`sshFingerprint` per router, SHA256 hex)
+  - TLS: certificate fingerprint pinning (`tls.fingerprint` per router, SHA256 hex), startup warning logged when `rejectUnauthorized=false`
 
 ---
 
