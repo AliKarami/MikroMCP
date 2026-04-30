@@ -1,26 +1,14 @@
-// ---------------------------------------------------------------------------
-// MikroMCP - TLS configuration for undici HTTP Agent
-// ---------------------------------------------------------------------------
-
 import { readFileSync } from "node:fs";
 import type { ConnectionOptions } from "node:tls";
 import type { Agent } from "undici";
 
 export interface TlsOptions {
-  /** Whether TLS is enabled (HTTPS vs HTTP). */
   enabled: boolean;
-  /** Whether to reject self-signed / untrusted certificates. */
   rejectUnauthorized: boolean;
-  /** Optional path to a CA certificate file. */
   ca?: string;
+  fingerprint?: string;
 }
 
-/**
- * Build `Agent.Options` for an undici `Agent` based on TLS configuration.
- *
- * - If TLS is disabled, returns empty options (HTTP mode).
- * - Otherwise, configures `rejectUnauthorized` and optional CA.
- */
 export function buildAgentOptions(tls: TlsOptions): Agent.Options {
   if (!tls.enabled) {
     return {};
@@ -32,6 +20,22 @@ export function buildAgentOptions(tls: TlsOptions): Agent.Options {
 
   if (tls.ca) {
     connectOptions.ca = readFileSync(tls.ca, "utf-8");
+  }
+
+  if (tls.fingerprint) {
+    const expected = tls.fingerprint.replace(/:/g, "").toLowerCase();
+    connectOptions.checkServerIdentity = (
+      _host: string,
+      cert: { fingerprint256: string },
+    ): Error | undefined => {
+      const actual = cert.fingerprint256.replace(/:/g, "").toLowerCase();
+      if (actual !== expected) {
+        return new Error(
+          `TLS certificate fingerprint mismatch. Expected: ${expected}, got: ${actual}`,
+        );
+      }
+      return undefined;
+    };
   }
 
   return {
