@@ -7,13 +7,61 @@ import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("transport-http");
 
-async function readBody(req: IncomingMessage): Promise<unknown> {
+export class BodyTooLargeError extends Error {
+  constructor() {
+    super("Request body exceeds maximum allowed size");
+  }
+}
+
+export function createRateLimiter(rpm: number): (ip: string) => boolean {
+  if (rpm === 0) return () => true;
+
+  const WINDOW_MS = 60_000;
+  const windows = new Map<string, { count: number; windowStart: number }>();
+
+  return (ip: string): boolean => {
+    const now = Date.now();
+    const entry = windows.get(ip);
+
+    if (!entry || now - entry.windowStart >= WINDOW_MS) {
+      windows.set(ip, { count: 1, windowStart: now });
+      return true;
+    }
+
+    if (entry.count >= rpm) {
+      return false;
+    }
+
+    entry.count++;
+    return true;
+  };
+}
+
+export async function readBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let data = "";
+    let size = 0;
+    let settled = false;
+
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
     req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        req.destroy();
+        fail(new BodyTooLargeError());
+        return;
+      }
       data += chunk.toString();
     });
+
     req.on("end", () => {
+      if (settled) return;
+      settled = true;
       if (!data) {
         resolve(undefined);
         return;
@@ -24,26 +72,42 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
         reject(e);
       }
     });
-    req.on("error", reject);
+
+    req.on("error", (err) => fail(err));
   });
 }
 
-export async function connectHttp(makeServer: () => McpServer, port: number): Promise<void> {
-  // Streamable HTTP — one transport+server per session, keyed by Mcp-Session-Id.
-  // Stateless mode (sessionIdGenerator: undefined) forbids reuse across requests, so we use
-  // stateful mode: the SDK generates a session ID on initialize and the client echoes it back
-  // on every subsequent request.
-  const streamableSessions = new Map<string, StreamableHTTPServerTransport>();
+export interface HttpTransportConfig {
+  port: number;
+  bindHost: string;
+  maxBodyBytes: number;
+  rateLimitRpm: number;
+}
 
-  // Legacy SSE transport — one server + transport per connection at /sse + /messages
+export async function connectHttp(
+  makeServer: () => McpServer,
+  config: HttpTransportConfig,
+): Promise<void> {
+  const { port, bindHost, maxBodyBytes, rateLimitRpm } = config;
+  const checkRateLimit = createRateLimiter(rateLimitRpm);
+
+  const streamableSessions = new Map<string, StreamableHTTPServerTransport>();
   const sseTransports = new Map<string, SSEServerTransport>();
 
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    const ip = req.socket.remoteAddress ?? "unknown";
+
+    if (!checkRateLimit(ip)) {
+      log.warn({ ip }, "Rate limit exceeded");
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Too many requests. Retry after 60 seconds." }));
+      return;
+    }
+
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
     const { pathname } = url;
 
     try {
-      // Streamable HTTP (MCP Inspector "Streamable HTTP" mode)
       if (pathname === "/mcp") {
         const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
@@ -51,13 +115,11 @@ export async function connectHttp(makeServer: () => McpServer, port: number): Pr
 
         if (!transport) {
           if (sessionId) {
-            // Client claims a session we don't know about
             res.writeHead(404, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: `Session not found: ${sessionId}` }));
             return;
           }
 
-          // New session: create a fresh transport+server pair
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (id) => {
@@ -74,12 +136,11 @@ export async function connectHttp(makeServer: () => McpServer, port: number): Pr
           await makeServer().connect(transport);
         }
 
-        const body = req.method === "POST" ? await readBody(req) : undefined;
+        const body = req.method === "POST" ? await readBody(req, maxBodyBytes) : undefined;
         await transport.handleRequest(req, res, body);
         return;
       }
 
-      // Legacy SSE — open the event stream (MCP Inspector "SSE" mode, GET /sse)
       if (pathname === "/sse" && req.method === "GET") {
         const sseTransport = new SSEServerTransport("/messages", res);
         const sseServer = makeServer();
@@ -93,7 +154,6 @@ export async function connectHttp(makeServer: () => McpServer, port: number): Pr
         return;
       }
 
-      // Legacy SSE — receive client messages (POST /messages?sessionId=...)
       if (pathname === "/messages" && req.method === "POST") {
         const sid = url.searchParams.get("sessionId") ?? "";
         const sseTransport = sseTransports.get(sid);
@@ -102,7 +162,7 @@ export async function connectHttp(makeServer: () => McpServer, port: number): Pr
           res.end(JSON.stringify({ error: `SSE session not found: ${sid}` }));
           return;
         }
-        const body = await readBody(req);
+        const body = await readBody(req, maxBodyBytes);
         await sseTransport.handlePostMessage(req, res, body);
         return;
       }
@@ -118,6 +178,13 @@ export async function connectHttp(makeServer: () => McpServer, port: number): Pr
         }),
       );
     } catch (err) {
+      if (err instanceof BodyTooLargeError) {
+        if (!res.headersSent) {
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Request body too large" }));
+        }
+        return;
+      }
       log.error({ err }, "HTTP transport error");
       if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json" });
@@ -127,8 +194,11 @@ export async function connectHttp(makeServer: () => McpServer, port: number): Pr
   });
 
   await new Promise<void>((resolve, reject) => {
-    httpServer.listen(port, () => {
-      log.info({ port }, "HTTP transport listening (POST /mcp for Streamable HTTP, GET /sse for legacy SSE)");
+    httpServer.listen(port, bindHost, () => {
+      log.info(
+        { port, bindHost },
+        "HTTP transport listening (POST /mcp for Streamable HTTP, GET /sse for legacy SSE)",
+      );
       resolve();
     });
     httpServer.on("error", reject);

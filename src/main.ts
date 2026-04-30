@@ -20,8 +20,13 @@ async function main(): Promise<void> {
     await connectStdio(makeServer());
     log.info("MikroMCP server running via stdio");
   } else if (config.transport === "http") {
-    await connectHttp(makeServer, config.port);
-    log.info({ port: config.port }, "MikroMCP server running via HTTP/SSE");
+    await connectHttp(makeServer, {
+      port: config.port,
+      bindHost: config.bindHost,
+      maxBodyBytes: config.http.maxBodyBytes,
+      rateLimitRpm: config.http.rateLimitRpm,
+    });
+    log.info({ port: config.port, bindHost: config.bindHost }, "MikroMCP server running via HTTP/SSE");
   }
 
   const shutdown = () => {
