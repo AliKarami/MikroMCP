@@ -15,6 +15,10 @@ import { bridgeTools } from "./bridge-tools.js";
 import { wifiTools } from "./wifi-tools.js";
 import { wireguardTools } from "./wireguard-tools.js";
 import { dnsTools } from "./dns-tools.js";
+import { mangleTools } from "./mangle-tools.js";
+import { addressListTools } from "./address-list-tools.js";
+import { policyRoutingTools } from "./policy-routing-tools.js";
+import { routingProtocolTools } from "./routing-protocol-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -29,6 +33,10 @@ export const allTools: ToolDefinition[] = [
   ...wifiTools,
   ...wireguardTools,
   ...dnsTools,
+  ...mangleTools,
+  ...addressListTools,
+  ...policyRoutingTools,
+  ...routingProtocolTools,
 ];
 
 export type {
