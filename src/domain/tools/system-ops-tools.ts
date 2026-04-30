@@ -227,7 +227,7 @@ const runCommandTool: ToolDefinition = {
     }
 
     try {
-      const ssh = new SshClient(context.routerConfig, context.credentials);
+      const ssh = new SshClient(context.routerConfig, context.credentials, context.sshOptions);
       let output = await ssh.execute(parsed.command);
 
       let truncated = false;

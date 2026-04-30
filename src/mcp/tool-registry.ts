@@ -74,6 +74,10 @@ export function registerAllTools(
                 correlationId,
                 routerConfig,
                 credentials,
+                sshOptions: {
+                  commandTimeoutMs: config.ssh.commandTimeoutMs,
+                  maxOutputBytes: config.ssh.maxOutputBytes,
+                },
               });
 
             const executeHandler = () =>

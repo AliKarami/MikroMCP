@@ -45,7 +45,7 @@ const pingTool: ToolDefinition = {
       ];
       if (parsed.routingTable !== undefined) parts.push(`routing-table=${parsed.routingTable}`);
 
-      const ssh = new SshClient(context.routerConfig, context.credentials);
+      const ssh = new SshClient(context.routerConfig, context.credentials, context.sshOptions);
       const output = await ssh.execute(parts.join(" "));
 
       // Summary line: "sent=N received=N packet-loss=X% min-rtt=Xms avg-rtt=Xms max-rtt=Xms"
@@ -112,7 +112,7 @@ const tracerouteTool: ToolDefinition = {
         `max-hops=${parsed.maxHops}`,
       ];
 
-      const ssh = new SshClient(context.routerConfig, context.credentials);
+      const ssh = new SshClient(context.routerConfig, context.credentials, context.sshOptions);
       const output = await ssh.execute(parts.join(" "));
 
       // Each hop line starts with a number: " 1 192.168.1.1  echo reply  1ms …"
@@ -205,7 +205,7 @@ const torchTool: ToolDefinition = {
       if (parsed.srcAddress !== undefined) parts.push(`src-address=${parsed.srcAddress}`);
       if (parsed.dstAddress !== undefined) parts.push(`dst-address=${parsed.dstAddress}`);
 
-      const ssh = new SshClient(context.routerConfig, context.credentials);
+      const ssh = new SshClient(context.routerConfig, context.credentials, context.sshOptions);
       // RouterOS torch runs indefinitely — force-close after duration + 1s buffer
       const raw = await ssh.execute(parts.join(" "), (parsed.duration + 1) * 1000);
 

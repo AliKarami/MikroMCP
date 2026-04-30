@@ -29,6 +29,7 @@ export interface ToolContext {
   correlationId: string;
   routerConfig: RouterConfig;
   credentials: { username: string; password: string };
+  sshOptions: { commandTimeoutMs: number; maxOutputBytes: number };
 }
 
 export interface ToolResult {
