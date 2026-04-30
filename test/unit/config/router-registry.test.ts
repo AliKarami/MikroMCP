@@ -55,6 +55,46 @@ routers:
     expect(() => new RouterRegistry(path)).toThrow(/host/i);
   });
 
+  it("accepts optional tls.fingerprint field", () => {
+    const path = tempYaml(`
+routers:
+  home:
+    host: 192.168.1.1
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: true
+      fingerprint: "aabbccddeeff001122334455"
+    credentials:
+      source: env
+      envPrefix: ROUTER_HOME
+    tags: []
+    rosVersion: "7"
+`);
+    const registry = new RouterRegistry(path);
+    expect(registry.getRouter("home").tls.fingerprint).toBe("aabbccddeeff001122334455");
+  });
+
+  it("accepts optional sshFingerprint field", () => {
+    const path = tempYaml(`
+routers:
+  home:
+    host: 192.168.1.1
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: true
+    credentials:
+      source: env
+      envPrefix: ROUTER_HOME
+    tags: []
+    rosVersion: "7"
+    sshFingerprint: "sha256hexvalue"
+`);
+    const registry = new RouterRegistry(path);
+    expect(registry.getRouter("home").sshFingerprint).toBe("sha256hexvalue");
+  });
+
   it("throws on invalid port value", () => {
     const path = tempYaml(`
 routers:

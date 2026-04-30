@@ -7,7 +7,12 @@ export interface RouterConfig {
   id: string;
   host: string;
   port: number;
-  tls: { enabled: boolean; rejectUnauthorized: boolean; ca?: string };
+  tls: {
+    enabled: boolean;
+    rejectUnauthorized: boolean;
+    ca?: string;
+    fingerprint?: string;
+  };
   credentials: {
     source: "env" | "vault";
     envPrefix?: string;
@@ -16,6 +21,7 @@ export interface RouterConfig {
   tags: string[];
   rosVersion: string;
   sshPort?: number;
+  sshFingerprint?: string;
   cmdAllow?: string[];
   cmdDeny?: string[];
 }

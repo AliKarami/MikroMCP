@@ -14,6 +14,7 @@ const RouterConfigSchema = z.object({
       enabled: z.boolean(),
       rejectUnauthorized: z.boolean(),
       ca: z.string().optional(),
+      fingerprint: z.string().optional(),
     })
     .strict(),
   credentials: z
@@ -26,6 +27,7 @@ const RouterConfigSchema = z.object({
   tags: z.array(z.string()).default([]),
   rosVersion: z.string().min(1),
   sshPort: z.number().int().min(1).max(65535).optional(),
+  sshFingerprint: z.string().optional(),
   cmdAllow: z.array(z.string()).optional(),
   cmdDeny: z.array(z.string()).optional(),
 }).strict();
@@ -59,7 +61,15 @@ export class RouterRegistry {
     }
 
     for (const [id, config] of Object.entries(result.data.routers)) {
-      this.routers.set(id, { ...config, id } as RouterConfig);
+      const routerConfig = { ...config, id } as RouterConfig;
+      if (routerConfig.tls.enabled && !routerConfig.tls.rejectUnauthorized) {
+        log.warn(
+          { routerId: id },
+          "TLS certificate validation is DISABLED (rejectUnauthorized=false). " +
+            "Set tls.fingerprint to pin the server certificate instead.",
+        );
+      }
+      this.routers.set(id, routerConfig);
     }
     log.info({ count: this.routers.size }, "Loaded routers from config");
   }
