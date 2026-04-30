@@ -31,7 +31,7 @@ flowchart TD
     end
 
     subgraph Server["MikroMCP Server"]
-        REG["Tool Registry — 29 tools"]
+        REG["Tool Registry — 39 tools"]
         CB["Circuit Breaker — per-router"]
         RE["Retry Engine — backoff + jitter"]
         RC["RouterOS REST Client"]
@@ -124,6 +124,16 @@ For the full walkthrough including router user setup, see the **[📖 Setup Guid
 | `list_dns_entries` | 👁️ Read | List static DNS entries with name/type filtering |
 | `manage_dns_entry` | ✏️ Write | Add or remove a static DNS entry (idempotent by name+type) |
 | `get_dns_settings` | 👁️ Read | Read DNS resolver configuration |
+| `list_mangle_rules` | 👁️ Read | List mangle rules in evaluation order with chain/action/disabled filtering |
+| `manage_mangle_rule` | ✏️ Write | Add / remove / enable / disable mangle rules (idempotent by comment) |
+| `list_address_list_entries` | 👁️ Read | List firewall address list entries with list/address filtering |
+| `manage_address_list_entry` | ✏️ Write | Add or remove an address list entry (idempotent by list+address) |
+| `list_routing_rules` | 👁️ Read | List policy routing rules in evaluation order |
+| `manage_routing_rule` | ✏️ Write | Add / remove / enable / disable routing rules (idempotent by composite key) |
+| `list_routing_tables` | 👁️ Read | List custom routing tables |
+| `manage_routing_table` | ✏️ Write | Create or remove a routing table (idempotent by name) |
+| `list_bgp_peers` | 👁️ Read | List BGP sessions with state, prefix counts, and uptime (RouterOS 7+) |
+| `list_ospf_neighbors` | 👁️ Read | List OSPF neighbors with state, interface, and uptime (RouterOS 7+) |
 
 Full parameter tables and example prompts: **[📋 Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)**
 
@@ -138,11 +148,11 @@ Full parameter tables and example prompts: **[📋 Available Tools](https://gith
 | [⚙️ Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration) | Router registry YAML, credentials, env vars, HTTP transport |
 | [▶️ Running](https://github.com/AliKarami/MikroMCP/wiki/Running) | Dev and production scripts |
 | [🔌 Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-an-MCP-Client) | Claude Desktop, Claude Code, and other clients |
-| [🛠️ Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 29 tools with parameters and example prompts |
+| [🛠️ Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 39 tools with parameters and example prompts |
 | [🚨 Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling) | Error categories, circuit breaker, retry engine |
 | [🧪 Development](https://github.com/AliKarami/MikroMCP/wiki/Development) | Project structure, scripts, testing, MCP Inspector |
 | [🤝 Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing) | Adding tools, guidelines, PR checklist |
-| [🗺️ Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1 ✅ · v0.2 ✅ · v0.3 ✅ · v0.4 ✅ · v0.5–v1.0 planned |
+| [🗺️ Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1 ✅ · v0.2 ✅ · v0.3 ✅ · v0.4 ✅ · v0.5 🔄 · v0.6–v1.0 planned |
 
 ---
 

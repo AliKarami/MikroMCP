@@ -73,25 +73,25 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.5 — Advanced Firewall, Policy Routing & Security Hardening
+## 🔄 v0.5 — Advanced Firewall, Policy Routing & Security Hardening
 
 **Goal:** Complete the firewall surface, add advanced routing primitives, and close the security gaps in the HTTP transport and `run_command`.
 
-- **Firewall Mangle:**
+- ✅ **Firewall Mangle:**
   - `list_mangle_rules` — mangle rules in evaluation order
   - `manage_mangle_rule` — add/remove/disable/enable mangle rules (comment as idempotency key)
-- **Firewall Address Lists:**
+- ✅ **Firewall Address Lists:**
   - `list_address_list_entries` — entries across all address lists (`/ip/firewall/address-list`)
   - `manage_address_list_entry` — add/remove entries (idempotent by list+address)
-- **Policy Routing:**
+- ✅ **Policy Routing:**
   - `list_routing_rules` — routing rules (`/routing/rule`)
-  - `manage_routing_rule` — add/remove routing rules
+  - `manage_routing_rule` — add/remove/enable/disable routing rules (composite key)
   - `list_routing_tables` — custom routing tables (`/routing/table`)
   - `manage_routing_table` — create/remove routing tables
-- **Routing Protocols (read-only first):**
-  - `list_bgp_peers` — BGP sessions with state, prefix counts, uptime
-  - `list_ospf_neighbors` — OSPF neighbor state and adjacency info
-- **Security hardening:**
+- ✅ **Routing Protocols (read-only first):**
+  - `list_bgp_peers` — BGP sessions with state, prefix counts, uptime (RouterOS 7+)
+  - `list_ospf_neighbors` — OSPF neighbor state and adjacency info (RouterOS 7+)
+- 🔜 **Security hardening (v0.5b):**
   - HTTP transport: enforce body size limit, add `bindHost` config option (`127.0.0.1` by default for new installs), basic rate limiting
   - `run_command` policy documentation and hardening — clarify that default-allow + builtin denylist is intentional; document the allowlist mode (`cmdAllow`) as the stricter opt-in and add config examples for both modes
   - SSH: host-key pinning (reject unknown hosts by default), per-command execution timeout, streaming output cap, guaranteed resource cleanup on error paths
