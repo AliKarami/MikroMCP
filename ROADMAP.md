@@ -123,41 +123,54 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.7 — Enterprise Security & Identity
+## 🔜 v0.7 — Identity, Auth & Audit
 
-**Goal:** Multi-tenant deployments, stronger credential management, and VPN.
+**Goal:** Establish trust boundaries before expanding dangerous or admin-level surfaces. Nothing from this milestone onward ships without these foundations.
 
-- **Vault credential source** — resolve router credentials from HashiCorp Vault (KV v2) in addition to env vars
-- **RBAC / identity enforcement** — per-identity allowed routers, tool patterns, and action scopes; credentials passed as MCP request context; *prerequisite before expanding dangerous write tools beyond this milestone*
-- **HTTP transport authentication** — bearer token or mTLS for the HTTP/SSE endpoint; prerequisite before any non-localhost deployment
-- **Destructive-op confirmation workflow** — structured confirmation step for `reboot`, route removal, firewall removal, and IP removal; gated behind an RBAC scope so unattended automation can opt out intentionally
-- **Backup-before-write** — snapshot the affected resource set (firewall chain, route table, IP addresses, DHCP leases) before applying any write; include the snapshot path in the structured result so callers can roll back
-- **IPSec/VPN:**
-  - `list_ipsec_peers` — IPSec peer configuration and state (`/ip/ipsec`)
-  - `list_ipsec_policies` — active IPSec policies
-  - `manage_ipsec_peer` — add/remove IPSec peer definitions
-- **Certificates:**
-  - `list_certificates` — installed certificates with validity and usage (`/certificate`)
-  - `manage_certificate` — import, sign, remove certificates
-- **Users:**
-  - `list_users` — router users and groups (`/user`)
-  - `manage_user` — add/remove users and group membership (idempotent)
+- **HTTP transport auth** — bearer token (env-configured secret) as the first gate; mTLS optional add-on
+- **RBAC / identity enforcement** — per-identity allowed routers, tool name patterns, and action scopes; identity extracted from MCP request context
+- **Vault credential provider** — resolve per-router credentials from HashiCorp Vault (KV v2) in addition to env vars
+- **Audit log** — structured log record for every write/destructive call: identity, tool, router, params, outcome
+- **Confirmation middleware** — structured confirmation step gated on `destructiveHint` and action type; RBAC scope lets unattended automation opt out intentionally
+- **Credential surface reduction** — SSH and FTP currently receive raw credentials through `ToolContext`; move them behind adapter services so handlers never touch secrets directly
 
 ---
 
-## 🔜 v1.0 — Production Hardening
+## 🔜 v0.8 — Change Safety & Rollback
 
-**Goal:** The stability, observability, and ecosystem milestone for teams running MikroMCP in production.
+**Goal:** Move "backup before write" and `plan/apply` here, where identity and audit already exist to make them meaningful.
 
-- **Config snapshot & diff** — snapshot a router's full config at a point in time; diff two snapshots to see what changed; restore from snapshot (with dry-run)
-- **`plan/apply` diff tools** — dry-run a set of write operations against a snapshotted baseline; produce a structured human-readable diff; apply with a single confirmation (extends the snapshot/diff work above)
-- **Bulk operations** — apply a tool call across multiple routers in parallel (fan-out); aggregate results with per-router status
-- **Integration test harness** — RouterOS CHR running in Docker for end-to-end tests without real hardware; CI job that runs the full tool suite against CHR
-  - REST adapter tests with mocked HTTP responses (currently only tool-level `routerClient` mocks exist)
-  - Idempotency tests using real parsed RouterOS payloads — including boolean/number field edge cases that the current unit tests do not cover
-  - Negative tests: malformed `routerId`, invalid CIDR, invalid router config at startup, HTTP auth bypass attempts, `run_command` policy bypass attempts
-- **Prometheus metrics endpoint** — expose tool call latency, circuit breaker state, error category counts, and router availability as `/metrics` (when using HTTP transport)
-- **NPM package publication** — publish to npm so `npx mikromcp` works out of the box without cloning
+- **Snapshot engine** — capture the full state of a RouterOS section (firewall chain, routing table, IP addresses, DHCP config) before any write
+- **Before/after diff normalization** — structured diff of RouterOS payloads using the same field-normalization logic as idempotency checks
+- **Write journal** — append-only record of every write with the before-snapshot path and enough metadata for rollback
+- **`plan_changes`, `apply_plan`, `rollback_change`** — dry-run a set of writes against a live snapshot, apply with confirmation, roll back by ID
+- **Maintenance-window guardrails** — block disruptive actions (reboot, firewall flush, route removal) outside a declared window
+
+---
+
+## 🔜 v0.9 — Fleet Operations & Remaining RouterOS Surface
+
+**Goal:** After RBAC and snapshots exist, safely expand to the remaining dangerous surfaces and fleet-level operations.
+
+- **IPSec/VPN:** `list_ipsec_peers`, `list_ipsec_policies`, `manage_ipsec_peer`
+- **Certificates:** `list_certificates`, `manage_certificate`
+- **Users:** `list_users`, `manage_user`
+- **Additional RouterOS surfaces:** DHCP server/pools, queues/QoS, VRRP, SNMP, Netwatch, NTP, neighbor/LLDP discovery, ARP table
+- **Bulk operations** — fan-out a tool call across multiple routers by ID or tag with configurable concurrency; aggregate results with per-router status and partial-failure handling
+- **Health checks** — router reachability probe, REST/SSH capability detection, RouterOS version compatibility matrix
+
+---
+
+## 🔜 v1.0 — Production Release
+
+**Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams, not adding new router surfaces.
+
+- **Prometheus metrics** — `/metrics`, `/healthz`, `/readyz` endpoints: tool call latency, circuit breaker state, error rates per router, router availability
+- **RouterOS CHR integration test harness** — CHR in Docker for end-to-end CI without real hardware; REST adapter tests with real parsed payloads; idempotency edge-case coverage
+- **Distribution** — npm publication (`npx mikromcp`), Docker image, example systemd unit
+- **`mikromcp doctor`** — config/env/router capability validation CLI command
+- **Stability policy** — tool schema stability contract and compatibility matrix
+- **Security docs** — least-privilege RouterOS policy templates, threat model, deployment guide
 
 ---
 

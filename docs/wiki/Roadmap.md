@@ -53,7 +53,7 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ---
 
-## 🔜 v0.5 — Advanced Firewall, Policy Routing & Security Hardening
+## ✅ v0.5 — Advanced Firewall, Policy Routing & Security Hardening
 
 **Goal:** Complete the firewall surface, add advanced routing primitives, and close the security gaps in the HTTP transport and `run_command`.
 
@@ -64,7 +64,7 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ---
 
-## 🔜 v0.6 — Automation & System Management
+## ✅ v0.6 — Automation & System Management
 
 **Goal:** The scripting, scheduling, and lifecycle management layer.
 
@@ -76,27 +76,54 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ---
 
-## 🔜 v0.7 — Enterprise Security & Identity
+## 🔜 v0.7 — Identity, Auth & Audit
 
-**Goal:** Multi-tenant deployments, stronger credential management, and VPN.
+**Goal:** Establish trust boundaries before expanding dangerous or admin-level surfaces.
 
-- **Vault credential source** — resolve credentials from HashiCorp Vault (KV v2)
+- **HTTP transport auth** — bearer token; mTLS optional
 - **RBAC / identity enforcement** — per-identity allowed routers, tool patterns, action scopes
-- **IPSec/VPN:** `list_ipsec_peers`, `list_ipsec_policies`, `manage_ipsec_peer`
-- **Certificates:** `list_certificates`, `manage_certificate`
-- **Users:** `list_users`, `manage_user`
+- **Vault credential provider** — resolve credentials from HashiCorp Vault (KV v2)
+- **Audit log** — structured record for every write/destructive call
+- **Confirmation middleware** — structured confirmation step for destructive actions
+- **Credential surface reduction** — SSH/FTP move behind adapter services
 
 ---
 
-## 🔜 v1.0 — Production Hardening
+## 🔜 v0.8 — Change Safety & Rollback
 
-**Goal:** Stability, observability, and ecosystem milestone for teams running MikroMCP in production.
+**Goal:** Snapshot, diff, and rollback before expanding dangerous router surfaces.
 
-- **Config snapshot & diff** — snapshot, diff, and restore router configs
-- **Bulk operations** — fan-out a tool call across multiple routers in parallel
-- **Integration test harness** — RouterOS CHR in Docker for end-to-end CI
-- **Prometheus metrics endpoint** — tool call latency, circuit breaker state, error rates per router
-- **NPM package publication** — `npx mikromcp` without cloning
+- **Snapshot engine** — capture RouterOS section state before writes
+- **Before/after diff normalization** — structured diff of RouterOS payloads
+- **Write journal** — append-only record of writes with rollback metadata
+- **`plan_changes`, `apply_plan`, `rollback_change`** tools
+- **Maintenance-window guardrails** — block disruptive actions outside declared windows
+
+---
+
+## 🔜 v0.9 — Fleet Operations & Remaining RouterOS Surface
+
+**Goal:** After RBAC and snapshots exist, safely expand to remaining admin surfaces.
+
+- **IPSec/VPN:** `list_ipsec_peers`, `list_ipsec_policies`, `manage_ipsec_peer`
+- **Certificates:** `list_certificates`, `manage_certificate`
+- **Users:** `list_users`, `manage_user`
+- **Additional surfaces:** DHCP server/pools, queues/QoS, VRRP, SNMP, Netwatch, NTP, neighbor/LLDP, ARP
+- **Bulk operations** — fan-out across multiple routers by ID or tag with concurrency limits
+- **Health checks** — reachability probe, REST/SSH capability detection, version compatibility
+
+---
+
+## 🔜 v1.0 — Production Release
+
+**Goal:** Distribution, operability, and ecosystem milestone.
+
+- **Prometheus metrics** — `/metrics`, `/healthz`, `/readyz` endpoints
+- **RouterOS CHR integration test harness** — end-to-end CI without real hardware
+- **Distribution** — npm publication, Docker image, example systemd unit
+- **`mikromcp doctor`** — config/env/router capability validation
+- **Stability policy** — tool schema stability contract and compatibility matrix
+- **Security docs** — least-privilege RouterOS policies, threat model, deployment guide
 
 ---
 

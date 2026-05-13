@@ -210,7 +210,6 @@ const torchTool: ToolDefinition = {
       const raw = await ssh.execute(parts.join(" "), (parsed.duration + 1) * 1000);
 
       // Strip ANSI escape codes and parse flow rows
-      // eslint-disable-next-line no-control-regex
       const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
       const flows = parseTorchOutput(clean);
 

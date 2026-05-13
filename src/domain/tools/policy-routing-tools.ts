@@ -260,7 +260,7 @@ const listRoutingTablesTool: ToolDefinition = {
     openWorldHint: false,
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
-    const parsed = listRoutingTablesInputSchema.parse(params);
+    listRoutingTablesInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Listing routing tables");
 
     try {
