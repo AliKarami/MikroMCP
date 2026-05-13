@@ -1,7 +1,3 @@
-// ---------------------------------------------------------------------------
-// MikroMCP - Tool registry aggregation
-// ---------------------------------------------------------------------------
-
 import type { ToolDefinition } from "./tool-definition.js";
 import { systemTools } from "./system-tools.js";
 import { interfaceTools } from "./interface-tools.js";
@@ -21,6 +17,9 @@ import { policyRoutingTools } from "./policy-routing-tools.js";
 import { routingProtocolTools } from "./routing-protocol-tools.js";
 import { scriptsTools } from "./scripts-tools.js";
 import { schedulerTools } from "./scheduler-tools.js";
+import { packagesTools } from "./packages-tools.js";
+import { filesTools } from "./files-tools.js";
+import { containerTools } from "./container-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -41,6 +40,9 @@ export const allTools: ToolDefinition[] = [
   ...routingProtocolTools,
   ...scriptsTools,
   ...schedulerTools,
+  ...packagesTools,
+  ...filesTools,
+  ...containerTools,
 ];
 
 export type {
