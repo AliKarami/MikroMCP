@@ -1,0 +1,191 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("../../../src/adapter/ftp-client.js", () => ({
+  ftpUpload: vi.fn().mockResolvedValue(undefined),
+  ftpConnect: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { filesTools } from "../../../src/domain/tools/files-tools.js";
+import * as ftpAdapter from "../../../src/adapter/ftp-client.js";
+import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
+import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import type { RouterConfig } from "../../../src/types.js";
+import { z } from "zod";
+
+function makeRouterConfig(): RouterConfig {
+  return {
+    id: "test-router",
+    host: "192.168.1.1",
+    port: 443,
+    tls: { enabled: true, rejectUnauthorized: false },
+    credentials: { source: "env", envPrefix: "ROUTER_TEST" },
+    tags: [],
+    rosVersion: "7",
+  };
+}
+
+function makeContext(overrides: {
+  get?: ReturnType<typeof vi.fn>;
+  getOne?: ReturnType<typeof vi.fn>;
+} = {}): ToolContext {
+  return {
+    routerId: "test-router",
+    correlationId: "test-corr",
+    routerConfig: makeRouterConfig(),
+    credentials: { username: "admin", password: "secret" },
+    sshOptions: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+    routerClient: {
+      get: overrides.get ?? vi.fn().mockResolvedValue([]),
+      getOne: overrides.getOne ?? vi.fn().mockResolvedValue({}),
+    } as unknown as RouterOSRestClient,
+  };
+}
+
+const listFilesTool = filesTools[0];
+const getFileContentTool = filesTools[1];
+const uploadFileTool = filesTools[2];
+
+const listSchema = z.object({
+  routerId: z.string(),
+  name: z.string().optional(),
+  type: z.string().optional(),
+}).strict();
+
+const getContentSchema = z.object({ routerId: z.string(), name: z.string() }).strict();
+
+const uploadSchema = z.object({
+  routerId: z.string(),
+  name: z.string(),
+  content: z.string(),
+  dryRun: z.boolean().default(false),
+}).strict();
+
+describe("files tools", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("metadata", () => {
+    it("exports 3 tools", () => {
+      expect(filesTools).toHaveLength(3);
+      expect(listFilesTool.name).toBe("list_files");
+      expect(getFileContentTool.name).toBe("get_file_content");
+      expect(uploadFileTool.name).toBe("upload_file");
+    });
+
+    it("list_files has readOnlyHint true", () => {
+      expect(listFilesTool.annotations.readOnlyHint).toBe(true);
+    });
+
+    it("get_file_content has readOnlyHint true", () => {
+      expect(getFileContentTool.annotations.readOnlyHint).toBe(true);
+    });
+
+    it("upload_file has readOnlyHint false and idempotentHint true", () => {
+      expect(uploadFileTool.annotations.readOnlyHint).toBe(false);
+      expect(uploadFileTool.annotations.idempotentHint).toBe(true);
+    });
+  });
+
+  describe("list_files input schema", () => {
+    it("accepts minimal input", () => {
+      expect(() => listSchema.parse({ routerId: "r" })).not.toThrow();
+    });
+    it("rejects extra fields", () => {
+      expect(() => listSchema.parse({ routerId: "r", extra: true })).toThrow();
+    });
+  });
+
+  describe("upload_file input schema", () => {
+    it("accepts valid input with default dryRun", () => {
+      const r = uploadSchema.parse({ routerId: "r", name: "test.rsc", content: ":log info" });
+      expect(r.dryRun).toBe(false);
+    });
+    it("rejects extra fields", () => {
+      expect(() =>
+        uploadSchema.parse({ routerId: "r", name: "f", content: "c", extra: true }),
+      ).toThrow();
+    });
+  });
+
+  describe("list_files handler", () => {
+    it("returns all files with total", async () => {
+      const files = [
+        { ".id": "*1", name: "backup.backup", type: "backup", size: "1024" },
+        { ".id": "*2", name: "flash/routeros-7.14.npk", type: "package", size: "20480" },
+      ];
+      const ctx = makeContext({ get: vi.fn().mockResolvedValue(files) });
+      const result = await listFilesTool.handler({ routerId: "test-router" }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).total).toBe(2);
+    });
+
+    it("filters by name substring", async () => {
+      const files = [
+        { ".id": "*1", name: "backup.backup", type: "backup", size: "1024" },
+        { ".id": "*2", name: "script.rsc", type: "script", size: "512" },
+      ];
+      const ctx = makeContext({ get: vi.fn().mockResolvedValue(files) });
+      const result = await listFilesTool.handler({ routerId: "test-router", name: "back" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.files as unknown[]).length).toBe(1);
+    });
+
+    it("filters by type", async () => {
+      const files = [
+        { ".id": "*1", name: "backup.backup", type: "backup", size: "1024" },
+        { ".id": "*2", name: "script.rsc", type: "script", size: "512" },
+      ];
+      const ctx = makeContext({ get: vi.fn().mockResolvedValue(files) });
+      const result = await listFilesTool.handler({ routerId: "test-router", type: "script" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.files as unknown[]).length).toBe(1);
+    });
+  });
+
+  describe("get_file_content handler", () => {
+    it("returns file contents when found", async () => {
+      const ctx = makeContext({
+        get: vi.fn().mockResolvedValue([{ ".id": "*1", name: "script.rsc", type: "script" }]),
+        getOne: vi.fn().mockResolvedValue({ ".id": "*1", name: "script.rsc", contents: ":log info msg" }),
+      });
+      const result = await getFileContentTool.handler(
+        { routerId: "test-router", name: "script.rsc" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).contents).toBe(":log info msg");
+    });
+
+    it("throws NOT_FOUND when file does not exist", async () => {
+      const ctx = makeContext({ get: vi.fn().mockResolvedValue([]) });
+      await expect(
+        getFileContentTool.handler({ routerId: "test-router", name: "missing.rsc" }, ctx),
+      ).rejects.toMatchObject({ code: "FILE_NOT_FOUND" });
+    });
+  });
+
+  describe("upload_file handler", () => {
+    it("calls ftpUpload with correct args", async () => {
+      const ctx = makeContext();
+      await uploadFileTool.handler(
+        { routerId: "test-router", name: "test.rsc", content: ":log info" },
+        ctx,
+      );
+      expect(ftpAdapter.ftpUpload).toHaveBeenCalledWith(
+        { host: "192.168.1.1", port: 21, user: "admin", password: "secret" },
+        "test.rsc",
+        ":log info",
+      );
+    });
+
+    it("calls ftpConnect but not ftpUpload on dry-run", async () => {
+      const ctx = makeContext();
+      const result = await uploadFileTool.handler(
+        { routerId: "test-router", name: "test.rsc", content: ":log info", dryRun: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ftpAdapter.ftpConnect).toHaveBeenCalled();
+      expect(ftpAdapter.ftpUpload).not.toHaveBeenCalled();
+    });
+  });
+});
