@@ -159,6 +159,8 @@ const manageScriptTool: ToolDefinition = {
         const body: Record<string, string> = {};
         if (parsed.source !== undefined) body.source = parsed.source;
         if (parsed.comment !== undefined) body.comment = parsed.comment;
+        if (parsed.dontRequirePermissions !== undefined)
+          body["dont-require-permissions"] = parsed.dontRequirePermissions ? "yes" : "no";
 
         if (parsed.dryRun) {
           const diff = Object.entries(body).map(([property, after]) => ({

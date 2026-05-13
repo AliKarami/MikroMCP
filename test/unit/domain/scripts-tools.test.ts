@@ -102,6 +102,15 @@ describe("scripts tools", () => {
     });
   });
 
+  describe("run_script input schema", () => {
+    it("accepts valid input", () => {
+      expect(() => runSchema.parse({ routerId: "r", name: "my-script" })).not.toThrow();
+    });
+    it("rejects extra fields", () => {
+      expect(() => runSchema.parse({ routerId: "r", name: "s", extra: true })).toThrow();
+    });
+  });
+
   describe("list_scripts handler", () => {
     it("returns all scripts", async () => {
       const scripts = [
@@ -191,6 +200,23 @@ describe("scripts tools", () => {
           ctx,
         ),
       ).rejects.toMatchObject({ code: "SCRIPT_NOT_FOUND" });
+    });
+
+    it("updates dontRequirePermissions", async () => {
+      const update = vi.fn().mockResolvedValue(undefined);
+      const ctx = makeContext({
+        get: vi.fn().mockResolvedValue([{ ".id": "*1", name: "my-script", source: "x" }]),
+        update,
+      });
+      await manageScriptTool.handler(
+        { routerId: "test-router", action: "update", name: "my-script", dontRequirePermissions: true },
+        ctx,
+      );
+      expect(update).toHaveBeenCalledWith(
+        "system/script",
+        "*1",
+        expect.objectContaining({ "dont-require-permissions": "yes" }),
+      );
     });
   });
 
