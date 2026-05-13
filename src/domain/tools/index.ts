@@ -20,6 +20,7 @@ import { addressListTools } from "./address-list-tools.js";
 import { policyRoutingTools } from "./policy-routing-tools.js";
 import { routingProtocolTools } from "./routing-protocol-tools.js";
 import { scriptsTools } from "./scripts-tools.js";
+import { schedulerTools } from "./scheduler-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -39,6 +40,7 @@ export const allTools: ToolDefinition[] = [
   ...policyRoutingTools,
   ...routingProtocolTools,
   ...scriptsTools,
+  ...schedulerTools,
 ];
 
 export type {
