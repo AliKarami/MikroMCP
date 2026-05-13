@@ -266,7 +266,7 @@ const runScriptTool: ToolDefinition = {
         });
       }
 
-      await context.routerClient.execute(`${SCRIPT_PATH}/run`, { "run-script": parsed.name });
+      await context.routerClient.execute(`${SCRIPT_PATH}/run`, { number: parsed.name });
       log.info({ name: parsed.name }, "Script executed");
 
       return {

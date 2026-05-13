@@ -257,7 +257,7 @@ describe("scripts tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("executed");
-      expect(execute).toHaveBeenCalledWith("system/script/run", { "run-script": "my-script" });
+      expect(execute).toHaveBeenCalledWith("system/script/run", { number: "my-script" });
     });
 
     it("throws NOT_FOUND when script does not exist", async () => {
