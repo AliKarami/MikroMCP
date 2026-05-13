@@ -70,13 +70,7 @@ const manageRoutingRuleInputSchema = z.object({
   interface: z.string().optional().describe("Incoming interface to match"),
   priority: z.number().int().min(0).max(4294967295).optional().describe("Rule priority (0–4294967295)"),
   dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-}).strict().refine(
-  (d) => d.action !== "add" || d.srcAddress !== undefined || d.dstAddress !== undefined || d.interface !== undefined,
-  {
-    message: "At least one of srcAddress, dstAddress, or interface must be provided when action is add",
-    path: ["srcAddress"],
-  },
-);
+}).strict();
 
 function findRoutingRule(
   rules: RouterOSRecord[],
@@ -120,6 +114,18 @@ const manageRoutingRuleTool: ToolDefinition = {
       const existing = findRoutingRule(allRules, parsed.srcAddress, parsed.dstAddress, parsed.interface, parsed.table);
 
       if (parsed.action === "add") {
+        if (parsed.srcAddress === undefined && parsed.dstAddress === undefined && parsed.interface === undefined) {
+          throw new MikroMCPError({
+            category: ErrorCategory.VALIDATION,
+            code: "MATCH_REQUIRED",
+            message: "At least one of srcAddress, dstAddress, or interface must be provided when action is add",
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Provide at least one of srcAddress, dstAddress, or interface.",
+            },
+          });
+        }
+
         if (existing) {
           return {
             content: `Routing rule for table "${parsed.table}" already exists. No changes made.`,

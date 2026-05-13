@@ -110,11 +110,7 @@ const manageMangleRuleInputSchema = z
       .optional()
       .describe("Whether to continue matching subsequent rules"),
   })
-  .strict()
-  .refine((d) => d.action !== "add" || d.chain !== undefined, {
-    message: "chain is required when action is add",
-    path: ["chain"],
-  });
+  .strict();
 
 const manageMangleRuleTool: ToolDefinition = {
   name: "manage_mangle_rule",
@@ -137,6 +133,18 @@ const manageMangleRuleTool: ToolDefinition = {
 
     try {
       if (parsed.action === "add") {
+        if (parsed.chain === undefined) {
+          throw new MikroMCPError({
+            category: ErrorCategory.VALIDATION,
+            code: "CHAIN_REQUIRED",
+            message: "chain is required when action is add",
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Provide a chain value (e.g. prerouting, forward, postrouting).",
+            },
+          });
+        }
+
         const existing = await findMangleRuleByComment(context, parsed.comment);
 
         if (existing) {
