@@ -178,6 +178,19 @@ const uploadFileTool: ToolDefinition = {
       };
     } catch (err) {
       if (err instanceof MikroMCPError) throw err;
+      if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ECONNREFUSED") {
+        throw new MikroMCPError({
+          category: ErrorCategory.CONFIGURATION,
+          code: "FTP_SERVICE_UNAVAILABLE",
+          message: `FTP service is not running on ${context.routerConfig.host}:21. Enable it on the router and ensure the user has the 'ftp' policy.`,
+          details: { host: context.routerConfig.host, port: 21, routerId: context.routerId },
+          recoverability: {
+            retryable: false,
+            suggestedAction:
+              "Run on the router: /ip service enable ftp  — then add 'ftp' to the user group policy: /user group set <group> policy=...,ftp,...",
+          },
+        });
+      }
       throw enrichError(err, { routerId: context.routerId, tool: "upload_file" });
     }
   },

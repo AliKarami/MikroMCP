@@ -187,5 +187,16 @@ describe("files tools", () => {
       expect(ftpAdapter.ftpConnect).toHaveBeenCalled();
       expect(ftpAdapter.ftpUpload).not.toHaveBeenCalled();
     });
+
+    it("throws FTP_SERVICE_UNAVAILABLE when FTP port is refused", async () => {
+      const connRefused = Object.assign(new Error("connect ECONNREFUSED 192.168.1.1:21"), {
+        code: "ECONNREFUSED",
+      });
+      vi.mocked(ftpAdapter.ftpUpload).mockRejectedValueOnce(connRefused);
+      const ctx = makeContext();
+      await expect(
+        uploadFileTool.handler({ routerId: "test-router", name: "test.rsc", content: "x" }, ctx),
+      ).rejects.toMatchObject({ code: "FTP_SERVICE_UNAVAILABLE" });
+    });
   });
 });
