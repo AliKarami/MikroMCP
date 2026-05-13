@@ -99,7 +99,7 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.6 — Automation & System Management
+## ✅ v0.6 — Automation & System Management
 
 **Goal:** The scripting, scheduling, and lifecycle management layer — what separates a managed router from an automated one.
 

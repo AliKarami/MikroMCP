@@ -31,7 +31,7 @@ flowchart TD
     end
 
     subgraph Server["MikroMCP Server"]
-        REG["Tool Registry — 39 tools"]
+        REG["Tool Registry — 51 tools"]
         CB["Circuit Breaker — per-router"]
         RE["Retry Engine — backoff + jitter"]
         RC["RouterOS REST Client"]
@@ -134,6 +134,18 @@ For the full walkthrough including router user setup, see the **[📖 Setup Guid
 | `manage_routing_table` | ✏️ Write | Create or remove a routing table (idempotent by name) |
 | `list_bgp_peers` | 👁️ Read | List BGP sessions with state, prefix counts, and uptime (RouterOS 7+) |
 | `list_ospf_neighbors` | 👁️ Read | List OSPF neighbors with state, interface, and uptime (RouterOS 7+) |
+| `list_scripts` | 👁️ Read | List RouterOS scripts |
+| `manage_script` | ✏️ Write | Add / update / remove scripts (idempotent by name) |
+| `run_script` | ✏️ Write | Execute a named script (fire-and-forget; check `get_log` for output) |
+| `list_scheduled_jobs` | 👁️ Read | List scheduler entries |
+| `manage_scheduled_job` | ✏️ Write | Add / update / remove / enable / disable scheduled jobs |
+| `list_packages` | 👁️ Read | List installed packages with version and enabled status |
+| `manage_package` | ✏️ Write | Enable or disable a package (reboot required to apply) |
+| `list_files` | 👁️ Read | List router filesystem entries |
+| `get_file_content` | 👁️ Read | Read a text file's contents |
+| `upload_file` | ✏️ Write | Upload a text file via FTP (requires FTP policy on router user) |
+| `list_containers` | 👁️ Read | List container instances with status and image |
+| `manage_container` | ✏️ Write | Create / start / stop / remove containers |
 
 Full parameter tables and example prompts: **[📋 Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)**
 
@@ -148,11 +160,11 @@ Full parameter tables and example prompts: **[📋 Available Tools](https://gith
 | [⚙️ Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration) | Router registry YAML, credentials, env vars, HTTP transport |
 | [▶️ Running](https://github.com/AliKarami/MikroMCP/wiki/Running) | Dev and production scripts |
 | [🔌 Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-an-MCP-Client) | Claude Desktop, Claude Code, and other clients |
-| [🛠️ Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 39 tools with parameters and example prompts |
+| [🛠️ Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 51 tools with parameters and example prompts |
 | [🚨 Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling) | Error categories, circuit breaker, retry engine |
 | [🧪 Development](https://github.com/AliKarami/MikroMCP/wiki/Development) | Project structure, scripts, testing, MCP Inspector |
 | [🤝 Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing) | Adding tools, guidelines, PR checklist |
-| [🗺️ Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1 ✅ · v0.2 ✅ · v0.3 ✅ · v0.4 ✅ · v0.5 ✅ · v0.6–v1.0 planned |
+| [🗺️ Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1 ✅ · v0.2 ✅ · v0.3 ✅ · v0.4 ✅ · v0.5 ✅ · v0.6 ✅ · v0.7–v1.0 planned |
 
 ---
 

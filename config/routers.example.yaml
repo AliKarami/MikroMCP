@@ -3,7 +3,12 @@
 # Credentials are resolved from environment variables by default.
 #
 # Required RouterOS user group policies:
-#   read, write, api, rest-api, test, ssh, sniff
+#   read, write, api, rest-api, test, ssh, sniff, ftp
+#
+# The `ftp` policy is required for the upload_file tool.
+# Enable it with:
+#   /user group set <group> policy=...,ftp,...
+# FTP service must also be enabled on the router (/ip service enable ftp).
 #
 # The `ssh` policy is required for ping, traceroute, torch, and run_command —
 # those tools execute via SSH because RouterOS 7.x REST API blocks tool commands
