@@ -203,7 +203,7 @@ describe("container tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("started");
-      expect(execute).toHaveBeenCalledWith("container/*1/start");
+      expect(execute).toHaveBeenCalledWith("container/start", { number: "*1" });
     });
 
     it("returns no_change when already running", async () => {
@@ -240,7 +240,7 @@ describe("container tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("stopped");
-      expect(execute).toHaveBeenCalledWith("container/*1/stop");
+      expect(execute).toHaveBeenCalledWith("container/stop", { number: "*1" });
     });
 
     it("returns no_change when already stopped", async () => {
