@@ -19,6 +19,7 @@ import { mangleTools } from "./mangle-tools.js";
 import { addressListTools } from "./address-list-tools.js";
 import { policyRoutingTools } from "./policy-routing-tools.js";
 import { routingProtocolTools } from "./routing-protocol-tools.js";
+import { scriptsTools } from "./scripts-tools.js";
 
 export const allTools: ToolDefinition[] = [
   ...systemTools,
@@ -37,6 +38,7 @@ export const allTools: ToolDefinition[] = [
   ...addressListTools,
   ...policyRoutingTools,
   ...routingProtocolTools,
+  ...scriptsTools,
 ];
 
 export type {
