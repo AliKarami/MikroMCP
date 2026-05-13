@@ -266,13 +266,12 @@ const runScriptTool: ToolDefinition = {
         });
       }
 
-      const id = script[".id"];
-      await context.routerClient.execute(`${SCRIPT_PATH}/${id}/run`);
-      log.info({ name: parsed.name, id }, "Script executed");
+      await context.routerClient.execute(`${SCRIPT_PATH}/run`, { "run-script": parsed.name });
+      log.info({ name: parsed.name }, "Script executed");
 
       return {
         content: `Script "${parsed.name}" executed. Check get_log for output.`,
-        structuredContent: { action: "executed", name: parsed.name, id },
+        structuredContent: { action: "executed", name: parsed.name },
       };
     } catch (err) {
       if (err instanceof MikroMCPError) throw err;
