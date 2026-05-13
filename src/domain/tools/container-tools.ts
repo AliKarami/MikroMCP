@@ -197,7 +197,7 @@ const manageContainerTool: ToolDefinition = {
           };
         }
 
-        await context.routerClient.execute(`${CONTAINER_PATH}/start`, { number: id });
+        await context.routerClient.execute(`${CONTAINER_PATH}/start`, { ".id": id });
         log.info({ name: parsed.name, id }, "Container started");
         return {
           content: `Started container "${parsed.name}".`,
@@ -220,7 +220,7 @@ const manageContainerTool: ToolDefinition = {
           };
         }
 
-        await context.routerClient.execute(`${CONTAINER_PATH}/stop`, { number: id });
+        await context.routerClient.execute(`${CONTAINER_PATH}/stop`, { ".id": id });
         log.info({ name: parsed.name, id }, "Container stopped");
         return {
           content: `Stopped container "${parsed.name}".`,
