@@ -103,8 +103,8 @@ export interface AuditEvent {
   type: "audit";
   ts: string;
   correlationId: string;
-  identity: string;
-  role: string;
+  identityId: string;
+  role: Role;
   tool: string;
   routerId: string;
   phase: "attempt" | "success" | "failure";

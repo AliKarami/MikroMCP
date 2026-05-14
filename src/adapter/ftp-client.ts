@@ -34,6 +34,7 @@ export class FtpClient {
     }
   }
 
+  // Credential probe for dry-run: verifies FTP access without transferring data.
   async connect(): Promise<void> {
     const client = new Client();
     try {
