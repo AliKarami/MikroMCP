@@ -1,0 +1,42 @@
+# MikroMCP Identity Configuration
+#
+# Each identity maps a bcrypt-hashed bearer token to an RBAC policy.
+# Roles are semantic labels; enforcement is via allowedRouters and allowedToolPatterns.
+#
+# Token generation (two steps):
+#   1. Generate raw token:  openssl rand -hex 32
+#   2. Hash it (bcrypt cost 12):
+#      node -e "const b=require('bcryptjs');b.hash(process.argv[1],12).then(console.log)" <raw-token>
+#
+# Store the raw token securely (password manager, secrets vault).
+# Only the bcrypt hash goes in this file — never the raw token.
+#
+# Roles: readonly | operator | admin | superadmin
+#   - readonly:    Read-only tools. Requires confirmation for any destructive tool.
+#   - operator:    Read + selected write tools. Requires confirmation for destructive tools.
+#   - admin:       Full access. Skips confirmation gate.
+#   - superadmin:  Full access. Same as admin but typically used for the built-in stdio identity.
+#
+# allowedRouters:  [] means all routers are accessible.
+# allowedToolPatterns: [] means all tools are accessible. Supports * wildcard.
+
+identities:
+  # CI pipeline: operator access to specific routers, limited tool set
+  ci-pipeline:
+    token: "$2b$12$REPLACE_WITH_BCRYPT_HASH_OF_YOUR_TOKEN"
+    role: operator
+    allowedRouters:
+      - edge-01
+      - edge-02
+    allowedToolPatterns:
+      - "list_*"
+      - "ping"
+      - "traceroute"
+      - "get_system_status"
+
+  # Admin user: full access to all routers and tools, skips confirmation gate
+  admin-ali:
+    token: "$2b$12$REPLACE_WITH_BCRYPT_HASH_OF_YOUR_TOKEN"
+    role: admin
+    allowedRouters: []        # empty = all routers
+    allowedToolPatterns: []   # empty = all tools
