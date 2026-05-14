@@ -7,6 +7,10 @@ afterEach(() => {
   delete process.env.MIKROMCP_HTTP_RATE_LIMIT_RPM;
   delete process.env.MIKROMCP_SSH_COMMAND_TIMEOUT_MS;
   delete process.env.MIKROMCP_SSH_MAX_OUTPUT_BYTES;
+  delete process.env.MIKROMCP_IDENTITIES_PATH;
+  delete process.env.MIKROMCP_STDIO_IDENTITY;
+  delete process.env.MIKROMCP_CONFIRMATION_SECRET;
+  delete process.env.MIKROMCP_AUDIT_LOG_PATH;
 });
 
 describe("loadAppConfig", () => {
@@ -56,6 +60,44 @@ describe("loadAppConfig", () => {
     it("reads MIKROMCP_SSH_MAX_OUTPUT_BYTES", () => {
       process.env.MIKROMCP_SSH_MAX_OUTPUT_BYTES = "131072";
       expect(loadAppConfig().ssh.maxOutputBytes).toBe(131_072);
+    });
+  });
+
+  describe("v0.7 auth/audit env vars", () => {
+    it("identitiesPath defaults to config/identities.yaml", () => {
+      expect(loadAppConfig().identitiesPath).toBe("config/identities.yaml");
+    });
+
+    it("stdioIdentity defaults to undefined", () => {
+      expect(loadAppConfig().stdioIdentity).toBeUndefined();
+    });
+
+    it("confirmationSecret defaults to undefined", () => {
+      expect(loadAppConfig().confirmationSecret).toBeUndefined();
+    });
+
+    it("auditLogPath defaults to undefined", () => {
+      expect(loadAppConfig().auditLogPath).toBeUndefined();
+    });
+
+    it("reads MIKROMCP_IDENTITIES_PATH", () => {
+      process.env.MIKROMCP_IDENTITIES_PATH = "/etc/identities.yaml";
+      expect(loadAppConfig().identitiesPath).toBe("/etc/identities.yaml");
+    });
+
+    it("reads MIKROMCP_STDIO_IDENTITY", () => {
+      process.env.MIKROMCP_STDIO_IDENTITY = "admin-ali";
+      expect(loadAppConfig().stdioIdentity).toBe("admin-ali");
+    });
+
+    it("reads MIKROMCP_CONFIRMATION_SECRET", () => {
+      process.env.MIKROMCP_CONFIRMATION_SECRET = "supersecret";
+      expect(loadAppConfig().confirmationSecret).toBe("supersecret");
+    });
+
+    it("reads MIKROMCP_AUDIT_LOG_PATH", () => {
+      process.env.MIKROMCP_AUDIT_LOG_PATH = "/var/log/mikromcp-audit.ndjson";
+      expect(loadAppConfig().auditLogPath).toBe("/var/log/mikromcp-audit.ndjson");
     });
   });
 });

@@ -7,6 +7,10 @@ export interface AppConfig {
   dataDir: string;
   cmdAllow: string[];
   cmdDeny: string[];
+  identitiesPath: string;
+  stdioIdentity: string | undefined;
+  confirmationSecret: string | undefined;
+  auditLogPath: string | undefined;
   http: {
     maxBodyBytes: number;
     rateLimitRpm: number;
@@ -42,6 +46,10 @@ export function loadAppConfig(): AppConfig {
     dataDir: env.MIKROMCP_DATA_DIR ?? "data",
     cmdAllow: (env.MIKROMCP_CMD_ALLOW ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     cmdDeny: (env.MIKROMCP_CMD_DENY ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+    identitiesPath: env.MIKROMCP_IDENTITIES_PATH ?? "config/identities.yaml",
+    stdioIdentity: env.MIKROMCP_STDIO_IDENTITY || undefined,
+    confirmationSecret: env.MIKROMCP_CONFIRMATION_SECRET || undefined,
+    auditLogPath: env.MIKROMCP_AUDIT_LOG_PATH || undefined,
     http: {
       maxBodyBytes: parseInt(env.MIKROMCP_HTTP_MAX_BODY_BYTES ?? String(1024 * 1024), 10),
       rateLimitRpm: parseInt(env.MIKROMCP_HTTP_RATE_LIMIT_RPM ?? "60", 10),
