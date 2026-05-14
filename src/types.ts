@@ -98,3 +98,17 @@ export interface ConfigSection {
     properties: Record<string, string>;
   }>;
 }
+
+export interface AuditEvent {
+  type: "audit";
+  ts: string;
+  correlationId: string;
+  identity: string;
+  role: string;
+  tool: string;
+  routerId: string;
+  phase: "attempt" | "success" | "failure";
+  params: Record<string, unknown>;
+  outcome?: string;
+  durationMs?: number;
+}
