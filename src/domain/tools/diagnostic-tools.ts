@@ -1,6 +1,5 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { SshClient } from "../../adapter/ssh-client.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -10,13 +9,27 @@ const log = createLogger("diagnostic-tools");
 // ping
 // ---------------------------------------------------------------------------
 
-const pingInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  address: z.string().describe("Target IP address or hostname to ping"),
-  count: z.number().int().min(1).max(20).default(4).describe("Number of ICMP echo requests (1–20)"),
-  size: z.number().int().min(14).max(65535).default(56).describe("Packet size in bytes (14–65535)"),
-  routingTable: z.string().optional().describe("Routing table to use for the ping"),
-}).strict();
+const pingInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    address: z.string().describe("Target IP address or hostname to ping"),
+    count: z
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(4)
+      .describe("Number of ICMP echo requests (1–20)"),
+    size: z
+      .number()
+      .int()
+      .min(14)
+      .max(65535)
+      .default(56)
+      .describe("Packet size in bytes (14–65535)"),
+    routingTable: z.string().optional().describe("Routing table to use for the ping"),
+  })
+  .strict();
 
 const pingTool: ToolDefinition = {
   name: "ping",
@@ -45,8 +58,7 @@ const pingTool: ToolDefinition = {
       ];
       if (parsed.routingTable !== undefined) parts.push(`routing-table=${parsed.routingTable}`);
 
-      const ssh = new SshClient(context.routerConfig, context.credentials, context.sshOptions);
-      const output = await ssh.execute(parts.join(" "));
+      const output = await context.sshClient.execute(parts.join(" "));
 
       // Summary line: "sent=N received=N packet-loss=X% min-rtt=Xms avg-rtt=Xms max-rtt=Xms"
       const s = output.match(/sent=(\d+)/)?.[1] ?? String(parsed.count);
@@ -80,12 +92,14 @@ const pingTool: ToolDefinition = {
 // traceroute
 // ---------------------------------------------------------------------------
 
-const tracerouteInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  address: z.string().describe("Target IP address or hostname to trace"),
-  count: z.number().int().min(1).max(5).default(3).describe("Probes per hop (1–5)"),
-  maxHops: z.number().int().min(1).max(30).default(15).describe("Maximum number of hops (1–30)"),
-}).strict();
+const tracerouteInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    address: z.string().describe("Target IP address or hostname to trace"),
+    count: z.number().int().min(1).max(5).default(3).describe("Probes per hop (1–5)"),
+    maxHops: z.number().int().min(1).max(30).default(15).describe("Maximum number of hops (1–30)"),
+  })
+  .strict();
 
 const tracerouteTool: ToolDefinition = {
   name: "traceroute",
@@ -112,8 +126,7 @@ const tracerouteTool: ToolDefinition = {
         `max-hops=${parsed.maxHops}`,
       ];
 
-      const ssh = new SshClient(context.routerConfig, context.credentials, context.sshOptions);
-      const output = await ssh.execute(parts.join(" "));
+      const output = await context.sshClient.execute(parts.join(" "));
 
       // Each hop line starts with a number: " 1 192.168.1.1  echo reply  1ms …"
       const hopLines = output.split("\n").filter((l) => /^\s*\d+\s+\S+/.test(l));
@@ -151,13 +164,21 @@ const tracerouteTool: ToolDefinition = {
 // torch
 // ---------------------------------------------------------------------------
 
-const torchInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  interface: z.string().describe("Interface name to monitor (e.g. ether1, bridge1)"),
-  duration: z.number().int().min(1).max(30).default(5).describe("Capture duration in seconds (1–30)"),
-  srcAddress: z.string().optional().describe("Filter by source IP address"),
-  dstAddress: z.string().optional().describe("Filter by destination IP address"),
-}).strict();
+const torchInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    interface: z.string().describe("Interface name to monitor (e.g. ether1, bridge1)"),
+    duration: z
+      .number()
+      .int()
+      .min(1)
+      .max(30)
+      .default(5)
+      .describe("Capture duration in seconds (1–30)"),
+    srcAddress: z.string().optional().describe("Filter by source IP address"),
+    dstAddress: z.string().optional().describe("Filter by destination IP address"),
+  })
+  .strict();
 
 interface TorchFlow {
   src: string;
@@ -205,15 +226,16 @@ const torchTool: ToolDefinition = {
       if (parsed.srcAddress !== undefined) parts.push(`src-address=${parsed.srcAddress}`);
       if (parsed.dstAddress !== undefined) parts.push(`dst-address=${parsed.dstAddress}`);
 
-      const ssh = new SshClient(context.routerConfig, context.credentials, context.sshOptions);
       // RouterOS torch runs indefinitely — force-close after duration + 1s buffer
-      const raw = await ssh.execute(parts.join(" "), (parsed.duration + 1) * 1000);
+      const raw = await context.sshClient.execute(parts.join(" "), (parsed.duration + 1) * 1000);
 
       // Strip ANSI escape codes and parse flow rows
       const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
       const flows = parseTorchOutput(clean);
 
-      const lines = [`Torch on ${parsed.interface} (${parsed.duration}s) from ${context.routerId}: ${flows.length} flows`];
+      const lines = [
+        `Torch on ${parsed.interface} (${parsed.duration}s) from ${context.routerId}: ${flows.length} flows`,
+      ];
       for (const flow of flows.slice(0, 10)) {
         lines.push(`  ${flow.src} → ${flow.dst}  tx=${flow.txBytes} rx=${flow.rxBytes}`);
       }
@@ -238,17 +260,33 @@ const torchTool: ToolDefinition = {
 // get_log
 // ---------------------------------------------------------------------------
 
-const getLogInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  limit: z.number().int().min(1).max(500).default(100).describe("Maximum entries to return (1–500)"),
-  offset: z.number().int().min(0).default(0).describe("Pagination offset"),
-  topics: z.array(z.string()).optional()
-    .describe("Filter entries whose topics field contains any of these strings (e.g. [\"firewall\", \"dhcp\"])"),
-  prefix: z.string().optional()
-    .describe("Substring to match against the log message"),
-  sinceMinutes: z.number().int().min(1).max(1440).optional()
-    .describe("Only return entries from the last N minutes (1–1440)"),
-}).strict();
+const getLogInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum entries to return (1–500)"),
+    offset: z.number().int().min(0).default(0).describe("Pagination offset"),
+    topics: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Filter entries whose topics field contains any of these strings (e.g. ["firewall", "dhcp"])',
+      ),
+    prefix: z.string().optional().describe("Substring to match against the log message"),
+    sinceMinutes: z
+      .number()
+      .int()
+      .min(1)
+      .max(1440)
+      .optional()
+      .describe("Only return entries from the last N minutes (1–1440)"),
+  })
+  .strict();
 
 function parseRouterOsTimestamp(ts: string, now: Date): Date | null {
   const timeOnly = /^(\d{2}):(\d{2}):(\d{2})$/.exec(ts);
@@ -260,8 +298,18 @@ function parseRouterOsTimestamp(ts: string, now: Date): Date | null {
   }
 
   const MONTHS: Record<string, number> = {
-    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+    jan: 0,
+    feb: 1,
+    mar: 2,
+    apr: 3,
+    may: 4,
+    jun: 5,
+    jul: 6,
+    aug: 7,
+    sep: 8,
+    oct: 9,
+    nov: 10,
+    dec: 11,
   };
   const monthDay = /^([a-z]{3})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/i.exec(ts);
   if (monthDay) {
@@ -297,14 +345,18 @@ const getLogTool: ToolDefinition = {
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = getLogInputSchema.parse(params);
 
-    log.info({ routerId: context.routerId, topics: parsed.topics, sinceMinutes: parsed.sinceMinutes }, "Getting log");
+    log.info(
+      { routerId: context.routerId, topics: parsed.topics, sinceMinutes: parsed.sinceMinutes },
+      "Getting log",
+    );
 
     try {
       const allEntries = await context.routerClient.get<Record<string, string>>("log");
       const now = new Date();
-      const cutoff = parsed.sinceMinutes !== undefined
-        ? new Date(now.getTime() - parsed.sinceMinutes * 60_000)
-        : null;
+      const cutoff =
+        parsed.sinceMinutes !== undefined
+          ? new Date(now.getTime() - parsed.sinceMinutes * 60_000)
+          : null;
 
       let filtered = allEntries.map((e) => e as Record<string, string>);
 

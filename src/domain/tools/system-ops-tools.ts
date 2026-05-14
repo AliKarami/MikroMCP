@@ -3,7 +3,6 @@ import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.
 import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
-import { SshClient } from "../../adapter/ssh-client.js";
 import { resolveCommandPolicy, checkCommand } from "./command-guard.js";
 
 const log = createLogger("system-ops-tools");
@@ -12,9 +11,11 @@ const log = createLogger("system-ops-tools");
 // get_system_clock
 // ---------------------------------------------------------------------------
 
-const getSystemClockInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-}).strict();
+const getSystemClockInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+  })
+  .strict();
 
 const getSystemClockTool: ToolDefinition = {
   name: "get_system_clock",
@@ -34,7 +35,10 @@ const getSystemClockTool: ToolDefinition = {
 
     try {
       const results = await context.routerClient.get<Record<string, string>>("system/clock");
-      const clock = (Array.isArray(results) && results.length > 0 ? results[0] : results) as Record<string, string>;
+      const clock = (Array.isArray(results) && results.length > 0 ? results[0] : results) as Record<
+        string,
+        string
+      >;
 
       return {
         content: `Clock on ${parsed.routerId}: ${clock.date} ${clock.time} (${clock["time-zone-name"] ?? "?"})`,
@@ -56,13 +60,15 @@ const getSystemClockTool: ToolDefinition = {
 // set_system_clock
 // ---------------------------------------------------------------------------
 
-const setSystemClockInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  date: z.string().optional().describe("Date in RouterOS format: mon/dd/yyyy (e.g. jan/02/2006)"),
-  time: z.string().optional().describe("Time in RouterOS format: hh:mm:ss (e.g. 15:04:05)"),
-  timeZoneName: z.string().optional().describe("IANA timezone name (e.g. Europe/London, UTC)"),
-  dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-}).strict();
+const setSystemClockInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    date: z.string().optional().describe("Date in RouterOS format: mon/dd/yyyy (e.g. jan/02/2006)"),
+    time: z.string().optional().describe("Time in RouterOS format: hh:mm:ss (e.g. 15:04:05)"),
+    timeZoneName: z.string().optional().describe("IANA timezone name (e.g. Europe/London, UTC)"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
 
 const setSystemClockTool: ToolDefinition = {
   name: "set_system_clock",
@@ -82,7 +88,9 @@ const setSystemClockTool: ToolDefinition = {
 
     try {
       const results = await context.routerClient.get<Record<string, string>>("system/clock");
-      const current = (Array.isArray(results) && results.length > 0 ? results[0] : results) as Record<string, string>;
+      const current = (
+        Array.isArray(results) && results.length > 0 ? results[0] : results
+      ) as Record<string, string>;
       const id = current[".id"];
 
       const changes: Record<string, string> = {};
@@ -98,7 +106,11 @@ const setSystemClockTool: ToolDefinition = {
       }
       if (parsed.timeZoneName !== undefined && current["time-zone-name"] !== parsed.timeZoneName) {
         changes["time-zone-name"] = parsed.timeZoneName;
-        diff.push({ property: "time-zone-name", before: current["time-zone-name"] ?? null, after: parsed.timeZoneName });
+        diff.push({
+          property: "time-zone-name",
+          before: current["time-zone-name"] ?? null,
+          after: parsed.timeZoneName,
+        });
       }
 
       if (diff.length === 0) {
@@ -133,11 +145,19 @@ const setSystemClockTool: ToolDefinition = {
 // reboot
 // ---------------------------------------------------------------------------
 
-const rebootInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  delay: z.number().int().min(0).max(3600).default(0).describe("Seconds before rebooting (0–3600)"),
-  dryRun: z.boolean().default(false).describe("Preview the reboot without executing"),
-}).strict();
+const rebootInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    delay: z
+      .number()
+      .int()
+      .min(0)
+      .max(3600)
+      .default(0)
+      .describe("Seconds before rebooting (0–3600)"),
+    dryRun: z.boolean().default(false).describe("Preview the reboot without executing"),
+  })
+  .strict();
 
 const rebootTool: ToolDefinition = {
   name: "reboot",
@@ -157,9 +177,10 @@ const rebootTool: ToolDefinition = {
 
     try {
       if (parsed.dryRun) {
-        const msg = parsed.delay > 0
-          ? `Dry run: Would reboot ${context.routerId} in ${parsed.delay} seconds.`
-          : `Dry run: Would reboot ${context.routerId} immediately.`;
+        const msg =
+          parsed.delay > 0
+            ? `Dry run: Would reboot ${context.routerId} in ${parsed.delay} seconds.`
+            : `Dry run: Would reboot ${context.routerId} immediately.`;
         return {
           content: msg,
           structuredContent: { action: "dry_run", delay: parsed.delay, routerId: context.routerId },
@@ -169,9 +190,10 @@ const rebootTool: ToolDefinition = {
       await context.routerClient.execute("system/reboot", { delay: String(parsed.delay) });
       log.info({ routerId: context.routerId, delay: parsed.delay }, "Reboot triggered");
 
-      const msg = parsed.delay > 0
-        ? `Reboot of ${context.routerId} scheduled in ${parsed.delay} seconds.`
-        : `Reboot of ${context.routerId} triggered.`;
+      const msg =
+        parsed.delay > 0
+          ? `Reboot of ${context.routerId} scheduled in ${parsed.delay} seconds.`
+          : `Reboot of ${context.routerId} triggered.`;
 
       return {
         content: msg,
@@ -189,11 +211,16 @@ const rebootTool: ToolDefinition = {
 
 const OUTPUT_MAX_CHARS = 4_000;
 
-const runCommandInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  command: z.string().min(1).describe("RouterOS console command to execute"),
-  dryRun: z.boolean().default(false).describe("Preview the command without executing (validates allow/deny policy only)"),
-}).strict();
+const runCommandInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    command: z.string().min(1).describe("RouterOS console command to execute"),
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe("Preview the command without executing (validates allow/deny policy only)"),
+  })
+  .strict();
 
 const runCommandTool: ToolDefinition = {
   name: "run_command",
@@ -212,9 +239,13 @@ const runCommandTool: ToolDefinition = {
     log.info({ routerId: context.routerId, command: parsed.command }, "Running command");
 
     const globalAllow = (process.env.MIKROMCP_CMD_ALLOW ?? "")
-      .split(",").map((s) => s.trim()).filter(Boolean);
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     const globalDeny = (process.env.MIKROMCP_CMD_DENY ?? "")
-      .split(",").map((s) => s.trim()).filter(Boolean);
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     const policy = resolveCommandPolicy(context.routerConfig, globalAllow, globalDeny);
     checkCommand(parsed.command, policy);
@@ -222,13 +253,16 @@ const runCommandTool: ToolDefinition = {
     if (parsed.dryRun) {
       return {
         content: `Dry run: Would execute command on ${context.routerId}: ${parsed.command}`,
-        structuredContent: { action: "dry_run", command: parsed.command, routerId: context.routerId },
+        structuredContent: {
+          action: "dry_run",
+          command: parsed.command,
+          routerId: context.routerId,
+        },
       };
     }
 
     try {
-      const ssh = new SshClient(context.routerConfig, context.credentials, context.sshOptions);
-      let output = await ssh.execute(parsed.command);
+      let output = await context.sshClient.execute(parsed.command);
 
       let truncated = false;
       if (output.length > OUTPUT_MAX_CHARS) {
@@ -242,7 +276,13 @@ const runCommandTool: ToolDefinition = {
 
       return {
         content,
-        structuredContent: { action: "executed", command: parsed.command, routerId: context.routerId, output, truncated },
+        structuredContent: {
+          action: "executed",
+          command: parsed.command,
+          routerId: context.routerId,
+          output,
+          truncated,
+        },
       };
     } catch (err) {
       if (err instanceof MikroMCPError) throw err;

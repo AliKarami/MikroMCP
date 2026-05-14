@@ -4,7 +4,6 @@ import type { RouterOSRecord } from "../../types.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
-import { ftpUpload, ftpConnect } from "../../adapter/ftp-client.js";
 
 const log = createLogger("files-tools");
 
@@ -14,10 +13,7 @@ const listFilesInputSchema = z
   .object({
     routerId: z.string().describe("Target router identifier from the router registry"),
     name: z.string().optional().describe("Filter by file name (substring match)"),
-    type: z
-      .string()
-      .optional()
-      .describe("Filter by file type (e.g. script, backup, package)"),
+    type: z.string().optional().describe("Filter by file type (e.g. script, backup, package)"),
   })
   .strict();
 
@@ -92,9 +88,9 @@ const getFileContentTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const file = all.find(
-        (f) => (f as Record<string, string>).name === parsed.name,
-      ) as Record<string, string> | undefined;
+      const file = all.find((f) => (f as Record<string, string>).name === parsed.name) as
+        | Record<string, string>
+        | undefined;
 
       if (!file) {
         throw new MikroMCPError({
@@ -153,23 +149,16 @@ const uploadFileTool: ToolDefinition = {
     const parsed = uploadFileInputSchema.parse(params);
     log.info({ routerId: context.routerId, name: parsed.name }, "Uploading file");
 
-    const ftpOptions = {
-      host: context.routerConfig.host,
-      port: 21,
-      user: context.credentials.username,
-      password: context.credentials.password,
-    };
-
     try {
       if (parsed.dryRun) {
-        await ftpConnect(ftpOptions);
+        await context.ftpClient.connect();
         return {
           content: `Dry run: FTP connectivity to ${context.routerId} verified. Would upload "${parsed.name}".`,
           structuredContent: { action: "dry_run", name: parsed.name, routerId: context.routerId },
         };
       }
 
-      await ftpUpload(ftpOptions, parsed.name, parsed.content);
+      await context.ftpClient.upload(parsed.name, parsed.content);
       log.info({ name: parsed.name }, "File uploaded via FTP");
 
       return {
