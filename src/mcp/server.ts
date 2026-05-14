@@ -8,8 +8,12 @@ import { RouterRegistry } from "../config/router-registry.js";
 import { ConnectionPool } from "../adapter/connection-pool.js";
 import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { AppConfig } from "../config/app-config.js";
+import type { IdentityRegistry } from "../config/identity-registry.js";
 
-export function createServerFactory(config: AppConfig): {
+export function createServerFactory(
+  config: AppConfig,
+  identityRegistry: IdentityRegistry,
+): {
   makeServer: () => McpServer;
   pool: ConnectionPool;
   circuitBreakers: Map<string, CircuitBreaker>;
@@ -23,7 +27,7 @@ export function createServerFactory(config: AppConfig): {
       name: "mikrotik-mcp-server",
       version: "0.6.0",
     });
-    registerAllTools(server, registry, pool, circuitBreakers, config);
+    registerAllTools(server, registry, pool, circuitBreakers, config, identityRegistry);
     return server;
   };
 

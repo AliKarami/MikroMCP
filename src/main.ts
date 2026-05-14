@@ -7,6 +7,7 @@ import { createServerFactory } from "./mcp/server.js";
 import { connectStdio } from "./mcp/transports/stdio.js";
 import { connectHttp } from "./mcp/transports/http.js";
 import { IdentityRegistry } from "./config/identity-registry.js";
+import { getStdioIdentity, withIdentity } from "./middleware/auth.js";
 import { createLogger } from "./observability/logger.js";
 
 const log = createLogger("main");
@@ -15,11 +16,21 @@ async function main(): Promise<void> {
   const config = loadAppConfig();
   log.info({ transport: config.transport, logLevel: config.logLevel }, "Starting MikroMCP server");
 
-  const { makeServer, pool } = createServerFactory(config);
   const identityRegistry = new IdentityRegistry(config.identitiesPath);
 
+  const hasLimitedRoles = identityRegistry.getIdentities().some(
+    (i) => i.role === "readonly" || i.role === "operator",
+  );
+  if (hasLimitedRoles && !config.confirmationSecret) {
+    log.error("MIKROMCP_CONFIRMATION_SECRET is required when identities with role readonly or operator are configured");
+    process.exit(1);
+  }
+
+  const { makeServer, pool } = createServerFactory(config, identityRegistry);
+
   if (config.transport === "stdio") {
-    await connectStdio(makeServer());
+    const stdioIdentity = getStdioIdentity(config.stdioIdentity, identityRegistry);
+    await withIdentity(stdioIdentity, () => connectStdio(makeServer()));
     log.info("MikroMCP server running via stdio");
   } else if (config.transport === "http") {
     await connectHttp(makeServer, {
