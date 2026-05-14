@@ -4,6 +4,8 @@ import { bridgeTools } from "../../../src/domain/tools/bridge-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 
 function makeRouterConfig(): RouterConfig {
   return {
@@ -25,11 +27,11 @@ function makeContext(
     routerId: "test-router",
     correlationId: "corr",
     routerConfig: makeRouterConfig(),
-    credentials: { username: "admin", password: "secret" },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
     routerClient: {
-      get: vi.fn()
-        .mockResolvedValueOnce(bridgeRecords)
-        .mockResolvedValueOnce(portRecords),
+      get: vi.fn().mockResolvedValueOnce(bridgeRecords).mockResolvedValueOnce(portRecords),
       create: vi.fn().mockResolvedValue({ ".id": "*1" }),
       remove: vi.fn().mockResolvedValue(undefined),
     } as unknown as RouterOSRestClient,
@@ -78,12 +80,15 @@ describe("bridgeTools", () => {
           create: vi.fn(),
         } as unknown as RouterOSRestClient,
       };
-      const result = await manageBridgeTool.handler({
-        routerId: "test-router",
-        action: "create",
-        name: "bridge2",
-        dryRun: true,
-      }, ctx);
+      const result = await manageBridgeTool.handler(
+        {
+          routerId: "test-router",
+          action: "create",
+          name: "bridge2",
+          dryRun: true,
+        },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("dry_run");
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
@@ -100,11 +105,14 @@ describe("bridgeTools", () => {
           create: vi.fn(),
         } as unknown as RouterOSRestClient,
       };
-      const result = await manageBridgeTool.handler({
-        routerId: "test-router",
-        action: "create",
-        name: "bridge1",
-      }, ctx);
+      const result = await manageBridgeTool.handler(
+        {
+          routerId: "test-router",
+          action: "create",
+          name: "bridge1",
+        },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("already_exists");
     });
@@ -112,14 +120,18 @@ describe("bridgeTools", () => {
 
   describe("manage_bridge_port", () => {
     it("rejects extra fields", () => {
-      const schema = z.object({
-        routerId: z.string(),
-        action: z.enum(["add", "remove"]),
-        bridge: z.string(),
-        interface: z.string(),
-        dryRun: z.boolean().default(false),
-      }).strict();
-      expect(() => schema.parse({ routerId: "r", action: "add", bridge: "b", interface: "e", extra: 1 })).toThrow();
+      const schema = z
+        .object({
+          routerId: z.string(),
+          action: z.enum(["add", "remove"]),
+          bridge: z.string(),
+          interface: z.string(),
+          dryRun: z.boolean().default(false),
+        })
+        .strict();
+      expect(() =>
+        schema.parse({ routerId: "r", action: "add", bridge: "b", interface: "e", extra: 1 }),
+      ).toThrow();
     });
   });
 });

@@ -3,6 +3,8 @@ import { containerTools } from "../../../src/domain/tools/container-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { z } from "zod";
 
 function makeRouterConfig(): RouterConfig {
@@ -17,18 +19,21 @@ function makeRouterConfig(): RouterConfig {
   };
 }
 
-function makeContext(overrides: {
-  get?: ReturnType<typeof vi.fn>;
-  create?: ReturnType<typeof vi.fn>;
-  remove?: ReturnType<typeof vi.fn>;
-  execute?: ReturnType<typeof vi.fn>;
-} = {}): ToolContext {
+function makeContext(
+  overrides: {
+    get?: ReturnType<typeof vi.fn>;
+    create?: ReturnType<typeof vi.fn>;
+    remove?: ReturnType<typeof vi.fn>;
+    execute?: ReturnType<typeof vi.fn>;
+  } = {},
+): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    credentials: { username: "admin", password: "secret" },
-    sshOptions: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
     routerClient: {
       get: overrides.get ?? vi.fn().mockResolvedValue([]),
       create: overrides.create ?? vi.fn().mockResolvedValue({ ".id": "*1", name: "my-app" }),
@@ -168,7 +173,11 @@ describe("container tools", () => {
       expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
       expect(create).toHaveBeenCalledWith(
         "container",
-        expect.objectContaining({ name: "app", "remote-image": "alpine:latest", interface: "veth1" }),
+        expect.objectContaining({
+          name: "app",
+          "remote-image": "alpine:latest",
+          interface: "veth1",
+        }),
       );
     });
 

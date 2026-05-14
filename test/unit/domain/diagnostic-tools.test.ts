@@ -1,12 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { diagnosticTools } from "../../../src/domain/tools/diagnostic-tools.js";
-import { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import { z } from "zod";
-
-vi.mock("../../../src/adapter/ssh-client.js");
 
 const pingTool = diagnosticTools[0];
 const tracerouteTool = diagnosticTools[1];
@@ -23,33 +22,39 @@ function makeRouterConfig(): RouterConfig {
   };
 }
 
-function makeContext(returnValue: unknown = []): ToolContext {
+function makeContext(sshOutput = ""): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    credentials: { username: "admin", password: "secret" },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue(sshOutput) } as unknown as SshClient,
+    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
     routerClient: {
-      execute: vi.fn().mockResolvedValue(returnValue),
-      get: vi.fn().mockResolvedValue(returnValue),
+      execute: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue([]),
     } as unknown as RouterOSRestClient,
   };
 }
 
-const pingInputSchema = z.object({
-  routerId: z.string(),
-  address: z.string(),
-  count: z.number().int().min(1).max(20).default(4),
-  size: z.number().int().min(14).max(65535).default(56),
-  routingTable: z.string().optional(),
-}).strict();
+const pingInputSchema = z
+  .object({
+    routerId: z.string(),
+    address: z.string(),
+    count: z.number().int().min(1).max(20).default(4),
+    size: z.number().int().min(14).max(65535).default(56),
+    routingTable: z.string().optional(),
+  })
+  .strict();
 
-const tracerouteInputSchema = z.object({
-  routerId: z.string(),
-  address: z.string(),
-  count: z.number().int().min(1).max(5).default(3),
-  maxHops: z.number().int().min(1).max(30).default(15),
-}).strict();
+const tracerouteInputSchema = z
+  .object({
+    routerId: z.string(),
+    address: z.string(),
+    count: z.number().int().min(1).max(5).default(3),
+    maxHops: z.number().int().min(1).max(30).default(15),
+  })
+  .strict();
 
 describe("diagnostic tools", () => {
   describe("metadata", () => {
@@ -79,15 +84,21 @@ describe("diagnostic tools", () => {
     });
 
     it("rejects count > 20", () => {
-      expect(() => pingInputSchema.parse({ routerId: "r", address: "8.8.8.8", count: 21 })).toThrow();
+      expect(() =>
+        pingInputSchema.parse({ routerId: "r", address: "8.8.8.8", count: 21 }),
+      ).toThrow();
     });
 
     it("rejects size < 14", () => {
-      expect(() => pingInputSchema.parse({ routerId: "r", address: "8.8.8.8", size: 13 })).toThrow();
+      expect(() =>
+        pingInputSchema.parse({ routerId: "r", address: "8.8.8.8", size: 13 }),
+      ).toThrow();
     });
 
     it("rejects extra fields", () => {
-      expect(() => pingInputSchema.parse({ routerId: "r", address: "8.8.8.8", unknown: true })).toThrow();
+      expect(() =>
+        pingInputSchema.parse({ routerId: "r", address: "8.8.8.8", unknown: true }),
+      ).toThrow();
     });
   });
 
@@ -99,11 +110,15 @@ describe("diagnostic tools", () => {
     });
 
     it("rejects maxHops > 30", () => {
-      expect(() => tracerouteInputSchema.parse({ routerId: "r", address: "8.8.8.8", maxHops: 31 })).toThrow();
+      expect(() =>
+        tracerouteInputSchema.parse({ routerId: "r", address: "8.8.8.8", maxHops: 31 }),
+      ).toThrow();
     });
 
     it("rejects extra fields", () => {
-      expect(() => tracerouteInputSchema.parse({ routerId: "r", address: "8.8.8.8", extra: 1 })).toThrow();
+      expect(() =>
+        tracerouteInputSchema.parse({ routerId: "r", address: "8.8.8.8", extra: 1 }),
+      ).toThrow();
     });
   });
 
@@ -114,15 +129,8 @@ describe("diagnostic tools", () => {
       "  1 8.8.8.8               56  56 14ms  echo reply\n" +
       "    sent=4 received=4 packet-loss=0% min-rtt=10ms avg-rtt=12ms max-rtt=15ms\n";
 
-    function mockSsh(output: string) {
-      vi.mocked(SshClient).mockImplementation(
-        () => ({ execute: vi.fn().mockResolvedValue(output) }) as unknown as SshClient,
-      );
-    }
-
     it("returns RTT stats on successful ping", async () => {
-      mockSsh(PING_SSH_OUTPUT);
-      const ctx = makeContext();
+      const ctx = makeContext(PING_SSH_OUTPUT);
       const result = await pingTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain("8.8.8.8");
@@ -132,21 +140,22 @@ describe("diagnostic tools", () => {
     });
 
     it("sends address, count, and size in the SSH command", async () => {
-      const executeMock = vi.fn().mockResolvedValue(PING_SSH_OUTPUT);
-      vi.mocked(SshClient).mockImplementation(() => ({ execute: executeMock }) as unknown as SshClient);
-      const ctx = makeContext();
-      await pingTool.handler({ routerId: "test-router", address: "10.0.0.1", count: 10, size: 128 }, ctx);
-      expect(executeMock).toHaveBeenCalledWith(
-        expect.stringContaining("address=10.0.0.1"),
+      const ctx = makeContext(PING_SSH_OUTPUT);
+      await pingTool.handler(
+        { routerId: "test-router", address: "10.0.0.1", count: 10, size: 128 },
+        ctx,
       );
-      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("count=10"));
-      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("size=128"));
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("address=10.0.0.1"));
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("count=10"));
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("size=128"));
     });
 
     it("treats 100% packet loss as a valid (non-error) response", async () => {
-      mockSsh("    sent=4 received=0 packet-loss=100%\n");
-      const ctx = makeContext();
-      const result = await pingTool.handler({ routerId: "test-router", address: "10.255.255.1" }, ctx);
+      const ctx = makeContext("    sent=4 received=0 packet-loss=100%\n");
+      const result = await pingTool.handler(
+        { routerId: "test-router", address: "10.255.255.1" },
+        ctx,
+      );
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain("100%");
     });
@@ -158,39 +167,38 @@ describe("diagnostic tools", () => {
       " 1 192.168.1.1  echo reply  1ms    1ms    1ms\n" +
       " 2 10.0.0.1     echo reply  5ms    5ms    5ms\n";
 
-    function mockSsh(output: string) {
-      vi.mocked(SshClient).mockImplementation(
-        () => ({ execute: vi.fn().mockResolvedValue(output) }) as unknown as SshClient,
-      );
-    }
-
     it("returns hop list", async () => {
-      mockSsh(TRACE_SSH_OUTPUT);
-      const ctx = makeContext();
-      const result = await tracerouteTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
+      const ctx = makeContext(TRACE_SSH_OUTPUT);
+      const result = await tracerouteTool.handler(
+        { routerId: "test-router", address: "8.8.8.8" },
+        ctx,
+      );
       expect(result.isError).toBeFalsy();
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.hops as unknown[]).length).toBe(2);
     });
 
     it("sends address, count, and max-hops in the SSH command", async () => {
-      const executeMock = vi.fn().mockResolvedValue(TRACE_SSH_OUTPUT);
-      vi.mocked(SshClient).mockImplementation(() => ({ execute: executeMock }) as unknown as SshClient);
-      const ctx = makeContext();
-      await tracerouteTool.handler({ routerId: "test-router", address: "8.8.8.8", count: 2, maxHops: 10 }, ctx);
-      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("address=8.8.8.8"));
-      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("count=2"));
-      expect(executeMock).toHaveBeenCalledWith(expect.stringContaining("max-hops=10"));
+      const ctx = makeContext(TRACE_SSH_OUTPUT);
+      await tracerouteTool.handler(
+        { routerId: "test-router", address: "8.8.8.8", count: 2, maxHops: 10 },
+        ctx,
+      );
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("address=8.8.8.8"));
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("count=2"));
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("max-hops=10"));
     });
 
     it("treats partial hop list (some timeouts shown as ???) as valid response", async () => {
-      mockSsh(
+      const ctx = makeContext(
         " # ADDRESS       STATUS     RTT1\n" +
-        " 1 192.168.1.1  echo reply  1ms\n" +
-        " 2 ???          timeout\n",
+          " 1 192.168.1.1  echo reply  1ms\n" +
+          " 2 ???          timeout\n",
       );
-      const ctx = makeContext();
-      const result = await tracerouteTool.handler({ routerId: "test-router", address: "8.8.8.8" }, ctx);
+      const result = await tracerouteTool.handler(
+        { routerId: "test-router", address: "8.8.8.8" },
+        ctx,
+      );
       expect(result.isError).toBeFalsy();
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.hops as unknown[]).length).toBe(2);
@@ -210,13 +218,15 @@ describe("diagnostic tools", () => {
   });
 
   describe("torch input schema", () => {
-    const torchInputSchema = z.object({
-      routerId: z.string(),
-      interface: z.string(),
-      duration: z.number().int().min(1).max(30).default(5),
-      srcAddress: z.string().optional(),
-      dstAddress: z.string().optional(),
-    }).strict();
+    const torchInputSchema = z
+      .object({
+        routerId: z.string(),
+        interface: z.string(),
+        duration: z.number().int().min(1).max(30).default(5),
+        srcAddress: z.string().optional(),
+        dstAddress: z.string().optional(),
+      })
+      .strict();
 
     it("accepts minimal input with defaults", () => {
       const r = torchInputSchema.parse({ routerId: "r", interface: "ether1" });
@@ -224,11 +234,15 @@ describe("diagnostic tools", () => {
     });
 
     it("rejects duration > 30", () => {
-      expect(() => torchInputSchema.parse({ routerId: "r", interface: "ether1", duration: 31 })).toThrow();
+      expect(() =>
+        torchInputSchema.parse({ routerId: "r", interface: "ether1", duration: 31 }),
+      ).toThrow();
     });
 
     it("rejects duration < 1", () => {
-      expect(() => torchInputSchema.parse({ routerId: "r", interface: "ether1", duration: 0 })).toThrow();
+      expect(() =>
+        torchInputSchema.parse({ routerId: "r", interface: "ether1", duration: 0 }),
+      ).toThrow();
     });
 
     it("rejects missing interface", () => {
@@ -236,7 +250,9 @@ describe("diagnostic tools", () => {
     });
 
     it("rejects extra fields", () => {
-      expect(() => torchInputSchema.parse({ routerId: "r", interface: "ether1", unknown: 1 })).toThrow();
+      expect(() =>
+        torchInputSchema.parse({ routerId: "r", interface: "ether1", unknown: 1 }),
+      ).toThrow();
     });
   });
 
@@ -246,16 +262,9 @@ describe("diagnostic tools", () => {
       "192.168.1.10    8.8.8.8         1000       500\n" +
       "192.168.1.11    1.1.1.1         2000       100\n";
 
-    function mockSsh(output: string) {
-      vi.mocked(SshClient).mockImplementation(
-        () => ({ execute: vi.fn().mockResolvedValue(output) }) as unknown as SshClient,
-      );
-    }
-
     it("returns flows from SSH output", async () => {
-      mockSsh(TORCH_SSH_OUTPUT);
       const torchTool = diagnosticTools[2];
-      const ctx = makeContext();
+      const ctx = makeContext(TORCH_SSH_OUTPUT);
       const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
       expect(result.isError).toBeFalsy();
       const sc = result.structuredContent as Record<string, unknown>;
@@ -263,21 +272,15 @@ describe("diagnostic tools", () => {
     });
 
     it("sends interface in the SSH command and uses duration as timeout", async () => {
-      const executeMock = vi.fn().mockResolvedValue(TORCH_SSH_OUTPUT);
-      vi.mocked(SshClient).mockImplementation(() => ({ execute: executeMock }) as unknown as SshClient);
       const torchTool = diagnosticTools[2];
-      const ctx = makeContext();
+      const ctx = makeContext(TORCH_SSH_OUTPUT);
       await torchTool.handler({ routerId: "test-router", interface: "ether1", duration: 10 }, ctx);
-      expect(executeMock).toHaveBeenCalledWith(
-        expect.stringContaining("interface=ether1"),
-        11_000,
-      );
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("interface=ether1"), 11_000);
     });
 
     it("returns empty flows for empty output", async () => {
-      mockSsh("");
       const torchTool = diagnosticTools[2];
-      const ctx = makeContext();
+      const ctx = makeContext("");
       const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.flows as unknown[]).length).toBe(0);
@@ -297,14 +300,16 @@ describe("diagnostic tools", () => {
   });
 
   describe("get_log input schema", () => {
-    const getLogInputSchema = z.object({
-      routerId: z.string(),
-      limit: z.number().int().min(1).max(500).default(100),
-      offset: z.number().int().min(0).default(0),
-      topics: z.array(z.string()).optional(),
-      prefix: z.string().optional(),
-      sinceMinutes: z.number().int().min(1).max(1440).optional(),
-    }).strict();
+    const getLogInputSchema = z
+      .object({
+        routerId: z.string(),
+        limit: z.number().int().min(1).max(500).default(100),
+        offset: z.number().int().min(0).default(0),
+        topics: z.array(z.string()).optional(),
+        prefix: z.string().optional(),
+        sinceMinutes: z.number().int().min(1).max(1440).optional(),
+      })
+      .strict();
 
     it("accepts minimal input with defaults", () => {
       const r = getLogInputSchema.parse({ routerId: "r" });
@@ -334,7 +339,8 @@ describe("diagnostic tools", () => {
 
     it("returns all entries when no filters applied", async () => {
       const getLogTool = diagnosticTools[3];
-      const ctx = makeContext(sampleEntries);
+      const ctx = makeContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockResolvedValue(sampleEntries);
       const result = await getLogTool.handler({ routerId: "test-router" }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.entries as unknown[]).length).toBe(3);
@@ -342,16 +348,24 @@ describe("diagnostic tools", () => {
 
     it("filters by topic substring", async () => {
       const getLogTool = diagnosticTools[3];
-      const ctx = makeContext(sampleEntries);
-      const result = await getLogTool.handler({ routerId: "test-router", topics: ["firewall"] }, ctx);
+      const ctx = makeContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockResolvedValue(sampleEntries);
+      const result = await getLogTool.handler(
+        { routerId: "test-router", topics: ["firewall"] },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.entries as unknown[]).length).toBe(2);
     });
 
     it("filters by prefix substring in message", async () => {
       const getLogTool = diagnosticTools[3];
-      const ctx = makeContext(sampleEntries);
-      const result = await getLogTool.handler({ routerId: "test-router", prefix: "port scan" }, ctx);
+      const ctx = makeContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockResolvedValue(sampleEntries);
+      const result = await getLogTool.handler(
+        { routerId: "test-router", prefix: "port scan" },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.entries as unknown[]).length).toBe(1);
     });
@@ -361,7 +375,8 @@ describe("diagnostic tools", () => {
       const entriesWithBadTs = [
         { ".id": "*1", time: "INVALID_TS", topics: "info", message: "something happened" },
       ];
-      const ctx = makeContext(entriesWithBadTs);
+      const ctx = makeContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockResolvedValue(entriesWithBadTs);
       const result = await getLogTool.handler({ routerId: "test-router", sinceMinutes: 5 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.entries as unknown[]).length).toBe(1);
@@ -380,11 +395,14 @@ describe("diagnostic tools", () => {
         { ".id": "*2", time: oldTs, topics: "info", message: "old event" },
       ];
       const getLogTool = diagnosticTools[3];
-      const ctx = makeContext(entries);
+      const ctx = makeContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockResolvedValue(entries);
       const result = await getLogTool.handler({ routerId: "test-router", sinceMinutes: 30 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.entries as unknown[]).length).toBe(1);
-      expect(((sc.entries as Record<string, unknown>[])[0] as Record<string, string>).message).toBe("recent event");
+      expect(((sc.entries as Record<string, unknown>[])[0] as Record<string, string>).message).toBe(
+        "recent event",
+      );
     });
   });
 });

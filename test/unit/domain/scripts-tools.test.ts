@@ -3,6 +3,8 @@ import { scriptsTools } from "../../../src/domain/tools/scripts-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { MikroMCPError } from "../../../src/domain/errors/error-types.js";
 import { z } from "zod";
 
@@ -18,19 +20,22 @@ function makeRouterConfig(): RouterConfig {
   };
 }
 
-function makeContext(overrides: {
-  get?: ReturnType<typeof vi.fn>;
-  create?: ReturnType<typeof vi.fn>;
-  update?: ReturnType<typeof vi.fn>;
-  remove?: ReturnType<typeof vi.fn>;
-  execute?: ReturnType<typeof vi.fn>;
-} = {}): ToolContext {
+function makeContext(
+  overrides: {
+    get?: ReturnType<typeof vi.fn>;
+    create?: ReturnType<typeof vi.fn>;
+    update?: ReturnType<typeof vi.fn>;
+    remove?: ReturnType<typeof vi.fn>;
+    execute?: ReturnType<typeof vi.fn>;
+  } = {},
+): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    credentials: { username: "admin", password: "secret" },
-    sshOptions: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
     routerClient: {
       get: overrides.get ?? vi.fn().mockResolvedValue([]),
       create: overrides.create ?? vi.fn().mockResolvedValue({ ".id": "*1", name: "my-script" }),
@@ -46,15 +51,17 @@ const manageScriptTool = scriptsTools[1];
 const runScriptTool = scriptsTools[2];
 
 const listSchema = z.object({ routerId: z.string(), name: z.string().optional() }).strict();
-const manageSchema = z.object({
-  routerId: z.string(),
-  action: z.enum(["add", "update", "remove"]),
-  name: z.string(),
-  source: z.string().optional(),
-  comment: z.string().optional(),
-  dontRequirePermissions: z.boolean().optional(),
-  dryRun: z.boolean().default(false),
-}).strict();
+const manageSchema = z
+  .object({
+    routerId: z.string(),
+    action: z.enum(["add", "update", "remove"]),
+    name: z.string(),
+    source: z.string().optional(),
+    comment: z.string().optional(),
+    dontRequirePermissions: z.boolean().optional(),
+    dryRun: z.boolean().default(false),
+  })
+  .strict();
 const runSchema = z.object({ routerId: z.string(), name: z.string() }).strict();
 
 describe("scripts tools", () => {
@@ -92,7 +99,12 @@ describe("scripts tools", () => {
 
   describe("manage_script input schema", () => {
     it("accepts valid add", () => {
-      const r = manageSchema.parse({ routerId: "r", action: "add", name: "s", source: ":log info" });
+      const r = manageSchema.parse({
+        routerId: "r",
+        action: "add",
+        name: "s",
+        source: ":log info",
+      });
       expect(r.dryRun).toBe(false);
     });
     it("rejects extra fields", () => {
@@ -189,7 +201,11 @@ describe("scripts tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
-      expect(update).toHaveBeenCalledWith("system/script", "*1", expect.objectContaining({ source: "new source" }));
+      expect(update).toHaveBeenCalledWith(
+        "system/script",
+        "*1",
+        expect.objectContaining({ source: "new source" }),
+      );
     });
 
     it("throws NOT_FOUND when script does not exist", async () => {
@@ -209,7 +225,12 @@ describe("scripts tools", () => {
         update,
       });
       await manageScriptTool.handler(
-        { routerId: "test-router", action: "update", name: "my-script", dontRequirePermissions: true },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "my-script",
+          dontRequirePermissions: true,
+        },
         ctx,
       );
       expect(update).toHaveBeenCalledWith(

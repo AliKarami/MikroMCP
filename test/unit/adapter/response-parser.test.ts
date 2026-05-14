@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseRouterOSValue, parseRecord, parseRecords } from "../../../src/adapter/response-parser.js";
+import {
+  parseRouterOSValue,
+  parseRecord,
+  parseRecords,
+} from "../../../src/adapter/response-parser.js";
 
 describe("parseRouterOSValue", () => {
   it("parses 'true' to boolean true", () => {

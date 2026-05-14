@@ -3,6 +3,8 @@ import { interfaceTools } from "../../../src/domain/tools/interface-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { z } from "zod";
 
 const listInterfacesTool = interfaceTools[0];
@@ -24,7 +26,9 @@ function makeContext(ifaces: Record<string, unknown>[]): ToolContext {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    credentials: { username: "admin", password: "secret" },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(ifaces),
     } as unknown as RouterOSRestClient,
@@ -49,25 +53,32 @@ describe("create_vlan - idempotency boolean comparison", () => {
       routerId: "test-router",
       correlationId: "corr",
       routerConfig: makeRouterConfig(),
-      credentials: { username: "admin", password: "secret" },
+      identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+      sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+      ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
       routerClient: {
-        get: vi.fn().mockResolvedValue([{
-          ".id": "*1",
-          name: "vlan10",
-          "vlan-id": "10",
-          interface: "ether1",
-          disabled: "false",   // RouterOS returns string
-        }]),
+        get: vi.fn().mockResolvedValue([
+          {
+            ".id": "*1",
+            name: "vlan10",
+            "vlan-id": "10",
+            interface: "ether1",
+            disabled: "false", // RouterOS returns string
+          },
+        ]),
       } as unknown as RouterOSRestClient,
     };
     const createVlanTool = interfaceTools[1];
-    const result = await createVlanTool.handler({
-      routerId: "test-router",
-      name: "vlan10",
-      vlanId: 10,
-      parentInterface: "ether1",
-      disabled: false,   // JS boolean
-    }, ctx);
+    const result = await createVlanTool.handler(
+      {
+        routerId: "test-router",
+        name: "vlan10",
+        vlanId: 10,
+        parentInterface: "ether1",
+        disabled: false, // JS boolean
+      },
+      ctx,
+    );
     const sc = result.structuredContent as Record<string, unknown>;
     expect(sc.action).toBe("already_exists");
   });

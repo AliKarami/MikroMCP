@@ -3,6 +3,8 @@ import { packagesTools } from "../../../src/domain/tools/packages-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { z } from "zod";
 
 function makeRouterConfig(): RouterConfig {
@@ -17,16 +19,19 @@ function makeRouterConfig(): RouterConfig {
   };
 }
 
-function makeContext(overrides: {
-  get?: ReturnType<typeof vi.fn>;
-  update?: ReturnType<typeof vi.fn>;
-} = {}): ToolContext {
+function makeContext(
+  overrides: {
+    get?: ReturnType<typeof vi.fn>;
+    update?: ReturnType<typeof vi.fn>;
+  } = {},
+): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    credentials: { username: "admin", password: "secret" },
-    sshOptions: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
     routerClient: {
       get: overrides.get ?? vi.fn().mockResolvedValue([]),
       update: overrides.update ?? vi.fn().mockResolvedValue(undefined),
@@ -106,10 +111,7 @@ describe("packages tools", () => {
         { ".id": "*2", name: "wifi", version: "7.14", disabled: "false" },
       ];
       const ctx = makeContext({ get: vi.fn().mockResolvedValue(pkgs) });
-      const result = await listPackagesTool.handler(
-        { routerId: "test-router", name: "wifi" },
-        ctx,
-      );
+      const result = await listPackagesTool.handler({ routerId: "test-router", name: "wifi" }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.packages as unknown[]).length).toBe(1);
     });

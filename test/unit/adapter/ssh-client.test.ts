@@ -82,9 +82,7 @@ describe("SshClient", () => {
   describe("resource cleanup", () => {
     it("calls conn.end() on connection error", async () => {
       const { conn } = buildMocks();
-      conn.connect = vi.fn(() =>
-        setImmediate(() => conn.emit("error", new Error("ECONNREFUSED"))),
-      );
+      conn.connect = vi.fn(() => setImmediate(() => conn.emit("error", new Error("ECONNREFUSED"))));
       const client = new SshClient(routerConfig, credentials);
 
       await expect(client.execute("test command")).rejects.toThrow("ECONNREFUSED");

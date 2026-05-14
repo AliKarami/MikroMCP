@@ -7,21 +7,25 @@ import { z } from "zod";
 const listAddressListTool = addressListTools[0];
 const manageAddressListTool = addressListTools[1];
 
-const listSchema = z.object({
-  routerId: z.string(),
-  list: z.string().optional(),
-  address: z.string().optional(),
-}).strict();
+const listSchema = z
+  .object({
+    routerId: z.string(),
+    list: z.string().optional(),
+    address: z.string().optional(),
+  })
+  .strict();
 
-const manageSchema = z.object({
-  routerId: z.string(),
-  action: z.enum(["add", "remove"]),
-  list: z.string(),
-  address: z.string(),
-  comment: z.string().optional(),
-  timeout: z.string().optional(),
-  dryRun: z.boolean().default(false),
-}).strict();
+const manageSchema = z
+  .object({
+    routerId: z.string(),
+    action: z.enum(["add", "remove"]),
+    list: z.string(),
+    address: z.string(),
+    comment: z.string().optional(),
+    timeout: z.string().optional(),
+    dryRun: z.boolean().default(false),
+  })
+  .strict();
 
 function makeContext(
   records: Record<string, unknown>[],
@@ -32,7 +36,9 @@ function makeContext(
     correlationId: "test-corr",
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
-      create: vi.fn().mockResolvedValue(createReturn ?? { ".id": "*1", list: "blocked", address: "10.0.0.1" }),
+      create: vi
+        .fn()
+        .mockResolvedValue(createReturn ?? { ".id": "*1", list: "blocked", address: "10.0.0.1" }),
       remove: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
     } as unknown as RouterOSRestClient,
@@ -71,13 +77,24 @@ describe("address list tools", () => {
 
   describe("manage_address_list_entry input schema", () => {
     it("accepts valid add", () => {
-      const r = manageSchema.parse({ routerId: "r", action: "add", list: "blocked", address: "10.0.0.1" });
+      const r = manageSchema.parse({
+        routerId: "r",
+        action: "add",
+        list: "blocked",
+        address: "10.0.0.1",
+      });
       expect(r.dryRun).toBe(false);
     });
 
     it("rejects extra fields", () => {
       expect(() =>
-        manageSchema.parse({ routerId: "r", action: "add", list: "l", address: "1.1.1.1", extra: true }),
+        manageSchema.parse({
+          routerId: "r",
+          action: "add",
+          list: "l",
+          address: "1.1.1.1",
+          extra: true,
+        }),
       ).toThrow();
     });
   });
@@ -103,7 +120,9 @@ describe("address list tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
-      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<typeof vi.fn>;
+      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockCreate).toHaveBeenCalled();
     });
 
@@ -120,11 +139,19 @@ describe("address list tools", () => {
     it("returns dry_run without calling create", async () => {
       const ctx = makeContext([]);
       const result = await manageAddressListTool.handler(
-        { routerId: "test-router", action: "add", list: "blocked", address: "10.0.0.1", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          list: "blocked",
+          address: "10.0.0.1",
+          dryRun: true,
+        },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
-      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<typeof vi.fn>;
+      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockCreate).not.toHaveBeenCalled();
     });
   });
@@ -138,7 +165,9 @@ describe("address list tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("removed");
-      const mockRemove = (ctx.routerClient as Record<string, unknown>).remove as ReturnType<typeof vi.fn>;
+      const mockRemove = (ctx.routerClient as Record<string, unknown>).remove as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockRemove).toHaveBeenCalledWith("ip/firewall/address-list", "*1");
     });
 

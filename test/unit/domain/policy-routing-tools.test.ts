@@ -9,30 +9,36 @@ const manageRoutingRuleTool = policyRoutingTools[1];
 const listRoutingTablesTool = policyRoutingTools[2];
 const manageRoutingTableTool = policyRoutingTools[3];
 
-const listRulesSchema = z.object({
-  routerId: z.string(),
-  table: z.string().optional(),
-  disabled: z.boolean().optional(),
-}).strict();
+const listRulesSchema = z
+  .object({
+    routerId: z.string(),
+    table: z.string().optional(),
+    disabled: z.boolean().optional(),
+  })
+  .strict();
 
-const manageRuleSchema = z.object({
-  routerId: z.string(),
-  action: z.enum(["add", "remove", "enable", "disable"]),
-  table: z.string(),
-  srcAddress: z.string().optional(),
-  dstAddress: z.string().optional(),
-  interface: z.string().optional(),
-  priority: z.number().int().min(0).max(4294967295).optional(),
-  dryRun: z.boolean().default(false),
-}).strict();
+const manageRuleSchema = z
+  .object({
+    routerId: z.string(),
+    action: z.enum(["add", "remove", "enable", "disable"]),
+    table: z.string(),
+    srcAddress: z.string().optional(),
+    dstAddress: z.string().optional(),
+    interface: z.string().optional(),
+    priority: z.number().int().min(0).max(4294967295).optional(),
+    dryRun: z.boolean().default(false),
+  })
+  .strict();
 
-const manageTableSchema = z.object({
-  routerId: z.string(),
-  action: z.enum(["add", "remove"]),
-  name: z.string(),
-  fib: z.boolean().default(false),
-  dryRun: z.boolean().default(false),
-}).strict();
+const manageTableSchema = z
+  .object({
+    routerId: z.string(),
+    action: z.enum(["add", "remove"]),
+    name: z.string(),
+    fib: z.boolean().default(false),
+    dryRun: z.boolean().default(false),
+  })
+  .strict();
 
 function makeContext(
   records: Record<string, unknown>[],
@@ -75,19 +81,36 @@ describe("policy routing tools", () => {
 
   describe("manage_routing_rule input schema", () => {
     it("accepts valid add with dstAddress and table", () => {
-      const r = manageRuleSchema.parse({ routerId: "r", action: "add", table: "isp1", dstAddress: "0.0.0.0/0" });
+      const r = manageRuleSchema.parse({
+        routerId: "r",
+        action: "add",
+        table: "isp1",
+        dstAddress: "0.0.0.0/0",
+      });
       expect(r.dryRun).toBe(false);
     });
 
     it("rejects priority below 0", () => {
       expect(() =>
-        manageRuleSchema.parse({ routerId: "r", action: "add", table: "t", dstAddress: "0.0.0.0/0", priority: -1 }),
+        manageRuleSchema.parse({
+          routerId: "r",
+          action: "add",
+          table: "t",
+          dstAddress: "0.0.0.0/0",
+          priority: -1,
+        }),
       ).toThrow();
     });
 
     it("rejects extra fields", () => {
       expect(() =>
-        manageRuleSchema.parse({ routerId: "r", action: "add", table: "t", dstAddress: "0.0.0.0/0", unknownField: true }),
+        manageRuleSchema.parse({
+          routerId: "r",
+          action: "add",
+          table: "t",
+          dstAddress: "0.0.0.0/0",
+          unknownField: true,
+        }),
       ).toThrow();
     });
   });
@@ -108,8 +131,22 @@ describe("policy routing tools", () => {
 
   describe("list_routing_rules handler", () => {
     const sampleRules = [
-      { ".id": "*1", "dst-address": "0.0.0.0/0", table: "isp1", "src-address": "", interface: "", disabled: "false" },
-      { ".id": "*2", "src-address": "192.168.1.0/24", table: "isp2", "dst-address": "", interface: "", disabled: "true" },
+      {
+        ".id": "*1",
+        "dst-address": "0.0.0.0/0",
+        table: "isp1",
+        "src-address": "",
+        interface: "",
+        disabled: "false",
+      },
+      {
+        ".id": "*2",
+        "src-address": "192.168.1.0/24",
+        table: "isp2",
+        "dst-address": "",
+        interface: "",
+        disabled: "true",
+      },
     ];
 
     it("returns all rules with correct total", async () => {
@@ -121,14 +158,20 @@ describe("policy routing tools", () => {
 
     it("filters by table", async () => {
       const ctx = makeContext(sampleRules);
-      const result = await listRoutingRulesTool.handler({ routerId: "test-router", table: "isp1" }, ctx);
+      const result = await listRoutingRulesTool.handler(
+        { routerId: "test-router", table: "isp1" },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.total).toBe(1);
     });
 
     it("filters by disabled", async () => {
       const ctx = makeContext(sampleRules);
-      const result = await listRoutingRulesTool.handler({ routerId: "test-router", disabled: true }, ctx);
+      const result = await listRoutingRulesTool.handler(
+        { routerId: "test-router", disabled: true },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.total).toBe(1);
     });
@@ -142,7 +185,9 @@ describe("policy routing tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
-      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<typeof vi.fn>;
+      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockCreate).toHaveBeenCalled();
     });
 
@@ -166,11 +211,19 @@ describe("policy routing tools", () => {
     it("returns dry_run without calling create", async () => {
       const ctx = makeContext([]);
       const result = await manageRoutingRuleTool.handler(
-        { routerId: "test-router", action: "add", table: "isp1", dstAddress: "0.0.0.0/0", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          table: "isp1",
+          dstAddress: "0.0.0.0/0",
+          dryRun: true,
+        },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
-      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<typeof vi.fn>;
+      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockCreate).not.toHaveBeenCalled();
     });
   });
@@ -191,7 +244,9 @@ describe("policy routing tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("removed");
-      const mockRemove = (ctx.routerClient as Record<string, unknown>).remove as ReturnType<typeof vi.fn>;
+      const mockRemove = (ctx.routerClient as Record<string, unknown>).remove as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockRemove).toHaveBeenCalledWith("routing/rule", "*1");
     });
 
@@ -231,7 +286,9 @@ describe("policy routing tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
-      const mockUpdate = (ctx.routerClient as Record<string, unknown>).update as ReturnType<typeof vi.fn>;
+      const mockUpdate = (ctx.routerClient as Record<string, unknown>).update as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockUpdate).toHaveBeenCalledWith("routing/rule", "*1", { disabled: "true" });
     });
   });
@@ -264,7 +321,9 @@ describe("policy routing tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("removed");
-      const mockRemove = (ctx.routerClient as Record<string, unknown>).remove as ReturnType<typeof vi.fn>;
+      const mockRemove = (ctx.routerClient as Record<string, unknown>).remove as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockRemove).toHaveBeenCalledWith("routing/table", "*1");
     });
 
@@ -284,7 +343,9 @@ describe("policy routing tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
-      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<typeof vi.fn>;
+      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockCreate).not.toHaveBeenCalled();
     });
   });

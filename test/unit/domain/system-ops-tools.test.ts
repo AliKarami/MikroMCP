@@ -3,6 +3,8 @@ import { systemOpsTools } from "../../../src/domain/tools/system-ops-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { MikroMCPError } from "../../../src/domain/errors/error-types.js";
 import { z } from "zod";
 
@@ -19,19 +21,23 @@ function makeRouterConfig(overrides: Partial<RouterConfig> = {}): RouterConfig {
   };
 }
 
-function makeContext(overrides: {
-  get?: ReturnType<typeof vi.fn>;
-  update?: ReturnType<typeof vi.fn>;
-  execute?: ReturnType<typeof vi.fn>;
-  create?: ReturnType<typeof vi.fn>;
-  remove?: ReturnType<typeof vi.fn>;
-  routerConfig?: RouterConfig;
-} = {}): ToolContext {
+function makeContext(
+  overrides: {
+    get?: ReturnType<typeof vi.fn>;
+    update?: ReturnType<typeof vi.fn>;
+    execute?: ReturnType<typeof vi.fn>;
+    create?: ReturnType<typeof vi.fn>;
+    remove?: ReturnType<typeof vi.fn>;
+    routerConfig?: RouterConfig;
+  } = {},
+): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: overrides.routerConfig ?? makeRouterConfig(),
-    credentials: { username: "admin", password: "secret" },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
     routerClient: {
       get: overrides.get ?? vi.fn().mockResolvedValue([]),
       update: overrides.update ?? vi.fn().mockResolvedValue(undefined),
@@ -69,13 +75,15 @@ describe("system-ops tools", () => {
   });
 
   describe("set_system_clock input schema", () => {
-    const setClockSchema = z.object({
-      routerId: z.string(),
-      date: z.string().optional(),
-      time: z.string().optional(),
-      timeZoneName: z.string().optional(),
-      dryRun: z.boolean().default(false),
-    }).strict();
+    const setClockSchema = z
+      .object({
+        routerId: z.string(),
+        date: z.string().optional(),
+        time: z.string().optional(),
+        timeZoneName: z.string().optional(),
+        dryRun: z.boolean().default(false),
+      })
+      .strict();
 
     it("accepts minimal input (just routerId)", () => {
       const r = setClockSchema.parse({ routerId: "r" });
@@ -88,13 +96,15 @@ describe("system-ops tools", () => {
   });
 
   describe("get_system_clock handler", () => {
-    const clockRecord = [{
-      ".id": "*1",
-      date: "apr/25/2026",
-      time: "12:00:00",
-      "time-zone-name": "UTC",
-      "time-zone-autodetect": "false",
-    }];
+    const clockRecord = [
+      {
+        ".id": "*1",
+        date: "apr/25/2026",
+        time: "12:00:00",
+        "time-zone-name": "UTC",
+        "time-zone-autodetect": "false",
+      },
+    ];
 
     it("returns clock fields", async () => {
       const ctx = makeContext({ get: vi.fn().mockResolvedValue(clockRecord) });
@@ -115,23 +125,28 @@ describe("system-ops tools", () => {
   });
 
   describe("set_system_clock handler", () => {
-    const currentClock = [{
-      ".id": "*1",
-      date: "apr/25/2026",
-      time: "12:00:00",
-      "time-zone-name": "UTC",
-    }];
+    const currentClock = [
+      {
+        ".id": "*1",
+        date: "apr/25/2026",
+        time: "12:00:00",
+        "time-zone-name": "UTC",
+      },
+    ];
 
     it("returns already_set when values match", async () => {
       const mockGet = vi.fn().mockResolvedValue(currentClock);
       const mockUpdate = vi.fn().mockResolvedValue(undefined);
       const ctx = makeContext({ get: mockGet, update: mockUpdate });
-      const result = await setSystemClockTool.handler({
-        routerId: "test-router",
-        date: "apr/25/2026",
-        time: "12:00:00",
-        timeZoneName: "UTC",
-      }, ctx);
+      const result = await setSystemClockTool.handler(
+        {
+          routerId: "test-router",
+          date: "apr/25/2026",
+          time: "12:00:00",
+          timeZoneName: "UTC",
+        },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("already_set");
       expect(mockUpdate).not.toHaveBeenCalled();
     });
@@ -140,11 +155,14 @@ describe("system-ops tools", () => {
       const mockGet = vi.fn().mockResolvedValue(currentClock);
       const mockUpdate = vi.fn().mockResolvedValue(undefined);
       const ctx = makeContext({ get: mockGet, update: mockUpdate });
-      const result = await setSystemClockTool.handler({
-        routerId: "test-router",
-        timeZoneName: "Europe/London",
-        dryRun: true,
-      }, ctx);
+      const result = await setSystemClockTool.handler(
+        {
+          routerId: "test-router",
+          timeZoneName: "Europe/London",
+          dryRun: true,
+        },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
       expect(mockUpdate).not.toHaveBeenCalled();
     });
@@ -153,10 +171,13 @@ describe("system-ops tools", () => {
       const mockGet = vi.fn().mockResolvedValue(currentClock);
       const mockUpdate = vi.fn().mockResolvedValue(undefined);
       const ctx = makeContext({ get: mockGet, update: mockUpdate });
-      await setSystemClockTool.handler({
-        routerId: "test-router",
-        timeZoneName: "Europe/London",
-      }, ctx);
+      await setSystemClockTool.handler(
+        {
+          routerId: "test-router",
+          timeZoneName: "Europe/London",
+        },
+        ctx,
+      );
       expect(mockUpdate).toHaveBeenCalledWith(
         "system/clock",
         "*1",
@@ -179,11 +200,13 @@ describe("system-ops tools", () => {
   });
 
   describe("reboot input schema", () => {
-    const rebootSchema = z.object({
-      routerId: z.string(),
-      delay: z.number().int().min(0).max(3600).default(0),
-      dryRun: z.boolean().default(false),
-    }).strict();
+    const rebootSchema = z
+      .object({
+        routerId: z.string(),
+        delay: z.number().int().min(0).max(3600).default(0),
+        dryRun: z.boolean().default(false),
+      })
+      .strict();
 
     it("accepts minimal input with defaults", () => {
       const r = rebootSchema.parse({ routerId: "r" });
@@ -242,11 +265,13 @@ describe("system-ops tools", () => {
   });
 
   describe("run_command input schema", () => {
-    const runCommandSchema = z.object({
-      routerId: z.string(),
-      command: z.string().min(1),
-      dryRun: z.boolean().default(false),
-    }).strict();
+    const runCommandSchema = z
+      .object({
+        routerId: z.string(),
+        command: z.string().min(1),
+        dryRun: z.boolean().default(false),
+      })
+      .strict();
 
     it("accepts valid input", () => {
       const r = runCommandSchema.parse({ routerId: "r", command: "/ip/route/print" });
@@ -258,7 +283,9 @@ describe("system-ops tools", () => {
     });
 
     it("rejects extra fields", () => {
-      expect(() => runCommandSchema.parse({ routerId: "r", command: "/ip/route/print", extra: 1 })).toThrow();
+      expect(() =>
+        runCommandSchema.parse({ routerId: "r", command: "/ip/route/print", extra: 1 }),
+      ).toThrow();
     });
   });
 
@@ -285,11 +312,14 @@ describe("system-ops tools", () => {
 
     it("returns dry_run without executing SSH when dryRun=true", async () => {
       const ctx = makeContext();
-      const result = await runCommandTool.handler({
-        routerId: "test-router",
-        command: "/ip/route/print",
-        dryRun: true,
-      }, ctx);
+      const result = await runCommandTool.handler(
+        {
+          routerId: "test-router",
+          command: "/ip/route/print",
+          dryRun: true,
+        },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
     });
 

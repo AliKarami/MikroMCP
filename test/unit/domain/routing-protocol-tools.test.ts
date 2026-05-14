@@ -58,8 +58,20 @@ describe("routing protocol tools", () => {
 
   describe("list_bgp_peers handler", () => {
     const sessions = [
-      { ".id": "*1", "remote.as": "65001", "remote.address": "10.0.0.1", state: "established", uptime: "1d2h" },
-      { ".id": "*2", "remote.as": "65002", "remote.address": "10.0.0.2", state: "active", uptime: "0s" },
+      {
+        ".id": "*1",
+        "remote.as": "65001",
+        "remote.address": "10.0.0.1",
+        state: "established",
+        uptime: "1d2h",
+      },
+      {
+        ".id": "*2",
+        "remote.as": "65002",
+        "remote.address": "10.0.0.2",
+        state: "active",
+        uptime: "0s",
+      },
     ];
 
     it("returns all sessions with correct total", async () => {
@@ -71,7 +83,10 @@ describe("routing protocol tools", () => {
 
     it("filters by state", async () => {
       const ctx = makeContext(sessions);
-      const result = await listBgpPeersTool.handler({ routerId: "test-router", state: "established" }, ctx);
+      const result = await listBgpPeersTool.handler(
+        { routerId: "test-router", state: "established" },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.total).toBe(1);
       expect((sc.sessions as Record<string, unknown>[])[0]["remote.as"]).toBe("65001");
@@ -100,7 +115,10 @@ describe("routing protocol tools", () => {
 
     it("filters by state", async () => {
       const ctx = makeContext(neighbors);
-      const result = await listOspfNeighborsTool.handler({ routerId: "test-router", state: "full" }, ctx);
+      const result = await listOspfNeighborsTool.handler(
+        { routerId: "test-router", state: "full" },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.total).toBe(1);
     });

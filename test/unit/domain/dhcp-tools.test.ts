@@ -7,14 +7,16 @@ import { z } from "zod";
 const tool = dhcpTools[0];
 
 // Inline schema for isolated validation tests (avoids importing internal implementation detail)
-const listDhcpInputSchema = z.object({
-  routerId: z.string(),
-  server: z.string().optional(),
-  status: z.enum(["bound", "waiting", "offered", "blocked", "all"]).default("all"),
-  macAddress: z.string().optional(),
-  limit: z.number().int().min(1).max(500).default(100),
-  offset: z.number().int().min(0).default(0),
-}).strict();
+const listDhcpInputSchema = z
+  .object({
+    routerId: z.string(),
+    server: z.string().optional(),
+    status: z.enum(["bound", "waiting", "offered", "blocked", "all"]).default("all"),
+    macAddress: z.string().optional(),
+    limit: z.number().int().min(1).max(500).default(100),
+    offset: z.number().int().min(0).default(0),
+  })
+  .strict();
 
 function makeContext(leases: Record<string, unknown>[]): ToolContext {
   const mockGet = vi.fn().mockResolvedValue(leases);
@@ -74,9 +76,29 @@ describe("list_dhcp_leases tool", () => {
 
   describe("handler", () => {
     const sampleLeases = [
-      { ".id": "*1", address: "192.168.1.10", "mac-address": "AA:BB:CC:DD:EE:01", "host-name": "laptop", server: "dhcp1", status: "bound" },
-      { ".id": "*2", address: "192.168.1.11", "mac-address": "AA:BB:CC:DD:EE:02", server: "dhcp1", status: "waiting" },
-      { ".id": "*3", address: "192.168.1.12", "mac-address": "AA:BB:CC:DD:EE:03", "host-name": "phone", server: "dhcp2", status: "bound" },
+      {
+        ".id": "*1",
+        address: "192.168.1.10",
+        "mac-address": "AA:BB:CC:DD:EE:01",
+        "host-name": "laptop",
+        server: "dhcp1",
+        status: "bound",
+      },
+      {
+        ".id": "*2",
+        address: "192.168.1.11",
+        "mac-address": "AA:BB:CC:DD:EE:02",
+        server: "dhcp1",
+        status: "waiting",
+      },
+      {
+        ".id": "*3",
+        address: "192.168.1.12",
+        "mac-address": "AA:BB:CC:DD:EE:03",
+        "host-name": "phone",
+        server: "dhcp2",
+        status: "bound",
+      },
     ];
 
     it("returns all leases with no filters", async () => {
@@ -84,7 +106,9 @@ describe("list_dhcp_leases tool", () => {
       const result = await tool.handler({ routerId: "test-router" }, ctx);
       expect(result.isError).toBeFalsy();
       expect((result.structuredContent as Record<string, unknown>).total).toBe(3);
-      expect(((result.structuredContent as Record<string, unknown>).leases as unknown[]).length).toBe(3);
+      expect(
+        ((result.structuredContent as Record<string, unknown>).leases as unknown[]).length,
+      ).toBe(3);
     });
 
     it("filters by status", async () => {
@@ -101,7 +125,10 @@ describe("list_dhcp_leases tool", () => {
 
     it("filters by macAddress (case-insensitive)", async () => {
       const ctx = makeContext(sampleLeases);
-      const result = await tool.handler({ routerId: "test-router", macAddress: "aa:bb:cc:dd:ee:01" }, ctx);
+      const result = await tool.handler(
+        { routerId: "test-router", macAddress: "aa:bb:cc:dd:ee:01" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
     });
 

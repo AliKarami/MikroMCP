@@ -16,6 +16,8 @@ import { createLogger } from "../observability/logger.js";
 import { withContext } from "../observability/correlation.js";
 import { nanoid } from "nanoid";
 import type { AppConfig } from "../config/app-config.js";
+import { SshClient } from "../adapter/ssh-client.js";
+import { FtpClient } from "../adapter/ftp-client.js";
 
 const log = createLogger("tool-registry");
 
@@ -67,17 +69,26 @@ export function registerAllTools(
               circuitBreakers.set(routerId, cb);
             }
 
+            const sshClient = new SshClient(routerConfig, credentials, {
+              commandTimeoutMs: config.ssh.commandTimeoutMs,
+              maxOutputBytes: config.ssh.maxOutputBytes,
+            });
+            const ftpClient = new FtpClient(
+              routerConfig.host,
+              21,
+              credentials.username,
+              credentials.password,
+            );
+
             const runHandler = () =>
               tool.handler(args, {
                 routerClient: client,
                 routerId,
                 correlationId,
                 routerConfig,
-                credentials,
-                sshOptions: {
-                  commandTimeoutMs: config.ssh.commandTimeoutMs,
-                  maxOutputBytes: config.ssh.maxOutputBytes,
-                },
+                identity: { id: "superadmin-builtin", role: "superadmin", allowedRouters: [], allowedToolPatterns: [] },
+                sshClient,
+                ftpClient,
               });
 
             const executeHandler = () =>

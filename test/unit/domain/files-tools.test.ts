@@ -1,15 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-vi.mock("../../../src/adapter/ftp-client.js", () => ({
-  ftpUpload: vi.fn().mockResolvedValue(undefined),
-  ftpConnect: vi.fn().mockResolvedValue(undefined),
-}));
-
 import { filesTools } from "../../../src/domain/tools/files-tools.js";
-import * as ftpAdapter from "../../../src/adapter/ftp-client.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { z } from "zod";
 
 function makeRouterConfig(): RouterConfig {
@@ -24,16 +19,24 @@ function makeRouterConfig(): RouterConfig {
   };
 }
 
-function makeContext(overrides: {
-  get?: ReturnType<typeof vi.fn>;
-  getOne?: ReturnType<typeof vi.fn>;
-} = {}): ToolContext {
+function makeContext(
+  overrides: {
+    get?: ReturnType<typeof vi.fn>;
+    getOne?: ReturnType<typeof vi.fn>;
+    ftpUpload?: ReturnType<typeof vi.fn>;
+    ftpConnect?: ReturnType<typeof vi.fn>;
+  } = {},
+): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    credentials: { username: "admin", password: "secret" },
-    sshOptions: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+    ftpClient: {
+      upload: overrides.ftpUpload ?? vi.fn().mockResolvedValue(undefined),
+      connect: overrides.ftpConnect ?? vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: overrides.get ?? vi.fn().mockResolvedValue([]),
       getOne: overrides.getOne ?? vi.fn().mockResolvedValue({}),
@@ -45,20 +48,24 @@ const listFilesTool = filesTools[0];
 const getFileContentTool = filesTools[1];
 const uploadFileTool = filesTools[2];
 
-const listSchema = z.object({
-  routerId: z.string(),
-  name: z.string().optional(),
-  type: z.string().optional(),
-}).strict();
+const listSchema = z
+  .object({
+    routerId: z.string(),
+    name: z.string().optional(),
+    type: z.string().optional(),
+  })
+  .strict();
 
 const getContentSchema = z.object({ routerId: z.string(), name: z.string() }).strict();
 
-const uploadSchema = z.object({
-  routerId: z.string(),
-  name: z.string(),
-  content: z.string(),
-  dryRun: z.boolean().default(false),
-}).strict();
+const uploadSchema = z
+  .object({
+    routerId: z.string(),
+    name: z.string(),
+    content: z.string(),
+    dryRun: z.boolean().default(false),
+  })
+  .strict();
 
 describe("files tools", () => {
   beforeEach(() => {
@@ -146,7 +153,9 @@ describe("files tools", () => {
     it("returns file contents when found", async () => {
       const ctx = makeContext({
         get: vi.fn().mockResolvedValue([{ ".id": "*1", name: "script.rsc", type: "script" }]),
-        getOne: vi.fn().mockResolvedValue({ ".id": "*1", name: "script.rsc", contents: ":log info msg" }),
+        getOne: vi
+          .fn()
+          .mockResolvedValue({ ".id": "*1", name: "script.rsc", contents: ":log info msg" }),
       });
       const result = await getFileContentTool.handler(
         { routerId: "test-router", name: "script.rsc" },
@@ -164,36 +173,35 @@ describe("files tools", () => {
   });
 
   describe("upload_file handler", () => {
-    it("calls ftpUpload with correct args", async () => {
-      const ctx = makeContext();
+    it("calls ftpClient.upload with correct args", async () => {
+      const ftpUpload = vi.fn().mockResolvedValue(undefined);
+      const ctx = makeContext({ ftpUpload });
       await uploadFileTool.handler(
         { routerId: "test-router", name: "test.rsc", content: ":log info" },
         ctx,
       );
-      expect(ftpAdapter.ftpUpload).toHaveBeenCalledWith(
-        { host: "192.168.1.1", port: 21, user: "admin", password: "secret" },
-        "test.rsc",
-        ":log info",
-      );
+      expect(ftpUpload).toHaveBeenCalledWith("test.rsc", ":log info");
     });
 
-    it("calls ftpConnect but not ftpUpload on dry-run", async () => {
-      const ctx = makeContext();
+    it("calls ftpClient.connect but not ftpClient.upload on dry-run", async () => {
+      const ftpUpload = vi.fn().mockResolvedValue(undefined);
+      const ftpConnect = vi.fn().mockResolvedValue(undefined);
+      const ctx = makeContext({ ftpUpload, ftpConnect });
       const result = await uploadFileTool.handler(
         { routerId: "test-router", name: "test.rsc", content: ":log info", dryRun: true },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
-      expect(ftpAdapter.ftpConnect).toHaveBeenCalled();
-      expect(ftpAdapter.ftpUpload).not.toHaveBeenCalled();
+      expect(ftpConnect).toHaveBeenCalled();
+      expect(ftpUpload).not.toHaveBeenCalled();
     });
 
     it("throws FTP_SERVICE_UNAVAILABLE when FTP port is refused", async () => {
       const connRefused = Object.assign(new Error("connect ECONNREFUSED 192.168.1.1:21"), {
         code: "ECONNREFUSED",
       });
-      vi.mocked(ftpAdapter.ftpUpload).mockRejectedValueOnce(connRefused);
-      const ctx = makeContext();
+      const ftpUpload = vi.fn().mockRejectedValueOnce(connRefused);
+      const ctx = makeContext({ ftpUpload });
       await expect(
         uploadFileTool.handler({ routerId: "test-router", name: "test.rsc", content: "x" }, ctx),
       ).rejects.toMatchObject({ code: "FTP_SERVICE_UNAVAILABLE" });

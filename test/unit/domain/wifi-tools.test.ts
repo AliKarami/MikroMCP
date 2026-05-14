@@ -3,6 +3,8 @@ import { wifiTools } from "../../../src/domain/tools/wifi-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { SshClient } from "../../../src/adapter/ssh-client.js";
+import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 
 function makeRouterConfig(rosVersion = "7"): RouterConfig {
   return {
@@ -21,7 +23,9 @@ function makeContext(records: Record<string, unknown>[], rosVersion = "7"): Tool
     routerId: "test-router",
     correlationId: "corr",
     routerConfig: makeRouterConfig(rosVersion),
-    credentials: { username: "admin", password: "secret" },
+    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
       update: vi.fn().mockResolvedValue(undefined),
@@ -49,10 +53,7 @@ describe("wifiTools", () => {
         "7",
       );
       await listWifiTool.handler({ routerId: "test-router" }, ctx);
-      expect(ctx.routerClient.get).toHaveBeenCalledWith(
-        "interface/wifi",
-        expect.anything(),
-      );
+      expect(ctx.routerClient.get).toHaveBeenCalledWith("interface/wifi", expect.anything());
     });
 
     it("uses /interface/wireless for ROS 6", async () => {
@@ -61,10 +62,7 @@ describe("wifiTools", () => {
         "6",
       );
       await listWifiTool.handler({ routerId: "test-router" }, ctx);
-      expect(ctx.routerClient.get).toHaveBeenCalledWith(
-        "interface/wireless",
-        expect.anything(),
-      );
+      expect(ctx.routerClient.get).toHaveBeenCalledWith("interface/wireless", expect.anything());
     });
 
     it("returns interfaces in structuredContent", async () => {
@@ -141,10 +139,7 @@ describe("wifiTools", () => {
     it("throws NOT_FOUND when interface is missing", async () => {
       const ctx = makeContext([]);
       await expect(
-        manageWifiTool.handler(
-          { routerId: "test-router", name: "wifi1", disabled: false },
-          ctx,
-        ),
+        manageWifiTool.handler({ routerId: "test-router", name: "wifi1", disabled: false }, ctx),
       ).rejects.toThrow("not found");
     });
   });
@@ -171,11 +166,9 @@ describe("wifiTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "interface/wifi",
-        "*1",
-        { ssid: "NewNet" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/wifi", "*1", {
+        ssid: "NewNet",
+      });
     });
   });
 });

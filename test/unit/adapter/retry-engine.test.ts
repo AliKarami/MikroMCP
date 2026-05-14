@@ -29,9 +29,9 @@ describe("withRetry", () => {
 
     const fn = vi.fn().mockRejectedValue(error);
 
-    await expect(
-      withRetry(fn, { maxRetries: 3, baseDelayMs: 1, maxDelayMs: 10 }),
-    ).rejects.toThrow("not found");
+    await expect(withRetry(fn, { maxRetries: 3, baseDelayMs: 1, maxDelayMs: 10 })).rejects.toThrow(
+      "not found",
+    );
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -41,9 +41,9 @@ describe("withRetry", () => {
 
     const fn = vi.fn().mockRejectedValue(error);
 
-    await expect(
-      withRetry(fn, { maxRetries: 2, baseDelayMs: 1, maxDelayMs: 10 }),
-    ).rejects.toThrow("timeout");
+    await expect(withRetry(fn, { maxRetries: 2, baseDelayMs: 1, maxDelayMs: 10 })).rejects.toThrow(
+      "timeout",
+    );
     expect(fn).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
   });
 });

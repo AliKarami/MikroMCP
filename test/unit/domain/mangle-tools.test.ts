@@ -7,33 +7,37 @@ import { z } from "zod";
 const listMangleRulesTool = mangleTools[0];
 const manageMangleRuleTool = mangleTools[1];
 
-const listSchema = z.object({
-  routerId: z.string(),
-  chain: z.string().optional(),
-  action: z.string().optional(),
-  disabled: z.boolean().optional(),
-}).strict();
+const listSchema = z
+  .object({
+    routerId: z.string(),
+    chain: z.string().optional(),
+    action: z.string().optional(),
+    disabled: z.boolean().optional(),
+  })
+  .strict();
 
-const manageSchema = z.object({
-  routerId: z.string(),
-  action: z.enum(["add", "remove", "enable", "disable"]),
-  comment: z.string(),
-  chain: z.string().optional(),
-  dryRun: z.boolean().default(false),
-  srcAddress: z.string().optional(),
-  dstAddress: z.string().optional(),
-  srcAddressList: z.string().optional(),
-  dstAddressList: z.string().optional(),
-  protocol: z.string().optional(),
-  srcPort: z.string().optional(),
-  dstPort: z.string().optional(),
-  inInterface: z.string().optional(),
-  outInterface: z.string().optional(),
-  newRoutingMark: z.string().optional(),
-  newConnectionMark: z.string().optional(),
-  newDscpValue: z.number().int().min(0).max(63).optional(),
-  passthrough: z.boolean().optional(),
-}).strict();
+const manageSchema = z
+  .object({
+    routerId: z.string(),
+    action: z.enum(["add", "remove", "enable", "disable"]),
+    comment: z.string(),
+    chain: z.string().optional(),
+    dryRun: z.boolean().default(false),
+    srcAddress: z.string().optional(),
+    dstAddress: z.string().optional(),
+    srcAddressList: z.string().optional(),
+    dstAddressList: z.string().optional(),
+    protocol: z.string().optional(),
+    srcPort: z.string().optional(),
+    dstPort: z.string().optional(),
+    inInterface: z.string().optional(),
+    outInterface: z.string().optional(),
+    newRoutingMark: z.string().optional(),
+    newConnectionMark: z.string().optional(),
+    newDscpValue: z.number().int().min(0).max(63).optional(),
+    passthrough: z.boolean().optional(),
+  })
+  .strict();
 
 function makeContext(
   records: Record<string, unknown>[],
@@ -85,27 +89,57 @@ describe("mangle tools", () => {
 
   describe("manage_mangle_rule input schema", () => {
     it("accepts valid add with chain and comment", () => {
-      const r = manageSchema.parse({ routerId: "r", action: "add", comment: "mark-web", chain: "prerouting" });
+      const r = manageSchema.parse({
+        routerId: "r",
+        action: "add",
+        comment: "mark-web",
+        chain: "prerouting",
+      });
       expect(r.dryRun).toBe(false);
     });
 
     it("rejects newDscpValue above 63", () => {
       expect(() =>
-        manageSchema.parse({ routerId: "r", action: "add", comment: "c", chain: "prerouting", newDscpValue: 64 }),
+        manageSchema.parse({
+          routerId: "r",
+          action: "add",
+          comment: "c",
+          chain: "prerouting",
+          newDscpValue: 64,
+        }),
       ).toThrow();
     });
 
     it("rejects extra fields", () => {
       expect(() =>
-        manageSchema.parse({ routerId: "r", action: "add", comment: "c", chain: "prerouting", unknownField: true }),
+        manageSchema.parse({
+          routerId: "r",
+          action: "add",
+          comment: "c",
+          chain: "prerouting",
+          unknownField: true,
+        }),
       ).toThrow();
     });
   });
 
   describe("list_mangle_rules handler", () => {
     const sampleRules = [
-      { ".id": "*1", chain: "prerouting", action: "mark-routing", "new-routing-mark": "isp1", disabled: "false", comment: "mark-isp1" },
-      { ".id": "*2", chain: "forward", action: "mark-connection", disabled: "true", comment: "mark-conn" },
+      {
+        ".id": "*1",
+        chain: "prerouting",
+        action: "mark-routing",
+        "new-routing-mark": "isp1",
+        disabled: "false",
+        comment: "mark-isp1",
+      },
+      {
+        ".id": "*2",
+        chain: "forward",
+        action: "mark-connection",
+        disabled: "true",
+        comment: "mark-conn",
+      },
     ];
 
     it("returns all rules with correct total", async () => {
@@ -117,14 +151,20 @@ describe("mangle tools", () => {
 
     it("filters by chain", async () => {
       const ctx = makeContext(sampleRules);
-      const result = await listMangleRulesTool.handler({ routerId: "test-router", chain: "prerouting" }, ctx);
+      const result = await listMangleRulesTool.handler(
+        { routerId: "test-router", chain: "prerouting" },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.total).toBe(1);
     });
 
     it("filters by disabled true", async () => {
       const ctx = makeContext(sampleRules);
-      const result = await listMangleRulesTool.handler({ routerId: "test-router", disabled: true }, ctx);
+      const result = await listMangleRulesTool.handler(
+        { routerId: "test-router", disabled: true },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.total).toBe(1);
     });
@@ -134,30 +174,62 @@ describe("mangle tools", () => {
     it("creates rule and returns created", async () => {
       const ctx = makeContext([]);
       const result = await manageMangleRuleTool.handler(
-        { routerId: "test-router", action: "add", comment: "mark-web", chain: "prerouting", newRoutingMark: "isp1" },
+        {
+          routerId: "test-router",
+          action: "add",
+          comment: "mark-web",
+          chain: "prerouting",
+          newRoutingMark: "isp1",
+        },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
-      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<typeof vi.fn>;
+      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockCreate).toHaveBeenCalled();
     });
 
     it("returns already_exists when comment matches with same config", async () => {
-      const existing = { ".id": "*1", chain: "prerouting", "new-routing-mark": "isp1", comment: "mark-web", disabled: "false" };
+      const existing = {
+        ".id": "*1",
+        chain: "prerouting",
+        "new-routing-mark": "isp1",
+        comment: "mark-web",
+        disabled: "false",
+      };
       const ctx = makeContext([existing]);
       const result = await manageMangleRuleTool.handler(
-        { routerId: "test-router", action: "add", comment: "mark-web", chain: "prerouting", newRoutingMark: "isp1" },
+        {
+          routerId: "test-router",
+          action: "add",
+          comment: "mark-web",
+          chain: "prerouting",
+          newRoutingMark: "isp1",
+        },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
     });
 
     it("throws CONFLICT when comment matches with different config", async () => {
-      const existing = { ".id": "*1", chain: "prerouting", "new-routing-mark": "isp1", comment: "mark-web", disabled: "false" };
+      const existing = {
+        ".id": "*1",
+        chain: "prerouting",
+        "new-routing-mark": "isp1",
+        comment: "mark-web",
+        disabled: "false",
+      };
       const ctx = makeContext([existing]);
       await expect(
         manageMangleRuleTool.handler(
-          { routerId: "test-router", action: "add", comment: "mark-web", chain: "forward", newRoutingMark: "isp2" },
+          {
+            routerId: "test-router",
+            action: "add",
+            comment: "mark-web",
+            chain: "forward",
+            newRoutingMark: "isp2",
+          },
           ctx,
         ),
       ).rejects.toThrow();
@@ -166,11 +238,19 @@ describe("mangle tools", () => {
     it("returns dry_run and does not call create", async () => {
       const ctx = makeContext([]);
       const result = await manageMangleRuleTool.handler(
-        { routerId: "test-router", action: "add", comment: "test", chain: "prerouting", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          comment: "test",
+          chain: "prerouting",
+          dryRun: true,
+        },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
-      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<typeof vi.fn>;
+      const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockCreate).not.toHaveBeenCalled();
     });
   });
@@ -184,7 +264,9 @@ describe("mangle tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("removed");
-      const mockRemove = (ctx.routerClient as Record<string, unknown>).remove as ReturnType<typeof vi.fn>;
+      const mockRemove = (ctx.routerClient as Record<string, unknown>).remove as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockRemove).toHaveBeenCalledWith("ip/firewall/mangle", "*1");
     });
 
@@ -202,7 +284,10 @@ describe("mangle tools", () => {
     it("throws NOT_FOUND when comment not found", async () => {
       const ctx = makeContext([]);
       await expect(
-        manageMangleRuleTool.handler({ routerId: "test-router", action: "enable", comment: "nonexistent" }, ctx),
+        manageMangleRuleTool.handler(
+          { routerId: "test-router", action: "enable", comment: "nonexistent" },
+          ctx,
+        ),
       ).rejects.toThrow();
     });
 
@@ -214,7 +299,9 @@ describe("mangle tools", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
-      const mockUpdate = (ctx.routerClient as Record<string, unknown>).update as ReturnType<typeof vi.fn>;
+      const mockUpdate = (ctx.routerClient as Record<string, unknown>).update as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockUpdate).toHaveBeenCalledWith("ip/firewall/mangle", "*1", { disabled: "true" });
     });
 
@@ -225,7 +312,9 @@ describe("mangle tools", () => {
         { routerId: "test-router", action: "enable", comment: "mark-web" },
         ctx,
       );
-      const mockUpdate = (ctx.routerClient as Record<string, unknown>).update as ReturnType<typeof vi.fn>;
+      const mockUpdate = (ctx.routerClient as Record<string, unknown>).update as ReturnType<
+        typeof vi.fn
+      >;
       expect(mockUpdate).toHaveBeenCalledWith("ip/firewall/mangle", "*1", { disabled: "false" });
     });
   });

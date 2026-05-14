@@ -50,7 +50,10 @@ describe("FtpClient", () => {
   });
 
   it("does not expose credentials as public properties", () => {
-    const ftp = new FtpClient("192.168.1.1", 21, "admin", "secret") as unknown as Record<string, unknown>;
+    const ftp = new FtpClient("192.168.1.1", 21, "admin", "secret") as unknown as Record<
+      string,
+      unknown
+    >;
     expect(ftp["user"]).toBeUndefined();
     expect(ftp["password"]).toBeUndefined();
     expect(ftp["host"]).toBeUndefined();
