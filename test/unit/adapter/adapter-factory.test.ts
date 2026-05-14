@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 vi.mock("../../../src/config/secrets.js", () => ({
   getCredentials: vi.fn().mockReturnValue({ username: "admin", password: "secret" }),
@@ -23,7 +23,10 @@ function makeRouterConfig(): RouterConfig {
 
 describe("createSshClient", () => {
   it("returns an SshClient instance", () => {
-    const client = createSshClient(makeRouterConfig(), { commandTimeoutMs: 30000, maxOutputBytes: 524288 });
+    const client = createSshClient(makeRouterConfig(), {
+      commandTimeoutMs: 30000,
+      maxOutputBytes: 524288,
+    });
     expect(client).toBeInstanceOf(SshClient);
   });
 });
