@@ -6,6 +6,7 @@ import { loadAppConfig } from "./config/app-config.js";
 import { createServerFactory } from "./mcp/server.js";
 import { connectStdio } from "./mcp/transports/stdio.js";
 import { connectHttp } from "./mcp/transports/http.js";
+import { IdentityRegistry } from "./config/identity-registry.js";
 import { createLogger } from "./observability/logger.js";
 
 const log = createLogger("main");
@@ -15,6 +16,7 @@ async function main(): Promise<void> {
   log.info({ transport: config.transport, logLevel: config.logLevel }, "Starting MikroMCP server");
 
   const { makeServer, pool } = createServerFactory(config);
+  const identityRegistry = new IdentityRegistry(config.identitiesPath);
 
   if (config.transport === "stdio") {
     await connectStdio(makeServer());
@@ -25,8 +27,11 @@ async function main(): Promise<void> {
       bindHost: config.bindHost,
       maxBodyBytes: config.http.maxBodyBytes,
       rateLimitRpm: config.http.rateLimitRpm,
-    });
-    log.info({ port: config.port, bindHost: config.bindHost }, "MikroMCP server running via HTTP/SSE");
+    }, identityRegistry);
+    log.info(
+      { port: config.port, bindHost: config.bindHost },
+      "MikroMCP server running via HTTP/SSE",
+    );
   }
 
   const shutdown = () => {

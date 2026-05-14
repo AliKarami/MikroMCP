@@ -4,6 +4,9 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createLogger } from "../../observability/logger.js";
+import type { IdentityRegistry } from "../../config/identity-registry.js";
+import { authenticateHttp, withIdentity } from "../../middleware/auth.js";
+import { MikroMCPError } from "../../domain/errors/error-types.js";
 
 const log = createLogger("transport-http");
 
@@ -87,6 +90,7 @@ export interface HttpTransportConfig {
 export async function connectHttp(
   makeServer: () => McpServer,
   config: HttpTransportConfig,
+  identityRegistry: IdentityRegistry,
 ): Promise<void> {
   const { port, bindHost, maxBodyBytes, rateLimitRpm } = config;
   const checkRateLimit = createRateLimiter(rateLimitRpm);
@@ -108,62 +112,22 @@ export async function connectHttp(
     const { pathname } = url;
 
     try {
-      if (pathname === "/mcp") {
-        const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
-        let transport = sessionId ? streamableSessions.get(sessionId) : undefined;
-
-        if (!transport) {
-          if (sessionId) {
-            res.writeHead(404, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: `Session not found: ${sessionId}` }));
+      if (pathname === "/mcp" || pathname === "/sse" || pathname === "/messages") {
+        let identity;
+        try {
+          identity = await authenticateHttp(req, identityRegistry);
+        } catch (err) {
+          if (err instanceof MikroMCPError) {
+            res.writeHead(401, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: err.message, code: err.code }));
             return;
           }
-
-          transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => randomUUID(),
-            onsessioninitialized: (id) => {
-              streamableSessions.set(id, transport!);
-              log.info({ sessionId: id }, "Streamable HTTP session created");
-            },
-          });
-          transport.onclose = () => {
-            if (transport!.sessionId) {
-              streamableSessions.delete(transport!.sessionId);
-              log.info({ sessionId: transport!.sessionId }, "Streamable HTTP session closed");
-            }
-          };
-          await makeServer().connect(transport);
+          throw err;
         }
 
-        const body = req.method === "POST" ? await readBody(req, maxBodyBytes) : undefined;
-        await transport.handleRequest(req, res, body);
-        return;
-      }
-
-      if (pathname === "/sse" && req.method === "GET") {
-        const sseTransport = new SSEServerTransport("/messages", res);
-        const sseServer = makeServer();
-        await sseServer.connect(sseTransport);
-        sseTransports.set(sseTransport.sessionId, sseTransport);
-        sseTransport.onclose = () => {
-          sseTransports.delete(sseTransport.sessionId);
-        };
-        log.info({ sessionId: sseTransport.sessionId }, "SSE client connected");
-        await sseTransport.start();
-        return;
-      }
-
-      if (pathname === "/messages" && req.method === "POST") {
-        const sid = url.searchParams.get("sessionId") ?? "";
-        const sseTransport = sseTransports.get(sid);
-        if (!sseTransport) {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: `SSE session not found: ${sid}` }));
-          return;
-        }
-        const body = await readBody(req, maxBodyBytes);
-        await sseTransport.handlePostMessage(req, res, body);
+        await withIdentity(identity, async () => {
+          await handleMcpRequest(pathname, req, res, url, port, maxBodyBytes, makeServer, streamableSessions, sseTransports);
+        });
         return;
       }
 
@@ -203,4 +167,74 @@ export async function connectHttp(
     });
     httpServer.on("error", reject);
   });
+}
+
+async function handleMcpRequest(
+  pathname: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  port: number,
+  maxBodyBytes: number,
+  makeServer: () => McpServer,
+  streamableSessions: Map<string, StreamableHTTPServerTransport>,
+  sseTransports: Map<string, SSEServerTransport>,
+): Promise<void> {
+  if (pathname === "/mcp") {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    let transport = sessionId ? streamableSessions.get(sessionId) : undefined;
+
+    if (!transport) {
+      if (sessionId) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `Session not found: ${sessionId}` }));
+        return;
+      }
+
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (id) => {
+          streamableSessions.set(id, transport!);
+          log.info({ sessionId: id }, "Streamable HTTP session created");
+        },
+      });
+      transport.onclose = () => {
+        if (transport!.sessionId) {
+          streamableSessions.delete(transport!.sessionId);
+          log.info({ sessionId: transport!.sessionId }, "Streamable HTTP session closed");
+        }
+      };
+      await makeServer().connect(transport);
+    }
+
+    const body = req.method === "POST" ? await readBody(req, maxBodyBytes) : undefined;
+    await transport.handleRequest(req, res, body);
+    return;
+  }
+
+  if (pathname === "/sse" && req.method === "GET") {
+    const sseTransport = new SSEServerTransport("/messages", res);
+    const sseServer = makeServer();
+    await sseServer.connect(sseTransport);
+    sseTransports.set(sseTransport.sessionId, sseTransport);
+    sseTransport.onclose = () => {
+      sseTransports.delete(sseTransport.sessionId);
+    };
+    log.info({ sessionId: sseTransport.sessionId }, "SSE client connected");
+    await sseTransport.start();
+    return;
+  }
+
+  if (pathname === "/messages" && req.method === "POST") {
+    const sid = url.searchParams.get("sessionId") ?? "";
+    const sseTransport = sseTransports.get(sid);
+    if (!sseTransport) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: `SSE session not found: ${sid}` }));
+      return;
+    }
+    const body = await readBody(req, maxBodyBytes);
+    await sseTransport.handlePostMessage(req, res, body);
+    return;
+  }
 }
