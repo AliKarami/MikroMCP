@@ -1,10 +1,9 @@
-// ---------------------------------------------------------------------------
-// MikroMCP - Tool definition types
-// ---------------------------------------------------------------------------
-
 import { z } from "zod";
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
 import type { RouterConfig } from "../../types.js";
+import type { Identity } from "../../types.js";
+import type { SshClient } from "../../adapter/ssh-client.js";
+import type { FtpClient } from "../../adapter/ftp-client.js";
 
 export interface ToolAnnotations {
   readOnlyHint: boolean;
@@ -28,8 +27,9 @@ export interface ToolContext {
   routerId: string;
   correlationId: string;
   routerConfig: RouterConfig;
-  credentials: { username: string; password: string };
-  sshOptions: { commandTimeoutMs: number; maxOutputBytes: number };
+  sshClient: SshClient;
+  ftpClient: FtpClient;
+  identity: Identity;
 }
 
 export interface ToolResult {
