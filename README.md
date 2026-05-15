@@ -282,6 +282,22 @@ Full parameter tables and example prompts are in [Available Tools](https://githu
 | Transport hardening | HTTP mode supports bind host, request body limits, and per-IP rate limiting. |
 | Pinning | RouterOS TLS and SSH host-key fingerprints can be pinned per router. |
 
+## Authentication
+
+MikroMCP uses bearer token authentication. Each identity is defined in `config/identities.yaml` with a bcrypt-hashed token, a role, and optional router/tool restrictions. See `config/identities.example.yaml` for the full format.
+
+**HTTP transport** — every request must include `Authorization: Bearer <token>`. The server rejects unauthenticated calls with 401.
+
+**stdio transport** — no bearer token is required. The process identity defaults to a built-in `superadmin` with no restrictions. Set `MIKROMCP_STDIO_IDENTITY` to use a named identity from `identities.yaml` instead.
+
+Generate a token hash for a new identity:
+
+```bash
+node -e "const b=require('bcryptjs'); b.hash('your-raw-token', 12).then(console.log)"
+```
+
+**RBAC** — each identity has `allowedRouters` (list of router IDs, or empty for all) and `allowedToolPatterns` (glob-style patterns, or empty for all). Destructive tools require a two-step confirmation unless the identity holds `admin` or `superadmin` role.
+
 ## Configuration
 
 Router inventory lives in `config/routers.yaml`; credentials live in environment variables that match each router's `envPrefix`.
@@ -295,6 +311,10 @@ Router inventory lives in `config/routers.yaml`; credentials live in environment
 | `MIKROMCP_BIND_HOST` | `127.0.0.1` | HTTP bind address |
 | `MIKROMCP_HTTP_MAX_BODY_BYTES` | `1048576` | HTTP request body cap |
 | `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | HTTP requests per minute per IP; `0` disables rate limiting |
+| `MIKROMCP_IDENTITIES_PATH` | `config/identities.yaml` | Path to identity/token registry |
+| `MIKROMCP_STDIO_IDENTITY` | none | Named identity used for stdio transport (defaults to built-in superadmin) |
+| `MIKROMCP_CONFIRMATION_SECRET` | none | HMAC secret for confirmation tokens (**required** in HTTP mode) |
+| `MIKROMCP_AUDIT_LOG_PATH` | none | NDJSON audit log file path (omit to disable file sink) |
 | `ROUTER_<PREFIX>_USER` | none | Router username for a registry entry |
 | `ROUTER_<PREFIX>_PASS` | none | Router password for a registry entry |
 
@@ -343,12 +363,12 @@ Project entry points:
 | [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling) | Error categories, circuit breaker, and retry engine |
 | [Development](https://github.com/AliKarami/MikroMCP/wiki/Development) | Project structure, testing, and MCP Inspector usage |
 | [Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing) | Adding tools, style guide, and PR checklist |
-| [Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1-v0.6 shipped; v0.7-v1.0 planned |
+| [Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1-v0.7 shipped; v0.8-v1.0 planned |
 
 ## Roadmap Snapshot
 
 - **v0.1-v0.6:** Foundation, routing, firewall, diagnostics, network services, policy routing, security hardening, automation, packages, files, and containers.
-- **v0.7:** Identity, auth, RBAC, Vault credential provider, audit logging, and confirmation middleware.
+- **v0.7 ✅:** HTTP bearer token auth, RBAC enforcement, dual-sink audit log, two-step confirmation gate, and credential surface reduction.
 - **v0.8:** Change safety, snapshots, diffs, write journal, plan/apply, and rollback.
 - **v0.9:** Fleet operations, IPSec, certificates, users, queues, SNMP, Netwatch, NTP, and health checks.
 - **v1.0:** Prometheus metrics, CHR integration tests, npm/Docker/systemd distribution, `mikromcp doctor`, stability policy, and security documentation.

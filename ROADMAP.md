@@ -123,16 +123,15 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.7 — Identity, Auth & Audit
+## ✅ v0.7 — Identity, Auth & Audit
 
 **Goal:** Establish trust boundaries before expanding dangerous or admin-level surfaces. Nothing from this milestone onward ships without these foundations.
 
-- **HTTP transport auth** — bearer token (env-configured secret) as the first gate; mTLS optional add-on
-- **RBAC / identity enforcement** — per-identity allowed routers, tool name patterns, and action scopes; identity extracted from MCP request context
-- **Vault credential provider** — resolve per-router credentials from HashiCorp Vault (KV v2) in addition to env vars
-- **Audit log** — structured log record for every write/destructive call: identity, tool, router, params, outcome
-- **Confirmation middleware** — structured confirmation step gated on `destructiveHint` and action type; RBAC scope lets unattended automation opt out intentionally
-- **Credential surface reduction** — SSH and FTP currently receive raw credentials through `ToolContext`; move them behind adapter services so handlers never touch secrets directly
+- **HTTP bearer token authentication** — bcrypt token verification (cost 12); HTTP transport requires `Authorization: Bearer <token>`; stdio falls back to a built-in `superadmin` identity
+- **RBAC identity enforcement** — per-identity `allowedRouters` and `allowedToolPatterns` (wildcard `*` supported); `authz.ts` middleware enforces at call time
+- **Dual-sink audit log** — every write/destructive call logged to pino (structured) and an NDJSON file with identity, tool, router, params (credentials redacted), and outcome
+- **Two-step confirmation gate** — destructive tools require a `confirmationToken` (HMAC-SHA256, 5-min TTL, single-use); `operator` and `readonly` roles must confirm; `admin`/`superadmin` bypass
+- **Credential surface reduction** — SSH and FTP adapters (`SshClient`, `FtpClient`) wrap credentials in a closure; tool handlers never touch secrets directly
 
 ---
 

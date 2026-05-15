@@ -221,6 +221,10 @@ Two transports:
 | `MIKROMCP_CONFIG_PATH` | `config/routers.yaml` | Path to router registry |
 | `MIKROMCP_LOG_LEVEL` | `info` | `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP transport only |
+| `MIKROMCP_IDENTITIES_PATH` | `config/identities.yaml` | Path to identity/token registry |
+| `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport (omit for built-in superadmin) |
+| `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret for confirmation tokens (**required** in HTTP mode) |
+| `MIKROMCP_AUDIT_LOG_PATH` | — | NDJSON audit log file path (omit to disable file sink) |
 | `ROUTER_<PREFIX>_USER` | — | Per-router credential (matches `envPrefix` in YAML) |
 | `ROUTER_<PREFIX>_PASS` | — | Per-router credential |
 
