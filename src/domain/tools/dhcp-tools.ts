@@ -14,19 +14,28 @@ const log = createLogger("dhcp-tools");
 // list_dhcp_leases
 // ---------------------------------------------------------------------------
 
-const listDhcpLeasesInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  server: z.string().optional()
-    .describe("Filter by DHCP server name"),
-  status: z.enum(["bound", "waiting", "offered", "blocked", "all"]).default("all")
-    .describe("Filter by lease status"),
-  macAddress: z.string().optional()
-    .describe("Filter by MAC address (exact match, case-insensitive)"),
-  limit: z.number().int().min(1).max(500).default(100)
-    .describe("Maximum number of leases to return"),
-  offset: z.number().int().min(0).default(0)
-    .describe("Offset for pagination"),
-}).strict();
+const listDhcpLeasesInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    server: z.string().optional().describe("Filter by DHCP server name"),
+    status: z
+      .enum(["bound", "waiting", "offered", "blocked", "all"])
+      .default("all")
+      .describe("Filter by lease status"),
+    macAddress: z
+      .string()
+      .optional()
+      .describe("Filter by MAC address (exact match, case-insensitive)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum number of leases to return"),
+    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+  })
+  .strict();
 
 const listDhcpLeasesTool: ToolDefinition = {
   name: "list_dhcp_leases",

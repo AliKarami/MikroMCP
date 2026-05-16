@@ -44,8 +44,14 @@ export function loadAppConfig(): AppConfig {
     logLevel: env.MIKROMCP_LOG_LEVEL ?? "info",
     configPath: env.MIKROMCP_CONFIG_PATH ?? "config/routers.yaml",
     dataDir: env.MIKROMCP_DATA_DIR ?? "data",
-    cmdAllow: (env.MIKROMCP_CMD_ALLOW ?? "").split(",").map((s) => s.trim()).filter(Boolean),
-    cmdDeny: (env.MIKROMCP_CMD_DENY ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+    cmdAllow: (env.MIKROMCP_CMD_ALLOW ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    cmdDeny: (env.MIKROMCP_CMD_DENY ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
     identitiesPath: env.MIKROMCP_IDENTITIES_PATH ?? "config/identities.yaml",
     stdioIdentity: env.MIKROMCP_STDIO_IDENTITY || undefined,
     confirmationSecret: env.MIKROMCP_CONFIRMATION_SECRET || undefined,

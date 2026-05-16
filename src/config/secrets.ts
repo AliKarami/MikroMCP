@@ -3,10 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import type { RouterConfig } from "../types.js";
-import {
-  MikroMCPError,
-  ErrorCategory,
-} from "../domain/errors/error-types.js";
+import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 
 export interface Credentials {
   username: string;
@@ -57,10 +54,7 @@ export function getCredentials(router: RouterConfig): Credentials {
   const password = process.env[passKey];
 
   if (!username || !password) {
-    const missing = [
-      !username ? userKey : null,
-      !password ? passKey : null,
-    ].filter(Boolean);
+    const missing = [!username ? userKey : null, !password ? passKey : null].filter(Boolean);
 
     throw new MikroMCPError({
       category: ErrorCategory.CONFIGURATION,

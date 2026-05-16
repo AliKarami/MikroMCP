@@ -69,7 +69,8 @@ function defaultRecoverability(category: ErrorCategory): Recoverability {
       return {
         retryable: true,
         retryAfterMs: 3000,
-        suggestedAction: "The router did not respond in time. Retry with a longer timeout or check router load.",
+        suggestedAction:
+          "The router did not respond in time. Retry with a longer timeout or check router load.",
       };
     case ErrorCategory.ROUTER_ERROR:
       return {
@@ -135,10 +136,7 @@ function buildDetails(
  * - Network errors (ECONNREFUSED, etc.) become ROUTER_UNREACHABLE.
  * - Everything else becomes INTERNAL.
  */
-export function enrichError(
-  error: unknown,
-  context?: EnrichContext,
-): MikroMCPError {
+export function enrichError(error: unknown, context?: EnrichContext): MikroMCPError {
   // Already enriched - pass through.
   if (error instanceof MikroMCPError) {
     return error;

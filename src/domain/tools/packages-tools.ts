@@ -19,8 +19,7 @@ const listPackagesInputSchema = z
 const listPackagesTool: ToolDefinition = {
   name: "list_packages",
   title: "List Packages",
-  description:
-    "List installed RouterOS packages with version and enabled status.",
+  description: "List installed RouterOS packages with version and enabled status.",
   inputSchema: listPackagesInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -86,9 +85,9 @@ const managePackageTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const pkg = all.find(
-        (p) => (p as Record<string, string>).name === parsed.name,
-      ) as Record<string, string> | undefined;
+      const pkg = all.find((p) => (p as Record<string, string>).name === parsed.name) as
+        | Record<string, string>
+        | undefined;
 
       if (!pkg) {
         throw new MikroMCPError({

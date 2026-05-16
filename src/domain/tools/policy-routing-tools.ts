@@ -10,16 +10,19 @@ const log = createLogger("policy-routing-tools");
 const ROUTING_RULE_PATH = "routing/rule";
 const ROUTING_TABLE_PATH = "routing/table";
 
-const listRoutingRulesInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  table: z.string().optional().describe("Filter by routing table name"),
-  disabled: z.boolean().optional().describe("Filter by disabled state"),
-}).strict();
+const listRoutingRulesInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    table: z.string().optional().describe("Filter by routing table name"),
+    disabled: z.boolean().optional().describe("Filter by disabled state"),
+  })
+  .strict();
 
 const listRoutingRulesTool: ToolDefinition = {
   name: "list_routing_rules",
   title: "List Routing Rules",
-  description: "List policy routing rules on a MikroTik router in evaluation order. Supports filtering by table and disabled state.",
+  description:
+    "List policy routing rules on a MikroTik router in evaluation order. Supports filtering by table and disabled state.",
   inputSchema: listRoutingRulesInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -59,18 +62,28 @@ const listRoutingRulesTool: ToolDefinition = {
   },
 };
 
-const manageRoutingRuleInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
-  table: z.string().describe(
-    "Routing table name — part of the composite idempotency key; required for all actions",
-  ),
-  srcAddress: z.string().optional().describe("Source CIDR to match"),
-  dstAddress: z.string().optional().describe("Destination CIDR to match"),
-  interface: z.string().optional().describe("Incoming interface to match"),
-  priority: z.number().int().min(0).max(4294967295).optional().describe("Rule priority (0–4294967295)"),
-  dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-}).strict();
+const manageRoutingRuleInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
+    table: z
+      .string()
+      .describe(
+        "Routing table name — part of the composite idempotency key; required for all actions",
+      ),
+    srcAddress: z.string().optional().describe("Source CIDR to match"),
+    dstAddress: z.string().optional().describe("Destination CIDR to match"),
+    interface: z.string().optional().describe("Incoming interface to match"),
+    priority: z
+      .number()
+      .int()
+      .min(0)
+      .max(4294967295)
+      .optional()
+      .describe("Rule priority (0–4294967295)"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
 
 function findRoutingRule(
   rules: RouterOSRecord[],
@@ -104,21 +117,35 @@ const manageRoutingRuleTool: ToolDefinition = {
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageRoutingRuleInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, table: parsed.table }, "Managing routing rule");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, table: parsed.table },
+      "Managing routing rule",
+    );
 
     try {
       const allRules = await context.routerClient.get<RouterOSRecord>(ROUTING_RULE_PATH, {
         limit: undefined,
         offset: undefined,
       });
-      const existing = findRoutingRule(allRules, parsed.srcAddress, parsed.dstAddress, parsed.interface, parsed.table);
+      const existing = findRoutingRule(
+        allRules,
+        parsed.srcAddress,
+        parsed.dstAddress,
+        parsed.interface,
+        parsed.table,
+      );
 
       if (parsed.action === "add") {
-        if (parsed.srcAddress === undefined && parsed.dstAddress === undefined && parsed.interface === undefined) {
+        if (
+          parsed.srcAddress === undefined &&
+          parsed.dstAddress === undefined &&
+          parsed.interface === undefined
+        ) {
           throw new MikroMCPError({
             category: ErrorCategory.VALIDATION,
             code: "MATCH_REQUIRED",
-            message: "At least one of srcAddress, dstAddress, or interface must be provided when action is add",
+            message:
+              "At least one of srcAddress, dstAddress, or interface must be provided when action is add",
             recoverability: {
               retryable: false,
               suggestedAction: "Provide at least one of srcAddress, dstAddress, or interface.",
@@ -140,7 +167,11 @@ const manageRoutingRuleTool: ToolDefinition = {
         if (parsed.priority !== undefined) body.priority = String(parsed.priority);
 
         if (parsed.dryRun) {
-          const diff = Object.entries(body).map(([property, after]) => ({ property, before: null, after }));
+          const diff = Object.entries(body).map(([property, after]) => ({
+            property,
+            before: null,
+            after,
+          }));
           return {
             content: `Dry run: Would add routing rule for table "${parsed.table}".`,
             structuredContent: { action: "dry_run", diff },
@@ -215,14 +246,18 @@ const manageRoutingRuleTool: ToolDefinition = {
         }
 
         if (parsed.dryRun) {
-          const diff = [{ property: "disabled", before: String(isDisabled), after: String(wantDisabled) }];
+          const diff = [
+            { property: "disabled", before: String(isDisabled), after: String(wantDisabled) },
+          ];
           return {
             content: `Dry run: Would ${parsed.action} routing rule for table "${parsed.table}".`,
             structuredContent: { action: "dry_run", diff },
           };
         }
 
-        await context.routerClient.update(ROUTING_RULE_PATH, id, { disabled: wantDisabled ? "true" : "false" });
+        await context.routerClient.update(ROUTING_RULE_PATH, id, {
+          disabled: wantDisabled ? "true" : "false",
+        });
         log.info({ id, table: parsed.table, action: parsed.action }, "Routing rule toggled");
 
         return {
@@ -235,7 +270,10 @@ const manageRoutingRuleTool: ToolDefinition = {
         category: ErrorCategory.VALIDATION,
         code: "INVALID_ACTION",
         message: `Unknown action: ${parsed.action as string}`,
-        recoverability: { retryable: false, suggestedAction: "Use one of: add, remove, enable, disable." },
+        recoverability: {
+          retryable: false,
+          suggestedAction: "Use one of: add, remove, enable, disable.",
+        },
       });
     } catch (err) {
       if (err instanceof MikroMCPError) throw err;
@@ -244,9 +282,11 @@ const manageRoutingRuleTool: ToolDefinition = {
   },
 };
 
-const listRoutingTablesInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-}).strict();
+const listRoutingTablesInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+  })
+  .strict();
 
 const listRoutingTablesTool: ToolDefinition = {
   name: "list_routing_tables",
@@ -280,18 +320,21 @@ const listRoutingTablesTool: ToolDefinition = {
   },
 };
 
-const manageRoutingTableInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  action: z.enum(["add", "remove"]).describe("Action to perform"),
-  name: z.string().describe("Routing table name (idempotency key)"),
-  fib: z.boolean().default(false).describe("Whether to sync this table with the FIB"),
-  dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-}).strict();
+const manageRoutingTableInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z.enum(["add", "remove"]).describe("Action to perform"),
+    name: z.string().describe("Routing table name (idempotency key)"),
+    fib: z.boolean().default(false).describe("Whether to sync this table with the FIB"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
 
 const manageRoutingTableTool: ToolDefinition = {
   name: "manage_routing_table",
   title: "Manage Routing Table",
-  description: "Create or remove a custom routing table. Idempotent by table name. Supports dry-run mode.",
+  description:
+    "Create or remove a custom routing table. Idempotent by table name. Supports dry-run mode.",
   inputSchema: manageRoutingTableInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -301,7 +344,10 @@ const manageRoutingTableTool: ToolDefinition = {
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageRoutingTableInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing routing table");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing routing table",
+    );
 
     try {
       const existing = await context.routerClient.get<RouterOSRecord>(ROUTING_TABLE_PATH, {
@@ -317,10 +363,17 @@ const manageRoutingTableTool: ToolDefinition = {
           };
         }
 
-        const body: Record<string, string> = { name: parsed.name, fib: parsed.fib ? "true" : "false" };
+        const body: Record<string, string> = {
+          name: parsed.name,
+          fib: parsed.fib ? "true" : "false",
+        };
 
         if (parsed.dryRun) {
-          const diff = Object.entries(body).map(([property, after]) => ({ property, before: null, after }));
+          const diff = Object.entries(body).map(([property, after]) => ({
+            property,
+            before: null,
+            after,
+          }));
           return {
             content: `Dry run: Would create routing table "${parsed.name}".`,
             structuredContent: { action: "dry_run", diff },

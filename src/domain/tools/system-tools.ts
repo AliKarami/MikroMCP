@@ -9,7 +9,15 @@ import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("system-tools");
 
-const SECTION_VALUES = ["resource", "identity", "license", "routerboard", "health", "clock", "all"] as const;
+const SECTION_VALUES = [
+  "resource",
+  "identity",
+  "license",
+  "routerboard",
+  "health",
+  "clock",
+  "all",
+] as const;
 type Section = (typeof SECTION_VALUES)[number];
 
 const ALL_SECTIONS: Exclude<Section, "all">[] = [
@@ -30,12 +38,15 @@ const SECTION_PATHS: Record<Exclude<Section, "all">, string> = {
   clock: "system/clock",
 };
 
-const inputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  sections: z.array(z.enum(SECTION_VALUES))
-    .default(["all"])
-    .describe("Which system information sections to include"),
-}).strict();
+const inputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    sections: z
+      .array(z.enum(SECTION_VALUES))
+      .default(["all"])
+      .describe("Which system information sections to include"),
+  })
+  .strict();
 
 async function fetchSection(
   context: ToolContext,
@@ -125,7 +136,7 @@ const getSystemStatusTool: ToolDefinition = {
     const parsed = inputSchema.parse(params);
     const requestedSections = parsed.sections.includes("all")
       ? ALL_SECTIONS
-      : (parsed.sections.filter((s): s is Exclude<Section, "all"> => s !== "all"));
+      : parsed.sections.filter((s): s is Exclude<Section, "all"> => s !== "all");
 
     log.info({ routerId: context.routerId, sections: requestedSections }, "Fetching system status");
 
@@ -137,7 +148,9 @@ const getSystemStatusTool: ToolDefinition = {
           results[section] = await fetchSection(context, section);
         } catch (err) {
           log.warn({ section, err }, "Failed to fetch section, skipping");
-          results[section] = { _error: `Failed to fetch: ${err instanceof Error ? err.message : String(err)}` };
+          results[section] = {
+            _error: `Failed to fetch: ${err instanceof Error ? err.message : String(err)}`,
+          };
         }
       }
 

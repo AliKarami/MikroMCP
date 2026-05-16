@@ -15,25 +15,42 @@ const log = createLogger("interface-tools");
 // list_interfaces
 // ---------------------------------------------------------------------------
 
-const listInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  type: z.enum(["ether", "vlan", "bridge", "bonding", "wireguard", "gre", "all"]).default("all")
-    .describe("Filter by interface type"),
-  status: z.enum(["up", "down", "all"]).default("all")
-    .describe("Filter by running status"),
-  macAddress: z.string().optional()
-    .describe("Filter by MAC address (case-insensitive exact match on mac-address field)"),
-  includeCounters: z.boolean().default(false)
-    .describe("Include traffic counters (tx-byte, rx-byte, etc.)"),
-  limit: z.number().int().min(1).max(500).default(100)
-    .describe("Maximum number of interfaces to return"),
-  offset: z.number().int().min(0).default(0)
-    .describe("Offset for pagination"),
-}).strict();
+const listInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    type: z
+      .enum(["ether", "vlan", "bridge", "bonding", "wireguard", "gre", "all"])
+      .default("all")
+      .describe("Filter by interface type"),
+    status: z.enum(["up", "down", "all"]).default("all").describe("Filter by running status"),
+    macAddress: z
+      .string()
+      .optional()
+      .describe("Filter by MAC address (case-insensitive exact match on mac-address field)"),
+    includeCounters: z
+      .boolean()
+      .default(false)
+      .describe("Include traffic counters (tx-byte, rx-byte, etc.)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum number of interfaces to return"),
+    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+  })
+  .strict();
 
 const COUNTER_PROPS = [
-  "tx-byte", "rx-byte", "tx-packet", "rx-packet",
-  "tx-drop", "rx-drop", "tx-error", "rx-error",
+  "tx-byte",
+  "rx-byte",
+  "tx-packet",
+  "rx-packet",
+  "tx-drop",
+  "rx-drop",
+  "tx-error",
+  "rx-error",
   "tx-queue-drop",
 ];
 
@@ -136,23 +153,25 @@ const listInterfacesTool: ToolDefinition = {
 // create_vlan
 // ---------------------------------------------------------------------------
 
-const createVlanInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  name: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(15)
-    .describe("VLAN interface name (alphanumeric, hyphens, underscores, max 15 chars)"),
-  vlanId: z.number().int().min(1).max(4094)
-    .describe("VLAN ID (1-4094)"),
-  parentInterface: z.string()
-    .describe("Parent interface name (e.g., ether1, bridge1)"),
-  mtu: z.number().int().min(68).max(9000).default(1500)
-    .describe("MTU size"),
-  disabled: z.boolean().default(false)
-    .describe("Whether the VLAN interface should be disabled"),
-  comment: z.string().max(255).optional()
-    .describe("Optional comment for the VLAN interface"),
-  dryRun: z.boolean().default(false)
-    .describe("If true, validate and return planned changes without applying"),
-}).strict();
+const createVlanInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    name: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]+$/)
+      .max(15)
+      .describe("VLAN interface name (alphanumeric, hyphens, underscores, max 15 chars)"),
+    vlanId: z.number().int().min(1).max(4094).describe("VLAN ID (1-4094)"),
+    parentInterface: z.string().describe("Parent interface name (e.g., ether1, bridge1)"),
+    mtu: z.number().int().min(68).max(9000).default(1500).describe("MTU size"),
+    disabled: z.boolean().default(false).describe("Whether the VLAN interface should be disabled"),
+    comment: z.string().max(255).optional().describe("Optional comment for the VLAN interface"),
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe("If true, validate and return planned changes without applying"),
+  })
+  .strict();
 
 function sanitizeComment(comment: string | undefined): string | undefined {
   if (comment === undefined) return undefined;
@@ -192,7 +211,10 @@ const createVlanTool: ToolDefinition = {
         const existingInterface = found.interface;
 
         // Same name, same config -> already exists
-        if (existingVlanId === String(parsed.vlanId) && existingInterface === parsed.parentInterface) {
+        if (
+          existingVlanId === String(parsed.vlanId) &&
+          existingInterface === parsed.parentInterface
+        ) {
           log.info({ name: parsed.name }, "VLAN already exists with matching config");
           return {
             content: `VLAN "${parsed.name}" already exists with VLAN ID ${parsed.vlanId} on ${parsed.parentInterface}. No changes made.`,

@@ -12,7 +12,13 @@ const listDnsInputSchema = z
     routerId: z.string().describe("Target router identifier from the router registry"),
     name: z.string().optional().describe("Filter by hostname (partial match)"),
     type: z.enum(["A", "CNAME", "TXT", "all"]).default("all").describe("Filter by record type"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum number of entries to return"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum number of entries to return"),
     offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
   })
   .strict();
@@ -39,9 +45,7 @@ const listDnsTool: ToolDefinition = {
       });
 
       if (parsed.type !== "all") {
-        entries = entries.filter(
-          (e) => (e as Record<string, string>).type === parsed.type,
-        );
+        entries = entries.filter((e) => (e as Record<string, string>).type === parsed.type);
       }
       if (parsed.name) {
         const needle = parsed.name.toLowerCase();
@@ -211,7 +215,12 @@ const manageDnsTool: ToolDefinition = {
       log.info({ name: parsed.name, type: parsed.type }, "DNS entry removed");
       return {
         content: `Removed DNS entry "${parsed.name}" (${parsed.type}).`,
-        structuredContent: { action: "removed", name: parsed.name, type: parsed.type, id: rec[".id"] },
+        structuredContent: {
+          action: "removed",
+          name: parsed.name,
+          type: parsed.type,
+          id: rec[".id"],
+        },
       };
     } catch (err) {
       if (err instanceof MikroMCPError) throw err;

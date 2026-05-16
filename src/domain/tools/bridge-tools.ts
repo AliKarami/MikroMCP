@@ -7,18 +7,31 @@ import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("bridge-tools");
 
-const listBridgesInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  limit: z.number().int().min(1).max(500).default(100).describe("Maximum number of bridges to return"),
-  offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
-}).strict();
+const listBridgesInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum number of bridges to return"),
+    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+  })
+  .strict();
 
 const listBridgesTool: ToolDefinition = {
   name: "list_bridges",
   title: "List Bridges",
   description: "List bridge interfaces and their port members on a MikroTik router.",
   inputSchema: listBridgesInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listBridgesInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Listing bridges");
@@ -48,13 +61,24 @@ const listBridgesTool: ToolDefinition = {
       const lines = [`Bridges on ${context.routerId}: ${total} total`];
       for (const b of paginated) {
         const bRec = b as Record<string, unknown>;
-        const portList = (b.ports as RouterOSRecord[]).map((p) => (p as Record<string, string>).interface).join(", ");
-        lines.push(`  ${String(bRec.name)} [${(b.ports as unknown[]).length} ports${portList ? ": " + portList : ""}]`);
+        const portList = (b.ports as RouterOSRecord[])
+          .map((p) => (p as Record<string, string>).interface)
+          .join(", ");
+        lines.push(
+          `  ${String(bRec.name)} [${(b.ports as unknown[]).length} ports${portList ? ": " + portList : ""}]`,
+        );
       }
 
       return {
         content: lines.join("\n"),
-        structuredContent: { routerId: context.routerId, bridges: paginated, total, hasMore, offset: parsed.offset, limit: parsed.limit },
+        structuredContent: {
+          routerId: context.routerId,
+          bridges: paginated,
+          total,
+          hasMore,
+          offset: parsed.offset,
+          limit: parsed.limit,
+        },
       };
     } catch (err) {
       throw enrichError(err, { routerId: context.routerId, tool: "list_bridges" });
@@ -62,24 +86,39 @@ const listBridgesTool: ToolDefinition = {
   },
 };
 
-const manageBridgeInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  action: z.enum(["create", "remove"]).describe("Action to perform"),
-  name: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(15).describe("Bridge interface name"),
-  comment: z.string().max(255).optional().describe("Optional comment"),
-  disabled: z.boolean().default(false).describe("Whether the bridge should be disabled"),
-  dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-}).strict();
+const manageBridgeInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z.enum(["create", "remove"]).describe("Action to perform"),
+    name: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]+$/)
+      .max(15)
+      .describe("Bridge interface name"),
+    comment: z.string().max(255).optional().describe("Optional comment"),
+    disabled: z.boolean().default(false).describe("Whether the bridge should be disabled"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
 
 const manageBridgeTool: ToolDefinition = {
   name: "manage_bridge",
   title: "Manage Bridge Interface",
-  description: "Create or remove a bridge interface on a MikroTik router. Idempotent: create returns already_exists if bridge with same name exists.",
+  description:
+    "Create or remove a bridge interface on a MikroTik router. Idempotent: create returns already_exists if bridge with same name exists.",
   inputSchema: manageBridgeInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageBridgeInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing bridge");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing bridge",
+    );
     try {
       const existing = await context.routerClient.get<RouterOSRecord>("interface/bridge", {
         filter: { name: parsed.name },
@@ -123,14 +162,20 @@ const manageBridgeTool: ToolDefinition = {
           code: "BRIDGE_NOT_FOUND",
           message: `Bridge "${parsed.name}" not found.`,
           details: { name: parsed.name },
-          recoverability: { retryable: false, suggestedAction: "Verify the bridge name exists on the router." },
+          recoverability: {
+            retryable: false,
+            suggestedAction: "Verify the bridge name exists on the router.",
+          },
         });
       }
       const rec = existing[0] as Record<string, string>;
       if (parsed.dryRun) {
         return {
           content: `Dry run: Would remove bridge "${parsed.name}".`,
-          structuredContent: { action: "dry_run", diff: [{ property: "name", before: parsed.name, after: null }] },
+          structuredContent: {
+            action: "dry_run",
+            diff: [{ property: "name", before: parsed.name, after: null }],
+          },
         };
       }
       await context.routerClient.remove("interface/bridge", rec[".id"]);
@@ -146,23 +191,39 @@ const manageBridgeTool: ToolDefinition = {
   },
 };
 
-const manageBridgePortInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  action: z.enum(["add", "remove"]).describe("Action to perform"),
-  bridge: z.string().describe("Bridge interface name"),
-  interface: z.string().describe("Interface to add or remove as a bridge port"),
-  dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-}).strict();
+const manageBridgePortInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z.enum(["add", "remove"]).describe("Action to perform"),
+    bridge: z.string().describe("Bridge interface name"),
+    interface: z.string().describe("Interface to add or remove as a bridge port"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
 
 const manageBridgePortTool: ToolDefinition = {
   name: "manage_bridge_port",
   title: "Manage Bridge Port",
-  description: "Add or remove an interface from a bridge on a MikroTik router. Idempotent: add returns already_exists if the port assignment already exists.",
+  description:
+    "Add or remove an interface from a bridge on a MikroTik router. Idempotent: add returns already_exists if the port assignment already exists.",
   inputSchema: manageBridgePortInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageBridgePortInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, bridge: parsed.bridge, interface: parsed.interface }, "Managing bridge port");
+    log.info(
+      {
+        routerId: context.routerId,
+        action: parsed.action,
+        bridge: parsed.bridge,
+        interface: parsed.interface,
+      },
+      "Managing bridge port",
+    );
     try {
       const existing = await context.routerClient.get<RouterOSRecord>("interface/bridge/port", {
         filter: { bridge: parsed.bridge, interface: parsed.interface },
@@ -204,21 +265,32 @@ const manageBridgePortTool: ToolDefinition = {
           code: "BRIDGE_PORT_NOT_FOUND",
           message: `Interface "${parsed.interface}" is not a port on bridge "${parsed.bridge}".`,
           details: { bridge: parsed.bridge, interface: parsed.interface },
-          recoverability: { retryable: false, suggestedAction: "Verify the interface is a member of the bridge." },
+          recoverability: {
+            retryable: false,
+            suggestedAction: "Verify the interface is a member of the bridge.",
+          },
         });
       }
       const rec = existing[0] as Record<string, string>;
       if (parsed.dryRun) {
         return {
           content: `Dry run: Would remove "${parsed.interface}" from bridge "${parsed.bridge}".`,
-          structuredContent: { action: "dry_run", diff: [{ property: "interface", before: parsed.interface, after: null }] },
+          structuredContent: {
+            action: "dry_run",
+            diff: [{ property: "interface", before: parsed.interface, after: null }],
+          },
         };
       }
       await context.routerClient.remove("interface/bridge/port", rec[".id"]);
       log.info({ bridge: parsed.bridge, interface: parsed.interface }, "Bridge port removed");
       return {
         content: `Removed "${parsed.interface}" from bridge "${parsed.bridge}".`,
-        structuredContent: { action: "removed", bridge: parsed.bridge, interface: parsed.interface, id: rec[".id"] },
+        structuredContent: {
+          action: "removed",
+          bridge: parsed.bridge,
+          interface: parsed.interface,
+          id: rec[".id"],
+        },
       };
     } catch (err) {
       if (err instanceof MikroMCPError) throw err;
@@ -227,4 +299,8 @@ const manageBridgePortTool: ToolDefinition = {
   },
 };
 
-export const bridgeTools: ToolDefinition[] = [listBridgesTool, manageBridgeTool, manageBridgePortTool];
+export const bridgeTools: ToolDefinition[] = [
+  listBridgesTool,
+  manageBridgeTool,
+  manageBridgePortTool,
+];

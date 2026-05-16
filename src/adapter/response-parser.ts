@@ -53,9 +53,7 @@ export function parseRouterOSValue(key: string, value: string): unknown {
 /**
  * Parse all values in a single RouterOS record.
  */
-export function parseRecord<T = Record<string, unknown>>(
-  raw: Record<string, string>,
-): T {
+export function parseRecord<T = Record<string, unknown>>(raw: Record<string, string>): T {
   const parsed: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(raw)) {
@@ -68,8 +66,6 @@ export function parseRecord<T = Record<string, unknown>>(
 /**
  * Parse an array of RouterOS records.
  */
-export function parseRecords<T = Record<string, unknown>>(
-  raw: Array<Record<string, string>>,
-): T[] {
+export function parseRecords<T = Record<string, unknown>>(raw: Array<Record<string, string>>): T[] {
   return raw.map((r) => parseRecord<T>(r));
 }

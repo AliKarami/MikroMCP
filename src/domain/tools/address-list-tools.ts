@@ -9,11 +9,13 @@ const log = createLogger("address-list-tools");
 
 const ADDRESS_LIST_PATH = "ip/firewall/address-list";
 
-const listAddressListInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  list: z.string().optional().describe("Filter by address list name"),
-  address: z.string().optional().describe("Filter by address (IP or CIDR)"),
-}).strict();
+const listAddressListInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    list: z.string().optional().describe("Filter by address list name"),
+    address: z.string().optional().describe("Filter by address (IP or CIDR)"),
+  })
+  .strict();
 
 const listAddressListTool: ToolDefinition = {
   name: "list_address_list_entries",
@@ -53,15 +55,17 @@ const listAddressListTool: ToolDefinition = {
   },
 };
 
-const manageAddressListInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  action: z.enum(["add", "remove"]).describe("Action to perform"),
-  list: z.string().describe("Address list name"),
-  address: z.string().describe("IP address or CIDR to add/remove"),
-  comment: z.string().optional().describe("Optional comment for the entry"),
-  timeout: z.string().optional().describe("Expiry timeout (e.g. 1d, 2h30m) — omit for permanent"),
-  dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-}).strict();
+const manageAddressListInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z.enum(["add", "remove"]).describe("Action to perform"),
+    list: z.string().describe("Address list name"),
+    address: z.string().describe("IP address or CIDR to add/remove"),
+    comment: z.string().optional().describe("Optional comment for the entry"),
+    timeout: z.string().optional().describe("Expiry timeout (e.g. 1d, 2h30m) — omit for permanent"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
 
 const manageAddressListTool: ToolDefinition = {
   name: "manage_address_list_entry",
@@ -77,7 +81,10 @@ const manageAddressListTool: ToolDefinition = {
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageAddressListInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, list: parsed.list }, "Managing address list entry");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, list: parsed.list },
+      "Managing address list entry",
+    );
 
     try {
       const existing = await context.routerClient.get<RouterOSRecord>(ADDRESS_LIST_PATH, {
@@ -98,7 +105,11 @@ const manageAddressListTool: ToolDefinition = {
         if (parsed.timeout !== undefined) body.timeout = parsed.timeout;
 
         if (parsed.dryRun) {
-          const diff = Object.entries(body).map(([property, after]) => ({ property, before: null, after }));
+          const diff = Object.entries(body).map(([property, after]) => ({
+            property,
+            before: null,
+            after,
+          }));
           return {
             content: `Dry run: Would add "${parsed.address}" to address list "${parsed.list}".`,
             structuredContent: { action: "dry_run", diff },
@@ -106,7 +117,10 @@ const manageAddressListTool: ToolDefinition = {
         }
 
         const created = await context.routerClient.create(ADDRESS_LIST_PATH, body);
-        log.info({ list: parsed.list, address: parsed.address, id: created[".id"] }, "Address list entry added");
+        log.info(
+          { list: parsed.list, address: parsed.address, id: created[".id"] },
+          "Address list entry added",
+        );
 
         return {
           content: `Added "${parsed.address}" to address list "${parsed.list}".`,
@@ -118,7 +132,11 @@ const manageAddressListTool: ToolDefinition = {
         if (!found) {
           return {
             content: `Address list entry "${parsed.address}" in list "${parsed.list}" does not exist. No changes made.`,
-            structuredContent: { action: "already_removed", list: parsed.list, address: parsed.address },
+            structuredContent: {
+              action: "already_removed",
+              list: parsed.list,
+              address: parsed.address,
+            },
           };
         }
 
@@ -127,7 +145,12 @@ const manageAddressListTool: ToolDefinition = {
         if (parsed.dryRun) {
           return {
             content: `Dry run: Would remove "${parsed.address}" from address list "${parsed.list}".`,
-            structuredContent: { action: "dry_run", id, list: parsed.list, address: parsed.address },
+            structuredContent: {
+              action: "dry_run",
+              id,
+              list: parsed.list,
+              address: parsed.address,
+            },
           };
         }
 

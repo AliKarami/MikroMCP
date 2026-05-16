@@ -36,10 +36,7 @@ export class RouterOSRestClient {
   private readonly authHeader: string;
   private readonly agent: Agent;
 
-  constructor(
-    config: RouterConfig,
-    credentials: { username: string; password: string },
-  ) {
+  constructor(config: RouterConfig, credentials: { username: string; password: string }) {
     const scheme = config.tls.enabled ? "https" : "http";
     this.baseUrl = `${scheme}://${config.host}:${config.port}/rest`;
 
@@ -57,10 +54,7 @@ export class RouterOSRestClient {
    * Applies filtering via GET query params or POST body depending on the
    * query complexity, then runs client-side pagination.
    */
-  async get<T = Record<string, unknown>>(
-    path: string,
-    options?: QueryOptions,
-  ): Promise<T[]> {
+  async get<T = Record<string, unknown>>(path: string, options?: QueryOptions): Promise<T[]> {
     const query = buildListQuery(options);
     let raw: Array<Record<string, string>>;
 
@@ -89,21 +83,17 @@ export class RouterOSRestClient {
 
   /** Fetch a single resource by its RouterOS `.id`. */
   async getOne<T = Record<string, unknown>>(path: string, id: string): Promise<T> {
-    const raw = (await this.doRequest(
-      "GET",
-      `${this.baseUrl}/${path}/${id}`,
-    )) as Record<string, string>;
+    const raw = (await this.doRequest("GET", `${this.baseUrl}/${path}/${id}`)) as Record<
+      string,
+      string
+    >;
 
     return parseRecord<T>(raw);
   }
 
   /** Create a new resource (PUT). Returns the created record including `.id`. */
   async create(path: string, data: Record<string, string>): Promise<RouterOSRecord> {
-    const raw = (await this.doRequest(
-      "PUT",
-      `${this.baseUrl}/${path}`,
-      data,
-    )) as RouterOSRecord;
+    const raw = (await this.doRequest("PUT", `${this.baseUrl}/${path}`, data)) as RouterOSRecord;
 
     return raw;
   }

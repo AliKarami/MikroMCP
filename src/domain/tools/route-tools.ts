@@ -16,17 +16,21 @@ const log = createLogger("route-tools");
 // list_routes
 // ---------------------------------------------------------------------------
 
-const listRoutesInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  activeOnly: z.boolean().default(false)
-    .describe("Return only active routes"),
-  staticOnly: z.boolean().default(false)
-    .describe("Return only non-dynamic routes"),
-  limit: z.number().int().min(1).max(500).default(100)
-    .describe("Maximum number of routes to return"),
-  offset: z.number().int().min(0).default(0)
-    .describe("Offset for pagination"),
-}).strict();
+const listRoutesInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    activeOnly: z.boolean().default(false).describe("Return only active routes"),
+    staticOnly: z.boolean().default(false).describe("Return only non-dynamic routes"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum number of routes to return"),
+    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+  })
+  .strict();
 
 const listRoutesTool: ToolDefinition = {
   name: "list_routes",
@@ -128,25 +132,27 @@ const listRoutesTool: ToolDefinition = {
 // manage_route
 // ---------------------------------------------------------------------------
 
-const manageRouteInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  action: z.enum(["add", "remove"])
-    .describe("Action to perform: add or remove a route"),
-  dstAddress: cidrSchema
-    .describe("Destination address in CIDR notation or plain IP (auto-converted to /32), e.g. 10.0.0.0/8 or 10.77.0.4"),
-  gateway: z.string()
-    .describe("Gateway IP address"),
-  distance: z.number().int().min(1).max(255).default(1)
-    .describe("Route distance/metric (1-255)"),
-  comment: z.string().max(255).optional()
-    .describe("Optional comment for the route"),
-  routingTable: z.string().optional()
-    .describe("Routing table name (default: main). Use for policy routing with separate tables."),
-  disabled: z.boolean().default(false)
-    .describe("Whether the route should be disabled"),
-  dryRun: z.boolean().default(false)
-    .describe("If true, validate and return planned changes without applying"),
-}).strict();
+const manageRouteInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z.enum(["add", "remove"]).describe("Action to perform: add or remove a route"),
+    dstAddress: cidrSchema.describe(
+      "Destination address in CIDR notation or plain IP (auto-converted to /32), e.g. 10.0.0.0/8 or 10.77.0.4",
+    ),
+    gateway: z.string().describe("Gateway IP address"),
+    distance: z.number().int().min(1).max(255).default(1).describe("Route distance/metric (1-255)"),
+    comment: z.string().max(255).optional().describe("Optional comment for the route"),
+    routingTable: z
+      .string()
+      .optional()
+      .describe("Routing table name (default: main). Use for policy routing with separate tables."),
+    disabled: z.boolean().default(false).describe("Whether the route should be disabled"),
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe("If true, validate and return planned changes without applying"),
+  })
+  .strict();
 
 function sanitizeComment(comment: string | undefined): string | undefined {
   if (comment === undefined) return undefined;
@@ -186,12 +192,22 @@ const manageRouteTool: ToolDefinition = {
     const comment = sanitizeComment(parsed.comment);
 
     log.info(
-      { routerId: context.routerId, action: parsed.action, dstAddress: parsed.dstAddress, gateway: parsed.gateway },
+      {
+        routerId: context.routerId,
+        action: parsed.action,
+        dstAddress: parsed.dstAddress,
+        gateway: parsed.gateway,
+      },
       "Managing route",
     );
 
     try {
-      const existing = await findExisting(context, parsed.dstAddress, parsed.gateway, parsed.routingTable);
+      const existing = await findExisting(
+        context,
+        parsed.dstAddress,
+        parsed.gateway,
+        parsed.routingTable,
+      );
 
       // -----------------------------------------------------------------------
       // ADD
@@ -224,7 +240,8 @@ const manageRouteTool: ToolDefinition = {
             },
             recoverability: {
               retryable: false,
-              suggestedAction: "Remove the existing route first, or use manage_route with action=remove before re-adding.",
+              suggestedAction:
+                "Remove the existing route first, or use manage_route with action=remove before re-adding.",
               alternativeTools: ["manage_route with action=remove"],
             },
           });
@@ -237,7 +254,9 @@ const manageRouteTool: ToolDefinition = {
             { property: "gateway", before: null, after: parsed.gateway },
             { property: "distance", before: null, after: String(parsed.distance) },
             { property: "disabled", before: null, after: parsed.disabled ? "true" : "false" },
-            ...(parsed.routingTable ? [{ property: "routing-table", before: null, after: parsed.routingTable }] : []),
+            ...(parsed.routingTable
+              ? [{ property: "routing-table", before: null, after: parsed.routingTable }]
+              : []),
             ...(comment ? [{ property: "comment", before: null, after: comment }] : []),
           ];
 
@@ -259,7 +278,10 @@ const manageRouteTool: ToolDefinition = {
 
         const created = await context.routerClient.create("ip/route", body);
 
-        log.info({ dstAddress: parsed.dstAddress, gateway: parsed.gateway, id: created[".id"] }, "Route added");
+        log.info(
+          { dstAddress: parsed.dstAddress, gateway: parsed.gateway, id: created[".id"] },
+          "Route added",
+        );
 
         return {
           content: `Added route ${parsed.dstAddress} via ${parsed.gateway}.`,
@@ -307,7 +329,12 @@ const manageRouteTool: ToolDefinition = {
 
         return {
           content: `Removed route ${parsed.dstAddress} via ${parsed.gateway}.`,
-          structuredContent: { action: "removed", id, dstAddress: parsed.dstAddress, gateway: parsed.gateway },
+          structuredContent: {
+            action: "removed",
+            id,
+            dstAddress: parsed.dstAddress,
+            gateway: parsed.gateway,
+          },
         };
       }
 

@@ -84,16 +84,19 @@ const manageScriptTool: ToolDefinition = {
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageScriptInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing script");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing script",
+    );
 
     try {
       const all = await context.routerClient.get<RouterOSRecord>(SCRIPT_PATH, {
         limit: undefined,
         offset: undefined,
       });
-      const existing = all.find(
-        (s) => (s as Record<string, string>).name === parsed.name,
-      ) as Record<string, string> | undefined;
+      const existing = all.find((s) => (s as Record<string, string>).name === parsed.name) as
+        | Record<string, string>
+        | undefined;
 
       if (parsed.action === "add") {
         if (parsed.source === undefined) {
@@ -101,7 +104,10 @@ const manageScriptTool: ToolDefinition = {
             category: ErrorCategory.VALIDATION,
             code: "SOURCE_REQUIRED",
             message: "source is required when action is add",
-            recoverability: { retryable: false, suggestedAction: "Provide the script body in the source field." },
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Provide the script body in the source field.",
+            },
           });
         }
 
@@ -113,7 +119,8 @@ const manageScriptTool: ToolDefinition = {
             details: { existing: { name: existing.name, ".id": existing[".id"] } },
             recoverability: {
               retryable: false,
-              suggestedAction: "Use action=update to change the source, or action=remove then re-add.",
+              suggestedAction:
+                "Use action=update to change the source, or action=remove then re-add.",
               alternativeTools: ["manage_script with action=update"],
             },
           });
@@ -125,7 +132,11 @@ const manageScriptTool: ToolDefinition = {
           body["dont-require-permissions"] = parsed.dontRequirePermissions ? "yes" : "no";
 
         if (parsed.dryRun) {
-          const diff = Object.entries(body).map(([property, after]) => ({ property, before: null, after }));
+          const diff = Object.entries(body).map(([property, after]) => ({
+            property,
+            before: null,
+            after,
+          }));
           return {
             content: `Dry run: Would add script "${parsed.name}".`,
             structuredContent: { action: "dry_run", diff },
@@ -248,9 +259,9 @@ const runScriptTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const script = all.find(
-        (s) => (s as Record<string, string>).name === parsed.name,
-      ) as Record<string, string> | undefined;
+      const script = all.find((s) => (s as Record<string, string>).name === parsed.name) as
+        | Record<string, string>
+        | undefined;
 
       if (!script) {
         throw new MikroMCPError({

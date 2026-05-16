@@ -7,10 +7,15 @@ import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("routing-protocol-tools");
 
-const listBgpPeersInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  state: z.string().optional().describe("Filter by session state (e.g. established, active, idle)"),
-}).strict();
+const listBgpPeersInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    state: z
+      .string()
+      .optional()
+      .describe("Filter by session state (e.g. established, active, idle)"),
+  })
+  .strict();
 
 const listBgpPeersTool: ToolDefinition = {
   name: "list_bgp_peers",
@@ -35,9 +40,7 @@ const listBgpPeersTool: ToolDefinition = {
       });
 
       if (parsed.state !== undefined) {
-        sessions = sessions.filter(
-          (s) => (s as Record<string, string>).state === parsed.state,
-        );
+        sessions = sessions.filter((s) => (s as Record<string, string>).state === parsed.state);
       }
 
       return {
@@ -51,10 +54,12 @@ const listBgpPeersTool: ToolDefinition = {
   },
 };
 
-const listOspfNeighborsInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  state: z.string().optional().describe("Filter by neighbor state (e.g. full, 2-way, init)"),
-}).strict();
+const listOspfNeighborsInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    state: z.string().optional().describe("Filter by neighbor state (e.g. full, 2-way, init)"),
+  })
+  .strict();
 
 const listOspfNeighborsTool: ToolDefinition = {
   name: "list_ospf_neighbors",
@@ -79,9 +84,7 @@ const listOspfNeighborsTool: ToolDefinition = {
       });
 
       if (parsed.state !== undefined) {
-        neighbors = neighbors.filter(
-          (n) => (n as Record<string, string>).state === parsed.state,
-        );
+        neighbors = neighbors.filter((n) => (n as Record<string, string>).state === parsed.state);
       }
 
       return {

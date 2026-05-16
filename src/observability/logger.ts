@@ -19,7 +19,10 @@ const transport: pino.TransportSingleOptions | undefined = isDevelopment
 
 // Always write to stderr (fd 2) -- stdout is reserved for MCP stdio transport
 const rootLogger: pino.Logger = transport
-  ? pino(baseOptions, pino.transport({ ...transport, options: { ...transport.options, destination: 2 } }))
+  ? pino(
+      baseOptions,
+      pino.transport({ ...transport, options: { ...transport.options, destination: 2 } }),
+    )
   : pino(baseOptions, pino.destination(2));
 
 /**

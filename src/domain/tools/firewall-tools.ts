@@ -35,19 +35,31 @@ async function findRuleByComment(
 // list_firewall_rules
 // ---------------------------------------------------------------------------
 
-const listFirewallRulesInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  table: z.enum(["filter", "nat"]).default("filter")
-    .describe("Firewall table to query: filter or nat"),
-  chain: z.string().optional()
-    .describe("Filter rules by chain name (e.g. forward, input, srcnat)"),
-  disabled: z.enum(["true", "false", "all"]).default("all")
-    .describe("Filter by disabled state: true, false, or all"),
-  limit: z.number().int().min(1).max(500).default(100)
-    .describe("Maximum number of rules to return"),
-  offset: z.number().int().min(0).default(0)
-    .describe("Offset for pagination"),
-}).strict();
+const listFirewallRulesInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    table: z
+      .enum(["filter", "nat"])
+      .default("filter")
+      .describe("Firewall table to query: filter or nat"),
+    chain: z
+      .string()
+      .optional()
+      .describe("Filter rules by chain name (e.g. forward, input, srcnat)"),
+    disabled: z
+      .enum(["true", "false", "all"])
+      .default("all")
+      .describe("Filter by disabled state: true, false, or all"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum number of rules to return"),
+    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+  })
+  .strict();
 
 const listFirewallRulesTool: ToolDefinition = {
   name: "list_firewall_rules",
@@ -65,7 +77,12 @@ const listFirewallRulesTool: ToolDefinition = {
     const parsed = listFirewallRulesInputSchema.parse(params);
 
     log.info(
-      { routerId: context.routerId, table: parsed.table, chain: parsed.chain, disabled: parsed.disabled },
+      {
+        routerId: context.routerId,
+        table: parsed.table,
+        chain: parsed.chain,
+        disabled: parsed.disabled,
+      },
       "Listing firewall rules",
     );
 
@@ -156,31 +173,41 @@ const listFirewallRulesTool: ToolDefinition = {
 // manage_firewall_rule
 // ---------------------------------------------------------------------------
 
-const manageFirewallRuleInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  table: z.enum(["filter", "nat"]).default("filter")
-    .describe("Firewall table to manage: filter or nat"),
-  action: z.enum(["add", "remove", "disable", "enable"])
-    .describe("Action to perform: add, remove, disable, or enable a firewall rule"),
-  chain: z.string().describe("Firewall chain (e.g. forward, input, output, srcnat, dstnat)"),
-  ruleAction: z.string().describe("RouterOS rule action (e.g. accept, drop, reject, masquerade)"),
-  srcAddress: z.string().optional().describe("Source address or network"),
-  dstAddress: z.string().optional().describe("Destination address or network"),
-  protocol: z.enum(["tcp", "udp", "icmp", "gre", "ospf", "all"]).optional()
-    .describe("Protocol to match"),
-  srcPort: z.string().optional().describe("Source port or range"),
-  dstPort: z.string().optional().describe("Destination port or range"),
-  inInterface: z.string().optional().describe("Incoming interface"),
-  outInterface: z.string().optional().describe("Outgoing interface"),
-  comment: z.string().max(255).optional()
-    .describe("Comment to identify the rule (used as idempotency key)"),
-  disabled: z.boolean().default(false)
-    .describe("Whether the rule should be disabled"),
-  placeBefore: z.string().optional()
-    .describe("Place the new rule before this rule ID"),
-  dryRun: z.boolean().default(false)
-    .describe("If true, validate and return planned changes without applying"),
-}).strict();
+const manageFirewallRuleInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    table: z
+      .enum(["filter", "nat"])
+      .default("filter")
+      .describe("Firewall table to manage: filter or nat"),
+    action: z
+      .enum(["add", "remove", "disable", "enable"])
+      .describe("Action to perform: add, remove, disable, or enable a firewall rule"),
+    chain: z.string().describe("Firewall chain (e.g. forward, input, output, srcnat, dstnat)"),
+    ruleAction: z.string().describe("RouterOS rule action (e.g. accept, drop, reject, masquerade)"),
+    srcAddress: z.string().optional().describe("Source address or network"),
+    dstAddress: z.string().optional().describe("Destination address or network"),
+    protocol: z
+      .enum(["tcp", "udp", "icmp", "gre", "ospf", "all"])
+      .optional()
+      .describe("Protocol to match"),
+    srcPort: z.string().optional().describe("Source port or range"),
+    dstPort: z.string().optional().describe("Destination port or range"),
+    inInterface: z.string().optional().describe("Incoming interface"),
+    outInterface: z.string().optional().describe("Outgoing interface"),
+    comment: z
+      .string()
+      .max(255)
+      .optional()
+      .describe("Comment to identify the rule (used as idempotency key)"),
+    disabled: z.boolean().default(false).describe("Whether the rule should be disabled"),
+    placeBefore: z.string().optional().describe("Place the new rule before this rule ID"),
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe("If true, validate and return planned changes without applying"),
+  })
+  .strict();
 
 const manageFirewallRuleTool: ToolDefinition = {
   name: "manage_firewall_rule",
@@ -199,7 +226,12 @@ const manageFirewallRuleTool: ToolDefinition = {
     const comment = sanitizeComment(parsed.comment);
 
     log.info(
-      { routerId: context.routerId, action: parsed.action, table: parsed.table, chain: parsed.chain },
+      {
+        routerId: context.routerId,
+        action: parsed.action,
+        table: parsed.table,
+        chain: parsed.chain,
+      },
       "Managing firewall rule",
     );
 
@@ -218,9 +250,17 @@ const manageFirewallRuleTool: ToolDefinition = {
             const sameSrcPort = (existing["src-port"] ?? "") === (parsed.srcPort ?? "");
             const sameDstPort = (existing["dst-port"] ?? "") === (parsed.dstPort ?? "");
             const sameInInterface = (existing["in-interface"] ?? "") === (parsed.inInterface ?? "");
-            const sameOutInterface = (existing["out-interface"] ?? "") === (parsed.outInterface ?? "");
+            const sameOutInterface =
+              (existing["out-interface"] ?? "") === (parsed.outInterface ?? "");
 
-            if (sameChain && sameRuleAction && sameSrcPort && sameDstPort && sameInInterface && sameOutInterface) {
+            if (
+              sameChain &&
+              sameRuleAction &&
+              sameSrcPort &&
+              sameDstPort &&
+              sameInInterface &&
+              sameOutInterface
+            ) {
               return {
                 content: `Firewall ${parsed.table} rule with comment "${comment}" already exists. No changes made.`,
                 structuredContent: { action: "already_exists", rule: existing },
@@ -251,7 +291,8 @@ const manageFirewallRuleTool: ToolDefinition = {
               },
               recoverability: {
                 retryable: false,
-                suggestedAction: "Remove the existing rule first, then re-add with the desired configuration.",
+                suggestedAction:
+                  "Remove the existing rule first, then re-add with the desired configuration.",
                 alternativeTools: ["manage_firewall_rule with action=remove"],
               },
             });
@@ -267,7 +308,8 @@ const manageFirewallRuleTool: ToolDefinition = {
         if (comment !== undefined) body.comment = comment;
         if (parsed.srcAddress !== undefined) body["src-address"] = parsed.srcAddress;
         if (parsed.dstAddress !== undefined) body["dst-address"] = parsed.dstAddress;
-        if (parsed.protocol !== undefined && parsed.protocol !== "all") body.protocol = parsed.protocol;
+        if (parsed.protocol !== undefined && parsed.protocol !== "all")
+          body.protocol = parsed.protocol;
         if (parsed.srcPort !== undefined) body["src-port"] = parsed.srcPort;
         if (parsed.dstPort !== undefined) body["dst-port"] = parsed.dstPort;
         if (parsed.inInterface !== undefined) body["in-interface"] = parsed.inInterface;
@@ -275,7 +317,11 @@ const manageFirewallRuleTool: ToolDefinition = {
         if (parsed.placeBefore !== undefined) body["place-before"] = parsed.placeBefore;
 
         if (parsed.dryRun) {
-          const diff = Object.entries(body).map(([property, after]) => ({ property, before: null, after }));
+          const diff = Object.entries(body).map(([property, after]) => ({
+            property,
+            before: null,
+            after,
+          }));
           return {
             content: `Dry run: Would add firewall ${parsed.table} rule in chain "${parsed.chain}" with action "${parsed.ruleAction}".`,
             structuredContent: { action: "dry_run", diff },
@@ -284,7 +330,10 @@ const manageFirewallRuleTool: ToolDefinition = {
 
         const created = await context.routerClient.create(path, body);
 
-        log.info({ chain: parsed.chain, ruleAction: parsed.ruleAction, id: created[".id"] }, "Firewall rule added");
+        log.info(
+          { chain: parsed.chain, ruleAction: parsed.ruleAction, id: created[".id"] },
+          "Firewall rule added",
+        );
 
         return {
           content: `Added firewall ${parsed.table} rule in chain "${parsed.chain}" with action "${parsed.ruleAction}".`,
@@ -303,7 +352,8 @@ const manageFirewallRuleTool: ToolDefinition = {
             message: "Removing a firewall rule requires a comment to identify it unambiguously.",
             recoverability: {
               retryable: false,
-              suggestedAction: "Provide a comment field that uniquely identifies the rule to remove.",
+              suggestedAction:
+                "Provide a comment field that uniquely identifies the rule to remove.",
             },
           });
         }
@@ -386,7 +436,9 @@ const manageFirewallRuleTool: ToolDefinition = {
         }
 
         if (parsed.dryRun) {
-          const diff = [{ property: "disabled", before: String(isDisabled), after: String(wantDisabled) }];
+          const diff = [
+            { property: "disabled", before: String(isDisabled), after: String(wantDisabled) },
+          ];
           return {
             content: `Dry run: Would ${parsed.action} firewall ${parsed.table} rule with comment "${comment}".`,
             structuredContent: { action: "dry_run", diff },

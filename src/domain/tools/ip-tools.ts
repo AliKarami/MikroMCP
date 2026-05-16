@@ -12,23 +12,28 @@ import { cidrSchema } from "./cidr.js";
 
 const log = createLogger("ip-tools");
 
-const inputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  action: z.enum(["add", "update", "remove"])
-    .describe("Action to perform: add, update, or remove an IP address"),
-  address: cidrSchema
-    .describe("IP address with optional prefix length in CIDR notation (e.g., 192.168.1.1/24). Defaults to /32 if prefix is omitted."),
-  interface: z.string()
-    .describe("Interface to assign the IP address to"),
-  network: z.string().optional()
-    .describe("Network address (auto-calculated from address if omitted)"),
-  comment: z.string().max(255).optional()
-    .describe("Optional comment for the IP address entry"),
-  disabled: z.boolean().default(false)
-    .describe("Whether the IP address should be disabled"),
-  dryRun: z.boolean().default(false)
-    .describe("If true, validate and return planned changes without applying"),
-}).strict();
+const inputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z
+      .enum(["add", "update", "remove"])
+      .describe("Action to perform: add, update, or remove an IP address"),
+    address: cidrSchema.describe(
+      "IP address with optional prefix length in CIDR notation (e.g., 192.168.1.1/24). Defaults to /32 if prefix is omitted.",
+    ),
+    interface: z.string().describe("Interface to assign the IP address to"),
+    network: z
+      .string()
+      .optional()
+      .describe("Network address (auto-calculated from address if omitted)"),
+    comment: z.string().max(255).optional().describe("Optional comment for the IP address entry"),
+    disabled: z.boolean().default(false).describe("Whether the IP address should be disabled"),
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe("If true, validate and return planned changes without applying"),
+  })
+  .strict();
 
 function sanitizeComment(comment: string | undefined): string | undefined {
   if (comment === undefined) return undefined;
@@ -66,7 +71,12 @@ const manageIpAddressTool: ToolDefinition = {
     const comment = sanitizeComment(parsed.comment);
 
     log.info(
-      { routerId: context.routerId, action: parsed.action, address: parsed.address, interface: parsed.interface },
+      {
+        routerId: context.routerId,
+        action: parsed.action,
+        address: parsed.address,
+        interface: parsed.interface,
+      },
       "Managing IP address",
     );
 
@@ -112,7 +122,8 @@ const manageIpAddressTool: ToolDefinition = {
             },
             recoverability: {
               retryable: false,
-              suggestedAction: "Use the 'update' action to modify the existing address, or remove it first.",
+              suggestedAction:
+                "Use the 'update' action to modify the existing address, or remove it first.",
               alternativeTools: ["manage_ip_address with action=update"],
             },
           });
@@ -125,7 +136,9 @@ const manageIpAddressTool: ToolDefinition = {
             { property: "interface", before: null, after: parsed.interface },
             { property: "disabled", before: null, after: parsed.disabled ? "true" : "false" },
             ...(comment ? [{ property: "comment", before: null, after: comment }] : []),
-            ...(parsed.network ? [{ property: "network", before: null, after: parsed.network }] : []),
+            ...(parsed.network
+              ? [{ property: "network", before: null, after: parsed.network }]
+              : []),
           ];
 
           return {
@@ -165,7 +178,8 @@ const manageIpAddressTool: ToolDefinition = {
             details: { address: parsed.address, interface: parsed.interface },
             recoverability: {
               retryable: false,
-              suggestedAction: "Verify the address and interface, or use 'add' action to create it.",
+              suggestedAction:
+                "Verify the address and interface, or use 'add' action to create it.",
               alternativeTools: ["manage_ip_address with action=add"],
             },
           });
@@ -256,7 +270,12 @@ const manageIpAddressTool: ToolDefinition = {
 
         return {
           content: `Removed IP address ${parsed.address} from ${parsed.interface}.`,
-          structuredContent: { action: "removed", id, address: parsed.address, interface: parsed.interface },
+          structuredContent: {
+            action: "removed",
+            id,
+            address: parsed.address,
+            interface: parsed.interface,
+          },
         };
       }
 

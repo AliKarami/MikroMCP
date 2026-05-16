@@ -18,12 +18,7 @@ const DEFAULTS: RetryOptions = {
 };
 
 /** Network error codes that warrant a retry. */
-const RETRYABLE_CODES = new Set([
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "ETIMEDOUT",
-  "ENOTFOUND",
-]);
+const RETRYABLE_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND"]);
 
 /**
  * Determine whether an error is safe to retry.

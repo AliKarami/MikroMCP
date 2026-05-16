@@ -2,6 +2,7 @@ node_modules/
 dist/
 data/
 config/routers.yaml
+config/identities.yaml
 *.log
 .env
 .env.*

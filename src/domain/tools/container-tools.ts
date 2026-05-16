@@ -18,8 +18,7 @@ const listContainersInputSchema = z
 const listContainersTool: ToolDefinition = {
   name: "list_containers",
   title: "List Containers",
-  description:
-    "List RouterOS container instances with status, image, and network information.",
+  description: "List RouterOS container instances with status, image, and network information.",
   inputSchema: listContainersInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -64,7 +63,10 @@ const manageContainerInputSchema = z
         "veth interface name to attach the container to (required on create — must be pre-configured in RouterOS)",
       ),
     rootDir: z.string().optional().describe("Root directory for container files"),
-    envlist: z.string().optional().describe("RouterOS environment list name for container env vars"),
+    envlist: z
+      .string()
+      .optional()
+      .describe("RouterOS environment list name for container env vars"),
     comment: z.string().optional().describe("Optional comment"),
     dryRun: z.boolean().default(false).describe("Preview changes without applying"),
   })
@@ -94,9 +96,9 @@ const manageContainerTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const existing = all.find(
-        (c) => (c as Record<string, string>).name === parsed.name,
-      ) as Record<string, string> | undefined;
+      const existing = all.find((c) => (c as Record<string, string>).name === parsed.name) as
+        | Record<string, string>
+        | undefined;
 
       if (parsed.action === "create") {
         if (parsed.remoteImage === undefined) {
@@ -106,7 +108,8 @@ const manageContainerTool: ToolDefinition = {
             message: "remoteImage is required when action is create",
             recoverability: {
               retryable: false,
-              suggestedAction: "Provide the Docker image name in the remoteImage field (e.g. alpine:latest).",
+              suggestedAction:
+                "Provide the Docker image name in the remoteImage field (e.g. alpine:latest).",
             },
           });
         }
@@ -129,7 +132,9 @@ const manageContainerTool: ToolDefinition = {
             category: ErrorCategory.CONFLICT,
             code: "CONTAINER_CONFLICT",
             message: `Container "${parsed.name}" already exists.`,
-            details: { existing: { name: existing.name, ".id": existing[".id"], status: existing.status } },
+            details: {
+              existing: { name: existing.name, ".id": existing[".id"], status: existing.status },
+            },
             recoverability: {
               retryable: false,
               suggestedAction:
@@ -149,7 +154,11 @@ const manageContainerTool: ToolDefinition = {
         if (parsed.comment !== undefined) body.comment = parsed.comment;
 
         if (parsed.dryRun) {
-          const diff = Object.entries(body).map(([property, after]) => ({ property, before: null, after }));
+          const diff = Object.entries(body).map(([property, after]) => ({
+            property,
+            before: null,
+            after,
+          }));
           return {
             content: `Dry run: Would create container "${parsed.name}" with image "${parsed.remoteImage}".`,
             structuredContent: { action: "dry_run", diff },
@@ -166,7 +175,10 @@ const manageContainerTool: ToolDefinition = {
 
       const container = existing;
 
-      if (!container && (parsed.action === "start" || parsed.action === "stop" || parsed.action === "remove")) {
+      if (
+        !container &&
+        (parsed.action === "start" || parsed.action === "stop" || parsed.action === "remove")
+      ) {
         throw new MikroMCPError({
           category: ErrorCategory.NOT_FOUND,
           code: "CONTAINER_NOT_FOUND",

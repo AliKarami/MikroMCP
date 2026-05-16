@@ -7,18 +7,31 @@ import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("wireguard-tools");
 
-const listWgInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  limit: z.number().int().min(1).max(500).default(100).describe("Maximum number of interfaces to return"),
-  offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
-}).strict();
+const listWgInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum number of interfaces to return"),
+    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+  })
+  .strict();
 
 const listWgTool: ToolDefinition = {
   name: "list_wireguard_interfaces",
   title: "List WireGuard Interfaces",
   description: "List WireGuard interfaces and their status on a MikroTik router.",
   inputSchema: listWgInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listWgInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Listing WireGuard interfaces");
@@ -55,25 +68,43 @@ const listWgTool: ToolDefinition = {
   },
 };
 
-const listPeersInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  interface: z.string().optional().describe("Filter by WireGuard interface name"),
-  limit: z.number().int().min(1).max(500).default(100).describe("Maximum number of peers to return"),
-  offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
-}).strict();
+const listPeersInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    interface: z.string().optional().describe("Filter by WireGuard interface name"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(100)
+      .describe("Maximum number of peers to return"),
+    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+  })
+  .strict();
 
 const listPeersTool: ToolDefinition = {
   name: "list_wireguard_peers",
   title: "List WireGuard Peers",
   description: "List WireGuard peers with last handshake time and transfer statistics.",
   inputSchema: listPeersInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listPeersInputSchema.parse(params);
-    log.info({ routerId: context.routerId, interface: parsed.interface }, "Listing WireGuard peers");
+    log.info(
+      { routerId: context.routerId, interface: parsed.interface },
+      "Listing WireGuard peers",
+    );
     try {
       const filter = parsed.interface ? { interface: parsed.interface } : undefined;
-      const allPeers = await context.routerClient.get<RouterOSRecord>("interface/wireguard/peers", { filter });
+      const allPeers = await context.routerClient.get<RouterOSRecord>("interface/wireguard/peers", {
+        filter,
+      });
 
       const total = allPeers.length;
       const peers = allPeers.slice(parsed.offset, parsed.offset + parsed.limit);
@@ -83,7 +114,9 @@ const listPeersTool: ToolDefinition = {
       for (const peer of peers) {
         const rec = peer as Record<string, string>;
         const key = rec["public-key"] ? rec["public-key"].slice(0, 8) + "…" : "unknown";
-        lines.push(`  [${rec.interface ?? "?"}] ${key} last-handshake=${rec["last-handshake"] ?? "never"}`);
+        lines.push(
+          `  [${rec.interface ?? "?"}] ${key} last-handshake=${rec["last-handshake"] ?? "never"}`,
+        );
       }
 
       return {
@@ -103,16 +136,21 @@ const listPeersTool: ToolDefinition = {
   },
 };
 
-const managePeerInputSchema = z.object({
-  routerId: z.string().describe("Target router identifier from the router registry"),
-  action: z.enum(["add", "remove"]).describe("Action to perform"),
-  interface: z.string().describe("WireGuard interface name (e.g. wg0)"),
-  publicKey: z.string().min(1).describe("Peer public key in base64 format (44 characters)"),
-  allowedAddress: z.string().optional().describe("Allowed IP address/CIDR for this peer (e.g. 10.0.0.2/32)"),
-  endpoint: z.string().optional().describe("Peer endpoint as IP:port (e.g. 1.2.3.4:51820)"),
-  comment: z.string().max(255).optional().describe("Optional comment"),
-  dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-}).strict();
+const managePeerInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z.enum(["add", "remove"]).describe("Action to perform"),
+    interface: z.string().describe("WireGuard interface name (e.g. wg0)"),
+    publicKey: z.string().min(1).describe("Peer public key in base64 format (44 characters)"),
+    allowedAddress: z
+      .string()
+      .optional()
+      .describe("Allowed IP address/CIDR for this peer (e.g. 10.0.0.2/32)"),
+    endpoint: z.string().optional().describe("Peer endpoint as IP:port (e.g. 1.2.3.4:51820)"),
+    comment: z.string().max(255).optional().describe("Optional comment"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
 
 const managePeerTool: ToolDefinition = {
   name: "manage_wireguard_peer",
@@ -120,7 +158,12 @@ const managePeerTool: ToolDefinition = {
   description:
     "Add or remove a WireGuard peer. Idempotent by public key: add returns already_exists if a peer with the same public key already exists on the interface.",
   inputSchema: managePeerInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = managePeerInputSchema.parse(params);
     log.info(

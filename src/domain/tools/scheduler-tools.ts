@@ -56,9 +56,7 @@ const listScheduledJobsTool: ToolDefinition = {
 const manageScheduledJobInputSchema = z
   .object({
     routerId: z.string().describe("Target router identifier from the router registry"),
-    action: z
-      .enum(["add", "update", "remove", "enable", "disable"])
-      .describe("Action to perform"),
+    action: z.enum(["add", "update", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z.string().describe("Job name — idempotency key"),
     onEvent: z
       .string()
@@ -96,9 +94,9 @@ const manageScheduledJobTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const existing = all.find(
-        (j) => (j as Record<string, string>).name === parsed.name,
-      ) as Record<string, string> | undefined;
+      const existing = all.find((j) => (j as Record<string, string>).name === parsed.name) as
+        | Record<string, string>
+        | undefined;
 
       if (parsed.action === "add") {
         if (parsed.onEvent === undefined) {

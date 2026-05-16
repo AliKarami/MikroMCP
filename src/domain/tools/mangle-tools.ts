@@ -89,9 +89,7 @@ const manageMangleRuleInputSchema = z
     chain: z
       .string()
       .optional()
-      .describe(
-        "Mangle chain (required on add): prerouting, input, forward, output, postrouting",
-      ),
+      .describe("Mangle chain (required on add): prerouting, input, forward, output, postrouting"),
     dryRun: z.boolean().default(false).describe("Preview changes without applying"),
     srcAddress: z.string().optional().describe("Source IP/CIDR to match"),
     dstAddress: z.string().optional().describe("Destination IP/CIDR to match"),
@@ -105,10 +103,7 @@ const manageMangleRuleInputSchema = z
     newRoutingMark: z.string().optional().describe("Routing mark to set"),
     newConnectionMark: z.string().optional().describe("Connection mark to set"),
     newDscpValue: z.number().int().min(0).max(63).optional().describe("DSCP value to set (0–63)"),
-    passthrough: z
-      .boolean()
-      .optional()
-      .describe("Whether to continue matching subsequent rules"),
+    passthrough: z.boolean().optional().describe("Whether to continue matching subsequent rules"),
   })
   .strict();
 
