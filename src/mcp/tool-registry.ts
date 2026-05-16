@@ -105,8 +105,9 @@ export function registerAllTools(
               circuitBreakers.set(routerId, cb);
             }
 
+            const { confirmationToken: _ct, ...handlerArgs } = args;
             const runHandler = () =>
-              tool.handler(args, {
+              tool.handler(handlerArgs, {
                 routerClient: client,
                 routerId,
                 correlationId,
