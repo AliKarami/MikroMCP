@@ -19,6 +19,7 @@ import { checkAuthz } from "../middleware/authz.js";
 import { checkConfirmation } from "../middleware/confirmation.js";
 import { auditLog } from "../observability/audit-log.js";
 import { createSshClient, createFtpClient } from "../adapter/adapter-factory.js";
+import { isWithinMaintenanceWindow } from "../config/maintenance-window.js";
 import { takeSnapshot } from "../domain/snapshot/snapshot-engine.js";
 import { recordAttempt, recordOutcome } from "../domain/snapshot/write-journal.js";
 
@@ -74,6 +75,24 @@ export function registerAllTools(
 
             checkAuthz(identity, tool.name, routerId);
 
+            const routerConfig = registry.getRouter(routerId);
+
+            if (tool.annotations.destructiveHint) {
+              const windows = routerConfig.maintenanceWindows;
+              if (windows && windows.length > 0 && !isWithinMaintenanceWindow(windows, new Date())) {
+                throw new MikroMCPError({
+                  category: ErrorCategory.PERMISSION_DENIED,
+                  code: "OUTSIDE_MAINTENANCE_WINDOW",
+                  message: `Router "${routerId}" has maintenance windows configured. Destructive operations are only permitted during scheduled windows.`,
+                  details: { maintenanceWindows: windows },
+                  recoverability: {
+                    retryable: true,
+                    suggestedAction: "Wait for a scheduled maintenance window, or remove maintenanceWindows from routers.yaml to allow unrestricted access.",
+                  },
+                });
+              }
+            }
+
             if (tool.annotations.destructiveHint && config.confirmationSecret) {
               await checkConfirmation(tool.name, routerId, args, identity, config.confirmationSecret);
             }
@@ -93,7 +112,6 @@ export function registerAllTools(
               });
             }
 
-            const routerConfig = registry.getRouter(routerId);
             const credentials = getCredentials(routerConfig);
             const client = pool.getClient(routerConfig, credentials);
             const sshClient = createSshClient(routerConfig, config.ssh);
