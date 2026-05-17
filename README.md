@@ -26,7 +26,7 @@ MikroMCP turns MikroTik RouterOS into a structured, typed, controlled tool surfa
 | Transports | stdio and HTTP/SSE |
 | Router support | MikroTik RouterOS 7.x with REST API enabled |
 | Runtime | Node.js 22+, TypeScript, ESM |
-| Tool count | 51 MCP tools |
+| Tool count | 54 MCP tools |
 | Safety model | Zod validation, idempotent writes, dry-run, circuit breaker, retries, typed errors |
 | Credential model | Router credentials come from environment variables, not YAML |
 | License | MIT |
@@ -61,7 +61,7 @@ flowchart LR
     end
 
     subgraph MikroMCP["MikroMCP Control Plane"]
-        Registry["Tool Registry<br/>51 typed MCP tools"]
+        Registry["Tool Registry<br/>54 typed MCP tools"]
         Schemas["Zod Schemas<br/>strict input validation"]
         Formatter["Dual Responses<br/>human text + JSON"]
     end
@@ -218,11 +218,11 @@ See [Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Con
 
 ## Available MCP Tools
 
-MikroMCP currently exposes **51 MCP tools** across day-to-day operations, diagnostics, security, routing, automation, files, and containers.
+MikroMCP currently exposes **54 MCP tools** across day-to-day operations, diagnostics, security, routing, automation, files, and containers.
 
 ```mermaid
 flowchart TB
-    Tools["51 MikroMCP Tools"]
+    Tools["54 MikroMCP Tools"]
 
     Tools --> Ops["Operations<br/>system, logs, scripts, scheduler"]
     Tools --> Network["Network Core<br/>interfaces, VLANs, IP, DHCP, DNS"]
@@ -264,6 +264,7 @@ flowchart TB
 | RouterOS scripts and scheduler | `list_scripts`, `manage_script`, `run_script`, `list_scheduled_jobs`, `manage_scheduled_job` |
 | Packages and files | `list_packages`, `manage_package`, `list_files`, `get_file_content`, `upload_file` |
 | Containers | `list_containers`, `manage_container` |
+| Change safety | `plan_changes`, `apply_plan`, `rollback_change` |
 | Escape hatch | `run_command` |
 
 Full parameter tables and example prompts are in [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools).
@@ -359,7 +360,7 @@ Project entry points:
 | [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration) | Router registry YAML, credentials, env vars, and HTTP transport |
 | [Running](https://github.com/AliKarami/MikroMCP/wiki/Running) | Development and production commands |
 | [Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-an-MCP-Client) | Claude Desktop, Claude Code, and other clients |
-| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 51 tools with parameters and example prompts |
+| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 54 tools with parameters and example prompts |
 | [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling) | Error categories, circuit breaker, and retry engine |
 | [Development](https://github.com/AliKarami/MikroMCP/wiki/Development) | Project structure, testing, and MCP Inspector usage |
 | [Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing) | Adding tools, style guide, and PR checklist |
@@ -369,7 +370,7 @@ Project entry points:
 
 - **v0.1-v0.6:** Foundation, routing, firewall, diagnostics, network services, policy routing, security hardening, automation, packages, files, and containers.
 - **v0.7 ✅:** HTTP bearer token auth, RBAC enforcement, dual-sink audit log, two-step confirmation gate, and credential surface reduction.
-- **v0.8:** Change safety, snapshots, diffs, write journal, plan/apply, and rollback.
+- **v0.8 ✅:** Change safety, snapshots, diffs, write journal, plan/apply, and rollback.
 - **v0.9:** Fleet operations, IPSec, certificates, users, queues, SNMP, Netwatch, NTP, and health checks.
 - **v1.0:** Prometheus metrics, CHR integration tests, npm/Docker/systemd distribution, `mikromcp doctor`, stability policy, and security documentation.
 

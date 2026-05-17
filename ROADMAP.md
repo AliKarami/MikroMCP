@@ -135,7 +135,7 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.8 — Change Safety & Rollback
+## ✅ v0.8 — Change Safety & Rollback
 
 **Goal:** Move "backup before write" and `plan/apply` here, where identity and audit already exist to make them meaningful.
 

@@ -20,8 +20,9 @@ import { schedulerTools } from "./scheduler-tools.js";
 import { packagesTools } from "./packages-tools.js";
 import { filesTools } from "./files-tools.js";
 import { containerTools } from "./container-tools.js";
+import { createChangeManagementTools } from "./change-management-tools.js";
 
-export const allTools: ToolDefinition[] = [
+const baseTools: ToolDefinition[] = [
   ...systemTools,
   ...interfaceTools,
   ...ipTools,
@@ -43,6 +44,11 @@ export const allTools: ToolDefinition[] = [
   ...packagesTools,
   ...filesTools,
   ...containerTools,
+];
+
+export const allTools: ToolDefinition[] = [
+  ...baseTools,
+  ...createChangeManagementTools(baseTools),
 ];
 
 export type {
