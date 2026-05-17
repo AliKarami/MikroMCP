@@ -19,6 +19,8 @@ import { checkAuthz } from "../middleware/authz.js";
 import { checkConfirmation } from "../middleware/confirmation.js";
 import { auditLog } from "../observability/audit-log.js";
 import { createSshClient, createFtpClient } from "../adapter/adapter-factory.js";
+import { takeSnapshot } from "../domain/snapshot/snapshot-engine.js";
+import { recordAttempt, recordOutcome } from "../domain/snapshot/write-journal.js";
 
 const log = createLogger("tool-registry");
 
@@ -52,6 +54,7 @@ export function registerAllTools(
 
         return withContext({ correlationId, tool: tool.name }, async () => {
           const startMs = Date.now();
+          let journalId: string | undefined;
 
           try {
             const routerId = args.routerId as string | undefined;
@@ -106,6 +109,32 @@ export function registerAllTools(
             }
 
             const { confirmationToken: _ct, ...handlerArgs } = args;
+
+            const snapshotIds: string[] = [];
+            if (tool.snapshotPaths && tool.snapshotPaths.length > 0 && !tool.annotations.readOnlyHint) {
+              for (const path of tool.snapshotPaths) {
+                try {
+                  const meta = await takeSnapshot(client, routerId, path, config.snapshotDir);
+                  snapshotIds.push(meta.id);
+                  log.debug({ snapshotId: meta.id, path }, "Snapshot taken");
+                } catch (err) {
+                  log.warn({ err, path, routerId }, "Snapshot failed — proceeding without snapshot");
+                }
+              }
+            }
+
+            if (!tool.annotations.readOnlyHint && config.journalPath) {
+              journalId = recordAttempt({
+                journalPath: config.journalPath,
+                identityId: identity.id,
+                role: identity.role,
+                tool: tool.name,
+                routerId,
+                params: handlerArgs,
+                snapshotIds,
+              });
+            }
+
             const runHandler = () =>
               tool.handler(handlerArgs, {
                 routerClient: client,
@@ -126,6 +155,15 @@ export function registerAllTools(
 
             const result = await executeHandler();
 
+            if (journalId) {
+              recordOutcome({
+                journalPath: config.journalPath!,
+                journalId,
+                phase: "success",
+                durationMs: Date.now() - startMs,
+              });
+            }
+
             if (shouldAudit) {
               auditLog({
                 type: "audit",
@@ -145,6 +183,16 @@ export function registerAllTools(
             return formatToolResult(result);
           } catch (err) {
             const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: tool.name });
+
+            if (journalId) {
+              recordOutcome({
+                journalPath: config.journalPath!,
+                journalId,
+                phase: "failure",
+                outcome: error.code,
+                durationMs: Date.now() - startMs,
+              });
+            }
 
             const shouldAudit = tool.annotations.destructiveHint || !tool.annotations.readOnlyHint;
             if (shouldAudit && error.category !== ErrorCategory.APPROVAL_REQUIRED) {
