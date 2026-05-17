@@ -66,6 +66,7 @@ const manageIpAddressTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["ip/address"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = inputSchema.parse(params);
     const comment = sanitizeComment(parsed.comment);

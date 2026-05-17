@@ -187,6 +187,7 @@ const manageRouteTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["ip/route"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageRouteInputSchema.parse(params);
     const comment = sanitizeComment(parsed.comment);

@@ -164,6 +164,7 @@ const managePeerTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["interface/wireguard/peers"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = managePeerInputSchema.parse(params);
     log.info(

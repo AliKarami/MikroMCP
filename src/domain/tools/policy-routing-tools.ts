@@ -115,6 +115,7 @@ const manageRoutingRuleTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["routing/rule"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageRoutingRuleInputSchema.parse(params);
     log.info(
@@ -342,6 +343,7 @@ const manageRoutingTableTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["routing/table"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageRoutingTableInputSchema.parse(params);
     log.info(

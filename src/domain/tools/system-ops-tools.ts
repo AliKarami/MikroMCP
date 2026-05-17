@@ -82,6 +82,7 @@ const setSystemClockTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["system/clock"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = setSystemClockInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Setting system clock");

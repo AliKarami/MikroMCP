@@ -79,6 +79,7 @@ const manageAddressListTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["ip/firewall/address-list"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageAddressListInputSchema.parse(params);
     log.info(

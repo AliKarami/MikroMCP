@@ -82,6 +82,7 @@ const manageScriptTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["system/script"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageScriptInputSchema.parse(params);
     log.info(

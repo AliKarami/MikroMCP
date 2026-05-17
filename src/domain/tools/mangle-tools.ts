@@ -119,6 +119,7 @@ const manageMangleRuleTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["ip/firewall/mangle"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageMangleRuleInputSchema.parse(params);
     log.info(

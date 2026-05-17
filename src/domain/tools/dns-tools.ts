@@ -110,6 +110,7 @@ const manageDnsTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["ip/dns/static"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageDnsInputSchema.parse(params);
     log.info(

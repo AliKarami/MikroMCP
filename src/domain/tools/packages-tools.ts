@@ -73,6 +73,7 @@ const managePackageTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["system/package"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = managePackageInputSchema.parse(params);
     log.info(

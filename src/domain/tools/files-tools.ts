@@ -145,6 +145,7 @@ const uploadFileTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["file"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = uploadFileInputSchema.parse(params);
     log.info({ routerId: context.routerId, name: parsed.name }, "Uploading file");

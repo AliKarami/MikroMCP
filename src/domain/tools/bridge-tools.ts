@@ -113,6 +113,7 @@ const manageBridgeTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["interface/bridge"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageBridgeInputSchema.parse(params);
     log.info(
@@ -213,6 +214,7 @@ const manageBridgePortTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["interface/bridge/port"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageBridgePortInputSchema.parse(params);
     log.info(

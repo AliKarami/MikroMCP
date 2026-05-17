@@ -84,6 +84,7 @@ const manageContainerTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["container"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageContainerInputSchema.parse(params);
     log.info(

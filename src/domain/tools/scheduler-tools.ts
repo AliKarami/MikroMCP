@@ -82,6 +82,7 @@ const manageScheduledJobTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["system/scheduler"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageScheduledJobInputSchema.parse(params);
     log.info(
