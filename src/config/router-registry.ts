@@ -31,6 +31,18 @@ const RouterConfigSchema = z
     sshFingerprint: z.string().optional(),
     cmdAllow: z.array(z.string()).optional(),
     cmdDeny: z.array(z.string()).optional(),
+    maintenanceWindows: z
+      .array(
+        z.object({
+          days: z.array(
+            z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
+          ),
+          startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM"),
+          endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM"),
+          timezone: z.string().min(1),
+        }).strict(),
+      )
+      .optional(),
   })
   .strict();
 

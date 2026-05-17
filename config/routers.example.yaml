@@ -47,6 +47,11 @@ routers:
     #   - "/ip/route/print*"
     # cmdDeny:                     # Additional deny patterns beyond builtins
     #   - "/tool/fetch*"
+    # maintenanceWindows:           # Destructive tools blocked outside these windows
+    #   - days: ["Sat", "Sun"]      # Days when maintenance is permitted
+    #     startTime: "02:00"        # 24-hour HH:MM in the specified timezone
+    #     endTime: "06:00"
+    #     timezone: "Europe/Helsinki"
 
   # edge-02:
   #   host: "192.168.1.1"
