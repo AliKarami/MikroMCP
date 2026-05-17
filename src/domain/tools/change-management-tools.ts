@@ -4,8 +4,9 @@ import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
-import { loadSnapshot } from "../snapshot/snapshot-engine.js";
+import { takeSnapshot, loadSnapshot } from "../snapshot/snapshot-engine.js";
 import { computeRestorePlan, applyRestorePlan } from "../snapshot/diff-engine.js";
+import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 import type { RouterOSRecord } from "../../types.js";
 
 const log = createLogger("change-management");
@@ -145,17 +146,51 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
       const parsed = applyPlanInputSchema.parse(params);
       log.info({ routerId: context.routerId, stepCount: parsed.steps.length }, "Applying plan");
 
+      const dataDir = process.env.MIKROMCP_DATA_DIR ?? "data";
+      const journalPath = `${dataDir}/write-journal.ndjson`;
+      const snapshotDir = `${dataDir}/snapshots`;
+
       const results = [];
 
       for (const [i, step] of parsed.steps.entries()) {
         const tool = requireTool(step.tool);
         const stepParams = { ...step.params, routerId: parsed.routerId };
 
+        const snapshotIds: string[] = [];
+        if (tool.snapshotPaths && tool.snapshotPaths.length > 0) {
+          for (const path of tool.snapshotPaths) {
+            try {
+              const meta = await takeSnapshot(context.routerClient, context.routerId, path, snapshotDir);
+              snapshotIds.push(meta.id);
+            } catch (err) {
+              log.warn({ err, path, routerId: context.routerId, step: i }, "apply_plan step snapshot failed — proceeding without snapshot");
+            }
+          }
+        }
+
+        const stepJournalId = recordAttempt({
+          journalPath,
+          identityId: context.identity.id,
+          role: context.identity.role,
+          tool: step.tool,
+          routerId: context.routerId,
+          params: stepParams,
+          snapshotIds,
+        });
+
         try {
           const result = await tool.handler(stepParams, context);
-          results.push({ stepIndex: i, tool: step.tool, status: "success", result: result.content });
+          recordOutcome({ journalPath, journalId: stepJournalId, phase: "success", durationMs: 0 });
+          results.push({
+            stepIndex: i,
+            tool: step.tool,
+            status: "success",
+            journalId: stepJournalId,
+            result: result.content,
+          });
         } catch (err) {
           const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: step.tool });
+          recordOutcome({ journalPath, journalId: stepJournalId, phase: "failure", outcome: error.code, durationMs: 0 });
           log.error({ err: error, tool: step.tool, step: i }, "apply_plan step failed");
           return {
             content: `Apply failed at step ${i + 1}/${parsed.steps.length} (${step.tool}): ${error.message}. ${i} step(s) completed before failure.`,
@@ -172,7 +207,12 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
 
       return {
         content: `Applied ${parsed.steps.length}/${parsed.steps.length} step(s) on ${parsed.routerId} successfully.`,
-        structuredContent: { status: "success", routerId: parsed.routerId, steps: results },
+        structuredContent: {
+          status: "success",
+          routerId: parsed.routerId,
+          steps: results,
+          note: "Each step has its own journalId — pass it to rollback_change to undo that step individually.",
+        },
       };
     },
   };
