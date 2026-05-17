@@ -73,3 +73,55 @@ describe("plan_changes", () => {
     ).toThrow();
   });
 });
+
+describe("apply_plan", () => {
+  it("is registered with destructiveHint=true", () => {
+    const tools = createChangeManagementTools([makeManageRoute("applied")]);
+    const tool = tools.find((t) => t.name === "apply_plan");
+    expect(tool).toBeDefined();
+    expect(tool!.annotations.destructiveHint).toBe(true);
+  });
+
+  it("calls each step handler in order", async () => {
+    const manageRoute = makeManageRoute("created");
+    const tools = createChangeManagementTools([manageRoute]);
+    const applyTool = tools.find((t) => t.name === "apply_plan")!;
+    const ctx = makeContext();
+
+    const result = await applyTool.handler(
+      { routerId: "edge-01", steps: [{ tool: "manage_route", params: { action: "add", dstAddress: "10.0.0.0/8", gateway: "192.168.1.1" } }] },
+      ctx,
+    );
+
+    expect(manageRoute.handler).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "add", routerId: "edge-01" }),
+      ctx,
+    );
+    expect(result.content).toContain("1/1");
+  });
+
+  it("stops on first failure and reports which step failed", async () => {
+    const failingTool: ToolDefinition = {
+      ...makeManageRoute(""),
+      handler: vi.fn().mockRejectedValue(new Error("Router unreachable")),
+    };
+    const tools = createChangeManagementTools([failingTool]);
+    const applyTool = tools.find((t) => t.name === "apply_plan")!;
+
+    const result = await applyTool.handler(
+      { routerId: "edge-01", steps: [{ tool: "manage_route", params: { action: "add" } }] },
+      makeContext(),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("step 1");
+  });
+
+  it("rejects extra fields in input schema", () => {
+    const tools = createChangeManagementTools([]);
+    const applyTool = tools.find((t) => t.name === "apply_plan")!;
+    expect(() =>
+      applyTool.inputSchema.parse({ routerId: "edge-01", steps: [], extra: true }),
+    ).toThrow();
+  });
+});

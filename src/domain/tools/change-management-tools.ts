@@ -124,5 +124,55 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     },
   };
 
-  return [planChangesTool];
+  const applyPlanTool: ToolDefinition = {
+    name: "apply_plan",
+    title: "Apply Plan",
+    description:
+      "Execute a sequence of write operations in order. Stops on the first failure. Each step is snapshotted and journaled individually. Requires a confirmationToken for non-admin identities (same two-step flow as other destructive tools). Use rollback_change with any resulting journal IDs to undo individual steps.",
+    inputSchema: applyPlanInputSchema,
+    snapshotPaths: [],
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+      const parsed = applyPlanInputSchema.parse(params);
+      log.info({ routerId: context.routerId, stepCount: parsed.steps.length }, "Applying plan");
+
+      const results = [];
+
+      for (const [i, step] of parsed.steps.entries()) {
+        const tool = requireTool(step.tool);
+        const stepParams = { ...step.params, routerId: parsed.routerId };
+
+        try {
+          const result = await tool.handler(stepParams, context);
+          results.push({ stepIndex: i, tool: step.tool, status: "success", result: result.content });
+        } catch (err) {
+          const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: step.tool });
+          log.error({ err: error, tool: step.tool, step: i }, "apply_plan step failed");
+          return {
+            content: `Apply failed at step ${i + 1}/${parsed.steps.length} (${step.tool}): ${error.message}. ${i} step(s) completed before failure.`,
+            structuredContent: {
+              status: "failed",
+              failedStep: i,
+              completedSteps: results,
+              error: { code: error.code, message: error.message },
+            },
+            isError: true,
+          };
+        }
+      }
+
+      return {
+        content: `Applied ${parsed.steps.length}/${parsed.steps.length} step(s) on ${parsed.routerId} successfully.`,
+        structuredContent: { status: "success", routerId: parsed.routerId, steps: results },
+      };
+    },
+  };
+
+  // rollback_change added in Task 12
+  return [planChangesTool, applyPlanTool];
 }
