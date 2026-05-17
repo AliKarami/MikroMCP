@@ -2,6 +2,13 @@
 // MikroMCP - Shared type definitions
 // ---------------------------------------------------------------------------
 
+export interface MaintenanceWindow {
+  days: Array<"Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun">;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}
+
 // Router configuration
 export interface RouterConfig {
   id: string;
@@ -24,6 +31,7 @@ export interface RouterConfig {
   sshFingerprint?: string;
   cmdAllow?: string[];
   cmdDeny?: string[];
+  maintenanceWindows?: MaintenanceWindow[];
 }
 
 // Identity (for RBAC - simplified for v0.1)
@@ -84,19 +92,34 @@ export interface PropertyChange {
   after: string | null;
 }
 
-export interface ConfigSnapshot {
+export interface SnapshotMeta {
   id: string;
   routerId: string;
-  capturedAt: string;
-  sections: Record<string, ConfigSection>;
+  path: string;
+  ts: string;
+  filePath: string;
+  recordCount: number;
 }
 
-export interface ConfigSection {
+export interface JournalEntry {
+  id: string;
+  ts: string;
+  identityId: string;
+  role: string;
+  tool: string;
+  routerId: string;
+  params: Record<string, unknown>;
+  phase: "attempt" | "success" | "failure";
+  snapshotIds: string[];
+  outcome?: string;
+  durationMs?: number;
+}
+
+export interface RestorePlan {
   path: string;
-  records: Array<{
-    routerOsId: string;
-    properties: Record<string, string>;
-  }>;
+  toCreate: RouterOSRecord[];
+  toRemove: string[];
+  toUpdate: Array<{ currentId: string; data: Record<string, string> }>;
 }
 
 export interface AuditEvent {

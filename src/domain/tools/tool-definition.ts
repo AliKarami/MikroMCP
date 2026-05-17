@@ -19,6 +19,7 @@ export interface ToolDefinition {
   inputSchema: z.ZodType;
   outputSchema?: z.ZodType;
   annotations: ToolAnnotations;
+  snapshotPaths?: string[];
   handler: (params: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>;
 }
 
