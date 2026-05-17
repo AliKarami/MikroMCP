@@ -11,6 +11,7 @@ afterEach(() => {
   delete process.env.MIKROMCP_STDIO_IDENTITY;
   delete process.env.MIKROMCP_CONFIRMATION_SECRET;
   delete process.env.MIKROMCP_AUDIT_LOG_PATH;
+  delete process.env.MIKROMCP_DATA_DIR;
 });
 
 describe("loadAppConfig", () => {
@@ -98,6 +99,26 @@ describe("loadAppConfig", () => {
     it("reads MIKROMCP_AUDIT_LOG_PATH", () => {
       process.env.MIKROMCP_AUDIT_LOG_PATH = "/var/log/mikromcp-audit.ndjson";
       expect(loadAppConfig().auditLogPath).toBe("/var/log/mikromcp-audit.ndjson");
+    });
+  });
+
+  describe("v0.8 snapshot/journal config", () => {
+    it("snapshotDir defaults to data/snapshots", () => {
+      expect(loadAppConfig().snapshotDir).toBe("data/snapshots");
+    });
+
+    it("journalPath defaults to data/write-journal.ndjson", () => {
+      expect(loadAppConfig().journalPath).toBe("data/write-journal.ndjson");
+    });
+
+    it("snapshotDir uses MIKROMCP_DATA_DIR as prefix", () => {
+      process.env.MIKROMCP_DATA_DIR = "/var/mikromcp";
+      expect(loadAppConfig().snapshotDir).toBe("/var/mikromcp/snapshots");
+    });
+
+    it("journalPath uses MIKROMCP_DATA_DIR as prefix", () => {
+      process.env.MIKROMCP_DATA_DIR = "/var/mikromcp";
+      expect(loadAppConfig().journalPath).toBe("/var/mikromcp/write-journal.ndjson");
     });
   });
 });

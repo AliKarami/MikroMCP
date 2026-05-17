@@ -5,6 +5,8 @@ export interface AppConfig {
   logLevel: string;
   configPath: string;
   dataDir: string;
+  snapshotDir: string;
+  journalPath: string;
   cmdAllow: string[];
   cmdDeny: string[];
   identitiesPath: string;
@@ -36,6 +38,7 @@ export interface AppConfig {
 
 export function loadAppConfig(): AppConfig {
   const env = process.env;
+  const dataDir = env.MIKROMCP_DATA_DIR ?? "data";
 
   return {
     transport: env.MIKROMCP_TRANSPORT === "http" ? "http" : "stdio",
@@ -43,7 +46,9 @@ export function loadAppConfig(): AppConfig {
     bindHost: env.MIKROMCP_BIND_HOST ?? "127.0.0.1",
     logLevel: env.MIKROMCP_LOG_LEVEL ?? "info",
     configPath: env.MIKROMCP_CONFIG_PATH ?? "config/routers.yaml",
-    dataDir: env.MIKROMCP_DATA_DIR ?? "data",
+    dataDir,
+    snapshotDir: `${dataDir}/snapshots`,
+    journalPath: `${dataDir}/write-journal.ndjson`,
     cmdAllow: (env.MIKROMCP_CMD_ALLOW ?? "")
       .split(",")
       .map((s) => s.trim())
