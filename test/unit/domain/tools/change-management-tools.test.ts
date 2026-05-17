@@ -3,6 +3,13 @@ import { createChangeManagementTools } from "../../../../src/domain/tools/change
 import type { ToolDefinition, ToolContext } from "../../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../../src/adapter/rest-client.js";
 
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn(),
+  existsSync: vi.fn().mockReturnValue(true),
+}));
+
+import * as nodeFs from "node:fs";
+
 const ROUTE_RECORD = { ".id": "*1", "dst-address": "10.0.0.0/8", "gateway": "192.168.1.1", "routing-table": "main" };
 
 function makeManageRoute(dryRunResult: string): ToolDefinition {
@@ -123,5 +130,69 @@ describe("apply_plan", () => {
     expect(() =>
       applyTool.inputSchema.parse({ routerId: "edge-01", steps: [], extra: true }),
     ).toThrow();
+  });
+});
+
+describe("rollback_change", () => {
+  const JOURNAL_LINE_ATTEMPT = JSON.stringify({
+    id: "j-abc",
+    ts: "2026-05-17T10:00:00Z",
+    identityId: "alice",
+    role: "admin",
+    tool: "manage_route",
+    routerId: "edge-01",
+    params: { action: "add" },
+    snapshotIds: ["20260517-snap-1"],
+    phase: "attempt",
+  });
+  const JOURNAL_LINE_SUCCESS = JSON.stringify({
+    id: "j-abc",
+    ts: "2026-05-17T10:00:01Z",
+    phase: "success",
+    durationMs: 123,
+  });
+  const SNAPSHOT_CONTENT = JSON.stringify({
+    id: "20260517-snap-1",
+    routerId: "edge-01",
+    path: "ip/route",
+    ts: "2026-05-17T10:00:00Z",
+    records: [],
+  });
+
+  it("is registered with destructiveHint=true", () => {
+    const tools = createChangeManagementTools([]);
+    const tool = tools.find((t) => t.name === "rollback_change");
+    expect(tool).toBeDefined();
+    expect(tool!.annotations.destructiveHint).toBe(true);
+  });
+
+  it("dryRun returns restore plan without applying", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce(`${JOURNAL_LINE_ATTEMPT}\n${JOURNAL_LINE_SUCCESS}\n`)
+      .mockReturnValueOnce(SNAPSHOT_CONTENT);
+
+    const tools = createChangeManagementTools([]);
+    const rollbackTool = tools.find((t) => t.name === "rollback_change")!;
+    const ctx = makeContext([ROUTE_RECORD]);
+
+    const result = await rollbackTool.handler(
+      { routerId: "edge-01", journalId: "j-abc", dryRun: true },
+      ctx,
+    );
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content).toContain("dry run");
+    const structured = result.structuredContent as Record<string, unknown>;
+    expect(structured.action).toBe("dry_run");
+  });
+
+  it("throws NOT_FOUND for unknown journalId", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce("");
+    const tools = createChangeManagementTools([]);
+    const rollbackTool = tools.find((t) => t.name === "rollback_change")!;
+
+    await expect(
+      rollbackTool.handler({ routerId: "edge-01", journalId: "missing-id", dryRun: false }, makeContext()),
+    ).rejects.toMatchObject({ code: "JOURNAL_ENTRY_NOT_FOUND" });
   });
 });

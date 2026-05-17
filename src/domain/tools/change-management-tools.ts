@@ -1,8 +1,12 @@
 import { z } from "zod";
+import { readFileSync } from "node:fs";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
+import { loadSnapshot } from "../snapshot/snapshot-engine.js";
+import { computeRestorePlan, applyRestorePlan } from "../snapshot/diff-engine.js";
+import type { RouterOSRecord } from "../../types.js";
 
 const log = createLogger("change-management");
 
@@ -173,6 +177,88 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     },
   };
 
-  // rollback_change added in Task 12
-  return [planChangesTool, applyPlanTool];
+  function findJournalEntry(journalPath: string, journalId: string): { snapshotIds: string[] } {
+    const raw = readFileSync(journalPath, "utf-8");
+    const lines = raw.split("\n").filter(Boolean);
+    const entry = lines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((e) => e.id === journalId && e.phase === "attempt");
+    if (!entry) {
+      throw new MikroMCPError({
+        category: ErrorCategory.NOT_FOUND,
+        code: "JOURNAL_ENTRY_NOT_FOUND",
+        message: `Journal entry "${journalId}" not found in write journal.`,
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "Check the journalId. Only writes recorded since MIKROMCP_JOURNAL_PATH was configured are available.",
+        },
+      });
+    }
+    return { snapshotIds: (entry.snapshotIds as string[]) ?? [] };
+  }
+
+  const rollbackChangeTool: ToolDefinition = {
+    name: "rollback_change",
+    title: "Rollback Change",
+    description:
+      "Restore the RouterOS state to what it was before a write, identified by its journal ID. Reads the before-snapshot from disk, computes the diff against live state, and applies the reverse diff. Use dryRun=true to preview the restore plan without applying. Requires MIKROMCP_DATA_DIR (or defaults to data/) to be configured.",
+    inputSchema: rollbackChangeInputSchema,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+      const parsed = rollbackChangeInputSchema.parse(params);
+      const dataDir = process.env.MIKROMCP_DATA_DIR ?? "data";
+      const journalPath = `${dataDir}/write-journal.ndjson`;
+      const snapshotDir = `${dataDir}/snapshots`;
+
+      log.info({ routerId: context.routerId, journalId: parsed.journalId }, "Rolling back change");
+
+      const { snapshotIds } = findJournalEntry(journalPath, parsed.journalId);
+
+      if (snapshotIds.length === 0) {
+        return {
+          content: `Journal entry "${parsed.journalId}" has no associated snapshots — cannot rollback automatically.`,
+          structuredContent: { action: "no_snapshot", journalId: parsed.journalId },
+        };
+      }
+
+      const restorePlans = [];
+
+      for (const snapshotId of snapshotIds) {
+        const filePath = `${snapshotDir}/${context.routerId}/${snapshotId}.json`;
+        const stored = loadSnapshot(filePath);
+        const current = await context.routerClient.get<RouterOSRecord>(stored.path, {});
+        const plan = computeRestorePlan(stored.path, stored.records, current);
+        restorePlans.push(plan);
+      }
+
+      const totalOps = restorePlans.reduce(
+        (sum, p) => sum + p.toCreate.length + p.toRemove.length + p.toUpdate.length,
+        0,
+      );
+
+      if (parsed.dryRun) {
+        return {
+          content: `Rollback dry run for journal entry "${parsed.journalId}": ${totalOps} operation(s) would be applied across ${restorePlans.length} path(s).`,
+          structuredContent: { action: "dry_run", journalId: parsed.journalId, restorePlans },
+        };
+      }
+
+      for (const plan of restorePlans) {
+        await applyRestorePlan(plan, context.routerClient);
+      }
+
+      return {
+        content: `Rolled back journal entry "${parsed.journalId}": ${totalOps} operation(s) applied across ${restorePlans.length} path(s).`,
+        structuredContent: { action: "rolled_back", journalId: parsed.journalId, restorePlans },
+      };
+    },
+  };
+
+  return [planChangesTool, applyPlanTool, rollbackChangeTool];
 }
