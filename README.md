@@ -1,174 +1,219 @@
-# MikroMCP: MikroTik RouterOS MCP Server for AI Network Automation
+# MikroMCP
 
-> Production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for MikroTik RouterOS. MikroMCP lets AI assistants such as Claude Desktop, Claude Code, Cursor, and other MCP clients safely inspect and manage MikroTik routers through the RouterOS REST API.
+<p align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js >= 22](https://img.shields.io/badge/Node.js-%3E%3D22-339933)](package.json)
+  <picture>
+
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/MikroMCP-logo-dark.png">
+
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/MikroMCP-logo-light.png">
+
+    <img alt="MikroMCP" src="docs/assets/MikroMCP-logo-dark.png" width="700">
+
+  </picture>
+
+</p>
+
+> **AI-native network automation for MikroTik RouterOS.** MikroMCP exposes RouterOS as a typed, auditable [Model Context Protocol](https://modelcontextprotocol.io) server so Claude, Cursor, Codex, and other MCP clients can inspect, diagnose, and safely operate MikroTik routers in natural language.
+
+[![CI](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/package-json/v/AliKarami/MikroMCP?label=version)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-339933)](package.json)
 [![RouterOS 7.x](https://img.shields.io/badge/RouterOS-7.x-293239)](https://help.mikrotik.com/docs/display/ROS/REST+API)
 [![MCP Server](https://img.shields.io/badge/MCP-server-6f42c1)](https://modelcontextprotocol.io)
+[![Tools](https://img.shields.io/badge/MCP%20tools-54-0f766e)](#available-tools)
 
-MikroMCP turns MikroTik RouterOS into a structured, typed, controlled tool surface for LLMs. Instead of asking an assistant to invent RouterOS CLI commands, you connect the assistant to MikroMCP and give it validated tools for reading system state, managing routes, updating firewall rules, checking DHCP leases, running diagnostics, handling WireGuard peers, managing scripts, and more.
+MikroMCP exists because raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas, idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC, audit logs, snapshots, and rollback-aware change workflows.
 
-## Why MikroMCP
+**In one sentence:** MikroMCP turns MikroTik RouterOS into a production-minded MCP control plane for AI infrastructure, DevOps automation, and modern router management.
 
-- **Built for MikroTik RouterOS:** Uses RouterOS 7.x REST API paths and RouterOS field conventions directly.
-- **Made for AI assistants:** Every tool has a Zod schema, descriptions for MCP clients, human-readable output, and structured JSON content.
-- **Safer than raw shell access:** Write tools validate input, support dry-run mode, and implement idempotency checks before changing router state.
-- **Production-minded behavior:** Per-router circuit breaker, retry engine for read-only tools, correlation IDs, structured logging, TLS fingerprint pinning, SSH fingerprint pinning, and HTTP hardening.
-- **Multi-router from day one:** A single server instance can manage a fleet through `config/routers.yaml` and per-router environment credentials.
 
-## Project Facts
+![AI assistant connected through MikroMCP to a small MikroTik fleet, with tool calls flowing through validation, audit, and RouterOS REST](docs/assets/mikromcp-hero.png)
 
-| Fact | Value |
-|---|---|
-| Primary topic | MikroTik MCP server, RouterOS AI assistant, network automation |
-| Protocols | Model Context Protocol, JSON-RPC 2.0, RouterOS REST API, SSH, FTP |
-| Transports | stdio and HTTP/SSE |
-| Router support | MikroTik RouterOS 7.x with REST API enabled |
-| Runtime | Node.js 22+, TypeScript, ESM |
-| Tool count | 54 MCP tools |
-| Safety model | Zod validation, idempotent writes, dry-run, circuit breaker, retries, typed errors |
-| Credential model | Router credentials come from environment variables, not YAML |
-| License | MIT |
+---
 
-Keywords: `mikrotik mcp server`, `routeros mcp`, `mikrotik ai assistant`, `routeros rest api`, `model context protocol`, `network automation`, `mcp network tools`, `mikrotik router management`.
+## Why It Matters
 
-## What You Can Ask an AI Assistant To Do
+| Instead of...                                | MikroMCP gives you...                                                                                          |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Hand-written RouterOS CLI snippets from chat | Typed MCP tools with strict Zod validation                                                                     |
+| Blind config changes                         | Dry-run previews, idempotency checks, snapshots, and rollback tooling                                          |
+| One-off scripts per router                   | A multi-router registry with per-router credentials, tags, TLS, SSH, and maintenance windows                   |
+| Raw network access for every assistant       | RBAC identities, bearer tokens for HTTP mode, tool allowlists, and audit trails                                |
+| Fragile troubleshooting workflows            | Router-originated ping, traceroute, torch, logs, interfaces, DHCP, firewall, routes, WiFi, WireGuard, and more |
 
-With MikroMCP connected to an MCP client, prompts can become safe, structured router operations:
+MikroMCP is especially useful when you want AI agents to help with network operations without giving them unchecked terminal access.
 
-- "Show CPU, memory, uptime, interfaces, and recent warning logs for core-01."
-- "List inactive DHCP leases and group them by server."
-- "Dry-run a static route to 10.20.0.0/16 through 192.168.88.1."
-- "Find disabled firewall NAT rules and explain what each one would do."
-- "Check WireGuard peer handshakes and flag stale peers."
-- "Ping 1.1.1.1 and traceroute to 8.8.8.8 from the router."
-- "Create a scheduled RouterOS script job, but show the dry-run first."
+---
+
+## Feature Showcase
+
+| Category                   | What MikroMCP covers                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 🧭 **Router management**   | System status, clock, reboot, packages, files, scripts, scheduler jobs, containers                    |
+| 🌐 **Network operations**  | Interfaces, VLANs, IP addresses, DHCP leases, DNS static records, bridge ports, WiFi clients          |
+| 🔥 **Firewall and policy** | Filter/NAT rules, mangle rules, address lists, route tables, routing rules                            |
+| 🛰️ **Routing visibility**  | Static routes, routing tables, BGP peers, OSPF neighbors                                              |
+| 🔐 **Secure access**       | HTTP bearer auth, bcrypt token hashes, RBAC, router/tool restrictions, confirmation tokens            |
+| 🧪 **Diagnostics**         | Router-originated `ping`, `traceroute`, `torch`, log filtering, guarded SSH command execution         |
+| 🛡️ **Change safety**       | Dry-run, idempotent writes, snapshots, write journal, `plan_changes`, `apply_plan`, `rollback_change` |
+| ⚙️ **Production behavior** | Retries for read tools, per-router circuit breakers, correlation IDs, structured logs, audit logs     |
+| 🤖 **AI-agent fit**        | Human-readable responses plus structured JSON content for reasoning, chaining, and automation         |
+| 🧩 **MCP compatibility**   | stdio for desktop clients, Streamable HTTP and legacy SSE for remote or service-style clients         |
+
+**Best-in-class strengths:** MikroMCP is not just a thin REST wrapper. It models operational safety around RouterOS: typed tool contracts, safe write patterns, router-aware credentials, destructive-action gates, and rollback-oriented workflows.
+
+---
+
+## Demo
+
+### Usage
+
+<p align="center">
+  <img src="docs/assets/demo-1.gif" width="900" />
+</p>
+
+### MCP Inspector
+![The 54 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
+---
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Workbench["AI Workbench"]
-        ClaudeDesktop["Claude Desktop"]
-        ClaudeCode["Claude Code"]
-        Cursor["Cursor / MCP clients"]
+    subgraph Clients["AI and MCP clients"]
+        Claude["Claude Desktop / Claude Code"]
+        Cursor["Cursor / Cline / IDE agents"]
+        Service["Custom MCP clients"]
     end
 
-    subgraph Transport["Transport Boundary"]
-        Stdio["stdio<br/>local JSON-RPC"]
-        Http["HTTP/SSE<br/>stateless JSON-RPC"]
+    subgraph Transport["MCP transport"]
+        Stdio["stdio JSON-RPC"]
+        Http["Streamable HTTP<br/>POST /mcp, GET /mcp"]
+        Sse["Legacy SSE<br/>GET /sse, POST /messages"]
     end
 
-    subgraph MikroMCP["MikroMCP Control Plane"]
-        Registry["Tool Registry<br/>54 typed MCP tools"]
-        Schemas["Zod Schemas<br/>strict input validation"]
-        Formatter["Dual Responses<br/>human text + JSON"]
+    subgraph Core["MikroMCP server"]
+        Registry["Tool registry<br/>54 typed tools"]
+        Schemas["Zod schemas<br/>strict validation"]
+        Auth["Identity, RBAC<br/>confirmation gate"]
+        Safety["Retry, circuit breaker<br/>audit, snapshots, journal"]
+        Format["Human text + structured JSON"]
     end
 
-    subgraph Safety["Safety and Reliability Layer"]
-        DryRun["Dry-run Preview"]
-        Idempotency["Idempotency Checks"]
-        Retry["Read Retry<br/>backoff + jitter"]
-        Breaker["Per-router<br/>Circuit Breaker"]
-        Errors["Typed Errors<br/>with recovery hints"]
+    subgraph Adapters["Router adapters"]
+        Rest["RouterOS REST<br/>HTTPS"]
+        Ssh["SSH adapter<br/>diagnostics and guarded commands"]
+        Ftp["FTP adapter<br/>file uploads"]
     end
 
-    subgraph Adapters["Router Access"]
-        Rest["RouterOS REST Client<br/>HTTPS"]
-        Ssh["SSH Tool Adapter<br/>diagnostics + commands"]
-        Ftp["FTP File Adapter<br/>uploads"]
+    subgraph Routers["MikroTik RouterOS 7.x fleet"]
+        CoreRouter["core-01"]
+        EdgeRouter["edge-01"]
+        BranchRouter["branch-*"]
     end
 
-    subgraph Fleet["MikroTik RouterOS 7.x Fleet"]
-        Core["core-01"]
-        Edge["edge-01"]
-        Branch["branch routers"]
-    end
-
-    ClaudeDesktop --> Stdio
-    ClaudeCode --> Stdio
-    Cursor --> Http
+    Claude --> Stdio
+    Cursor --> Stdio
+    Service --> Http
+    Service --> Sse
     Stdio --> Registry
-    Http --> Registry
-    Registry --> Schemas --> DryRun --> Idempotency --> Retry --> Breaker --> Rest
-    Registry --> Formatter
-    Breaker --> Ssh
-    Breaker --> Ftp
-    Rest --> Core
-    Rest --> Edge
-    Rest --> Branch
-    Ssh --> Core
-    Ftp --> Core
-    Errors -.-> Registry
-    Breaker -.-> Errors
-
-    classDef client fill:#eef6ff,stroke:#2563eb,color:#172554,stroke-width:1px;
-    classDef transport fill:#f8fafc,stroke:#64748b,color:#0f172a,stroke-width:1px;
-    classDef core fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1px;
-    classDef safety fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:1px;
-    classDef adapter fill:#faf5ff,stroke:#9333ea,color:#581c87,stroke-width:1px;
-    classDef router fill:#fefce8,stroke:#ca8a04,color:#713f12,stroke-width:1px;
-
-    class ClaudeDesktop,ClaudeCode,Cursor client;
-    class Stdio,Http transport;
-    class Registry,Schemas,Formatter core;
-    class DryRun,Idempotency,Retry,Breaker,Errors safety;
-    class Rest,Ssh,Ftp adapter;
-    class Core,Edge,Branch router;
+    Http --> Auth
+    Sse --> Auth
+    Auth --> Registry
+    Registry --> Schemas
+    Schemas --> Safety
+    Safety --> Rest
+    Safety --> Ssh
+    Safety --> Ftp
+    Rest --> CoreRouter
+    Rest --> EdgeRouter
+    Rest --> BranchRouter
+    Ssh --> CoreRouter
+    Ftp --> CoreRouter
+    Registry --> Format
 ```
 
-## Request Lifecycle
+### Tool Execution Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Operator as Human operator
-    participant Assistant as AI assistant
-    participant Client as MCP client
+    actor User as Operator
+    participant Agent as AI assistant
+    participant MCP as MCP client
     participant Server as MikroMCP
-    participant Registry as Tool registry
-    participant Router as RouterOS device
+    participant Router as RouterOS
 
-    Operator->>Assistant: Natural-language network task
-    Assistant->>Client: Selects a MikroMCP tool
-    Client->>Server: JSON-RPC tool call
-    Server->>Registry: Resolve router, credentials, schema, and handler
-    Registry->>Registry: Validate input and attach correlation ID
+    User->>Agent: "Audit firewall and stale WireGuard peers on core-01"
+    Agent->>MCP: Select MikroMCP tools
+    MCP->>Server: JSON-RPC tool call
+    Server->>Server: Authenticate identity and authorize router/tool
+    Server->>Server: Validate input schema and attach correlation ID
 
-    alt write tool with dryRun=true
-        Registry-->>Client: Preview planned change with structured diff
-    else read tool
-        Registry->>Router: RouterOS REST/SSH request with retry policy
-        Router-->>Registry: RouterOS records or command output
-        Registry-->>Client: Human summary + structured JSON
-    else write tool
-        Registry->>Router: Check existing state first
-        Router-->>Registry: Current RouterOS state
-        Registry->>Router: Apply only the required change
-        Registry-->>Client: Action result + structured JSON
+    alt read-only tool
+        Server->>Router: REST/SSH request with retry policy
+        Router-->>Server: RouterOS records
+    else write tool with dryRun
+        Server->>Router: Read existing state
+        Server-->>MCP: Planned diff, no mutation
+    else confirmed write tool
+        Server->>Router: Snapshot affected path
+        Server->>Router: Apply idempotent change
+        Server->>Server: Record write journal and audit outcome
     end
 
-    Client-->>Assistant: Tool result
-    Assistant-->>Operator: Explanation, findings, or next safe action
+    Server-->>MCP: Text summary + structured JSON
+    MCP-->>Agent: Tool result
+    Agent-->>User: Findings and next recommended action
 ```
+
+### Authentication And Safety Model
+
+```mermaid
+flowchart TD
+    Request["Incoming MCP request"] --> Transport{"Transport"}
+    Transport -->|stdio| StdioIdentity["Built-in superadmin<br/>or MIKROMCP_STDIO_IDENTITY"]
+    Transport -->|HTTP/SSE| Bearer["Authorization: Bearer token"]
+    Bearer --> TokenHash["bcrypt token verification<br/>config/identities.yaml"]
+    StdioIdentity --> RBAC["RBAC check"]
+    TokenHash --> RBAC
+    RBAC --> RouterScope["allowedRouters"]
+    RBAC --> ToolScope["allowedToolPatterns"]
+    RouterScope --> Destructive{"Destructive tool?"}
+    ToolScope --> Destructive
+    Destructive -->|no| Execute["Execute tool"]
+    Destructive -->|yes| Window["Maintenance window check"]
+    Window --> Confirm["Confirmation token gate<br/>for readonly/operator roles"]
+    Confirm --> Execute
+    Execute --> Audit["Structured logs + optional NDJSON audit log"]
+```
+
+---
 
 ## Quick Start
 
-**Requirements**
+### Prerequisites
 
 - Node.js 22 or newer
-- MikroTik RouterOS 7.x
-- RouterOS REST API enabled
-- RouterOS user with the policies needed by the tools you plan to use
+- MikroTik RouterOS 7.x with the REST API enabled
+- A RouterOS user with the policies required by the tools you plan to use
+- Git and npm
 
-**Required RouterOS user policies**
+Recommended RouterOS policies for full tool coverage:
 
-`read`, `write`, `api`, `rest-api`, `test`, `ssh`, `sniff`
+```text
+read, write, api, rest-api, test, ssh, sniff, ftp
+```
 
-`ssh` is needed by `ping`, `traceroute`, `torch`, and `run_command`, which execute via SSH because RouterOS 7.x REST permissions are limited for tool commands. `sniff` is additionally required by `torch` for packet-capture access.
+Notes:
 
-If you use `upload_file`, also grant the RouterOS `ftp` policy to the router user.
+- `ssh` is required for `ping`, `traceroute`, `torch`, and `run_command`.
+- `sniff` is required by `torch`.
+- `ftp` is required only for `upload_file`.
+
+### Install Locally
 
 ```bash
 git clone https://github.com/AliKarami/MikroMCP.git
@@ -176,21 +221,45 @@ cd MikroMCP
 npm install
 npm run build
 cp config/routers.example.yaml config/routers.yaml
+cp config/identities.example.yaml config/identities.yaml
 ```
 
-Edit `config/routers.yaml` with your router details, then provide credentials through environment variables:
+Edit `config/routers.yaml`:
+
+```yaml
+routers:
+  core-01:
+    host: "10.0.0.1"
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: true
+    credentials:
+      source: "env"
+      envPrefix: "ROUTER_CORE01"
+    tags: ["core", "production"]
+    rosVersion: "7.14"
+```
+
+Provide router credentials through environment variables:
 
 ```bash
-export ROUTER_CORE01_USER=mcp-api
-export ROUTER_CORE01_PASS=your-password
+export ROUTER_CORE01_USER="mcp-api"
+export ROUTER_CORE01_PASS="your-router-password"
 npm start
 ```
 
-For the full router setup, REST API enablement, and least-privilege user walkthrough, see the [Setup Guide](https://github.com/AliKarami/MikroMCP/wiki/Setup-Guide).
+### Docker
 
-## Connect Claude Desktop
+A Docker image is planned for the v1.0 distribution milestone. Today, run MikroMCP with the local Node.js workflow above or package it behind your own service manager.
 
-Add MikroMCP to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+---
+
+## Connect An MCP Client
+
+### Claude Desktop
+
+Add MikroMCP to `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS:
 
 ```json
 {
@@ -201,125 +270,209 @@ Add MikroMCP to `~/Library/Application Support/Claude/claude_desktop_config.json
       "env": {
         "MIKROMCP_CONFIG_PATH": "/absolute/path/to/MikroMCP/config/routers.yaml",
         "ROUTER_CORE01_USER": "mcp-api",
-        "ROUTER_CORE01_PASS": "your-password"
+        "ROUTER_CORE01_PASS": "your-router-password"
       }
     }
   }
 }
 ```
 
-MikroMCP also supports HTTP/SSE mode:
+Restart Claude Desktop, then ask:
 
-```bash
-MIKROMCP_TRANSPORT=http MIKROMCP_PORT=3000 npm start
+```text
+Use MikroMCP to show CPU, memory, uptime, active interfaces, and warning logs for core-01.
 ```
 
-See [Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-an-MCP-Client) for Claude Desktop, Claude Code, and other MCP clients.
+### HTTP / SSE Mode
 
-## Available MCP Tools
+HTTP mode is useful for service deployments and MCP clients that connect over a local or private network endpoint.
 
-MikroMCP currently exposes **54 MCP tools** across day-to-day operations, diagnostics, security, routing, automation, files, and containers.
+```bash
+export MIKROMCP_TRANSPORT=http
+export MIKROMCP_PORT=3000
+export MIKROMCP_BIND_HOST=127.0.0.1
+export MIKROMCP_CONFIRMATION_SECRET="$(openssl rand -hex 32)"
+export ROUTER_CORE01_USER="mcp-api"
+export ROUTER_CORE01_PASS="your-router-password"
+npm start
+```
+
+Every HTTP/SSE request must include:
+
+```text
+Authorization: Bearer <token>
+```
+
+Tokens are configured as bcrypt hashes in `config/identities.yaml`.
+
+---
+
+## Configuration Reference
+
+| Variable                          | Default                  | Purpose                                                |
+| --------------------------------- | ------------------------ | ------------------------------------------------------ |
+| `MIKROMCP_TRANSPORT`              | `stdio`                  | `stdio` or `http`                                      |
+| `MIKROMCP_CONFIG_PATH`            | `config/routers.yaml`    | Router registry path                                   |
+| `MIKROMCP_IDENTITIES_PATH`        | `config/identities.yaml` | Identity and bearer-token registry                     |
+| `MIKROMCP_STDIO_IDENTITY`         | built-in superadmin      | Named identity for stdio mode                          |
+| `MIKROMCP_PORT`                   | `3000`                   | HTTP transport port                                    |
+| `MIKROMCP_BIND_HOST`              | `127.0.0.1`              | HTTP bind address                                      |
+| `MIKROMCP_CONFIRMATION_SECRET`    | unset                    | HMAC secret for destructive-action confirmation tokens |
+| `MIKROMCP_AUDIT_LOG_PATH`         | unset                    | Optional NDJSON audit log file path                    |
+| `MIKROMCP_HTTP_MAX_BODY_BYTES`    | `1048576`                | HTTP request body cap                                  |
+| `MIKROMCP_HTTP_RATE_LIMIT_RPM`    | `60`                     | Requests per minute per IP; `0` disables rate limiting |
+| `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000`                  | SSH command timeout                                    |
+| `MIKROMCP_SSH_MAX_OUTPUT_BYTES`   | `524288`                 | SSH output cap                                         |
+| `MIKROMCP_CMD_ALLOW`              | unset                    | Global allowlist patterns for `run_command`            |
+| `MIKROMCP_CMD_DENY`               | unset                    | Global denylist patterns for `run_command`             |
+| `ROUTER_<PREFIX>_USER`            | unset                    | Router username from `envPrefix`                       |
+| `ROUTER_<PREFIX>_PASS`            | unset                    | Router password from `envPrefix`                       |
+
+---
+
+## Available Tools
+
+MikroMCP currently registers **54 MCP tools**.
+
+| Area                    | Tools                                                                                                                                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| System                  | `get_system_status`, `get_system_clock`, `set_system_clock`, `reboot`                                                                                                                                     |
+| Interfaces and IP       | `list_interfaces`, `create_vlan`, `manage_ip_address`                                                                                                                                                     |
+| DHCP and DNS            | `list_dhcp_leases`, `list_dns_entries`, `manage_dns_entry`, `get_dns_settings`                                                                                                                            |
+| Routing                 | `list_routes`, `manage_route`, `list_routing_rules`, `manage_routing_rule`, `list_routing_tables`, `manage_routing_table`                                                                                 |
+| Routing protocols       | `list_bgp_peers`, `list_ospf_neighbors`                                                                                                                                                                   |
+| Firewall                | `list_firewall_rules`, `manage_firewall_rule`, `list_mangle_rules`, `manage_mangle_rule`, `list_address_list_entries`, `manage_address_list_entry`                                                        |
+| Bridge, WiFi, WireGuard | `list_bridges`, `manage_bridge`, `manage_bridge_port`, `list_wifi_interfaces`, `list_wifi_clients`, `manage_wifi_interface`, `list_wireguard_interfaces`, `list_wireguard_peers`, `manage_wireguard_peer` |
+| Diagnostics             | `ping`, `traceroute`, `torch`, `get_log`, `run_command`                                                                                                                                                   |
+| Automation              | `list_scripts`, `manage_script`, `run_script`, `list_scheduled_jobs`, `manage_scheduled_job`                                                                                                              |
+| Runtime                 | `list_packages`, `manage_package`, `list_files`, `get_file_content`, `upload_file`, `list_containers`, `manage_container`                                                                                 |
+| Change management       | `plan_changes`, `apply_plan`, `rollback_change`                                                                                                                                                           |
 
 ```mermaid
-flowchart TB
-    Tools["54 MikroMCP Tools"]
-
-    Tools --> Ops["Operations<br/>system, logs, scripts, scheduler"]
-    Tools --> Network["Network Core<br/>interfaces, VLANs, IP, DHCP, DNS"]
-    Tools --> Routing["Routing<br/>routes, policy rules, tables, BGP, OSPF"]
-    Tools --> Security["Security<br/>firewall, NAT, mangle, address lists"]
-    Tools --> Access["Access Networks<br/>bridge, WiFi, WireGuard"]
-    Tools --> Runtime["Runtime<br/>packages, files, containers"]
-    Tools --> Diagnostics["Diagnostics<br/>ping, traceroute, torch, command guard"]
-
-    Ops --> OpsTools["status, clock, reboot<br/>scripts, scheduled jobs"]
-    Network --> NetworkTools["interfaces, VLANs<br/>IP addresses, leases, DNS"]
-    Routing --> RoutingTools["static routes<br/>policy routing, BGP, OSPF"]
-    Security --> SecurityTools["filter, NAT, mangle<br/>address lists"]
-    Access --> AccessTools["bridges, ports<br/>wireless clients, WireGuard peers"]
-    Runtime --> RuntimeTools["package toggles<br/>file reads/uploads, containers"]
-    Diagnostics --> DiagnosticTools["router-originated tests<br/>logs, SSH command escape hatch"]
-
-    classDef root fill:#0f172a,stroke:#0f172a,color:#ffffff,stroke-width:2px;
-    classDef area fill:#ecfeff,stroke:#0891b2,color:#164e63,stroke-width:1px;
-    classDef detail fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-width:1px;
-
-    class Tools root;
-    class Ops,Network,Routing,Security,Access,Runtime,Diagnostics area;
-    class OpsTools,NetworkTools,RoutingTools,SecurityTools,AccessTools,RuntimeTools,DiagnosticTools detail;
+mindmap
+  root((MikroMCP tools))
+    Operations
+      System status
+      Logs
+      Clock
+      Reboot
+    Network
+      Interfaces
+      VLANs
+      DHCP
+      DNS
+      WiFi
+      WireGuard
+    Policy
+      Firewall
+      NAT
+      Mangle
+      Address lists
+      Routing rules
+    Automation
+      Scripts
+      Scheduler
+      Files
+      Containers
+    Safety
+      Plan changes
+      Apply plan
+      Rollback change
 ```
 
-| Area | Tools |
-|---|---|
-| System status | `get_system_status`, `get_system_clock`, `set_system_clock`, `reboot` |
-| Interfaces and VLANs | `list_interfaces`, `create_vlan` |
-| IP, DHCP, and DNS | `manage_ip_address`, `list_dhcp_leases`, `list_dns_entries`, `manage_dns_entry`, `get_dns_settings` |
-| Routing | `list_routes`, `manage_route`, `list_routing_rules`, `manage_routing_rule`, `list_routing_tables`, `manage_routing_table` |
-| Routing protocols | `list_bgp_peers`, `list_ospf_neighbors` |
-| Firewall | `list_firewall_rules`, `manage_firewall_rule`, `list_mangle_rules`, `manage_mangle_rule`, `list_address_list_entries`, `manage_address_list_entry` |
-| Bridge | `list_bridges`, `manage_bridge`, `manage_bridge_port` |
-| WiFi and wireless | `list_wifi_interfaces`, `list_wifi_clients`, `manage_wifi_interface` |
-| WireGuard | `list_wireguard_interfaces`, `list_wireguard_peers`, `manage_wireguard_peer` |
-| Diagnostics | `ping`, `traceroute`, `torch`, `get_log` |
-| RouterOS scripts and scheduler | `list_scripts`, `manage_script`, `run_script`, `list_scheduled_jobs`, `manage_scheduled_job` |
-| Packages and files | `list_packages`, `manage_package`, `list_files`, `get_file_content`, `upload_file` |
-| Containers | `list_containers`, `manage_container` |
-| Change safety | `plan_changes`, `apply_plan`, `rollback_change` |
-| Escape hatch | `run_command` |
+---
 
-Full parameter tables and example prompts are in [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools).
+## Real-World Usage Examples
 
-## Safety and Reliability
+### Router Inspection
 
-| Capability | How MikroMCP handles it |
-|---|---|
-| Input validation | Strict Zod schemas reject unexpected fields and invalid values before a tool runs. |
-| Idempotent writes | Write tools check existing RouterOS state before create, update, remove, enable, or disable actions. |
-| Dry-run mode | Write tools can preview changes without applying them. |
-| Typed errors | RouterOS, validation, conflict, not-found, and network failures are mapped to structured `MikroMCPError` categories. |
-| Retry behavior | Read-only tools retry transient failures with exponential backoff and jitter. |
-| Circuit breaker | Each router has an independent breaker so one failing device does not poison the whole fleet. |
-| Secret handling | Router usernames and passwords are read from environment variables, not committed configuration. |
-| Transport hardening | HTTP mode supports bind host, request body limits, and per-IP rate limiting. |
-| Pinning | RouterOS TLS and SSH host-key fingerprints can be pinned per router. |
-
-## Authentication
-
-MikroMCP uses bearer token authentication. Each identity is defined in `config/identities.yaml` with a bcrypt-hashed token, a role, and optional router/tool restrictions. See `config/identities.example.yaml` for the full format.
-
-**HTTP transport** — every request must include `Authorization: Bearer <token>`. The server rejects unauthenticated calls with 401.
-
-**stdio transport** — no bearer token is required. The process identity defaults to a built-in `superadmin` with no restrictions. Set `MIKROMCP_STDIO_IDENTITY` to use a named identity from `identities.yaml` instead.
-
-Generate a token hash for a new identity:
-
-```bash
-node -e "const b=require('bcryptjs'); b.hash('your-raw-token', 12).then(console.log)"
+```text
+Use MikroMCP to inspect core-01. Summarize system resources, RouterOS version,
+running interfaces, active routes, DNS settings, and recent warning/error logs.
+Flag anything that looks operationally risky.
 ```
 
-**RBAC** — each identity has `allowedRouters` (list of router IDs, or empty for all) and `allowedToolPatterns` (glob-style patterns, or empty for all). Destructive tools require a two-step confirmation unless the identity holds `admin` or `superadmin` role.
+### Firewall Management
 
-## Configuration
+```text
+List firewall filter and NAT rules on edge-01. Identify disabled rules,
+overlapping port forwards, broad accept rules, and anything without comments.
+Do not change anything yet.
+```
 
-Router inventory lives in `config/routers.yaml`; credentials live in environment variables that match each router's `envPrefix`.
+### Safe Static Route Change
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `MIKROMCP_TRANSPORT` | `stdio` | `stdio` or `http` transport |
-| `MIKROMCP_CONFIG_PATH` | `config/routers.yaml` | Router registry path |
-| `MIKROMCP_LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, or `error` |
-| `MIKROMCP_PORT` | `3000` | HTTP transport port |
-| `MIKROMCP_BIND_HOST` | `127.0.0.1` | HTTP bind address |
-| `MIKROMCP_HTTP_MAX_BODY_BYTES` | `1048576` | HTTP request body cap |
-| `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | HTTP requests per minute per IP; `0` disables rate limiting |
-| `MIKROMCP_IDENTITIES_PATH` | `config/identities.yaml` | Path to identity/token registry |
-| `MIKROMCP_STDIO_IDENTITY` | none | Named identity used for stdio transport (defaults to built-in superadmin) |
-| `MIKROMCP_CONFIRMATION_SECRET` | none | HMAC secret for confirmation tokens (**required** in HTTP mode) |
-| `MIKROMCP_AUDIT_LOG_PATH` | none | NDJSON audit log file path (omit to disable file sink) |
-| `ROUTER_<PREFIX>_USER` | none | Router username for a registry entry |
-| `ROUTER_<PREFIX>_PASS` | none | Router password for a registry entry |
+```text
+Dry-run a route on core-01 for 10.20.0.0/16 via 192.168.88.1 in the main table.
+Show the exact planned diff and tell me whether an existing route conflicts.
+```
 
-See [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration) for YAML examples, TLS options, SSH fingerprint pinning, and HTTP transport settings.
+### WireGuard Operations
+
+```text
+Show WireGuard peers on branch-02. Sort by last handshake age and flag peers
+that have not handshaken recently or have no transfer counters.
+```
+
+### Interface Diagnostics
+
+```text
+Check interface health on edge-01, then run ping and traceroute from the router
+to 1.1.1.1. If packet loss is present, use torch on the WAN interface for a
+short traffic snapshot.
+```
+
+### Configuration Backup And Audit
+
+```text
+List files, scripts, scheduled jobs, firewall rules, DNS static records, and
+routes on core-01. Produce an audit summary with change-risk notes and suggested
+cleanup tasks.
+```
+
+### Plan / Apply / Rollback Workflow
+
+```text
+Create a change plan that adds a DNS record and a firewall address-list entry
+on edge-01. Use dry-run first, explain the plan, then wait for approval before
+applying anything.
+```
+
+---
+
+## Why MikroMCP Is Useful For AI Agents
+
+MCP gives LLMs a standard way to call tools. MikroMCP makes RouterOS a high-quality MCP target by turning network operations into well-described, machine-readable, permission-aware actions.
+
+AI assistants can use MikroMCP to:
+
+- Investigate router state without memorizing RouterOS command syntax.
+- Chain tool calls across interfaces, routes, firewall rules, logs, and diagnostics.
+- Return both operator-friendly summaries and structured JSON for follow-up reasoning.
+- Preview changes before mutation and explain exactly what would happen.
+- Respect tool-level authorization, router scoping, maintenance windows, and confirmation gates.
+
+This makes MikroMCP a practical bridge between MikroTik networks and the emerging AI infrastructure ecosystem: Claude MCP, LLM tooling, infrastructure automation, DevOps workflows, and network operations copilots.
+
+---
+
+## Documentation
+
+| Resource                                                                                              | Use it for                                                 |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [ROADMAP.md](ROADMAP.md)                                                                              | Shipped milestones and planned v0.9/v1.0 work              |
+| [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers and request pipeline                         |
+| [Setup Guide](https://github.com/AliKarami/MikroMCP/wiki/Setup-Guide)                                 | RouterOS REST setup and end-to-end onboarding              |
+| [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration)                             | Router registry, TLS, SSH, credentials, HTTP mode          |
+| [Running](https://github.com/AliKarami/MikroMCP/wiki/Running)                                         | Local development and production commands                  |
+| [Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-an-MCP-Client) | Claude Desktop, Claude Code, Cursor, and other MCP clients |
+| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | Tool parameters and example prompts                        |
+| [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling)                           | Typed errors, retry behavior, circuit breaker behavior     |
+| [Development](https://github.com/AliKarami/MikroMCP/wiki/Development)                                 | Project structure, tests, MCP Inspector workflow           |
+| [Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing)                               | Adding tools, coding conventions, PR checklist             |
+| [Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap)                                         | Wiki mirror of the milestone roadmap                       |
+
+---
 
 ## Development
 
@@ -333,49 +486,94 @@ npm run lint         # ESLint
 npm run format       # Prettier
 ```
 
-Before committing changes:
+Run this before committing:
 
 ```bash
 npm test
 npm run typecheck
 ```
 
-Project entry points:
+Key project paths:
 
-| Path | Purpose |
-|---|---|
-| `src/main.ts` | Loads config and starts stdio or HTTP transport |
-| `src/mcp/tool-registry.ts` | Registers tools, injects router clients, retry, circuit breaker, and credentials |
-| `src/domain/tools/` | Tool definitions and handlers |
-| `src/adapter/rest-client.ts` | RouterOS REST API client |
-| `src/config/router-registry.ts` | Router inventory loader |
-| `config/routers.example.yaml` | Example multi-router registry |
+| Path                             | Purpose                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/main.ts`                    | Loads config and starts stdio or HTTP transport                                             |
+| `src/mcp/tool-registry.ts`       | Registers tools and applies auth, retry, circuit breaker, audit, snapshots, and credentials |
+| `src/domain/tools/`              | Tool definitions and handlers                                                               |
+| `src/domain/snapshot/`           | Snapshot, diff, and write-journal support                                                   |
+| `src/adapter/rest-client.ts`     | RouterOS REST API client                                                                    |
+| `src/adapter/ssh-client.ts`      | SSH execution adapter for diagnostics and guarded commands                                  |
+| `src/config/router-registry.ts`  | Router inventory loader                                                                     |
+| `config/routers.example.yaml`    | Example multi-router registry                                                               |
+| `config/identities.example.yaml` | Example RBAC identity registry                                                              |
 
-## Documentation
+---
 
-| Guide | What it covers |
-|---|---|
-| [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture) | System layers, request pipeline, and reliability boundaries |
-| [Setup Guide](https://github.com/AliKarami/MikroMCP/wiki/Setup-Guide) | End-to-end setup from router to AI assistant |
-| [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration) | Router registry YAML, credentials, env vars, and HTTP transport |
-| [Running](https://github.com/AliKarami/MikroMCP/wiki/Running) | Development and production commands |
-| [Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-an-MCP-Client) | Claude Desktop, Claude Code, and other clients |
-| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) | All 54 tools with parameters and example prompts |
-| [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling) | Error categories, circuit breaker, and retry engine |
-| [Development](https://github.com/AliKarami/MikroMCP/wiki/Development) | Project structure, testing, and MCP Inspector usage |
-| [Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing) | Adding tools, style guide, and PR checklist |
-| [Roadmap](https://github.com/AliKarami/MikroMCP/wiki/Roadmap) | v0.1-v0.7 shipped; v0.8-v1.0 planned |
+## Roadmap
 
-## Roadmap Snapshot
+| Milestone | Status     | Focus                                                                                                    |
+| --------- | ---------- | -------------------------------------------------------------------------------------------------------- |
+| v0.1-v0.6 | ✅ Shipped | Foundation, core tools, diagnostics, services, firewall, routing, automation, files, containers          |
+| v0.7      | ✅ Shipped | Identity, bearer auth, RBAC, audit log, confirmation gate                                                |
+| v0.8      | ✅ Shipped | Snapshots, write journal, plan/apply, rollback, maintenance windows                                      |
+| v0.9      | 🔜 Planned | Fleet operations, IPSec, certificates, users, queues, SNMP, Netwatch, NTP, health checks                 |
+| v1.0      | 🔜 Planned | Docker/npm/systemd distribution, Prometheus metrics, CHR integration tests, doctor CLI, stability policy |
 
-- **v0.1-v0.6:** Foundation, routing, firewall, diagnostics, network services, policy routing, security hardening, automation, packages, files, and containers.
-- **v0.7 ✅:** HTTP bearer token auth, RBAC enforcement, dual-sink audit log, two-step confirmation gate, and credential surface reduction.
-- **v0.8 ✅:** Change safety, snapshots, diffs, write journal, plan/apply, and rollback.
-- **v0.9:** Fleet operations, IPSec, certificates, users, queues, SNMP, Netwatch, NTP, and health checks.
-- **v1.0:** Prometheus metrics, CHR integration tests, npm/Docker/systemd distribution, `mikromcp doctor`, stability policy, and security documentation.
+See [ROADMAP.md](ROADMAP.md) for the complete milestone plan.
 
-See [ROADMAP.md](ROADMAP.md) for the full milestone plan.
+---
+
+## Contributing
+
+Issues, bug reports, tool requests, documentation improvements, and pull requests are welcome.
+
+Good first contributions:
+
+- Add a read-only tool for an uncovered RouterOS surface.
+- Improve the wiki tool reference with examples and parameter tables.
+- Add screenshots, demo GIFs, or topology diagrams.
+- Expand tests around RouterOS response normalization and idempotency edge cases.
+- Help validate RouterOS version compatibility across real MikroTik devices and CHR.
+
+Development standards:
+
+- TypeScript strict mode
+- ESM imports with `.js` extensions
+- Zod schemas with `.strict()`
+- Idempotency and `dryRun` for write tools
+- `MikroMCPError` for domain errors
+- Focused Vitest coverage for every tool
+
+Please open an issue before large changes so maintainers can align on scope.
+
+---
+
+## Security
+
+MikroMCP is designed for sensitive infrastructure, but it still controls real network devices. Treat it like an operations system.
+
+- Use least-privilege RouterOS users.
+- Prefer TLS verification and certificate fingerprint pinning.
+- Pin SSH host-key fingerprints for SSH-enabled tools.
+- Keep router credentials in environment variables or a secrets system, not YAML.
+- Use HTTP mode behind a trusted network boundary.
+- Configure identities with the smallest practical `allowedRouters` and `allowedToolPatterns`.
+- Enable audit logging for shared or production use.
+- Test write tools with `dryRun: true` before applying changes.
+
+For vulnerabilities or unsafe behavior, open a private security advisory if available, or contact the maintainer before publishing exploit details.
+
+---
+
+## Community And Support
+
+- ⭐ Star the repository if MikroMCP helps your MikroTik or MCP workflow.
+- 🍴 Fork it to add RouterOS surfaces your network depends on.
+- 🧵 Open an issue for bugs, feature requests, compatibility notes, or documentation gaps.
+- 🛣️ Follow the [roadmap](ROADMAP.md) for upcoming fleet, distribution, and production-readiness work.
+
+---
 
 ## License
 
-MikroMCP is released under the MIT License. See [LICENSE](LICENSE).
+MikroMCP is released under the [MIT License](LICENSE).
