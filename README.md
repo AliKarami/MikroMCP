@@ -1,23 +1,17 @@
 # MikroMCP
 
 <p align="center">
-
   <picture>
-
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/MikroMCP-logo-dark.png">
-
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/MikroMCP-logo-light.png">
-
-    <img alt="MikroMCP" src="docs/assets/MikroMCP-logo-dark.png" width="700">
-
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/MikroMCP-logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs/assets/MikroMCP-logo-light.png">
+    <img alt="MikroMCP" src="./docs/assets/MikroMCP-logo-dark.png" width="700">
   </picture>
-
 </p>
 
 > **AI-native network automation for MikroTik RouterOS.** MikroMCP exposes RouterOS as a typed, auditable [Model Context Protocol](https://modelcontextprotocol.io) server so Claude, Cursor, Codex, and other MCP clients can inspect, diagnose, and safely operate MikroTik routers in natural language.
 
 [![CI](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/github/package-json/v/AliKarami/MikroMCP?label=version)](package.json)
+[![Version](https://img.shields.io/badge/version-v0.8.0-EA580C)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-339933)](package.json)
 [![RouterOS 7.x](https://img.shields.io/badge/RouterOS-7.x-293239)](https://help.mikrotik.com/docs/display/ROS/REST+API)
@@ -27,7 +21,6 @@
 MikroMCP exists because raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas, idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC, audit logs, snapshots, and rollback-aware change workflows.
 
 **In one sentence:** MikroMCP turns MikroTik RouterOS into a production-minded MCP control plane for AI infrastructure, DevOps automation, and modern router management.
-
 
 ![AI assistant connected through MikroMCP to a small MikroTik fleet, with tool calls flowing through validation, audit, and RouterOS REST](docs/assets/mikromcp-hero.png)
 
@@ -75,7 +68,9 @@ MikroMCP is especially useful when you want AI agents to help with network opera
 </p>
 
 ### MCP Inspector
+
 ![The 54 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
+
 ---
 
 ## Architecture
