@@ -41,10 +41,11 @@ const listIpsecPeersTool: ToolDefinition = {
         offset: undefined,
       });
 
-      let filtered = allPeers as Record<string, string>[];
-      if (parsed.address) {
-        filtered = filtered.filter((p) => (p.address ?? "").includes(parsed.address!));
-      }
+      const filtered = parsed.address
+        ? (allPeers as Record<string, string>[]).filter((p) =>
+            (p.address ?? "").includes(parsed.address!),
+          )
+        : (allPeers as Record<string, string>[]);
       const peers = filtered.slice(0, parsed.limit);
 
       return {
@@ -103,17 +104,13 @@ const listIpsecPoliciesTool: ToolDefinition = {
         offset: undefined,
       });
 
-      let filtered = allPolicies as Record<string, string>[];
-      if (parsed.srcAddress) {
-        filtered = filtered.filter((p) =>
-          (p["src-address"] ?? "").includes(parsed.srcAddress!),
+      const filtered = (allPolicies as Record<string, string>[])
+        .filter((p) =>
+          parsed.srcAddress ? (p["src-address"] ?? "").includes(parsed.srcAddress) : true,
+        )
+        .filter((p) =>
+          parsed.dstAddress ? (p["dst-address"] ?? "").includes(parsed.dstAddress) : true,
         );
-      }
-      if (parsed.dstAddress) {
-        filtered = filtered.filter((p) =>
-          (p["dst-address"] ?? "").includes(parsed.dstAddress!),
-        );
-      }
       const policies = filtered.slice(0, parsed.limit);
 
       return {
@@ -156,7 +153,7 @@ const manageIpsecPeerTool: ToolDefinition = {
   inputSchema: manageIpsecPeerInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
@@ -197,6 +194,19 @@ const manageIpsecPeerTool: ToolDefinition = {
           });
         }
 
+        if (!parsed.address) {
+          throw new MikroMCPError({
+            category: ErrorCategory.VALIDATION,
+            code: "IPSEC_PEER_ADDRESS_REQUIRED",
+            message: "address is required when adding an IPSec peer.",
+            details: { name: parsed.name },
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Provide the remote gateway address.",
+            },
+          });
+        }
+
         if (parsed.dryRun) {
           const diff = [
             { property: "name", before: null, after: parsed.name },
@@ -213,19 +223,6 @@ const manageIpsecPeerTool: ToolDefinition = {
             content: `Dry run: Would add IPSec peer "${parsed.name}".`,
             structuredContent: { action: "dry_run", diff },
           };
-        }
-
-        if (!parsed.address) {
-          throw new MikroMCPError({
-            category: ErrorCategory.VALIDATION,
-            code: "IPSEC_PEER_ADDRESS_REQUIRED",
-            message: "address is required when adding an IPSec peer.",
-            details: { name: parsed.name },
-            recoverability: {
-              retryable: false,
-              suggestedAction: "Provide the remote gateway address.",
-            },
-          });
         }
 
         const body: Record<string, string> = {

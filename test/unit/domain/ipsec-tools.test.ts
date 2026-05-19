@@ -64,6 +64,9 @@ describe("ipsecTools", () => {
 
     it("manage_ipsec_peer is not readOnly", () =>
       expect(managePeerTool.annotations.readOnlyHint).toBe(false));
+
+    it("manage_ipsec_peer is destructive", () =>
+      expect(managePeerTool.annotations.destructiveHint).toBe(true));
   });
 
   describe("input schema — list_ipsec_peers", () => {
@@ -305,6 +308,16 @@ describe("ipsecTools", () => {
       await expect(
         managePeerTool.handler(
           { routerId: "test-router", action: "add", name: "vpn1" },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION });
+    });
+
+    it("throws VALIDATION error when address is missing even with dryRun=true", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        managePeerTool.handler(
+          { routerId: "test-router", action: "add", name: "vpn1", dryRun: true },
           ctx,
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION });
