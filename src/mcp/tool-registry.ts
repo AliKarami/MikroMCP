@@ -162,6 +162,8 @@ export function registerAllTools(
                 sshClient,
                 ftpClient,
                 identity,
+                routerRegistry: registry,
+                connectionPool: pool,
               });
 
             const executeHandler = () =>

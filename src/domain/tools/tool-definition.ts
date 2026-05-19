@@ -4,6 +4,8 @@ import type { RouterConfig } from "../../types.js";
 import type { Identity } from "../../types.js";
 import type { SshClient } from "../../adapter/ssh-client.js";
 import type { FtpClient } from "../../adapter/ftp-client.js";
+import type { RouterRegistry } from "../../config/router-registry.js";
+import type { ConnectionPool } from "../../adapter/connection-pool.js";
 
 export interface ToolAnnotations {
   readOnlyHint: boolean;
@@ -31,6 +33,8 @@ export interface ToolContext {
   sshClient: SshClient;
   ftpClient: FtpClient;
   identity: Identity;
+  routerRegistry?: RouterRegistry;
+  connectionPool?: ConnectionPool;
 }
 
 export interface ToolResult {
