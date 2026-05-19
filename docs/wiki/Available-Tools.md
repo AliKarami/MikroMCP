@@ -611,17 +611,19 @@ List RouterOS user accounts with group membership and last-login info.
 
 ### `manage_user` — Write · Idempotent
 
-Add, update, or remove a RouterOS user account. Idempotent by `name`.
+Add, remove, enable, disable, or change the password of a RouterOS user account. Idempotent by `name`.
+
+> **Required permissions:** The RouterOS credential used by MikroMCP must belong to the `full` group. Accounts in `write` or lower groups will receive HTTP 500 "not enough permissions" from RouterOS when attempting any write operation on `/user`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `add` \| `remove` \| `update` | — | Operation to perform |
+| `action` | `add` \| `remove` \| `enable` \| `disable` \| `set-password` | — | Operation to perform |
 | `name` | string | — | Username (idempotency key) |
-| `group` | string | — | RouterOS group name (e.g. `read`, `write`, `full`) |
-| `password` | string | — | User password |
+| `group` | string | — | RouterOS group name (required for `add`; e.g. `read`, `write`, `full`) |
+| `password` | string | — | Password (required for `add` and `set-password`) |
+| `address` | string | — | Allowed source address or range |
 | `comment` | string | — | Optional comment |
-| `disabled` | boolean | `false` | Create or update the user in disabled state |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a read-only user named monitor on core-01."
