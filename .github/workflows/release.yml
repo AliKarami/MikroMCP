@@ -42,8 +42,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Build (bundled for pkg)
+        run: npx tsup --config tsup.bundle.config.ts
 
       - name: Package binary
         run: npx @yao-pkg/pkg dist/main.js --target ${{ matrix.target }} --output ${{ matrix.artifact }}
