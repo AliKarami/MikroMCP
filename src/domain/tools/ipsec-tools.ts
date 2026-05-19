@@ -211,7 +211,7 @@ const manageIpsecPeerTool: ToolDefinition = {
           const diff = [
             { property: "name", before: null, after: parsed.name },
             { property: "address", before: null, after: parsed.address ?? null },
-            { property: "exchange", before: null, after: parsed.exchange },
+            { property: "exchange-mode", before: null, after: parsed.exchange },
             ...(parsed.localAddress
               ? [{ property: "local-address", before: null, after: parsed.localAddress }]
               : []),
@@ -228,7 +228,7 @@ const manageIpsecPeerTool: ToolDefinition = {
         const body: Record<string, string> = {
           name: parsed.name,
           address: parsed.address,
-          exchange: parsed.exchange,
+          "exchange-mode": parsed.exchange,
         };
         if (parsed.localAddress) body["local-address"] = parsed.localAddress;
         if (parsed.profile) body.profile = parsed.profile;
