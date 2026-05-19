@@ -273,14 +273,14 @@ function checkClaudeDesktop(): void {
     const config = JSON.parse(raw) as Record<string, unknown>;
     const servers = (config.mcpServers ?? {}) as Record<string, unknown>;
 
-    if ("mikrotik-mcp-server" in servers || "mikromcp" in servers) {
-      ok("Claude Desktop: mikrotik-mcp-server registered");
+    if ("mikromcp" in servers || "mikrotik-mcp-server" in servers) {
+      ok("Claude Desktop: mikromcp registered");
     } else {
       warn(
-        `Claude Desktop: mikrotik-mcp-server not registered in ${configPath}\n` +
+        `Claude Desktop: mikromcp not registered in ${configPath}\n` +
           `  Add to mcpServers:\n` +
           `  {\n` +
-          `    "mikrotik-mcp-server": {\n` +
+          `    "mikromcp": {\n` +
           `      "command": "mikromcp",\n` +
           `      "args": ["serve"]\n` +
           `    }\n` +
@@ -296,7 +296,7 @@ function checkClaudeDesktop(): void {
 
 async function checkForUpdates(): Promise<void> {
   try {
-    const response = await fetch("https://registry.npmjs.org/mikrotik-mcp-server/latest", {
+    const response = await fetch("https://registry.npmjs.org/mikromcp/latest", {
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
@@ -314,7 +314,7 @@ async function checkForUpdates(): Promise<void> {
     if (latestVersion === localVersion) {
       ok(`Up to date (v${localVersion})`);
     } else {
-      warn(`Update available: ${localVersion} → ${latestVersion} — run: npm install -g mikrotik-mcp-server`);
+      warn(`Update available: ${localVersion} → ${latestVersion} — run: npm install -g mikromcp`);
     }
   } catch {
     warn("Could not check for updates (network error)");

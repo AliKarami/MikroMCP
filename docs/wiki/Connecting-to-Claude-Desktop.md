@@ -33,7 +33,7 @@ If the file does not exist, create it. If it exists and is empty, start with `{}
 ```json
 {
   "mcpServers": {
-    "mikrotik-mcp-server": {
+    "mikromcp": {
       "command": "mikromcp",
       "args": ["serve"],
       "env": {
@@ -53,7 +53,7 @@ Replace `/absolute/path/to/config/routers.yaml` with the actual path to your `ro
 ```json
 {
   "mcpServers": {
-    "mikrotik-mcp-server": {
+    "mikromcp": {
       "command": "node",
       "args": ["/absolute/path/to/MikroMCP/dist/main.js"],
       "env": {

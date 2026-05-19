@@ -208,7 +208,7 @@ jobs:
           - 🤖 **AI-agent fit** — human-readable responses + structured JSON for reasoning and chaining
           - 🧩 **MCP compatibility** — stdio for desktop clients, Streamable HTTP and legacy SSE for remote deployments
 
-          **Three deployment options:** npm (\`npm install -g mikrotik-mcp-server\`), standalone binaries (see assets below), or Docker (\`ghcr.io/alikarami/mikromcp\`).
+          **Three deployment options:** npm (\`npm install -g mikromcp\`), standalone binaries (see assets below), or Docker (\`ghcr.io/alikarami/mikromcp\`).
 
           See the [README](https://github.com/AliKarami/MikroMCP#readme) and [wiki](https://github.com/AliKarami/MikroMCP/wiki) for full setup, configuration, and tool reference."
           fi

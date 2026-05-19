@@ -1,11 +1,10 @@
 {
-  "name": "mikrotik-mcp-server",
+  "name": "mikromcp",
   "version": "1.0.0",
   "description": "Production-grade MCP server for MikroTik RouterOS",
   "type": "module",
   "main": "dist/main.js",
   "bin": {
-    "mikrotik-mcp-server": "dist/main.js",
     "mikromcp": "dist/main.js"
   },
   "files": [

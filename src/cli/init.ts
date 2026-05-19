@@ -352,7 +352,7 @@ function registerClaudeDesktop(_projectRoot: string): { registered: boolean; sni
   };
 
   if (!configPath) {
-    const snippet = JSON.stringify({ mcpServers: { "mikrotik-mcp-server": entry } }, null, 2);
+    const snippet = JSON.stringify({ mcpServers: { mikromcp: entry } }, null, 2);
     console.log(
       chalk.yellow(
         "\n  Could not find Claude Desktop config file. Add the following to your claude_desktop_config.json:\n",
@@ -372,7 +372,7 @@ function registerClaudeDesktop(_projectRoot: string): { registered: boolean; sni
   if (!config.mcpServers || typeof config.mcpServers !== "object") {
     config.mcpServers = {};
   }
-  (config.mcpServers as Record<string, unknown>)["mikrotik-mcp-server"] = entry;
+  (config.mcpServers as Record<string, unknown>)["mikromcp"] = entry;
 
   writeFileSync(configPath, JSON.stringify(config, null, 2));
   console.log(chalk.dim(`  Backed up to ${backupPath}`));

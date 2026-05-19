@@ -23,13 +23,13 @@ export MIKROMCP_CONFIG_PATH=/absolute/path/to/config/routers.yaml
 Register MikroMCP (npm global install):
 
 ```bash
-claude mcp add mikrotik-mcp-server -- mikromcp serve
+claude mcp add mikromcp -- mikromcp serve
 ```
 
 Or with a source build:
 
 ```bash
-claude mcp add mikrotik-mcp-server -- node /absolute/path/to/MikroMCP/dist/main.js
+claude mcp add mikromcp -- node /absolute/path/to/MikroMCP/dist/main.js
 ```
 
 Verify registration:
@@ -38,12 +38,12 @@ Verify registration:
 claude mcp list
 ```
 
-You should see `mikrotik-mcp-server` in the list. On the next `claude` session start, all 77 MikroMCP tools will be available automatically.
+You should see `mikromcp` in the list. On the next `claude` session start, all 77 MikroMCP tools will be available automatically.
 
 To pass environment variables directly in the registration (useful if you do not want to rely on shell exports):
 
 ```bash
-claude mcp add mikrotik-mcp-server \
+claude mcp add mikromcp \
   -e MIKROMCP_CONFIG_PATH=/path/to/config/routers.yaml \
   -e ROUTER_CORE01_USER=mcp-api \
   -e ROUTER_CORE01_PASS=your-router-password \
@@ -61,7 +61,7 @@ Create or edit `.cursor/mcp.json` in your project:
 ```json
 {
   "mcpServers": {
-    "mikrotik-mcp-server": {
+    "mikromcp": {
       "command": "mikromcp",
       "args": ["serve"],
       "env": {
@@ -87,7 +87,7 @@ For user-wide registration (not per-project), edit `~/.cursor/mcp.json` with the
 Set the `CODEX_MCP_SERVERS` environment variable before running `codex`:
 
 ```bash
-export CODEX_MCP_SERVERS='[{"name":"mikrotik-mcp-server","command":"mikromcp","args":["serve"]}]'
+export CODEX_MCP_SERVERS='[{"name":"mikromcp","command":"mikromcp","args":["serve"]}]'
 export ROUTER_CORE01_USER=mcp-api
 export ROUTER_CORE01_PASS=your-router-password
 export MIKROMCP_CONFIG_PATH=/path/to/config/routers.yaml
@@ -137,7 +137,7 @@ http://localhost:3000/mcp
 In Claude Code:
 
 ```bash
-claude mcp add mikrotik-mcp-server \
+claude mcp add mikromcp \
   --transport http \
   http://localhost:3000/mcp
 ```
@@ -147,7 +147,7 @@ In Cursor's `.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "mikrotik-mcp-server": {
+    "mikromcp": {
       "url": "http://localhost:3000/mcp",
       "headers": {
         "Authorization": "Bearer your-token-here"

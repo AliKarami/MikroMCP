@@ -42,7 +42,7 @@ For a read-only setup (list/inspect tools only), use `group=read` instead.
 ### Option A: npm (recommended)
 
 ```bash
-npm install -g mikrotik-mcp-server
+npm install -g mikromcp
 ```
 
 After installation, `mikromcp` is available as a global command.
