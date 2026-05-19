@@ -317,7 +317,7 @@ describe("runInit — Claude Desktop registration", () => {
     const updated = JSON.parse(updatedRaw) as {
       mcpServers: Record<string, unknown>;
     };
-    expect(updated.mcpServers["mikrotik-mcp-server"]).toMatchObject({
+    expect(updated.mcpServers["mikromcp"]).toMatchObject({
       command: "mikromcp",
       args: ["serve"],
     });

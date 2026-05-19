@@ -36,6 +36,10 @@
     "model-context-protocol",
     "network-management"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AliKarami/MikroMCP"
+  },
   "author": "Ali Karami",
   "license": "MIT",
   "dependencies": {

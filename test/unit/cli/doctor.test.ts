@@ -398,7 +398,7 @@ describe("runDoctor", () => {
 
       const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
       expect(allOutput).toMatch(/⚠️.*not registered/);
-      expect(allOutput).toMatch(/mikrotik-mcp-server/);
+      expect(allOutput).toMatch(/mikromcp/);
     });
   });
 
