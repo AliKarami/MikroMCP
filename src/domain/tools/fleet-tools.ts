@@ -107,7 +107,11 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       const parsed = bulkExecuteInputSchema.parse(params);
 
-      if ((parsed.routerIds !== undefined) === (parsed.tags !== undefined)) {
+      // Treat empty arrays as not provided — MCP Inspector defaults optional arrays to []
+      const hasRouterIds = Array.isArray(parsed.routerIds) && parsed.routerIds.length > 0;
+      const hasTags = Array.isArray(parsed.tags) && parsed.tags.length > 0;
+
+      if (hasRouterIds === hasTags) {
         throw new MikroMCPError({
           category: ErrorCategory.VALIDATION,
           code: "BULK_TARGET_REQUIRED",
@@ -164,9 +168,9 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       }
 
       let routers: RouterConfig[];
-      if (parsed.routerIds !== undefined) {
+      if (hasRouterIds) {
         const resolved: RouterConfig[] = [];
-        for (const id of parsed.routerIds) {
+        for (const id of parsed.routerIds!) {
           try {
             resolved.push(context.routerRegistry!.getRouter(id));
           } catch {
@@ -175,7 +179,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         }
         routers = resolved;
       } else {
-        routers = context.routerRegistry!.listRouters(parsed.tags);
+        routers = context.routerRegistry!.listRouters(parsed.tags!);
       }
 
       if (routers.length === 0) {

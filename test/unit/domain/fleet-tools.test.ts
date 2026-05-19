@@ -223,14 +223,18 @@ describe("fleet-tools", () => {
     it("throws VALIDATION when neither routerIds nor tags provided", async () => {
       const ctx = makeFleetContext();
       await expect(
-        bulkTool.handler(
-          { toolName: "list_interfaces", params: {} },
-          ctx,
-        ),
+        bulkTool.handler({ toolName: "list_interfaces", params: {} }, ctx),
       ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "BULK_TARGET_REQUIRED" });
     });
 
-    it("throws VALIDATION when both routerIds and tags provided", async () => {
+    it("throws VALIDATION when both routerIds and tags are empty arrays", async () => {
+      const ctx = makeFleetContext();
+      await expect(
+        bulkTool.handler({ toolName: "list_interfaces", routerIds: [], tags: [], params: {} }, ctx),
+      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "BULK_TARGET_REQUIRED" });
+    });
+
+    it("throws VALIDATION when both routerIds and tags are non-empty", async () => {
       const ctx = makeFleetContext();
       await expect(
         bulkTool.handler(
@@ -238,6 +242,15 @@ describe("fleet-tools", () => {
           ctx,
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "BULK_TARGET_REQUIRED" });
+    });
+
+    it("accepts tags with empty routerIds array (MCP Inspector default)", async () => {
+      const ctx = makeFleetContext();
+      const result = await bulkTool.handler(
+        { toolName: "list_interfaces", routerIds: [], tags: ["prod"], params: {} },
+        ctx,
+      );
+      expect(result.structuredContent).toMatchObject({ totalRouters: expect.any(Number) });
     });
   });
 
