@@ -249,17 +249,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Check auth token
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "ERROR: NODE_AUTH_TOKEN is empty — NPM_TOKEN secret is missing or blank"
-            exit 1
-          fi
-          echo "NODE_AUTH_TOKEN is set (length: ${#NODE_AUTH_TOKEN})"
-          npm whoami
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Publish
         run: |
           VERSION=$(node -p "require('./package.json').version")
@@ -268,5 +257,3 @@ jobs:
           else
             npm publish --access public --provenance
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
