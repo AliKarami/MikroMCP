@@ -313,7 +313,7 @@ describe("fleet-tools", () => {
       expect(mockRegistry.listRouters).toHaveBeenCalledWith(["edge"]);
     });
 
-    it("returns empty result when no routers resolve", async () => {
+    it("unknown routerIds appear as status:error in results", async () => {
       const mockRegistry = {
         getRouter: vi.fn().mockImplementation(() => { throw new Error("not found"); }),
         listRouters: vi.fn().mockReturnValue([]),
@@ -325,15 +325,19 @@ describe("fleet-tools", () => {
       });
 
       const result = await bulkTool.handler(
-        { toolName: "list_interfaces", routerIds: ["nonexistent"], params: {} },
+        { toolName: "list_interfaces", routerIds: ["asghar", "akbar"], params: {} },
         ctx,
       );
 
       expect(result.structuredContent).toMatchObject({
-        totalRouters: 0,
+        totalRouters: 2,
         succeeded: 0,
-        failed: 0,
+        failed: 2,
       });
+      const results = result.structuredContent.results as Array<{ routerId: string; status: string; error: string }>;
+      expect(results).toHaveLength(2);
+      expect(results[0]).toMatchObject({ routerId: "asghar", status: "error" });
+      expect(results[1]).toMatchObject({ routerId: "akbar", status: "error" });
     });
 
     it("auth failure per router yields error status for that router", async () => {

@@ -167,6 +167,8 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         });
       }
 
+      // Pre-resolution errors (unknown IDs) become immediate error results
+      const preErrors: BulkResult[] = [];
       let routers: RouterConfig[];
       if (hasRouterIds) {
         const resolved: RouterConfig[] = [];
@@ -174,7 +176,8 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           try {
             resolved.push(context.routerRegistry!.getRouter(id));
           } catch {
-            log.warn({ routerId: id }, "bulk_execute: router not found, skipping");
+            log.warn({ routerId: id }, "bulk_execute: router not found");
+            preErrors.push({ routerId: id, status: "error", error: `Router "${id}" not found in registry`, durationMs: 0 });
           }
         }
         routers = resolved;
@@ -182,7 +185,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         routers = context.routerRegistry!.listRouters(parsed.tags!);
       }
 
-      if (routers.length === 0) {
+      if (routers.length === 0 && preErrors.length === 0) {
         return {
           content: `Executed ${parsed.toolName} on 0 routers: 0 succeeded, 0 failed`,
           structuredContent: {
@@ -224,7 +227,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         }
       }
 
-      const results: BulkResult[] = [];
+      const results: BulkResult[] = [...preErrors];
       for (let i = 0; i < routers.length; i += parsed.concurrency) {
         const batch = routers.slice(i, i + parsed.concurrency);
         const batchResults = await Promise.all(batch.map(runForRouter));
