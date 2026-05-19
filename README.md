@@ -132,7 +132,46 @@ npm start
 
 ### Docker
 
-A Docker image is planned for the v1.0 distribution milestone. Today, run MikroMCP with the local Node.js workflow above or package it behind your own service manager.
+#### Pull and run
+
+```bash
+docker pull ghcr.io/alikarami/mikromcp:latest
+```
+
+One-liner with environment variables:
+
+```bash
+docker run --rm \
+  -e MIKROMCP_TRANSPORT=http \
+  -e MIKROMCP_PORT=3000 \
+  -e MIKROMCP_CONFIRMATION_SECRET="$(openssl rand -hex 32)" \
+  -e ROUTER_CORE01_USER=mcp-api \
+  -e ROUTER_CORE01_PASS=your-router-password \
+  -v "$(pwd)/config:/app/config:ro" \
+  -p 3000:3000 \
+  ghcr.io/alikarami/mikromcp:latest
+```
+
+#### Docker Compose
+
+Copy the example file and fill in your `.env`:
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+cp config/routers.example.yaml config/routers.yaml
+cp config/identities.example.yaml config/identities.yaml
+# edit config/routers.yaml and set MIKROMCP_CONFIRMATION_SECRET + router credentials in .env
+docker compose up -d
+```
+
+See `docker-compose.example.yml` for the full service definition.
+
+#### Build from source
+
+```bash
+docker build -t mikromcp .
+docker run --rm -e MIKROMCP_TRANSPORT=http -p 3000:3000 mikromcp
+```
 
 ---
 

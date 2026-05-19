@@ -1,0 +1,20 @@
+services:
+  mikromcp:
+    image: ghcr.io/alikarami/mikromcp:latest
+    environment:
+      MIKROMCP_TRANSPORT: http
+      MIKROMCP_PORT: 3000
+      MIKROMCP_CONFIG_PATH: /app/config/routers.yaml
+      MIKROMCP_IDENTITIES_PATH: /app/config/identities.yaml
+      MIKROMCP_CONFIRMATION_SECRET: ${MIKROMCP_CONFIRMATION_SECRET}
+      MIKROMCP_LOG_LEVEL: info
+      # Add your router credentials here or via .env file
+      # ROUTER_CORE01_USER: mcp-api
+      # ROUTER_CORE01_PASS: your-password
+    volumes:
+      - ./config:/app/config:ro
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    env_file:
+      - .env

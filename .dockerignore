@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.github
+docs
+test
+*.md
+.env
+.env.*
+!.env.example
+config/*.yaml
+!config/*.example.yaml
+*.log
+coverage
+binaries
