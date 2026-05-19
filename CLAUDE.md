@@ -277,6 +277,19 @@ Two transports:
 
 Do this as part of the same commit that ships the feature — not as a follow-up.
 
+## Release checklist
+
+Run before `git tag v<X.Y.Z> && git push origin v<X.Y.Z>`:
+
+1. `npm version <major|minor|patch>` — bumps `package.json` + `package-lock.json`
+2. Update version string in `src/mcp/server.ts`
+3. Update README version badge: `version-v<X.Y.Z>`
+4. Flip `🔜` → `✅` in `ROADMAP.md` and `docs/wiki/Roadmap.md`
+5. Update `docs/wiki/Available-Tools.md` for any new/changed tools
+6. Commit: `chore: bump version to X.Y.Z`
+7. `git tag vX.Y.Z && git push origin main && git push origin vX.Y.Z`
+8. CI `release.yml` auto-runs: builds binaries, pushes Docker images, creates GitHub Release
+
 ## What not to do
 
 - Don't add retry/circuit-breaker logic inside a tool handler — that's handled by `tool-registry.ts`

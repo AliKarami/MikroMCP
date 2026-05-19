@@ -6,6 +6,7 @@ config/identities.yaml
 *.log
 .env
 .env.*
+!.env.example
 coverage/
 .DS_Store
 .worktrees/
