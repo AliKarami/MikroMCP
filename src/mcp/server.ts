@@ -25,7 +25,7 @@ export function createServerFactory(
   const makeServer = (): McpServer => {
     const server = new McpServer({
       name: "mikrotik-mcp-server",
-      version: "0.9.0",
+      version: "1.0.0",
     });
     registerAllTools(server, registry, pool, circuitBreakers, config, identityRegistry);
     return server;

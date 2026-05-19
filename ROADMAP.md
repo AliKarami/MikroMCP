@@ -165,7 +165,7 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v1.0 — Production Release
+## ✅ v1.0 — Production Release
 
 **Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams and accessible to individual users — not adding new router surfaces.
 

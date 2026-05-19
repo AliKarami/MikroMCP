@@ -118,7 +118,7 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ---
 
-## 🔜 v1.0 — Production Release
+## ✅ v1.0 — Production Release
 
 **Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams and accessible to individual users — not adding new router surfaces.
 
