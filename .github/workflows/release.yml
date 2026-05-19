@@ -249,9 +249,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Enable OIDC auth for npm trusted publishing
-        run: npm config delete //registry.npmjs.org/:_authToken
-
       - name: Publish
         run: |
           VERSION=$(node -p "require('./package.json').version")
@@ -260,3 +257,5 @@ jobs:
           else
             npm publish --access public --provenance
           fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
