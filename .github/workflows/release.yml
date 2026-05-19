@@ -186,7 +186,7 @@ jobs:
         id: changelog
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
+          if [ -n "$PREV_TAG" ] && [ "${{ github.ref_name }}" != "v1.0.0" ]; then
             CHANGES=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges)
             BODY="## What's changed
 
@@ -219,7 +219,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          name: MikroMCP ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           body: ${{ steps.changelog.outputs.BODY }}
           files: |
             artifacts/*
