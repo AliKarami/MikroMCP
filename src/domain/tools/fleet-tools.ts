@@ -51,7 +51,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       openWorldHint: false,
     },
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
-      const parsed = checkHealthInputSchema.parse(params);
+      checkHealthInputSchema.parse(params);
       log.info({ routerId: context.routerId }, "Checking router health");
       const startMs = Date.now();
 
