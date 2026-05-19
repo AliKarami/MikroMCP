@@ -22,6 +22,8 @@ export interface ToolDefinition {
   outputSchema?: z.ZodType;
   annotations: ToolAnnotations;
   snapshotPaths?: string[];
+  /** When true, tool-registry skips per-router setup (routerId, circuit breaker, client). Use for fleet tools that manage their own router contexts. */
+  skipRouterContext?: boolean;
   handler: (params: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>;
 }
 

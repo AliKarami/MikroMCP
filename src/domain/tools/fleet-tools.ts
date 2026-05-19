@@ -103,6 +103,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       idempotentHint: false,
       openWorldHint: false,
     },
+    skipRouterContext: true,
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       const parsed = bulkExecuteInputSchema.parse(params);
 

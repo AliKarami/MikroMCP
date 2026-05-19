@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { allTools } from "../domain/tools/index.js";
+import type { ToolContext } from "../domain/tools/tool-definition.js";
 import { RouterRegistry } from "../config/router-registry.js";
 import { ConnectionPool } from "../adapter/connection-pool.js";
 import { getCredentials } from "../config/secrets.js";
@@ -58,6 +59,23 @@ export function registerAllTools(
           let journalId: string | undefined;
 
           try {
+            const identity = getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
+
+            if (tool.skipRouterContext) {
+              const fleetContext: ToolContext = {
+                routerClient: null as unknown as ToolContext["routerClient"],
+                routerId: "",
+                correlationId,
+                routerConfig: null as unknown as ToolContext["routerConfig"],
+                sshClient: null as unknown as ToolContext["sshClient"],
+                ftpClient: null as unknown as ToolContext["ftpClient"],
+                identity,
+                routerRegistry: registry,
+                connectionPool: pool,
+              };
+              return formatToolResult(await tool.handler(args, fleetContext));
+            }
+
             const routerId = args.routerId as string | undefined;
             if (!routerId) {
               throw new MikroMCPError({
@@ -70,8 +88,6 @@ export function registerAllTools(
                 },
               });
             }
-
-            const identity = getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
 
             checkAuthz(identity, tool.name, routerId);
 
