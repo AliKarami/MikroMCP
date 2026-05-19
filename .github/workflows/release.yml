@@ -182,42 +182,45 @@ jobs:
           pattern: mikromcp-*
           merge-multiple: true
 
-      - name: Generate changelog
+      - name: Generate release body
         id: changelog
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
             CHANGES=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges)
+            BODY="## What's changed
+
+          ${CHANGES}"
           else
-            CHANGES=$(git log --pretty=format:"- %s" --no-merges)
+            BODY="## Welcome to MikroMCP
+
+          MikroMCP is an AI-native MCP server that turns MikroTik RouterOS into a safe, structured control plane for AI agents and DevOps automation. Instead of giving LLMs raw CLI access to production routers, MikroMCP exposes a typed tool surface with strict schema validation, idempotent writes, dry-run previews, and rollback-aware change workflows.
+
+          **77 tools across 10 categories:**
+          - 🧭 **Router management** — system status, clock, reboot, packages, files, scripts, scheduler, containers
+          - 🌐 **Network operations** — interfaces, VLANs, IP addresses, DHCP leases, DNS static records, bridge ports, WiFi clients
+          - 🔥 **Firewall & policy** — filter/NAT rules, mangle rules, address lists, route tables, routing rules
+          - 🛰️ **Routing visibility** — static routes, routing tables, BGP peers, OSPF neighbors
+          - 🔐 **Secure access** — HTTP bearer auth, bcrypt token hashes, RBAC, tool allowlists, confirmation tokens
+          - 🧪 **Diagnostics** — router-originated ping, traceroute, torch, log filtering, guarded SSH execution
+          - 🛡️ **Change safety** — dry-run, idempotent writes, snapshots, write journal, plan/apply/rollback workflows
+          - ⚙️ **Production behavior** — per-router circuit breakers, retries, correlation IDs, structured logs, audit trails
+          - 🤖 **AI-agent fit** — human-readable responses + structured JSON for reasoning and chaining
+          - 🧩 **MCP compatibility** — stdio for desktop clients, Streamable HTTP and legacy SSE for remote deployments
+
+          **Three deployment options:** npm (\`npm install -g mikrotik-mcp-server\`), standalone binaries (see assets below), or Docker (\`ghcr.io/alikarami/mikromcp\`).
+
+          See the [README](https://github.com/AliKarami/MikroMCP#readme) and [wiki](https://github.com/AliKarami/MikroMCP/wiki) for full setup, configuration, and tool reference."
           fi
-          echo "CHANGES<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "BODY<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           name: MikroMCP ${{ github.ref_name }}
-          body: |
-            ## What's changed
-
-            ${{ steps.changelog.outputs.CHANGES }}
-
-            ## Installation
-
-            ### Docker
-            ```bash
-            docker pull ghcr.io/${{ github.repository_owner }}/mikromcp:${{ github.ref_name }}
-            ```
-
-            ### Standalone binary
-            Download the binary for your platform from the assets below, make it executable, and run it directly.
-
-            ### npm
-            ```bash
-            npm install -g mikrotik-mcp-server
-            ```
+          body: ${{ steps.changelog.outputs.BODY }}
           files: |
             artifacts/*
           draft: false
@@ -229,6 +232,7 @@ jobs:
     needs: release
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -246,6 +250,4 @@ jobs:
         run: npm run build
 
       - name: Publish
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
