@@ -8,6 +8,13 @@
     "mikrotik-mcp-server": "dist/main.js",
     "mikromcp": "dist/main.js"
   },
+  "files": [
+    "dist/main.js",
+    "config/routers.example.yaml",
+    "config/identities.example.yaml",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
