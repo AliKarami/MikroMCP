@@ -16,7 +16,7 @@
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-339933)](package.json)
 [![RouterOS 7.x](https://img.shields.io/badge/RouterOS-7.x-293239)](https://help.mikrotik.com/docs/display/ROS/REST+API)
 [![MCP Server](https://img.shields.io/badge/MCP-server-6f42c1)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/MCP%20tools-54-0f766e)](#available-tools)
+[![Tools](https://img.shields.io/badge/MCP%20tools-77-0f766e)](#available-tools)
 
 MikroMCP exists because raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas, idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC, audit logs, snapshots, and rollback-aware change workflows.
 
@@ -69,7 +69,7 @@ MikroMCP is especially useful when you want AI agents to help with network opera
 
 ### MCP Inspector
 
-![The 54 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
+![The 77 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
 
 ---
 
@@ -213,21 +213,31 @@ Tokens are configured as bcrypt hashes in `config/identities.yaml`.
 
 ## Available Tools
 
-MikroMCP currently registers **54 MCP tools**.
+MikroMCP currently registers **77 MCP tools**.
 
 | Area                    | Tools                                                                                                                                                                                                     |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | System                  | `get_system_status`, `get_system_clock`, `set_system_clock`, `reboot`                                                                                                                                     |
 | Interfaces and IP       | `list_interfaces`, `create_vlan`, `manage_ip_address`                                                                                                                                                     |
 | DHCP and DNS            | `list_dhcp_leases`, `list_dns_entries`, `manage_dns_entry`, `get_dns_settings`                                                                                                                            |
+| DHCP Servers & Pools    | `list_dhcp_servers`, `manage_dhcp_server`, `list_dhcp_pools`, `manage_dhcp_pool`                                                                                                                          |
 | Routing                 | `list_routes`, `manage_route`, `list_routing_rules`, `manage_routing_rule`, `list_routing_tables`, `manage_routing_table`                                                                                 |
 | Routing protocols       | `list_bgp_peers`, `list_ospf_neighbors`                                                                                                                                                                   |
 | Firewall                | `list_firewall_rules`, `manage_firewall_rule`, `list_mangle_rules`, `manage_mangle_rule`, `list_address_list_entries`, `manage_address_list_entry`                                                        |
 | Bridge, WiFi, WireGuard | `list_bridges`, `manage_bridge`, `manage_bridge_port`, `list_wifi_interfaces`, `list_wifi_clients`, `manage_wifi_interface`, `list_wireguard_interfaces`, `list_wireguard_peers`, `manage_wireguard_peer` |
+| IPSec/VPN               | `list_ipsec_peers`, `list_ipsec_policies`, `manage_ipsec_peer`                                                                                                                                            |
+| Certificates            | `list_certificates`, `manage_certificate`                                                                                                                                                                 |
+| Users                   | `list_users`, `manage_user`                                                                                                                                                                               |
+| Queues/QoS              | `list_queues`, `manage_queue`                                                                                                                                                                             |
+| VRRP                    | `list_vrrp_instances`, `manage_vrrp_instance`                                                                                                                                                             |
+| SNMP & NTP              | `get_snmp_settings`, `get_ntp_settings`                                                                                                                                                                   |
+| Netwatch                | `list_netwatch_entries`, `manage_netwatch_entry`                                                                                                                                                          |
+| Discovery & ARP         | `list_neighbors`, `list_arp_entries`                                                                                                                                                                      |
 | Diagnostics             | `ping`, `traceroute`, `torch`, `get_log`, `run_command`                                                                                                                                                   |
 | Automation              | `list_scripts`, `manage_script`, `run_script`, `list_scheduled_jobs`, `manage_scheduled_job`                                                                                                              |
 | Runtime                 | `list_packages`, `manage_package`, `list_files`, `get_file_content`, `upload_file`, `list_containers`, `manage_container`                                                                                 |
 | Change management       | `plan_changes`, `apply_plan`, `rollback_change`                                                                                                                                                           |
+| Fleet operations        | `check_router_health`, `bulk_execute`                                                                                                                                                                     |
 
 ```mermaid
 mindmap
@@ -341,7 +351,7 @@ This makes MikroMCP a practical bridge between MikroTik networks and the emergin
 
 | Resource                                                                                              | Use it for                                                 |
 | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [ROADMAP.md](ROADMAP.md)                                                                              | Shipped milestones and planned v0.9/v1.0 work              |
+| [ROADMAP.md](ROADMAP.md)                                                                              | Shipped milestones and planned v1.0 work                   |
 | [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers and request pipeline                         |
 | [Setup Guide](https://github.com/AliKarami/MikroMCP/wiki/Setup-Guide)                                 | RouterOS REST setup and end-to-end onboarding              |
 | [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration)                             | Router registry, TLS, SSH, credentials, HTTP mode          |
@@ -397,7 +407,7 @@ Key project paths:
 | v0.1-v0.6 | ✅ Shipped | Foundation, core tools, diagnostics, services, firewall, routing, automation, files, containers          |
 | v0.7      | ✅ Shipped | Identity, bearer auth, RBAC, audit log, confirmation gate                                                |
 | v0.8      | ✅ Shipped | Snapshots, write journal, plan/apply, rollback, maintenance windows                                      |
-| v0.9      | 🔜 Planned | Fleet operations, IPSec, certificates, users, queues, SNMP, Netwatch, NTP, health checks                 |
+| v0.9      | ✅ Shipped | Fleet operations, IPSec, certificates, users, DHCP servers/pools, queues/QoS, VRRP, SNMP/NTP, Netwatch, discovery, ARP, health checks |
 | v1.0      | 🔜 Planned | Docker/npm/systemd distribution, Prometheus metrics, CHR integration tests, doctor CLI, stability policy |
 
 See [ROADMAP.md](ROADMAP.md) for the complete milestone plan.

@@ -147,16 +147,21 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v0.9 — Fleet Operations & Remaining RouterOS Surface
+## ✅ v0.9 — Fleet Operations & Remaining RouterOS Surface
 
 **Goal:** After RBAC and snapshots exist, safely expand to the remaining dangerous surfaces and fleet-level operations.
 
 - **IPSec/VPN:** `list_ipsec_peers`, `list_ipsec_policies`, `manage_ipsec_peer`
 - **Certificates:** `list_certificates`, `manage_certificate`
 - **Users:** `list_users`, `manage_user`
-- **Additional RouterOS surfaces:** DHCP server/pools, queues/QoS, VRRP, SNMP, Netwatch, NTP, neighbor/LLDP discovery, ARP table
-- **Bulk operations** — fan-out a tool call across multiple routers by ID or tag with configurable concurrency; aggregate results with per-router status and partial-failure handling
-- **Health checks** — router reachability probe, REST/SSH capability detection, RouterOS version compatibility matrix
+- **DHCP Servers & Pools:** `list_dhcp_servers`, `manage_dhcp_server`, `list_dhcp_pools`, `manage_dhcp_pool`
+- **Queues/QoS:** `list_queues`, `manage_queue`
+- **VRRP:** `list_vrrp_instances`, `manage_vrrp_instance`
+- **SNMP & NTP:** `get_snmp_settings`, `get_ntp_settings`
+- **Netwatch:** `list_netwatch_entries`, `manage_netwatch_entry`
+- **Discovery & ARP:** `list_neighbors`, `list_arp_entries`
+- **Fleet operations:** `bulk_execute` — fan-out a tool call across multiple routers by ID or tag with configurable concurrency; aggregates results with per-router status and partial-failure handling
+- **Health checks:** `check_router_health` — router reachability probe, REST/SSH capability detection, RouterOS version compatibility check
 
 ---
 

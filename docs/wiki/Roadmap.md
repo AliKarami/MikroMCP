@@ -76,20 +76,19 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ---
 
-## 🔜 v0.7 — Identity, Auth & Audit
+## ✅ v0.7 — Identity, Auth & Audit
 
 **Goal:** Establish trust boundaries before expanding dangerous or admin-level surfaces.
 
-- **HTTP transport auth** — bearer token; mTLS optional
-- **RBAC / identity enforcement** — per-identity allowed routers, tool patterns, action scopes
-- **Vault credential provider** — resolve credentials from HashiCorp Vault (KV v2)
-- **Audit log** — structured record for every write/destructive call
-- **Confirmation middleware** — structured confirmation step for destructive actions
-- **Credential surface reduction** — SSH/FTP move behind adapter services
+- **HTTP bearer token authentication** — bcrypt token verification; HTTP transport requires `Authorization: Bearer <token>`; stdio uses a built-in `superadmin` identity
+- **RBAC identity enforcement** — per-identity `allowedRouters` and `allowedToolPatterns`; `authz.ts` middleware enforces at call time
+- **Dual-sink audit log** — every write/destructive call logged to pino and an NDJSON file with identity, tool, router, params (credentials redacted), and outcome
+- **Two-step confirmation gate** — destructive tools require a `confirmationToken` (HMAC-SHA256, 5-min TTL, single-use)
+- **Credential surface reduction** — SSH and FTP adapters wrap credentials in a closure; tool handlers never touch secrets
 
 ---
 
-## 🔜 v0.8 — Change Safety & Rollback
+## ✅ v0.8 — Change Safety & Rollback
 
 **Goal:** Snapshot, diff, and rollback before expanding dangerous router surfaces.
 
@@ -101,16 +100,21 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ---
 
-## 🔜 v0.9 — Fleet Operations & Remaining RouterOS Surface
+## ✅ v0.9 — Fleet Operations & Remaining RouterOS Surface
 
 **Goal:** After RBAC and snapshots exist, safely expand to remaining admin surfaces.
 
 - **IPSec/VPN:** `list_ipsec_peers`, `list_ipsec_policies`, `manage_ipsec_peer`
 - **Certificates:** `list_certificates`, `manage_certificate`
 - **Users:** `list_users`, `manage_user`
-- **Additional surfaces:** DHCP server/pools, queues/QoS, VRRP, SNMP, Netwatch, NTP, neighbor/LLDP, ARP
-- **Bulk operations** — fan-out across multiple routers by ID or tag with concurrency limits
-- **Health checks** — reachability probe, REST/SSH capability detection, version compatibility
+- **DHCP Servers & Pools:** `list_dhcp_servers`, `manage_dhcp_server`, `list_dhcp_pools`, `manage_dhcp_pool`
+- **Queues/QoS:** `list_queues`, `manage_queue`
+- **VRRP:** `list_vrrp_instances`, `manage_vrrp_instance`
+- **SNMP & NTP:** `get_snmp_settings`, `get_ntp_settings`
+- **Netwatch:** `list_netwatch_entries`, `manage_netwatch_entry`
+- **Discovery & ARP:** `list_neighbors`, `list_arp_entries`
+- **Fleet operations:** `bulk_execute` — fan-out across multiple routers by ID or tag with concurrency limits and partial-failure handling
+- **Health checks:** `check_router_health` — reachability probe, REST/SSH capability detection, version compatibility
 
 ---
 

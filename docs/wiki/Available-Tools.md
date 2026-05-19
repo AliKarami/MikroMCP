@@ -1,6 +1,6 @@
 # Available Tools
 
-All 54 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
+All 77 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -508,3 +508,386 @@ Read DNS resolver configuration: upstream servers, cache size, cache TTL, and wh
 | `routerId` | string | — | Target router |
 
 **Example prompt:** "What DNS servers is core-01 using and is it allowing remote DNS requests?"
+
+---
+
+## IPSec/VPN
+
+### `list_ipsec_peers` — Read
+
+List IPSec peer configurations with state and connection status.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show all IPSec peers on edge-01 and which ones are established."
+
+---
+
+### `list_ipsec_policies` — Read
+
+List IPSec policy entries (traffic selectors).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "List all IPSec policies on core-01."
+
+---
+
+### `manage_ipsec_peer` — Write · Idempotent
+
+Add or remove an IPSec peer. Idempotent by `name`: `add` returns `already_exists` if a peer with the same name exists with matching config; throws `CONFLICT` if config differs.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` | — | Operation to perform |
+| `name` | string | — | Peer name (idempotency key) |
+| `address` | string | — | Remote peer IP address |
+| `authMethod` | `pre-shared-key` \| `rsa-signature` | — | Authentication method |
+| `secret` | string | — | Pre-shared key (required for `pre-shared-key`) |
+| `profile` | string | — | IPSec profile name |
+| `comment` | string | — | Optional comment |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add an IPSec peer named vpn-branch on edge-01 to 203.0.113.5 with a pre-shared key."
+
+---
+
+## Certificates
+
+### `list_certificates` — Read
+
+List router certificates with validity, fingerprint, and usage flags.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "List all certificates on core-01 and show which ones are expiring soon."
+
+---
+
+### `manage_certificate` — Write · Idempotent
+
+Import or remove a certificate. Idempotent by `name`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `import` \| `remove` | — | Operation to perform |
+| `name` | string | — | Certificate name (idempotency key) |
+| `passphrase` | string | — | Passphrase for the certificate file (if encrypted) |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Remove the expired certificate named old-vpn-cert from edge-01."
+
+---
+
+## Users
+
+### `list_users` — Read
+
+List RouterOS user accounts with group membership and last-login info.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show all users on core-01 and which groups they belong to."
+
+---
+
+### `manage_user` — Write · Idempotent
+
+Add, update, or remove a RouterOS user account. Idempotent by `name`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` \| `update` | — | Operation to perform |
+| `name` | string | — | Username (idempotency key) |
+| `group` | string | — | RouterOS group name (e.g. `read`, `write`, `full`) |
+| `password` | string | — | User password |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Create or update the user in disabled state |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add a read-only user named monitor on core-01."
+
+---
+
+## DHCP Servers & Pools
+
+### `list_dhcp_servers` — Read
+
+List DHCP server instances with their interface, address pool, and enabled status.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show all DHCP servers on core-01."
+
+---
+
+### `manage_dhcp_server` — Write · Idempotent
+
+Add, update, or remove a DHCP server instance. Idempotent by `name`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` \| `update` | — | Operation to perform |
+| `name` | string | — | Server name (idempotency key) |
+| `interface` | string | — | Interface the server listens on |
+| `addressPool` | string | — | Address pool name |
+| `leaseTime` | string | — | Lease duration (e.g. `1d`, `00:10:00`) |
+| `disabled` | boolean | `false` | Create the server in disabled state |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add a DHCP server on ether2 of core-01 using pool lan-pool."
+
+---
+
+### `list_dhcp_pools` — Read
+
+List DHCP address pools and their IP ranges.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show all IP pools on core-01."
+
+---
+
+### `manage_dhcp_pool` — Write · Idempotent
+
+Add or remove an IP address pool. Idempotent by `name`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` | — | Operation to perform |
+| `name` | string | — | Pool name (idempotency key) |
+| `ranges` | string | — | IP range(s) (e.g. `192.168.1.100-192.168.1.200`) |
+| `comment` | string | — | Optional comment |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Create an IP pool named lan-pool with range 192.168.1.100–192.168.1.200 on core-01."
+
+---
+
+## Queues/QoS
+
+### `list_queues` — Read
+
+List simple queue entries with their targets, limits, and current rates.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show all bandwidth queues on edge-01."
+
+---
+
+### `manage_queue` — Write · Idempotent
+
+Add, update, or remove a simple queue entry. Idempotent by `name`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` \| `update` | — | Operation to perform |
+| `name` | string | — | Queue name (idempotency key) |
+| `target` | string | — | Target IP address or CIDR |
+| `maxLimit` | string | — | Max rate as `upload/download` (e.g. `10M/10M`) |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Create or update the queue in disabled state |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Limit the device at 192.168.1.50 to 10 Mbps on core-01."
+
+---
+
+## VRRP
+
+### `list_vrrp_instances` — Read
+
+List VRRP instances with their virtual IP, priority, and master/backup state.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show VRRP instances on core-01 and which is master."
+
+---
+
+### `manage_vrrp_instance` — Write · Idempotent
+
+Add, update, or remove a VRRP instance. Idempotent by `name`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` \| `update` | — | Operation to perform |
+| `name` | string | — | VRRP interface name (idempotency key) |
+| `interface` | string | — | Underlying interface |
+| `vrid` | integer | — | Virtual Router ID (1–255) |
+| `priority` | integer | — | VRRP priority (1–254; 255 reserved for master) |
+| `address` | string | — | Virtual IP address |
+| `disabled` | boolean | `false` | Create or update in disabled state |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Check the VRRP priority on core-01 and increase it if it's not the master."
+
+---
+
+## SNMP & NTP
+
+### `get_snmp_settings` — Read
+
+Read SNMP configuration: enabled state, community strings, and contact/location info.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+
+**Example prompt:** "Is SNMP enabled on core-01 and what community string is configured?"
+
+---
+
+### `get_ntp_settings` — Read
+
+Read NTP client configuration: enabled state, primary and secondary server addresses.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+
+**Example prompt:** "What NTP servers is edge-01 using?"
+
+---
+
+## Netwatch
+
+### `list_netwatch_entries` — Read
+
+List Netwatch monitoring entries with their target hosts, probe intervals, and current status.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show all Netwatch entries on core-01 and which hosts are currently down."
+
+---
+
+### `manage_netwatch_entry` — Write · Idempotent
+
+Add, update, or remove a Netwatch monitoring entry. Idempotent by `host`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` \| `update` | — | Operation to perform |
+| `host` | string | — | Target IP address or hostname (idempotency key) |
+| `interval` | string | — | Probe interval (e.g. `00:00:10`) |
+| `upScript` | string | — | Script to run when host comes up |
+| `downScript` | string | — | Script to run when host goes down |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Create or update in disabled state |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add a Netwatch entry for 8.8.8.8 on core-01 with a 30-second probe interval."
+
+---
+
+## Discovery & ARP
+
+### `list_neighbors` — Read
+
+List LLDP/CDP/MNDP neighbor discovery entries. Shows neighbor hostname, interface, platform, and IP.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Filter by local interface name |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "What neighbors can core-01 see via LLDP?"
+
+---
+
+### `list_arp_entries` — Read
+
+List ARP table entries with IP address, MAC, interface, and status.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Filter by interface name |
+| `macAddress` | string | — | Filter by MAC address |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Show the ARP table on edge-01 for the ether2 interface."
+
+---
+
+## Fleet Operations
+
+### `check_router_health` — Read
+
+Probe one or more routers for reachability, REST API availability, SSH availability, and RouterOS version. Returns a per-router health summary. Can target individual routers by ID or entire tag groups.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerIds` | string[] | — | List of router IDs to probe (use `tags` or `routerIds`, not both) |
+| `tags` | string[] | — | Target all routers matching any of these tags |
+| `checkSsh` | boolean | `false` | Also probe SSH connectivity |
+| `concurrency` | integer | `5` | Maximum simultaneous probes (1–20) |
+
+**Example prompt:** "Check the health of all routers tagged 'production' and flag any that are unreachable or running an outdated RouterOS version."
+
+---
+
+### `bulk_execute` — Write
+
+Fan out any base tool call to multiple routers by ID or tag with configurable concurrency. Results include a per-router outcome with success/error status. Fleet tools and change-management tools cannot be used as the inner tool.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerIds` | string[] | — | List of router IDs to target (use `tags` or `routerIds`, not both) |
+| `tags` | string[] | — | Target all routers matching any of these tags |
+| `tool` | string | — | Name of the base tool to call on each router |
+| `params` | object | — | Parameters for the tool call (omit `routerId` — it is set per router) |
+| `concurrency` | integer | `3` | Maximum simultaneous calls (1–10) |
+| `stopOnError` | boolean | `false` | Abort remaining routers if any call fails |
+
+**Example prompt:** "Run `get_system_status` on all routers tagged 'branch' and summarize which ones have high CPU usage."

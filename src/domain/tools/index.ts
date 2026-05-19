@@ -21,6 +21,14 @@ import { packagesTools } from "./packages-tools.js";
 import { filesTools } from "./files-tools.js";
 import { containerTools } from "./container-tools.js";
 import { createChangeManagementTools } from "./change-management-tools.js";
+import { ipsecTools } from "./ipsec-tools.js";
+import { certificateTools } from "./certificate-tools.js";
+import { userTools } from "./user-tools.js";
+import { dhcpServerTools } from "./dhcp-server-tools.js";
+import { queueTools } from "./queue-tools.js";
+import { vrrpTools } from "./vrrp-tools.js";
+import { networkServicesTools } from "./network-services-tools.js";
+import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
   ...systemTools,
@@ -44,11 +52,19 @@ const baseTools: ToolDefinition[] = [
   ...packagesTools,
   ...filesTools,
   ...containerTools,
+  ...ipsecTools,
+  ...certificateTools,
+  ...userTools,
+  ...dhcpServerTools,
+  ...queueTools,
+  ...vrrpTools,
+  ...networkServicesTools,
 ];
 
 export const allTools: ToolDefinition[] = [
   ...baseTools,
   ...createChangeManagementTools(baseTools),
+  ...createFleetTools(baseTools),
 ];
 
 export type {
