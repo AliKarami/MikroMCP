@@ -18,17 +18,14 @@ const checkHealthInputSchema = z
 const bulkExecuteInputSchema = z
   .object({
     toolName: z.string().describe("Name of the tool to fan out (must be a single-router tool)"),
-    routerIds: z.array(z.string()).optional().describe("Explicit list of router IDs"),
-    tags: z.array(z.string()).optional().describe("Target all routers with these tags"),
+    routerIds: z.array(z.string()).optional().describe("Explicit list of router IDs to target"),
+    tags: z.array(z.string()).optional().describe("Target all routers with ALL of these tags (mutually exclusive with routerIds)"),
     params: z
       .record(z.string(), z.unknown())
       .describe("Params to pass to the tool (omit routerId — injected per router)"),
-    concurrency: z.number().int().min(1).max(20).default(5),
+    concurrency: z.number().int().min(1).max(20).default(5).describe("Max simultaneous router calls"),
   })
-  .strict()
-  .refine((d) => (d.routerIds !== undefined) !== (d.tags !== undefined), {
-    message: "Provide exactly one of routerIds or tags",
-  });
+  .strict();
 
 interface BulkResult {
   routerId: string;
@@ -108,6 +105,18 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     },
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       const parsed = bulkExecuteInputSchema.parse(params);
+
+      if ((parsed.routerIds !== undefined) === (parsed.tags !== undefined)) {
+        throw new MikroMCPError({
+          category: ErrorCategory.VALIDATION,
+          code: "BULK_TARGET_REQUIRED",
+          message: "Provide exactly one of routerIds or tags, not both and not neither.",
+          recoverability: {
+            retryable: false,
+            suggestedAction: "Supply either routerIds (array of IDs) or tags (array of tag strings).",
+          },
+        });
+      }
 
       log.info(
         { toolName: parsed.toolName, concurrency: parsed.concurrency },

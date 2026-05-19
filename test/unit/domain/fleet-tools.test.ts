@@ -220,24 +220,24 @@ describe("fleet-tools", () => {
       });
     });
 
-    it("throws ZodError when neither routerIds nor tags provided", async () => {
+    it("throws VALIDATION when neither routerIds nor tags provided", async () => {
       const ctx = makeFleetContext();
       await expect(
         bulkTool.handler(
           { toolName: "list_interfaces", params: {} },
           ctx,
         ),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "BULK_TARGET_REQUIRED" });
     });
 
-    it("throws ZodError when both routerIds and tags provided", async () => {
+    it("throws VALIDATION when both routerIds and tags provided", async () => {
       const ctx = makeFleetContext();
       await expect(
         bulkTool.handler(
           { toolName: "list_interfaces", routerIds: ["r1"], tags: ["tag1"], params: {} },
           ctx,
         ),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "BULK_TARGET_REQUIRED" });
     });
   });
 
