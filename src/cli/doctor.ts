@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import * as net from "node:net";
-import { createRequire } from "node:module";
 import chalk from "chalk";
 import { RouterRegistry } from "../config/router-registry.js";
 import { getCredentials } from "../config/secrets.js";
@@ -11,8 +10,8 @@ import { IdentityRegistry } from "../config/identity-registry.js";
 import { MikroMCPError } from "../domain/errors/error-types.js";
 import type { RouterConfig } from "../types.js";
 
-const require = createRequire(import.meta.url);
-const { version: localVersion } = require("../../package.json") as { version: string };
+declare const __MIKROMCP_VERSION__: string;
+const localVersion = __MIKROMCP_VERSION__;
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 

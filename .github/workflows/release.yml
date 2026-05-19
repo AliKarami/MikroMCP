@@ -250,6 +250,12 @@ jobs:
         run: npm run build
 
       - name: Publish
-        run: npm publish --access public --provenance
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "mikromcp@${VERSION}" version 2>/dev/null | grep -q "${VERSION}"; then
+            echo "mikromcp@${VERSION} already published, skipping."
+          else
+            npm publish --access public --provenance
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

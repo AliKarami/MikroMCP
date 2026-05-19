@@ -1,16 +1,14 @@
 import { Command } from "commander";
-import { createRequire } from "module";
 import { runServe } from "./serve.js";
 import { runDoctor } from "./doctor.js";
 import { runInit } from "./init.js";
 
-const require = createRequire(import.meta.url);
-const { version } = require("../../package.json") as { version: string };
+declare const __MIKROMCP_VERSION__: string;
 
 export const program = new Command()
   .name("mikromcp")
   .description("MikroTik RouterOS MCP server")
-  .version(version);
+  .version(__MIKROMCP_VERSION__);
 
 program
   .command("serve", { isDefault: true })
