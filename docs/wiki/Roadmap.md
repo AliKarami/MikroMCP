@@ -120,14 +120,17 @@ Milestones are intentionally scoped so each one ships working, testable software
 
 ## 🔜 v1.0 — Production Release
 
-**Goal:** Distribution, operability, and ecosystem milestone.
+**Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams and accessible to individual users — not adding new router surfaces.
 
-- **Prometheus metrics** — `/metrics`, `/healthz`, `/readyz` endpoints
-- **RouterOS CHR integration test harness** — end-to-end CI without real hardware
-- **Distribution** — npm publication, Docker image, example systemd unit
-- **`mikromcp doctor`** — config/env/router capability validation
+- **Prometheus metrics** — `/metrics`, `/healthz`, `/readyz` endpoints: tool call latency, circuit breaker state, error rates per router, router availability
+- **RouterOS CHR integration test harness** — end-to-end CI without real hardware; REST adapter tests with real parsed payloads
+- **`mikromcp doctor` (expanded)** — interactive setup wizard: detect missing config, generate `routers.yaml`, test router connectivity, verify API credentials, register with Claude Desktop / Claude Code, check for updates, summarise health with fix suggestions
+- **Onboarding for non-experts** — step-by-step wiki guides (RouterOS API enable, credential setup, `routers.yaml` authoring, connecting to Claude Desktop / Claude Code / Codex / Cursor); `mikromcp init` wizard as the CLI entry point for first-time setup
+- **GitHub Releases + multi-arch binaries** — automated release workflow on version tags: standalone binaries for Linux x64/arm64, macOS x64/arm64, Windows x64; changelog generated from conventional commits
+- **Docker Hub & GHCR images** — `mikromcp:latest` and `mikromcp:<version>` published to Docker Hub and GitHub Container Registry on each release; multi-arch manifest (linux/amd64, linux/arm64)
+- **Release artifact automation** — CI enforces version bump → binary builds → Docker pushes → GitHub Release → wiki sync on every release tag; `CLAUDE.md` documents the checklist for future contributors
 - **Stability policy** — tool schema stability contract and compatibility matrix
-- **Security docs** — least-privilege RouterOS policies, threat model, deployment guide
+- **Security docs** — least-privilege RouterOS policy templates, threat model, deployment guide
 
 ---
 

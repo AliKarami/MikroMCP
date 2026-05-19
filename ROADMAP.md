@@ -167,12 +167,15 @@ This document describes what has been built and what is planned. Milestones are 
 
 ## 🔜 v1.0 — Production Release
 
-**Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams, not adding new router surfaces.
+**Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams and accessible to individual users — not adding new router surfaces.
 
 - **Prometheus metrics** — `/metrics`, `/healthz`, `/readyz` endpoints: tool call latency, circuit breaker state, error rates per router, router availability
 - **RouterOS CHR integration test harness** — CHR in Docker for end-to-end CI without real hardware; REST adapter tests with real parsed payloads; idempotency edge-case coverage
-- **Distribution** — npm publication (`npx mikromcp`), Docker image, example systemd unit
-- **`mikromcp doctor`** — config/env/router capability validation CLI command
+- **`mikromcp doctor` (expanded)** — interactive setup wizard: detect missing env vars and config, generate a starter `routers.yaml`, test router connectivity, verify API credentials, configure and register with Claude Desktop / Claude Code, check for MikroMCP updates, and summarise overall health with actionable fix suggestions
+- **Onboarding for non-experts** — step-by-step wiki guides (RouterOS API enable, credential setup, `routers.yaml` authoring, connecting to Claude Desktop / Claude Code / Codex / Cursor); `mikromcp init` wizard as the CLI entry point for first-time setup
+- **GitHub Releases + multi-arch binaries** — automated release workflow triggered by version tags: build standalone binaries (Linux x64/arm64, macOS x64/arm64, Windows x64) via `pkg` or `bun build --compile`; attach to the GitHub Release; generate a changelog from conventional commits
+- **Docker Hub & GHCR images** — CI publishes `mikromcp:latest` and `mikromcp:<version>` to both Docker Hub and GitHub Container Registry on each release tag; multi-arch manifest (linux/amd64, linux/arm64); updated `docker-compose.example.yml` referencing the public images
+- **Release artifact automation in CI/CLAUDE.md** — CI workflow enforces that every release tag triggers: version bump, binary builds, Docker pushes, GitHub Release creation, and wiki sync; `CLAUDE.md` documents the release checklist so future contributors know what to update
 - **Stability policy** — tool schema stability contract and compatibility matrix
 - **Security docs** — least-privilege RouterOS policy templates, threat model, deployment guide
 
