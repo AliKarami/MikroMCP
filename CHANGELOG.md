@@ -12,6 +12,14 @@ Each release section covers changes **since the previous release only**.
 
 ---
 
+## [1.0.10] - 2026-05-20
+
+### Fixed
+- MCP Registry name casing corrected to `io.github.AliKarami/mikromcp` (was lowercase, causing 403 on publish).
+- MCP Registry description trimmed to satisfy 100-character validation limit.
+
+---
+
 ## [1.0.9] - 2026-05-20
 
 ### Added
