@@ -409,13 +409,15 @@ AI assistants can use MikroMCP to:
 | Resource                                                                                              | Use it for                                                 |
 | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | [ROADMAP.md](ROADMAP.md)                                                                              | Shipped milestones and planned work                        |
-| [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers and request pipeline                         |
-| [Setup Guide](https://github.com/AliKarami/MikroMCP/wiki/Setup-Guide)                                 | RouterOS REST setup and end-to-end onboarding              |
-| [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration)                             | Router registry, TLS, SSH, credentials, HTTP mode          |
-| [Running](https://github.com/AliKarami/MikroMCP/wiki/Running)                                         | Local development and production commands                  |
-| [Connecting to an MCP Client](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-an-MCP-Client) | Claude Desktop, Claude Code, Cursor, and other MCP clients |
-| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | Tool parameters and example prompts                        |
-| [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling)                           | Typed errors, retry behavior, circuit breaker behavior     |
+| [Getting Started](https://github.com/AliKarami/MikroMCP/wiki/Getting-Started)                         | Install, configure, and connect in 15 minutes              |
+| [RouterOS API Setup](https://github.com/AliKarami/MikroMCP/wiki/RouterOS-API-Setup)                   | Enable the REST API, create a user, TLS and firewall       |
+| [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration)                             | Router registry, credentials, all environment variables    |
+| [Connecting to Claude Desktop](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-Claude-Desktop) | Register MikroMCP in Claude Desktop                      |
+| [Connecting to AI Assistants](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-AI-Assistants) | Claude Code, Cursor, Codex, HTTP/Docker/systemd            |
+| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 77 tools — parameters and example prompts              |
+| [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers, request pipeline, auth model                |
+| [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling)                           | Error categories, retry engine, circuit breaker            |
+| [Running](https://github.com/AliKarami/MikroMCP/wiki/Running)                                         | Run commands, HTTP transport, troubleshooting              |
 | [Development](https://github.com/AliKarami/MikroMCP/wiki/Development)                                 | Project structure, tests, MCP Inspector workflow           |
 | [Contributing](https://github.com/AliKarami/MikroMCP/wiki/Contributing)                               | Adding tools, coding conventions, PR checklist             |
 
@@ -470,7 +472,6 @@ Issues, bug reports, tool requests, documentation improvements, and pull request
 Good first contributions:
 
 - Add a read-only tool for an uncovered RouterOS surface.
-- Improve the wiki tool reference with examples and parameter tables.
 - Add screenshots, demo GIFs, or topology diagrams.
 - Expand tests around RouterOS response normalization and idempotency edge cases.
 - Help validate RouterOS version compatibility across real MikroTik devices and CHR.
