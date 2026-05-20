@@ -7,7 +7,7 @@ import {
   mkdirSync,
   copyFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { stringify as yamlStringify, parse as yamlParse } from "yaml";
 import bcrypt from "bcryptjs";
@@ -57,6 +57,8 @@ interface CollectedData {
   allowedToolPatterns: string;
   rawToken: string;
   tokenHash: string;
+  envPath: string;
+  configDir: string;
   writeEnv: boolean;
   writeRoutersYaml: boolean;
   writeIdentitiesYaml: boolean;
@@ -66,6 +68,14 @@ interface CollectedData {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function mikromcpDir(): string {
+  return join(homedir(), ".mikromcp");
+}
+
+function defaultAuditLogPath(): string {
+  return join(mikromcpDir(), "audit.ndjson");
+}
 
 function suggestEnvPrefix(routerId: string): string {
   return "ROUTER_" + routerId.toUpperCase().replace(/-/g, "_");
@@ -91,23 +101,28 @@ function findClaudeDesktopConfig(): string | null {
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
-function appendToGitignore(projectRoot: string, entry: string): void {
-  const gitignorePath = join(projectRoot, ".gitignore");
-  if (existsSync(gitignorePath)) {
-    const content = readFileSync(gitignorePath, "utf-8");
-    if (!content.split("\n").some((line) => line.trim() === entry)) {
-      writeFileSync(gitignorePath, content.endsWith("\n") ? content + entry + "\n" : content + "\n" + entry + "\n");
-    }
-  } else {
-    writeFileSync(gitignorePath, entry + "\n");
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Steps
 // ---------------------------------------------------------------------------
 
-async function collectRouterInfo(): Promise<Omit<CollectedData, "createIdentity" | "identityId" | "role" | "allowedRouters" | "allowedToolPatterns" | "rawToken" | "tokenHash" | "writeEnv" | "writeRoutersYaml" | "writeIdentitiesYaml" | "registerClaudeDesktop">> {
+async function collectRouterInfo(): Promise<
+  Omit<
+    CollectedData,
+    | "createIdentity"
+    | "identityId"
+    | "role"
+    | "allowedRouters"
+    | "allowedToolPatterns"
+    | "rawToken"
+    | "tokenHash"
+    | "envPath"
+    | "configDir"
+    | "writeEnv"
+    | "writeRoutersYaml"
+    | "writeIdentitiesYaml"
+    | "registerClaudeDesktop"
+  >
+> {
   console.log(chalk.bold("\n── Router configuration ──────────────────────────────────────────"));
 
   const routerId = await input({
@@ -116,13 +131,13 @@ async function collectRouterInfo(): Promise<Omit<CollectedData, "createIdentity"
   });
 
   const host = await input({
-    message: "Host / IP (e.g. 192.168.1.1):",
-    validate: (v) => v.trim().length > 0 ? true : "Host is required",
+    message: "Host / IP (e.g. 192.168.88.1):",
+    validate: (v) => (v.trim().length > 0 ? true : "Host is required"),
   });
 
   const portStr = await input({
     message: "Port:",
-    default: "80",
+    default: "443",
     validate: (v) => {
       const n = Number(v);
       return Number.isInteger(n) && n >= 1 && n <= 65535 ? true : "Port must be 1–65535";
@@ -130,7 +145,8 @@ async function collectRouterInfo(): Promise<Omit<CollectedData, "createIdentity"
   });
   const port = Number(portStr);
 
-  const tlsEnabled = await confirm({ message: "Enable TLS?", default: false });
+  const tlsDefault = port === 443 || port === 8443;
+  const tlsEnabled = await confirm({ message: "Enable TLS?", default: tlsDefault });
 
   let rejectUnauthorized = true;
   if (tlsEnabled) {
@@ -152,7 +168,7 @@ async function collectRouterInfo(): Promise<Omit<CollectedData, "createIdentity"
   const envPrefix = await input({
     message: "Credential env prefix:",
     default: suggestedPrefix,
-    validate: (v) => v.trim().length > 0 ? true : "Env prefix is required",
+    validate: (v) => (v.trim().length > 0 ? true : "Env prefix is required"),
   });
 
   const tagsRaw = await input({
@@ -164,7 +180,7 @@ async function collectRouterInfo(): Promise<Omit<CollectedData, "createIdentity"
   const rosVersion = await input({
     message: "RouterOS version:",
     default: "7",
-    validate: (v) => v.trim().length > 0 ? true : "Version is required",
+    validate: (v) => (v.trim().length > 0 ? true : "Version is required"),
   });
 
   return { routerId, host, port, tlsEnabled, rejectUnauthorized, envPrefix, tags, rosVersion };
@@ -200,7 +216,7 @@ async function collectIdentityInfo(): Promise<{
 
   const identityId = await input({
     message: "Identity ID (e.g. claude):",
-    validate: (v) => v.trim().length > 0 ? true : "Identity ID is required",
+    validate: (v) => (v.trim().length > 0 ? true : "Identity ID is required"),
   });
 
   const role = await select({
@@ -241,9 +257,11 @@ async function collectIdentityInfo(): Promise<{
   };
 }
 
-async function collectEnvPreference(_data: Partial<CollectedData>): Promise<boolean> {
-  console.log(chalk.bold("\n── Environment file ─────────────────────────────────────────────"));
-  return confirm({ message: "Write env vars to .env?", default: true });
+async function collectEnvPreference(): Promise<boolean> {
+  return confirm({
+    message: "Write credentials to ~/.mikromcp/.env? (No = inject env vars at runtime)",
+    default: true,
+  });
 }
 
 async function collectClaudeDesktopPreference(): Promise<boolean> {
@@ -255,8 +273,8 @@ async function collectClaudeDesktopPreference(): Promise<boolean> {
 // Write actions
 // ---------------------------------------------------------------------------
 
-function writeRoutersYaml(data: CollectedData, configDir: string): boolean {
-  const filePath = join(configDir, "routers.yaml");
+function writeRoutersYaml(data: CollectedData): boolean {
+  const filePath = join(data.configDir, "routers.yaml");
 
   const newEntry: RouterYamlEntry = {
     host: data.host,
@@ -283,19 +301,23 @@ function writeRoutersYaml(data: CollectedData, configDir: string): boolean {
 
   parsed.routers[data.routerId] = newEntry;
 
-  mkdirSync(configDir, { recursive: true });
+  mkdirSync(data.configDir, { recursive: true });
   writeFileSync(filePath, yamlStringify(parsed, { lineWidth: 0 }));
   return true;
 }
 
-function writeIdentitiesYaml(data: CollectedData, configDir: string): boolean {
-  const filePath = join(configDir, "identities.yaml");
+function writeIdentitiesYaml(data: CollectedData): boolean {
+  const filePath = join(data.configDir, "identities.yaml");
 
   const newEntry: IdentityYamlEntry = {
     token: data.tokenHash,
     role: data.role,
-    allowedRouters: data.allowedRouters === "*" ? ["*"] : data.allowedRouters.split(",").map((s) => s.trim()),
-    allowedToolPatterns: data.allowedToolPatterns === "*" ? ["*"] : data.allowedToolPatterns.split(",").map((s) => s.trim()),
+    allowedRouters:
+      data.allowedRouters === "*" ? ["*"] : data.allowedRouters.split(",").map((s) => s.trim()),
+    allowedToolPatterns:
+      data.allowedToolPatterns === "*"
+        ? ["*"]
+        : data.allowedToolPatterns.split(",").map((s) => s.trim()),
   };
 
   let parsed: IdentitiesYaml = { identities: {} };
@@ -308,42 +330,62 @@ function writeIdentitiesYaml(data: CollectedData, configDir: string): boolean {
 
   parsed.identities[data.identityId] = newEntry;
 
-  mkdirSync(configDir, { recursive: true });
+  mkdirSync(data.configDir, { recursive: true });
   writeFileSync(filePath, yamlStringify(parsed, { lineWidth: 0 }));
   return true;
 }
 
-function writeDotEnv(data: CollectedData, projectRoot: string): void {
-  const envPath = join(projectRoot, ".env");
-
-  const lines: string[] = [];
-  lines.push(`ROUTER_${data.envPrefix.replace(/^ROUTER_/, "")}_USER=`);
-  lines.push(`ROUTER_${data.envPrefix.replace(/^ROUTER_/, "")}_PASS=`);
-
-  // Normalise: if envPrefix already starts with ROUTER_ these would double;
-  // instead derive consistently from envPrefix itself.
+function writeDotEnv(data: CollectedData): void {
   const userKey = `${data.envPrefix}_USER`;
   const passKey = `${data.envPrefix}_PASS`;
+  const auditLogPath = defaultAuditLogPath();
+  const transport = data.createIdentity ? "http" : "stdio";
+  const confirmationSecret = data.createIdentity ? randomBytes(32).toString("hex") : "";
 
-  if (data.createIdentity) {
-    lines.push("MIKROMCP_TRANSPORT=http");
-    lines.push("MIKROMCP_CONFIRMATION_SECRET=");
-  }
+  const lines = [
+    "# ── Router credentials ───────────────────────────────────────────────",
+    `${userKey}=`,
+    `${passKey}=`,
+    "",
+    "# ── Transport ────────────────────────────────────────────────────────",
+    `# stdio  → launched directly by Claude Desktop or another MCP client`,
+    `# http   → standalone server mode with bearer-token auth`,
+    `MIKROMCP_TRANSPORT=${transport}`,
+    "",
+    "# ── Config paths ─────────────────────────────────────────────────────",
+    `MIKROMCP_CONFIG_PATH=${join(data.configDir, "routers.yaml")}`,
+    `MIKROMCP_IDENTITIES_PATH=${join(data.configDir, "identities.yaml")}`,
+    "",
+    "# ── Logging ──────────────────────────────────────────────────────────",
+    "# Levels: trace | debug | info | warn | error",
+    "MIKROMCP_LOG_LEVEL=info",
+    `MIKROMCP_AUDIT_LOG_PATH=${auditLogPath}`,
+    "",
+    "# ── HTTP transport (only used when MIKROMCP_TRANSPORT=http) ──────────",
+    "MIKROMCP_PORT=3000",
+    `MIKROMCP_CONFIRMATION_SECRET=${confirmationSecret}`,
+    "",
+    "# ── RBAC (optional, for stdio with identity enforcement) ─────────────",
+    "# MIKROMCP_STDIO_IDENTITY=",
+  ];
 
-  const block = [`${userKey}=`, `${passKey}=`, ...(data.createIdentity ? ["MIKROMCP_TRANSPORT=http", "MIKROMCP_CONFIRMATION_SECRET="] : [])].join("\n") + "\n";
+  const content = lines.join("\n") + "\n";
 
-  if (existsSync(envPath)) {
-    const existing = readFileSync(envPath, "utf-8");
-    writeFileSync(envPath, existing.endsWith("\n") ? existing + block : existing + "\n" + block);
+  mkdirSync(data.configDir, { recursive: true });
+
+  if (existsSync(data.envPath)) {
+    const existing = readFileSync(data.envPath, "utf-8");
+    writeFileSync(data.envPath, existing.endsWith("\n") ? existing + "\n" + content : existing + "\n\n" + content);
   } else {
-    writeFileSync(envPath, block);
+    writeFileSync(data.envPath, content);
   }
 
-  appendToGitignore(projectRoot, ".env");
-  console.log(chalk.dim(`  Edit .env and fill in your router credentials`));
+  console.log(
+    chalk.dim(`  Fill in ${userKey} and ${passKey} in ${data.envPath}`),
+  );
 }
 
-function registerClaudeDesktop(_projectRoot: string): { registered: boolean; snippet?: string } {
+function registerClaudeDesktop(data: CollectedData): { registered: boolean; snippet?: string } {
   const configPath = findClaudeDesktopConfig();
 
   const entry = {
@@ -388,25 +430,25 @@ function registerClaudeDesktop(_projectRoot: string): { registered: boolean; sni
 export async function runInit(): Promise<void> {
   console.log(chalk.bold.cyan("\n🔧  MikroMCP — Interactive Setup Wizard\n"));
 
-  const projectRoot = process.cwd();
-  const configDir = join(projectRoot, "config");
-
   // Step 1: router config
   const routerInfo = await collectRouterInfo();
 
   // Step 2: identity
   const identityInfo = await collectIdentityInfo();
 
-  // Step 3: .env
-  const writeEnv = await collectEnvPreference({ ...routerInfo, ...identityInfo });
+  const configDir = mikromcpDir();
+  const envPath = join(configDir, ".env");
 
-  // Step 4: confirm routers.yaml write
+  // Step 3: .env opt-in
+  const writeEnv = await collectEnvPreference();
+
+  // Step 4: confirm routers.yaml write when file already exists
   let writeRouters = true;
   const routersYamlPath = join(configDir, "routers.yaml");
   if (existsSync(routersYamlPath)) {
     console.log(chalk.bold("\n── Config files ─────────────────────────────────────────────────"));
     writeRouters = await confirm({
-      message: "config/routers.yaml already exists. Add this router to it?",
+      message: "routers.yaml already exists. Add this router to it?",
       default: true,
     });
   }
@@ -418,6 +460,8 @@ export async function runInit(): Promise<void> {
   const data: CollectedData = {
     ...routerInfo,
     ...identityInfo,
+    envPath,
+    configDir,
     writeEnv,
     writeRoutersYaml: writeRouters,
     writeIdentitiesYaml: identityInfo.createIdentity,
@@ -428,31 +472,27 @@ export async function runInit(): Promise<void> {
 
   const summary: string[] = [];
 
-  // Write routers.yaml
   if (data.writeRoutersYaml) {
-    writeRoutersYaml(data, configDir);
-    summary.push(`config/routers.yaml updated`);
-    console.log(chalk.green("  ✔  config/routers.yaml written"));
+    writeRoutersYaml(data);
+    summary.push(`routers.yaml written to ${data.configDir}`);
+    console.log(chalk.green(`  ✔  ${join(data.configDir, "routers.yaml")}`));
   }
 
-  // Write identities.yaml
   if (data.writeIdentitiesYaml) {
-    writeIdentitiesYaml(data, configDir);
-    summary.push(`config/identities.yaml updated`);
-    console.log(chalk.green("  ✔  config/identities.yaml written"));
+    writeIdentitiesYaml(data);
+    summary.push(`identities.yaml written to ${data.configDir}`);
+    console.log(chalk.green(`  ✔  ${join(data.configDir, "identities.yaml")}`));
   }
 
-  // Write .env
   if (data.writeEnv) {
-    writeDotEnv(data, projectRoot);
-    summary.push(`.env created (fill in ${data.envPrefix}_USER and ${data.envPrefix}_PASS)`);
-    console.log(chalk.green("  ✔  .env written"));
+    writeDotEnv(data);
+    summary.push(`.env written to ${data.envPath}`);
+    console.log(chalk.green(`  ✔  ${data.envPath}`));
   }
 
-  // Register Claude Desktop
   let desktopRegistered = false;
   if (data.registerClaudeDesktop) {
-    const result = registerClaudeDesktop(projectRoot);
+    const result = registerClaudeDesktop(data);
     desktopRegistered = result.registered;
     if (desktopRegistered) {
       summary.push("Claude Desktop registered");
@@ -460,18 +500,19 @@ export async function runInit(): Promise<void> {
     }
   }
 
-  // Final summary
   console.log(chalk.bold.cyan("\n✅  Setup complete!\n"));
   for (const item of summary) {
     console.log(chalk.green(`  ✅  ${item}`));
   }
   if (data.createIdentity && data.rawToken) {
-    console.log(chalk.bold.yellow(`  ✅  Bearer token: ${data.rawToken} (save this — it won't be shown again)`));
+    console.log(
+      chalk.bold.yellow(`  ✅  Bearer token: ${data.rawToken} (save this — it won't be shown again)`),
+    );
   }
 
   console.log(chalk.bold("\nNext steps:"));
-  console.log(chalk.dim(`  1. Edit .env and fill in router credentials`));
-  console.log(chalk.dim("  2. Run: npm start"));
-  console.log(chalk.dim("  3. Verify: mikromcp doctor"));
+  console.log(chalk.dim(`  1. Fill in router credentials in ${data.envPath}`));
+  console.log(chalk.dim("  2. Run: mikromcp doctor"));
+  console.log(chalk.dim("  3. Restart Claude Desktop to load the MCP server"));
   console.log();
 }

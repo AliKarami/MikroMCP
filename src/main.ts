@@ -1,7 +1,8 @@
 import { config as loadDotenv } from "dotenv";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { program } from "./cli/index.js";
 
-// Load .env if present (ignore if not found)
-loadDotenv({ override: false });
+loadDotenv({ path: join(homedir(), ".mikromcp", ".env"), override: false });
 
 program.parse();

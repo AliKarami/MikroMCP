@@ -63,29 +63,18 @@ function makeTempProject() {
   return mkdtempSync(join(tmpdir(), "mikromcp-test-"));
 }
 
-// Helper: build default prompt sequence for a minimal router-only flow
-// (no identity, no .env, no Claude Desktop)
-function setupRouterOnlyPrompts(tmpDir: string) {
-  // input calls in order:
-  //   1. routerId
-  //   2. host
-  //   3. port
-  //   4. envPrefix (suggested)
-  //   5. tags
-  //   6. rosVersion
-  mockInput
-    .mockResolvedValueOnce("core-01")       // routerId
-    .mockResolvedValueOnce("192.168.1.1")   // host
-    .mockResolvedValueOnce("80")            // port
-    .mockResolvedValueOnce("ROUTER_CORE_01") // envPrefix
-    .mockResolvedValueOnce("")              // tags (none)
-    .mockResolvedValueOnce("7");            // rosVersion
+// configDir and envPath are always derived from homedir() → ~/.mikromcp/
+// Tests set mockHomedirRef.value = tmpDir so all paths land in the temp directory.
 
-  // confirm calls in order:
-  //   1. tlsEnabled → false
-  //   2. createIdentity → false
-  //   3. writeEnv → false
-  //   4. registerClaudeDesktop → false
+function setupRouterOnlyPrompts() {
+  mockInput
+    .mockResolvedValueOnce("core-01")
+    .mockResolvedValueOnce("192.168.1.1")
+    .mockResolvedValueOnce("80")
+    .mockResolvedValueOnce("ROUTER_CORE_01")
+    .mockResolvedValueOnce("")
+    .mockResolvedValueOnce("7");
+
   mockConfirm
     .mockResolvedValueOnce(false)  // tls
     .mockResolvedValueOnce(false)  // createIdentity
@@ -95,24 +84,19 @@ function setupRouterOnlyPrompts(tmpDir: string) {
 
 describe("runInit — router-only flow", () => {
   let tmpDir: string;
-  let cwdSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     tmpDir = makeTempProject();
-    cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
-    setupRouterOnlyPrompts(tmpDir);
+    mockHomedirRef.value = tmpDir;
+    setupRouterOnlyPrompts();
   });
 
-  afterEach(() => {
-    cwdSpy.mockRestore();
-  });
-
-  it("writes config/routers.yaml with correct structure", async () => {
+  it("writes ~/.mikromcp/routers.yaml with correct structure", async () => {
     const { runInit } = await import("../../../src/cli/init.js");
     await runInit();
 
-    const routersPath = join(tmpDir, "config", "routers.yaml");
+    const routersPath = join(tmpDir, ".mikromcp", "routers.yaml");
     expect(existsSync(routersPath)).toBe(true);
 
     const parsed = yamlParse(readFileSync(routersPath, "utf-8")) as {
@@ -132,41 +116,37 @@ describe("runInit — router-only flow", () => {
     const { runInit } = await import("../../../src/cli/init.js");
     await runInit();
 
-    const identitiesPath = join(tmpDir, "config", "identities.yaml");
-    expect(existsSync(identitiesPath)).toBe(false);
+    expect(existsSync(join(tmpDir, ".mikromcp", "identities.yaml"))).toBe(false);
   });
 
-  it("does not create .env when declined", async () => {
+  it("does not create .env when writeEnv is declined", async () => {
     const { runInit } = await import("../../../src/cli/init.js");
     await runInit();
 
-    expect(existsSync(join(tmpDir, ".env"))).toBe(false);
+    expect(existsSync(join(tmpDir, ".mikromcp", ".env"))).toBe(false);
   });
 });
 
 describe("runInit — identity creation", () => {
   let tmpDir: string;
-  let cwdSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     tmpDir = makeTempProject();
-    cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    mockHomedirRef.value = tmpDir;
 
-    // Router prompts
     mockInput
-      .mockResolvedValueOnce("edge-01")        // routerId
-      .mockResolvedValueOnce("10.0.0.1")       // host
-      .mockResolvedValueOnce("443")            // port
-      .mockResolvedValueOnce("ROUTER_EDGE01")  // envPrefix
-      .mockResolvedValueOnce("edge")           // tags
-      .mockResolvedValueOnce("7.14")           // rosVersion
-      // Identity prompts
-      .mockResolvedValueOnce("claude")         // identityId
-      .mockResolvedValueOnce("*")              // allowedRouters
-      .mockResolvedValueOnce("*");             // allowedToolPatterns
+      .mockResolvedValueOnce("edge-01")
+      .mockResolvedValueOnce("10.0.0.1")
+      .mockResolvedValueOnce("443")
+      .mockResolvedValueOnce("ROUTER_EDGE01")
+      .mockResolvedValueOnce("edge")
+      .mockResolvedValueOnce("7.14")
+      .mockResolvedValueOnce("claude")
+      .mockResolvedValueOnce("*")
+      .mockResolvedValueOnce("*");
 
-    mockSelect.mockResolvedValueOnce("operator"); // role
+    mockSelect.mockResolvedValueOnce("operator");
 
     mockConfirm
       .mockResolvedValueOnce(true)   // tlsEnabled
@@ -176,15 +156,11 @@ describe("runInit — identity creation", () => {
       .mockResolvedValueOnce(false); // claudeDesktop
   });
 
-  afterEach(() => {
-    cwdSpy.mockRestore();
-  });
-
-  it("writes config/identities.yaml with bcrypt hash", async () => {
+  it("writes ~/.mikromcp/identities.yaml with bcrypt hash", async () => {
     const { runInit } = await import("../../../src/cli/init.js");
     await runInit();
 
-    const identitiesPath = join(tmpDir, "config", "identities.yaml");
+    const identitiesPath = join(tmpDir, ".mikromcp", "identities.yaml");
     expect(existsSync(identitiesPath)).toBe(true);
 
     const parsed = yamlParse(readFileSync(identitiesPath, "utf-8")) as {
@@ -208,12 +184,11 @@ describe("runInit — identity creation", () => {
 
 describe("runInit — .env write path", () => {
   let tmpDir: string;
-  let cwdSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     tmpDir = makeTempProject();
-    cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    mockHomedirRef.value = tmpDir;
 
     mockInput
       .mockResolvedValueOnce("home-gw")
@@ -230,53 +205,26 @@ describe("runInit — .env write path", () => {
       .mockResolvedValueOnce(false); // claudeDesktop
   });
 
-  afterEach(() => {
-    cwdSpy.mockRestore();
-  });
-
-  it("writes .env with USER and PASS placeholders", async () => {
+  it("writes ~/.mikromcp/.env with USER and PASS placeholders", async () => {
     const { runInit } = await import("../../../src/cli/init.js");
     await runInit();
 
-    const envPath = join(tmpDir, ".env");
+    const envPath = join(tmpDir, ".mikromcp", ".env");
     expect(existsSync(envPath)).toBe(true);
 
     const content = readFileSync(envPath, "utf-8");
     expect(content).toContain("ROUTER_HOME_GW_USER=");
     expect(content).toContain("ROUTER_HOME_GW_PASS=");
   });
-
-  it("adds .env to .gitignore", async () => {
-    const { runInit } = await import("../../../src/cli/init.js");
-    await runInit();
-
-    const gitignorePath = join(tmpDir, ".gitignore");
-    expect(existsSync(gitignorePath)).toBe(true);
-    const content = readFileSync(gitignorePath, "utf-8");
-    expect(content).toContain(".env");
-  });
-
-  it("appends .env to existing .gitignore without duplicating", async () => {
-    const gitignorePath = join(tmpDir, ".gitignore");
-    writeFileSync(gitignorePath, "node_modules\ndist\n");
-
-    const { runInit } = await import("../../../src/cli/init.js");
-    await runInit();
-
-    const content = readFileSync(gitignorePath, "utf-8");
-    const envLines = content.split("\n").filter((l) => l.trim() === ".env");
-    expect(envLines.length).toBe(1);
-  });
 });
 
 describe("runInit — Claude Desktop registration", () => {
   let tmpDir: string;
-  let cwdSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     tmpDir = makeTempProject();
-    cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    mockHomedirRef.value = tmpDir;
 
     mockInput
       .mockResolvedValueOnce("wan-01")
@@ -291,17 +239,9 @@ describe("runInit — Claude Desktop registration", () => {
       .mockResolvedValueOnce(false)  // createIdentity
       .mockResolvedValueOnce(false)  // writeEnv
       .mockResolvedValueOnce(true);  // claudeDesktop → YES
-
-    // Point homedir() at our tmpDir so init finds/writes Claude Desktop config there
-    mockHomedirRef.value = tmpDir;
-  });
-
-  afterEach(() => {
-    cwdSpy.mockRestore();
   });
 
   it("patches claude_desktop_config.json and creates a backup", async () => {
-    // homedir() is already mocked to return tmpDir via mockHomedirRef.value = tmpDir (in beforeEach)
     // Create the expected Claude Desktop config path under the fake homedir
     const fakeConfigDir = join(tmpDir, "Library", "Application Support", "Claude");
     const { mkdirSync: fsMkdir, writeFileSync: fsWrite } = await import("node:fs");
@@ -333,12 +273,11 @@ describe("runInit — Claude Desktop registration", () => {
 
 describe("runInit — existing routers.yaml merge", () => {
   let tmpDir: string;
-  let cwdSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     tmpDir = makeTempProject();
-    cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    mockHomedirRef.value = tmpDir;
 
     mockInput
       .mockResolvedValueOnce("new-router")
@@ -356,13 +295,8 @@ describe("runInit — existing routers.yaml merge", () => {
       .mockResolvedValueOnce(false); // claudeDesktop
   });
 
-  afterEach(() => {
-    cwdSpy.mockRestore();
-  });
-
   it("adds new router to existing routers.yaml without overwriting existing entry", async () => {
-    // Pre-create a routers.yaml with an existing router
-    const configDir = join(tmpDir, "config");
+    const configDir = join(tmpDir, ".mikromcp");
     const { mkdirSync: fsMkdir, writeFileSync: fsWrite } = await import("node:fs");
     fsMkdir(configDir, { recursive: true });
     const existingYaml = `routers:\n  old-router:\n    host: "1.2.3.4"\n    port: 443\n    tls:\n      enabled: true\n      rejectUnauthorized: true\n    credentials:\n      source: env\n      envPrefix: ROUTER_OLD\n    tags: []\n    rosVersion: "7"\n`;
@@ -376,7 +310,6 @@ describe("runInit — existing routers.yaml merge", () => {
       routers: Record<string, unknown>;
     };
 
-    // Original router preserved
     expect(parsed.routers["old-router"]).toBeDefined();
     expect((parsed.routers["old-router"] as { host: string }).host).toBe("1.2.3.4");
 
