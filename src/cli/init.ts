@@ -7,7 +7,7 @@ import {
   mkdirSync,
   copyFileSync,
 } from "node:fs";
-import { homedir, platform } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { stringify as yamlStringify, parse as yamlParse } from "yaml";
 import bcrypt from "bcryptjs";
@@ -385,7 +385,7 @@ function writeDotEnv(data: CollectedData): void {
   );
 }
 
-function registerClaudeDesktop(data: CollectedData): { registered: boolean; snippet?: string } {
+function registerClaudeDesktop(): { registered: boolean; snippet?: string } {
   const configPath = findClaudeDesktopConfig();
 
   const entry = {
@@ -492,7 +492,7 @@ export async function runInit(): Promise<void> {
 
   let desktopRegistered = false;
   if (data.registerClaudeDesktop) {
-    const result = registerClaudeDesktop(data);
+    const result = registerClaudeDesktop();
     desktopRegistered = result.registered;
     if (desktopRegistered) {
       summary.push("Claude Desktop registered");

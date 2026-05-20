@@ -15,7 +15,7 @@ npm run lint         # eslint src/
 npm run format       # prettier --write src/ test/
 ```
 
-Run `npm test && npm run typecheck` before committing.
+Run `npm test` before committing (runs vitest, tsc, and eslint).
 
 ## Architecture in one sentence
 
