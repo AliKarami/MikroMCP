@@ -225,7 +225,7 @@ async function checkRouter(router: RouterConfig): Promise<void> {
 // ─── Identities config ─────────────────────────────────────────────────────
 
 function checkIdentities(identitiesPath: string, transport: string): void {
-  if (!process.env.MIKROMCP_IDENTITIES_PATH && identitiesPath === "config/identities.yaml") {
+  if (!process.env.MIKROMCP_IDENTITIES_PATH && identitiesPath.endsWith(".mikromcp/identities.yaml")) {
     // Default path not explicitly configured — skip unless file exists
     if (!existsSync(identitiesPath)) {
       return;

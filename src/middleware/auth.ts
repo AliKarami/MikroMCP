@@ -78,7 +78,7 @@ export function getStdioIdentity(
       details: { stdioIdentityName },
       recoverability: {
         retryable: false,
-        suggestedAction: `Add an identity named "${stdioIdentityName}" to config/identities.yaml or unset MIKROMCP_STDIO_IDENTITY.`,
+        suggestedAction: `Add an identity named "${stdioIdentityName}" to ~/.mikromcp/identities.yaml or unset MIKROMCP_STDIO_IDENTITY.`,
       },
     });
   }

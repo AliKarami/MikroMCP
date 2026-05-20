@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { loadAppConfig } from "../../../src/config/app-config.js";
 
 afterEach(() => {
@@ -65,8 +67,8 @@ describe("loadAppConfig", () => {
   });
 
   describe("v0.7 auth/audit env vars", () => {
-    it("identitiesPath defaults to config/identities.yaml", () => {
-      expect(loadAppConfig().identitiesPath).toBe("config/identities.yaml");
+    it("identitiesPath defaults to ~/.mikromcp/identities.yaml", () => {
+      expect(loadAppConfig().identitiesPath).toBe(join(homedir(), ".mikromcp", "identities.yaml"));
     });
 
     it("stdioIdentity defaults to undefined", () => {
@@ -103,12 +105,12 @@ describe("loadAppConfig", () => {
   });
 
   describe("v0.8 snapshot/journal config", () => {
-    it("snapshotDir defaults to data/snapshots", () => {
-      expect(loadAppConfig().snapshotDir).toBe("data/snapshots");
+    it("snapshotDir defaults to ~/.mikromcp/data/snapshots", () => {
+      expect(loadAppConfig().snapshotDir).toBe(join(homedir(), ".mikromcp", "data", "snapshots"));
     });
 
-    it("journalPath defaults to data/write-journal.ndjson", () => {
-      expect(loadAppConfig().journalPath).toBe("data/write-journal.ndjson");
+    it("journalPath defaults to ~/.mikromcp/data/write-journal.ndjson", () => {
+      expect(loadAppConfig().journalPath).toBe(join(homedir(), ".mikromcp", "data", "write-journal.ndjson"));
     });
 
     it("snapshotDir uses MIKROMCP_DATA_DIR as prefix", () => {
