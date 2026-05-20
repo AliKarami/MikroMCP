@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { stringify as yamlStringify, parse as yamlParse } from "yaml";
+import { parse as yamlParse, Document, visit } from "yaml";
 import bcrypt from "bcryptjs";
 import chalk from "chalk";
 
@@ -80,6 +80,21 @@ function defaultAuditLogPath(): string {
   return join(mikromcpDir(), "audit.ndjson");
 }
 
+function toYaml(obj: unknown): string {
+  const doc = new Document(obj);
+  visit(doc, {
+    Scalar(key, node) {
+      if (key !== "key" && typeof node.value === "string") {
+        node.type = "QUOTE_DOUBLE";
+      }
+    },
+    Seq(_, node) {
+      node.flow = true;
+    },
+  });
+  return doc.toString();
+}
+
 function suggestEnvPrefix(routerId: string): string {
   return "ROUTER_" + routerId.toUpperCase().replace(/-/g, "_");
 }
@@ -141,7 +156,7 @@ async function collectRouterInfo(): Promise<
 
   const portStr = await input({
     message: "Port:",
-    default: "443",
+    default: "80",
     validate: (v) => {
       const n = Number(v);
       return Number.isInteger(n) && n >= 1 && n <= 65535 ? true : "Port must be 1–65535";
@@ -151,11 +166,11 @@ async function collectRouterInfo(): Promise<
 
   const tlsEnabled = await confirm({ message: "Enable TLS?", default: false });
 
-  let rejectUnauthorized = true;
+  let rejectUnauthorized = false;
   if (tlsEnabled) {
     rejectUnauthorized = await confirm({
       message: "Reject unauthorized TLS certificates (rejectUnauthorized)?",
-      default: true,
+      default: false,
     });
     if (!rejectUnauthorized) {
       console.log(
@@ -339,7 +354,7 @@ function writeRoutersYaml(data: CollectedData): boolean {
   parsed.routers[data.routerId] = newEntry;
 
   mkdirSync(data.configDir, { recursive: true });
-  writeFileSync(filePath, yamlStringify(parsed, { lineWidth: 0 }));
+  writeFileSync(filePath, toYaml(parsed));
   return true;
 }
 
@@ -368,7 +383,7 @@ function writeIdentitiesYaml(data: CollectedData): boolean {
   parsed.identities[data.identityId] = newEntry;
 
   mkdirSync(data.configDir, { recursive: true });
-  writeFileSync(filePath, yamlStringify(parsed, { lineWidth: 0 }));
+  writeFileSync(filePath, toYaml(parsed));
   return true;
 }
 

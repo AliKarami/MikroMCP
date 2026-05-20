@@ -109,7 +109,7 @@ describe("runInit — router-only flow", () => {
     expect(parsed.routers["core-01"]).toMatchObject({
       host: "192.168.1.1",
       port: 80,
-      tls: { enabled: false, rejectUnauthorized: true },
+      tls: { enabled: false, rejectUnauthorized: false },
       credentials: { source: "env", envPrefix: "ROUTER_CORE_01" },
       tags: [],
       rosVersion: "7",
