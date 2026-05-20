@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { spawnSync } from "node:child_process";
 import { runServe } from "./serve.js";
 import { runDoctor } from "./doctor.js";
 import { runInit } from "./init.js";
@@ -18,3 +19,11 @@ program
 program.command("doctor").description("Check config, connectivity, and permissions").action(runDoctor);
 
 program.command("init").description("Interactive setup wizard").action(runInit);
+
+program
+  .command("update")
+  .description("Update mikromcp to the latest version via npm")
+  .action(() => {
+    const result = spawnSync("npm", ["update", "-g", "mikromcp"], { stdio: "inherit" });
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  });
