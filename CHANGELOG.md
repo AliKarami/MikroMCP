@@ -12,6 +12,16 @@ Each release section covers changes **since the previous release only**.
 
 ---
 
+## [1.0.9] - 2026-05-20
+
+### Added
+- MCP Registry metadata and GitHub Actions publishing via `mcp-publisher` OIDC.
+
+### Changed
+- Add npm `mcpName` ownership marker for `io.github.alikarami/mikromcp`.
+
+---
+
 ## [1.0.8] - 2026-05-20
 
 ### Fixed
