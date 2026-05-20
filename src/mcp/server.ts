@@ -25,7 +25,7 @@ export function createServerFactory(
   const makeServer = (): McpServer => {
     const server = new McpServer({
       name: "mikromcp",
-      version: "1.0.5",
+      version: "1.0.6",
     });
     registerAllTools(server, registry, pool, circuitBreakers, config, identityRegistry);
     return server;
