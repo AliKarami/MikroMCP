@@ -23,7 +23,7 @@ jobs:
             wiki
 
       - name: Copy wiki files
-        run: cp docs/wiki/*.md wiki/
+        run: rsync -av --delete --include="*.md" --exclude="*" docs/wiki/ wiki/
 
       - name: Commit and push
         run: |
