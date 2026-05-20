@@ -265,17 +265,29 @@ Two transports:
 
 ## Keeping documentation in sync
 
-**Every time a milestone is completed or a tool is added/changed, update all of the following together — never leave them out of sync:**
+Documentation is updated in the **same PR** that ships the change — never as a follow-up.
 
-| Document | What to update |
+### Trigger → required doc updates
+
+| What changed | Docs to update |
 |---|---|
-| `ROADMAP.md` | Flip `🔜` → `✅` on the completed milestone; update bullet descriptions to match what was actually shipped |
-| `README.md` | Tool count in the mermaid diagram, the Available Tools table (add/modify rows), and the roadmap progress note at the bottom of the docs table |
-| `CLAUDE.md` header line | Update the `> For the full feature roadmap` pointer if the phrasing is stale |
-| GitHub wiki — **Available Tools** page | Add parameter tables and example prompts for every new tool |
-| GitHub wiki — **Roadmap** page | Mirror the same milestone status changes as in `ROADMAP.md` |
+| New tool added | `docs/wiki/Available-Tools.md` (add full parameter table + example prompt), `README.md` (tool count, Available Tools table row), `CHANGELOG.md` (`[Unreleased]` → Added) |
+| Tool parameter changed | `docs/wiki/Available-Tools.md` (update parameter table), `CHANGELOG.md` (`[Unreleased]` → Changed) |
+| Tool removed or renamed | `docs/wiki/Available-Tools.md` (remove/rename entry), `README.md` (update table), `CHANGELOG.md` (`[Unreleased]` → Removed) |
+| New transport or auth mechanism | `docs/wiki/Architecture.md`, `docs/wiki/Connecting-to-AI-Assistants.md` |
+| New CLI command or install path | `docs/wiki/Getting-Started.md` |
+| Bug fix shipped | `CHANGELOG.md` (`[Unreleased]` → Fixed) only; no wiki update needed unless user-facing behaviour changes |
+| Milestone completed | `ROADMAP.md` (flip `🔜` → `✅`), `docs/wiki/Roadmap.md` (mirror status), `README.md` (roadmap note) |
 
-Do this as part of the same commit that ships the feature — not as a follow-up.
+### CHANGELOG discipline
+
+Keep `CHANGELOG.md`'s `[Unreleased]` section current throughout development. Every PR that touches user-facing behaviour adds a line there. At release time, that section becomes the `## [X.Y.Z]` entry — no archaeology required.
+
+### Available-Tools.md format
+
+Each tool entry must have: section header with tool name and Read/Write/Destructive tag, one-line description, parameter table with Type / Default / Description columns, and an **Example prompt** that a user could actually paste.
+
+Tool count in `README.md` and `docs/wiki/Architecture.md` must stay accurate.
 
 ## Git development process
 

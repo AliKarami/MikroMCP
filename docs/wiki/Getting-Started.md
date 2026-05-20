@@ -4,7 +4,7 @@
 
 MikroMCP is a [Model Context Protocol](https://modelcontextprotocol.io) server that connects AI assistants like Claude, Cursor, and Codex directly to your MikroTik RouterOS infrastructure. Instead of copying CLI snippets from chat into a terminal, your AI assistant calls typed, validated tools that talk to the router's REST API — with dry-run previews, idempotency checks, and audit logs built in.
 
-This guide takes you from zero to a working AI ↔ router connection. You will need about 15 minutes and shell access to your router.
+This guide takes you from zero to a working AI ↔ router connection in about 15 minutes.
 
 ---
 
@@ -25,11 +25,6 @@ Quick version using the RouterOS CLI:
 ```
 /ip service enable api-ssl
 /ip service set api-ssl port=443
-```
-
-Then create a dedicated API user (never use `admin` for automation):
-
-```
 /user add name=mcp-api group=full password=choose-a-strong-password
 ```
 
@@ -60,28 +55,34 @@ With the source install, replace `mikromcp` with `node /path/to/MikroMCP/dist/ma
 
 ---
 
-## Step 3 — Configure Your Router
+## Step 3 — Run the Setup Wizard
 
-Create the configuration file that tells MikroMCP how to reach your router:
+MikroMCP ships with an interactive setup wizard that generates your config files and tests your router connection in one step:
 
 ```bash
-# If you cloned from source:
-cp config/routers.example.yaml config/routers.yaml
-
-# If you installed via npm, create config/routers.yaml in your working directory:
-mkdir -p config
+mikromcp init
 ```
 
-Edit `config/routers.yaml`:
+The wizard will:
+1. Ask for your router's IP, port, and transport (HTTP/HTTPS)
+2. Ask for a router ID (e.g. `core-01`) and credentials
+3. Write `~/.mikromcp/routers.yaml` and `~/.mikromcp/.env`
+4. Test the connection before finishing
+
+Once complete, skip to [Step 5](#step-5--connect-to-your-ai-assistant).
+
+### Manual config (alternative)
+
+If you prefer to configure by hand, create `config/routers.yaml`:
 
 ```yaml
 routers:
   core-01:
-    host: "10.0.0.1"        # your router's IP address
-    port: 443                 # api-ssl port (default 443)
+    host: "10.0.0.1"
+    port: 443
     tls:
       enabled: true
-      rejectUnauthorized: false   # set true once you have a valid cert or fingerprint
+      rejectUnauthorized: false   # set true once you have a valid cert
     credentials:
       source: "env"
       envPrefix: "ROUTER_CORE01"  # env vars: ROUTER_CORE01_USER / ROUTER_CORE01_PASS
@@ -89,39 +90,31 @@ routers:
     rosVersion: "7.14"
 ```
 
-Set your credentials as environment variables. The easiest way is a `.env` file:
+And a `.env` file:
 
 ```bash
-# .env
 ROUTER_CORE01_USER=mcp-api
 ROUTER_CORE01_PASS=choose-a-strong-password
-```
-
-Load it before starting MikroMCP:
-
-```bash
-export $(grep -v '^#' .env | xargs)
 ```
 
 ---
 
 ## Step 4 — Verify Your Connection
 
-Test that MikroMCP can reach the router:
+Use the built-in doctor command to check everything is working:
 
 ```bash
-# stdio mode — start the server and check it loads without errors
-MIKROMCP_LOG_LEVEL=debug node dist/main.js 2>&1 | head -20
+mikromcp doctor
 ```
 
-Or send a direct test using the RouterOS REST API:
+This probes your router for REST API availability, tests authentication, and reports any issues with fix suggestions.
+
+You can also test directly against the RouterOS REST API:
 
 ```bash
 curl -sk https://10.0.0.1/rest/system/resource \
   --user mcp-api:your-password | python3 -m json.tool
 ```
-
-If this returns router resource data (uptime, CPU, memory), MikroMCP will be able to connect.
 
 **Common issues:**
 
@@ -175,7 +168,7 @@ You should see the assistant call MikroMCP tools and return real data from your 
 ## Troubleshooting
 
 **"Connection refused" on port 443**
-The RouterOS REST API (api-ssl) is not running, or a firewall is blocking the port. On the router: `/ip service print` — confirm `api-ssl` shows `enabled`. Add a firewall rule if MikroMCP runs on a separate host; see [RouterOS-API-Setup.md](RouterOS-API-Setup.md#firewall--allow-api-access).
+The RouterOS REST API (`api-ssl`) is not running, or a firewall is blocking the port. On the router: `/ip service print` — confirm `api-ssl` shows `enabled`. Add a firewall rule if MikroMCP runs on a separate host; see [RouterOS-API-Setup.md](RouterOS-API-Setup.md#firewall--allow-api-access).
 
 **"Authentication failed" / 401**
 Check that `ROUTER_CORE01_USER` and `ROUTER_CORE01_PASS` are exported in the environment where MikroMCP runs. Variable names must match the `envPrefix` in `routers.yaml` — prefix `ROUTER_CORE01` → variables `ROUTER_CORE01_USER` and `ROUTER_CORE01_PASS`.
