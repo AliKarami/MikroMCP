@@ -1,6 +1,6 @@
 {
   "name": "mikromcp",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Production-grade MCP server for MikroTik RouterOS",
   "type": "module",
   "main": "dist/main.js",
