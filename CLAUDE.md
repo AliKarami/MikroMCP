@@ -15,7 +15,7 @@ npm run lint         # eslint src/
 npm run format       # prettier --write src/ test/
 ```
 
-Run `npm test` before committing (runs vitest, tsc, and eslint).
+Run `npm test` before pushing a branch (runs vitest, tsc, and eslint).
 
 ## Architecture in one sentence
 
@@ -277,18 +277,85 @@ Two transports:
 
 Do this as part of the same commit that ships the feature — not as a follow-up.
 
-## Release checklist
+## Git development process
 
-Run before `git tag v<X.Y.Z> && git push origin v<X.Y.Z>`:
+### Branch conventions
 
-1. `npm version <major|minor|patch>` — bumps `package.json` + `package-lock.json`
-2. Update version string in `src/mcp/server.ts`
-3. Update README version badge: `version-v<X.Y.Z>`
-4. Flip `🔜` → `✅` in `ROADMAP.md` and `docs/wiki/Roadmap.md`
-5. Update `docs/wiki/Available-Tools.md` for any new/changed tools
-6. Commit: `chore: bump version to X.Y.Z`
-7. `git tag vX.Y.Z && git push origin main && git push origin vX.Y.Z`
-8. CI `release.yml` auto-runs: builds binaries, pushes Docker images, creates GitHub Release
+All work happens on branches — **never commit directly to `main`**. `main` is always releasable.
+
+| Branch prefix | Use for |
+|---|---|
+| `feat/<short-description>` | New features or tools |
+| `fix/<short-description>` | Bug fixes |
+| `chore/<short-description>` | Version bumps, dependency updates, config, CI |
+| `docs/<short-description>` | Documentation-only changes |
+| `refactor/<short-description>` | Code restructuring with no behaviour change |
+
+Branch names use kebab-case: `feat/wifi-scan-tool`, `fix/circuit-breaker-timeout`.
+
+### Commit message conventions
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<optional scope>): <short summary>
+```
+
+Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`.  
+Breaking changes: append `!` after the type, e.g. `feat!: rename tool parameter`.
+
+### Pull request workflow
+
+1. Create a branch from `main` using the naming convention above.
+2. Make commits, run `npm test` before pushing.
+3. Open a PR targeting `main`. PR title must follow the same Conventional Commits format as the commit messages.
+4. Merge using **squash merge** so `main` history stays one-commit-per-feature.
+5. Delete the branch after merge.
+
+### Tag and release conventions
+
+Tags follow strict semver: `vMAJOR.MINOR.PATCH`.
+
+- **PATCH** — bug fixes only, no new tools or breaking changes
+- **MINOR** — new tools, new features, backwards-compatible changes
+- **MAJOR** — breaking changes to config, tool names, or behaviour
+
+Tags are created only on `main` after the release PR merges.
+
+### Changelog
+
+`CHANGELOG.md` lives at the repo root and follows [Keep a Changelog](https://keepachangelog.com/) format.
+
+- Each release section covers **only changes since the previous release** — no cumulative history.
+- Sections within a release (use only those that apply): `Added`, `Changed`, `Fixed`, `Removed`, `Deprecated`, `Security`.
+- An `[Unreleased]` section at the top accumulates changes while a release is in progress.
+
+Example entry:
+```markdown
+## [1.1.0] - 2026-06-01
+
+### Added
+- `list_wifi_clients` tool — lists associated WiFi stations per interface
+- `manage_wifi_interface` tool — enable/disable WiFi interfaces
+
+### Fixed
+- Circuit breaker no longer trips on 404 responses from read tools
+```
+
+### Release checklist
+
+Run when merging a release PR into `main`:
+
+1. Move all items from `[Unreleased]` in `CHANGELOG.md` to a new `## [X.Y.Z] - YYYY-MM-DD` section.
+2. `npm version <major|minor|patch>` — bumps `package.json` + `package-lock.json`.
+3. Update version string in `src/mcp/server.ts`.
+4. Update README version badge: `version-v<X.Y.Z>`.
+5. Flip `🔜` → `✅` in `ROADMAP.md` and `docs/wiki/Roadmap.md`.
+6. Update `docs/wiki/Available-Tools.md` for any new/changed tools.
+7. Commit on the release branch: `chore: bump version to X.Y.Z`.
+8. Open PR, squash-merge into `main`.
+9. `git tag vX.Y.Z && git push origin vX.Y.Z`
+10. CI `release.yml` auto-runs: builds binaries, pushes Docker images, creates GitHub Release (uses the release section from `CHANGELOG.md` as release notes).
 
 ## What not to do
 
