@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.alikarami/mikromcp",
   "title": "MikroMCP",
-  "description": "Production-grade MCP server for safely operating MikroTik RouterOS routers through typed tools, strict validation, dry runs, RBAC, audit logs, and rollback-aware workflows.",
+  "description": "MCP server for MikroTik RouterOS with 77 typed tools, dry-run, RBAC, audit logs, and rollback support.",
   "repository": {
     "url": "https://github.com/AliKarami/MikroMCP",
     "source": "github"
