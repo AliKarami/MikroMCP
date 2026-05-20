@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.alikarami/mikromcp",
+  "name": "io.github.AliKarami/mikromcp",
   "title": "MikroMCP",
   "description": "MCP server for MikroTik RouterOS: typed tools, dry-run, RBAC, audit logs, and rollback.",
   "repository": {
