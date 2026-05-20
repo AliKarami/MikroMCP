@@ -305,10 +305,10 @@ describe("runInit — existing routers.yaml merge", () => {
       .mockResolvedValueOnce("7");
 
     mockConfirm
+      .mockResolvedValueOnce(true)   // upfront: existing files detected, continue?
       .mockResolvedValueOnce(false)  // tls
       .mockResolvedValueOnce(false)  // createIdentity
       .mockResolvedValueOnce(false)  // writeEnv
-      .mockResolvedValueOnce(true)   // merge into existing? → YES
       .mockResolvedValueOnce(false); // claudeDesktop
 
     mockSelect.mockResolvedValueOnce("stdio"); // transport

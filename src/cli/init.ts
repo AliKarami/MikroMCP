@@ -405,17 +405,8 @@ function writeDotEnv(data: CollectedData): void {
     "# MIKROMCP_STDIO_IDENTITY=",
   ];
 
-  const content = lines.join("\n") + "\n";
-
   mkdirSync(data.configDir, { recursive: true });
-
-  if (existsSync(data.envPath)) {
-    const existing = readFileSync(data.envPath, "utf-8");
-    writeFileSync(data.envPath, existing.endsWith("\n") ? existing + "\n" + content : existing + "\n\n" + content);
-  } else {
-    writeFileSync(data.envPath, content);
-  }
-
+  writeFileSync(data.envPath, lines.join("\n") + "\n");
 }
 
 function registerClaudeDesktop(): { registered: boolean; snippet?: string } {
@@ -463,14 +454,31 @@ function registerClaudeDesktop(): { registered: boolean; snippet?: string } {
 export async function runInit(): Promise<void> {
   console.log(chalk.bold.cyan("\n🔧  MikroMCP — Interactive Setup Wizard\n"));
 
+  // Step 0: warn if ~/.mikromcp/ already has config files
+  const configDir = mikromcpDir();
+  const envPath = join(configDir, ".env");
+  const existingFiles = [".env", "routers.yaml", "identities.yaml"].filter((f) =>
+    existsSync(join(configDir, f)),
+  );
+  if (existingFiles.length > 0) {
+    console.log(chalk.yellow(`  ⚠  Found existing files in ${configDir}:`));
+    for (const f of existingFiles) console.log(chalk.yellow(`       ${f}`));
+    console.log();
+    const proceed = await confirm({
+      message: "Continue? (existing files will be overwritten or merged)",
+      default: true,
+    });
+    if (!proceed) {
+      console.log(chalk.dim("  Aborted."));
+      return;
+    }
+  }
+
   // Step 1: router config
   const routerInfo = await collectRouterInfo();
 
   // Step 2: identity
   const identityInfo = await collectIdentityInfo();
-
-  const configDir = mikromcpDir();
-  const envPath = join(configDir, ".env");
 
   // Step 3: transport mode
   const transport = await collectTransport();
@@ -478,18 +486,7 @@ export async function runInit(): Promise<void> {
   // Step 4: .env opt-in
   const writeEnv = await collectEnvPreference();
 
-  // Step 5: confirm routers.yaml write when file already exists
-  let writeRouters = true;
-  const routersYamlPath = join(configDir, "routers.yaml");
-  if (existsSync(routersYamlPath)) {
-    console.log(chalk.bold("\n── Config files ─────────────────────────────────────────────────"));
-    writeRouters = await confirm({
-      message: "routers.yaml already exists. Add this router to it?",
-      default: true,
-    });
-  }
-
-  // Step 6: Claude Desktop
+  // Step 5: Claude Desktop
   const registerDesktop = await collectClaudeDesktopPreference();
 
   // Assemble full data object
@@ -500,7 +497,7 @@ export async function runInit(): Promise<void> {
     envPath,
     configDir,
     writeEnv,
-    writeRoutersYaml: writeRouters,
+    writeRoutersYaml: true,
     writeIdentitiesYaml: identityInfo.createIdentity,
     registerClaudeDesktop: registerDesktop,
   };
@@ -548,8 +545,7 @@ export async function runInit(): Promise<void> {
   }
 
   console.log(chalk.bold("\nNext steps:"));
-  console.log(chalk.dim(`  1. Fill in router credentials in ${data.envPath}`));
-  console.log(chalk.dim("  2. Run: mikromcp doctor"));
-  console.log(chalk.dim("  3. Restart Claude Desktop to load the MCP server"));
+  console.log(chalk.dim("  1. Run: mikromcp doctor"));
+  console.log(chalk.dim("  2. Restart Claude Desktop to load the MCP server"));
   console.log();
 }
