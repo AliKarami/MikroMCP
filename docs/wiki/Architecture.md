@@ -12,22 +12,21 @@ flowchart LR
 
     subgraph Transport["MCP transport"]
         Stdio["stdio JSON-RPC"]
-        Http["Streamable HTTP<br/>POST /mcp, GET /mcp"]
-        Sse["Legacy SSE<br/>GET /sse, POST /messages"]
+        Http["Streamable HTTP\nPOST /mcp, GET /mcp"]
     end
 
     subgraph Core["MikroMCP server"]
-        Registry["Tool registry<br/>54 typed tools"]
-        Schemas["Zod schemas<br/>strict validation"]
-        Auth["Identity, RBAC<br/>confirmation gate"]
-        Safety["Retry, circuit breaker<br/>audit, snapshots, journal"]
+        Registry["Tool registry\n77 typed tools"]
+        Schemas["Zod schemas\nstrict validation"]
+        Auth["Identity, RBAC\nconfirmation gate"]
+        Safety["Retry, circuit breaker\naudit, snapshots, journal"]
         Format["Human text + structured JSON"]
     end
 
     subgraph Adapters["Router adapters"]
-        Rest["RouterOS REST<br/>HTTPS"]
-        Ssh["SSH adapter<br/>diagnostics and guarded commands"]
-        Ftp["FTP adapter<br/>file uploads"]
+        Rest["RouterOS REST\nHTTPS"]
+        Ssh["SSH adapter\ndiagnostics and guarded commands"]
+        Ftp["FTP adapter\nfile uploads"]
     end
 
     subgraph Routers["MikroTik RouterOS 7.x fleet"]
@@ -39,10 +38,8 @@ flowchart LR
     Claude --> Stdio
     Cursor --> Stdio
     Service --> Http
-    Service --> Sse
     Stdio --> Registry
     Http --> Auth
-    Sse --> Auth
     Auth --> Registry
     Registry --> Schemas
     Schemas --> Safety
@@ -91,14 +88,14 @@ sequenceDiagram
     Agent-->>User: Findings and next recommended action
 ```
 
-## Authentication And Safety Model
+## Authentication and Safety Model
 
 ```mermaid
 flowchart TD
     Request["Incoming MCP request"] --> Transport{"Transport"}
-    Transport -->|stdio| StdioIdentity["Built-in superadmin<br/>or MIKROMCP_STDIO_IDENTITY"]
-    Transport -->|HTTP/SSE| Bearer["Authorization: Bearer token"]
-    Bearer --> TokenHash["bcrypt token verification<br/>config/identities.yaml"]
+    Transport -->|stdio| StdioIdentity["Built-in superadmin\nor MIKROMCP_STDIO_IDENTITY"]
+    Transport -->|HTTP| Bearer["Authorization: Bearer token"]
+    Bearer --> TokenHash["bcrypt token verification\nconfig/identities.yaml"]
     StdioIdentity --> RBAC["RBAC check"]
     TokenHash --> RBAC
     RBAC --> RouterScope["allowedRouters"]
@@ -107,7 +104,40 @@ flowchart TD
     ToolScope --> Destructive
     Destructive -->|no| Execute["Execute tool"]
     Destructive -->|yes| Window["Maintenance window check"]
-    Window --> Confirm["Confirmation token gate<br/>for readonly/operator roles"]
+    Window --> Confirm["Confirmation token gate\nfor readonly/operator roles"]
     Confirm --> Execute
     Execute --> Audit["Structured logs + optional NDJSON audit log"]
 ```
+
+## Key Components
+
+| Component | File | Responsibility |
+|---|---|---|
+| Entry point | `src/main.ts` | Loads config, selects transport, starts server |
+| Tool registry | `src/mcp/tool-registry.ts` | Registers tools; injects circuit breaker, retry, correlation ID, credentials |
+| All tools | `src/domain/tools/index.ts` | Aggregates all 77 `ToolDefinition` arrays |
+| REST client | `src/adapter/rest-client.ts` | `get`, `getOne`, `create`, `update`, `remove`, `execute` over HTTPS |
+| SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping`, `/tool/traceroute`, `/tool/torch`, and `run_command` |
+| FTP adapter | `src/adapter/ftp-client.ts` | Uploads files via `upload_file` |
+| Snapshot engine | `src/domain/snapshot/snapshot-engine.ts` | Captures RouterOS section state before writes |
+| Write journal | `src/domain/snapshot/write-journal.ts` | Append-only record of writes with rollback metadata |
+| Auth middleware | `src/mcp/authz.ts` | Enforces RBAC at call time |
+| Router registry | `src/config/router-registry.ts` | Loads and validates `config/routers.yaml` |
+
+## Transport Options
+
+| Mode | How to start | Use case |
+|---|---|---|
+| **stdio** (default) | `mikromcp serve` (no env needed) | Local: Claude Desktop, Claude Code, Cursor — the assistant spawns MikroMCP as a child process |
+| **HTTP** | `MIKROMCP_TRANSPORT=http mikromcp serve` | Remote / shared: Docker, systemd, multiple clients connecting to one instance |
+
+HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) on `MIKROMCP_PORT` (default 3000). Every request must carry `Authorization: Bearer <token>`.
+
+## Safety Guarantees
+
+- **Read tools** carry automatic exponential-backoff retry (up to 3 attempts). The circuit breaker does not trip on read failures.
+- **Write tools** are idempotent — each checks existing state before acting and returns `already_exists` / `no_change` when nothing needs to be done.
+- **All write tools** support `dryRun: true` to preview the planned change without touching the router.
+- **Destructive tools** (`reboot`, `manage_user`, and others flagged `destructiveHint: true`) require a short-lived HMAC confirmation token in HTTP mode.
+- **Snapshots** are taken of affected RouterOS paths before `apply_plan` runs a write sequence, enabling `rollback_change` to restore previous state.
+- **Audit log** records every write and destructive call with identity, tool name, router, parameters (credentials redacted), and outcome.
