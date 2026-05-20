@@ -48,6 +48,8 @@ interface CollectedData {
   tlsEnabled: boolean;
   rejectUnauthorized: boolean;
   envPrefix: string;
+  routerUser: string;
+  routerPass: string;
   tags: string[];
   rosVersion: string;
   createIdentity: boolean;
@@ -57,6 +59,7 @@ interface CollectedData {
   allowedToolPatterns: string;
   rawToken: string;
   tokenHash: string;
+  transport: string;
   envPath: string;
   configDir: string;
   writeEnv: boolean;
@@ -115,6 +118,7 @@ async function collectRouterInfo(): Promise<
     | "allowedToolPatterns"
     | "rawToken"
     | "tokenHash"
+    | "transport"
     | "envPath"
     | "configDir"
     | "writeEnv"
@@ -145,8 +149,7 @@ async function collectRouterInfo(): Promise<
   });
   const port = Number(portStr);
 
-  const tlsDefault = port === 443 || port === 8443;
-  const tlsEnabled = await confirm({ message: "Enable TLS?", default: tlsDefault });
+  const tlsEnabled = await confirm({ message: "Enable TLS?", default: false });
 
   let rejectUnauthorized = true;
   if (tlsEnabled) {
@@ -171,6 +174,16 @@ async function collectRouterInfo(): Promise<
     validate: (v) => (v.trim().length > 0 ? true : "Env prefix is required"),
   });
 
+  const routerUser = await input({
+    message: `Router username (${envPrefix}_USER):`,
+    validate: (v) => (v.trim().length > 0 ? true : "Username is required"),
+  });
+
+  const routerPass = await input({
+    message: `Router password (${envPrefix}_PASS):`,
+    validate: (v) => (v.trim().length > 0 ? true : "Password is required"),
+  });
+
   const tagsRaw = await input({
     message: "Tags (comma-separated, optional):",
     default: "",
@@ -183,7 +196,7 @@ async function collectRouterInfo(): Promise<
     validate: (v) => (v.trim().length > 0 ? true : "Version is required"),
   });
 
-  return { routerId, host, port, tlsEnabled, rejectUnauthorized, envPrefix, tags, rosVersion };
+  return { routerId, host, port, tlsEnabled, rejectUnauthorized, envPrefix, routerUser, routerPass, tags, rosVersion };
 }
 
 async function collectIdentityInfo(): Promise<{
@@ -255,6 +268,30 @@ async function collectIdentityInfo(): Promise<{
     rawToken,
     tokenHash,
   };
+}
+
+async function collectTransport(): Promise<string> {
+  console.log(chalk.bold("\n── Transport ────────────────────────────────────────────────────"));
+  const transport = await select({
+    message: "Transport mode:",
+    choices: [
+      { value: "stdio", name: "stdio  — launched by Claude Desktop or an MCP client (recommended)" },
+      { value: "http", name: "http   — standalone HTTP server with bearer-token auth" },
+    ],
+    default: "stdio",
+  });
+
+  if (transport === "http") {
+    console.log(
+      chalk.yellow(
+        "\n  ⚠  HTTP mode requires every request to include:\n" +
+          "     Authorization: Bearer <token>\n" +
+          "  Set MIKROMCP_CONFIRMATION_SECRET in ~/.mikromcp/.env and create an identity above.",
+      ),
+    );
+  }
+
+  return transport;
 }
 
 async function collectEnvPreference(): Promise<boolean> {
@@ -339,18 +376,17 @@ function writeDotEnv(data: CollectedData): void {
   const userKey = `${data.envPrefix}_USER`;
   const passKey = `${data.envPrefix}_PASS`;
   const auditLogPath = defaultAuditLogPath();
-  const transport = data.createIdentity ? "http" : "stdio";
-  const confirmationSecret = data.createIdentity ? randomBytes(32).toString("hex") : "";
+  const confirmationSecret = data.transport === "http" ? randomBytes(32).toString("hex") : "";
 
   const lines = [
     "# ── Router credentials ───────────────────────────────────────────────",
-    `${userKey}=`,
-    `${passKey}=`,
+    `${userKey}=${data.routerUser}`,
+    `${passKey}=${data.routerPass}`,
     "",
     "# ── Transport ────────────────────────────────────────────────────────",
     `# stdio  → launched directly by Claude Desktop or another MCP client`,
     `# http   → standalone server mode with bearer-token auth`,
-    `MIKROMCP_TRANSPORT=${transport}`,
+    `MIKROMCP_TRANSPORT=${data.transport}`,
     "",
     "# ── Config paths ─────────────────────────────────────────────────────",
     `MIKROMCP_CONFIG_PATH=${join(data.configDir, "routers.yaml")}`,
@@ -380,9 +416,6 @@ function writeDotEnv(data: CollectedData): void {
     writeFileSync(data.envPath, content);
   }
 
-  console.log(
-    chalk.dim(`  Fill in ${userKey} and ${passKey} in ${data.envPath}`),
-  );
 }
 
 function registerClaudeDesktop(): { registered: boolean; snippet?: string } {
@@ -439,10 +472,13 @@ export async function runInit(): Promise<void> {
   const configDir = mikromcpDir();
   const envPath = join(configDir, ".env");
 
-  // Step 3: .env opt-in
+  // Step 3: transport mode
+  const transport = await collectTransport();
+
+  // Step 4: .env opt-in
   const writeEnv = await collectEnvPreference();
 
-  // Step 4: confirm routers.yaml write when file already exists
+  // Step 5: confirm routers.yaml write when file already exists
   let writeRouters = true;
   const routersYamlPath = join(configDir, "routers.yaml");
   if (existsSync(routersYamlPath)) {
@@ -453,13 +489,14 @@ export async function runInit(): Promise<void> {
     });
   }
 
-  // Step 5: Claude Desktop
+  // Step 6: Claude Desktop
   const registerDesktop = await collectClaudeDesktopPreference();
 
   // Assemble full data object
   const data: CollectedData = {
     ...routerInfo,
     ...identityInfo,
+    transport,
     envPath,
     configDir,
     writeEnv,
