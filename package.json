@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "start": "node dist/main.js",
+    "version": "node scripts/sync-version.mjs && git add src/version.ts",
     "dev": "tsx watch src/main.ts",
     "build": "tsup",
     "clean": "rm -rf dist",

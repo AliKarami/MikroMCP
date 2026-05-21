@@ -9,6 +9,7 @@ import { ConnectionPool } from "../adapter/connection-pool.js";
 import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { AppConfig } from "../config/app-config.js";
 import type { IdentityRegistry } from "../config/identity-registry.js";
+import { VERSION } from "../version.js";
 
 export function createServerFactory(
   config: AppConfig,
@@ -25,7 +26,7 @@ export function createServerFactory(
   const makeServer = (): McpServer => {
     const server = new McpServer({
       name: "mikromcp",
-      version: "1.0.10",
+      version: VERSION,
     });
     registerAllTools(server, registry, pool, circuitBreakers, config, identityRegistry);
     return server;
