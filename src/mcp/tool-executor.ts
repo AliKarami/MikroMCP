@@ -8,8 +8,7 @@ import { takeSnapshot } from "../domain/snapshot/snapshot-engine.js";
 import { recordAttempt, recordOutcome } from "../domain/snapshot/write-journal.js";
 import { withRetry } from "../adapter/retry-engine.js";
 import { isWithinMaintenanceWindow } from "../config/maintenance-window.js";
-import { getCredentials } from "../config/secrets.js";
-import { createSshClient, createFtpClient } from "../adapter/adapter-factory.js";
+import { buildRouterToolContext } from "./tool-context.js";
 import { formatToolResult, formatError } from "./response-formatter.js";
 import type { McpToolResponse } from "./response-formatter.js";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
@@ -114,10 +113,14 @@ export async function executeToolCall(
         });
       }
 
-      const credentials = getCredentials(routerConfig);
-      const client = pool.getClient(routerConfig, credentials);
-      const sshClient = createSshClient(routerConfig, config.ssh);
-      const ftpClient = createFtpClient(routerConfig);
+      const toolContext = buildRouterToolContext({
+        routerConfig,
+        correlationId,
+        identity,
+        pool,
+        config,
+        registry,
+      });
 
       let cb = circuitBreakers.get(routerId);
       if (!cb) {
@@ -134,7 +137,7 @@ export async function executeToolCall(
       if (tool.snapshotPaths && tool.snapshotPaths.length > 0 && !tool.annotations.readOnlyHint) {
         for (const path of tool.snapshotPaths) {
           try {
-            const meta = await takeSnapshot(client, routerId, path, config.snapshotDir);
+            const meta = await takeSnapshot(toolContext.routerClient, routerId, path, config.snapshotDir);
             snapshotIds.push(meta.id);
             log.debug({ snapshotId: meta.id, path }, "Snapshot taken");
           } catch (err) {
@@ -155,18 +158,7 @@ export async function executeToolCall(
         });
       }
 
-      const runHandler = () =>
-        tool.handler(handlerArgs, {
-          routerClient: client,
-          routerId,
-          correlationId,
-          routerConfig,
-          sshClient,
-          ftpClient,
-          identity,
-          routerRegistry: registry,
-          connectionPool: pool,
-        });
+      const runHandler = () => tool.handler(handlerArgs, toolContext);
 
       const executeHandler = () =>
         cb!.execute(
