@@ -105,7 +105,6 @@ function makeAppConfig(overrides: Partial<{ transport: "stdio" | "http"; configP
     ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
     retry: { maxRetries: 3, baseDelayMs: 200, maxDelayMs: 5000 },
     circuitBreaker: { failureThreshold: 5, cooldownMs: 30000 },
-    pagination: { defaultLimit: 100, maxLimit: 500 },
   };
 }
 
