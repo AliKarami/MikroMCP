@@ -57,6 +57,7 @@ export async function executeToolCall(
           identity,
           routerRegistry: registry,
           connectionPool: pool,
+          appConfig: config,
         };
         return formatToolResult(await tool.handler(args, fleetContext));
       }

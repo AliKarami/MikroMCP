@@ -5,8 +5,7 @@ import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 import { auditLog } from "../../observability/audit-log.js";
 import { checkAuthz } from "../../middleware/authz.js";
-import { createSshClient, createFtpClient } from "../../adapter/adapter-factory.js";
-import { getCredentials } from "../../config/secrets.js";
+import { buildRouterToolContext } from "../../mcp/tool-context.js";
 
 const log = createLogger("fleet-tools");
 
@@ -226,19 +225,14 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         const start = Date.now();
         try {
           checkAuthz(context.identity, parsed.toolName, router.id);
-          const credentials = getCredentials(router);
-          const client = context.connectionPool!.getClient(router, credentials);
-          const sshClient = createSshClient(router, {});
-          const ftpClient = createFtpClient(router);
-          const routerContext: ToolContext = {
-            routerClient: client,
-            routerId: router.id,
-            correlationId: context.correlationId,
+          const routerContext = buildRouterToolContext({
             routerConfig: router,
-            sshClient,
-            ftpClient,
+            correlationId: context.correlationId,
             identity: context.identity,
-          };
+            pool: context.connectionPool!,
+            config: context.appConfig,
+            registry: context.routerRegistry,
+          });
           const toolParams = { ...parsed.params, routerId: router.id };
           const result = await targetTool.handler(
             toolParams as Record<string, unknown>,

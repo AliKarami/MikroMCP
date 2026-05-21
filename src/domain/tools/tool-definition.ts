@@ -7,6 +7,7 @@ import type { FtpClient } from "../../adapter/ftp-client.js";
 import type { RouterRegistry } from "../../config/router-registry.js";
 import type { ConnectionPool } from "../../adapter/connection-pool.js";
 import type { CircuitBreaker } from "../../adapter/circuit-breaker.js";
+import type { AppConfig } from "../../config/app-config.js";
 
 export interface ToolAnnotations {
   readOnlyHint: boolean;
@@ -40,6 +41,8 @@ export interface ToolContext {
   connectionPool?: ConnectionPool;
   /** Per-router circuit breaker — set for router-context calls; used by apply_plan to gate sub-steps. */
   circuitBreaker?: CircuitBreaker;
+  /** Server-wide configuration. Use this instead of reading process.env in tool handlers. */
+  appConfig: AppConfig;
 }
 
 export interface ToolResult {
