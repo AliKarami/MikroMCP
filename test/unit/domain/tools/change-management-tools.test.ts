@@ -6,6 +6,8 @@ import type { RouterOSRestClient } from "../../../../src/adapter/rest-client.js"
 vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
   existsSync: vi.fn().mockReturnValue(true),
+  appendFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
 }));
 
 import * as nodeFs from "node:fs";
@@ -122,6 +124,33 @@ describe("apply_plan", () => {
 
     expect(result.isError).toBe(true);
     expect(result.content).toContain("step 1");
+  });
+
+  it("records a numeric durationMs in the journal outcome line for a successful step", async () => {
+    const appendFsSpy = vi.mocked(nodeFs.appendFileSync);
+    appendFsSpy.mockClear();
+
+    const manageRoute = makeManageRoute("created");
+    const tools = createChangeManagementTools([manageRoute]);
+    const applyTool = tools.find((t) => t.name === "apply_plan")!;
+    const ctx = makeContext();
+
+    await applyTool.handler(
+      { routerId: "edge-01", steps: [{ tool: "manage_route", params: { action: "add", dstAddress: "10.0.0.0/8", gateway: "192.168.1.1" } }] },
+      ctx,
+    );
+
+    // at least one appended line must be the step outcome
+    const calls = appendFsSpy.mock.calls;
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+
+    // The outcome line is the last call; parse all lines and find the success phase
+    const allLines = calls.map((c) => JSON.parse(c[1] as string) as Record<string, unknown>);
+    const outcomeLine = allLines.find((l) => l.phase === "success");
+
+    expect(outcomeLine).toBeDefined();
+    expect(typeof outcomeLine!.durationMs).toBe("number");
+    expect(outcomeLine!.durationMs as number).toBeGreaterThanOrEqual(0);
   });
 
   it("rejects extra fields in input schema", () => {

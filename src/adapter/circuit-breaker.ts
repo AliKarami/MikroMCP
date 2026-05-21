@@ -37,6 +37,7 @@ export class CircuitBreaker {
   private currentState: CircuitState = "closed";
   private consecutiveFailures = 0;
   private lastFailureTime = 0;
+  private probeInFlight = false;
 
   constructor(
     private readonly routerId: string,
@@ -84,6 +85,23 @@ export class CircuitBreaker {
       });
     }
 
+    if (currentState === "half-open") {
+      if (this.probeInFlight) {
+        throw new MikroMCPError({
+          category: ErrorCategory.ROUTER_BUSY,
+          code: "CIRCUIT_PROBE_IN_FLIGHT",
+          message: `Circuit breaker for router "${this.routerId}" is half-open and a recovery probe is already in flight.`,
+          details: { routerId: this.routerId },
+          recoverability: {
+            retryable: true,
+            retryAfterMs: 1000,
+            suggestedAction: "Wait for the in-flight probe to complete, then retry.",
+          },
+        });
+      }
+      this.probeInFlight = true;
+    }
+
     try {
       const result = await fn();
       this.onSuccess();
@@ -93,6 +111,10 @@ export class CircuitBreaker {
         this.onFailure();
       }
       throw error;
+    } finally {
+      // Safe to clear unconditionally: the half-open gate sets the flag only
+      // after its early-return check, so non-half-open paths never set it.
+      this.probeInFlight = false;
     }
   }
 
@@ -101,6 +123,7 @@ export class CircuitBreaker {
     this.currentState = "closed";
     this.consecutiveFailures = 0;
     this.lastFailureTime = 0;
+    this.probeInFlight = false;
   }
 
   // ---------- internal helpers ----------

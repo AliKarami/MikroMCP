@@ -30,10 +30,6 @@ export interface AppConfig {
     failureThreshold: number;
     cooldownMs: number;
   };
-  pagination: {
-    defaultLimit: number;
-    maxLimit: number;
-  };
 }
 
 import { join } from "node:path";
@@ -84,10 +80,6 @@ export function loadAppConfig(): AppConfig {
     circuitBreaker: {
       failureThreshold: 5,
       cooldownMs: 30_000,
-    },
-    pagination: {
-      defaultLimit: 100,
-      maxLimit: 500,
     },
   };
 }

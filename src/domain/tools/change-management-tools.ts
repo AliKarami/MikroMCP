@@ -179,10 +179,11 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
           params: stepParams,
           snapshotIds,
         });
+        const stepStartMs = Date.now();
 
         try {
           const result = await tool.handler(stepParams, context);
-          recordOutcome({ journalPath, journalId: stepJournalId, phase: "success", durationMs: 0 });
+          recordOutcome({ journalPath, journalId: stepJournalId, phase: "success", durationMs: Date.now() - stepStartMs });
           results.push({
             stepIndex: i,
             tool: step.tool,
@@ -192,7 +193,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
           });
         } catch (err) {
           const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: step.tool });
-          recordOutcome({ journalPath, journalId: stepJournalId, phase: "failure", outcome: error.code, durationMs: 0 });
+          recordOutcome({ journalPath, journalId: stepJournalId, phase: "failure", outcome: error.code, durationMs: Date.now() - stepStartMs });
           log.error({ err: error, tool: step.tool, step: i }, "apply_plan step failed");
           return {
             content: `Apply failed at step ${i + 1}/${parsed.steps.length} (${step.tool}): ${error.message}. ${i} step(s) completed before failure.`,

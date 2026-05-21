@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { withRetry } from "../../../src/adapter/retry-engine.js";
+import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 describe("withRetry", () => {
   it("returns result on first success", async () => {
@@ -45,5 +46,43 @@ describe("withRetry", () => {
       "timeout",
     );
     expect(fn).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+  });
+});
+
+describe("withRetry — MikroMCPError handling", () => {
+  it("retries an enriched MikroMCPError whose recoverability.retryable is true", async () => {
+    let calls = 0;
+    const fn = async () => {
+      calls++;
+      if (calls < 3) {
+        throw new MikroMCPError({
+          category: ErrorCategory.ROUTER_ERROR,
+          code: "HTTP_503",
+          message: "server error",
+          recoverability: { retryable: true, suggestedAction: "retry" },
+        });
+      }
+      return "ok";
+    };
+    const result = await withRetry(fn, { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0 });
+    expect(result).toBe("ok");
+    expect(calls).toBe(3);
+  });
+
+  it("does NOT retry a MikroMCPError whose recoverability.retryable is false", async () => {
+    let calls = 0;
+    const fn = async () => {
+      calls++;
+      throw new MikroMCPError({
+        category: ErrorCategory.VALIDATION,
+        code: "VALIDATION_ERROR",
+        message: "bad input",
+        recoverability: { retryable: false, suggestedAction: "fix input" },
+      });
+    };
+    await expect(
+      withRetry(fn, { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0 }),
+    ).rejects.toBeInstanceOf(MikroMCPError);
+    expect(calls).toBe(1);
   });
 });

@@ -2,6 +2,8 @@
 // MikroMCP - Retry engine with exponential backoff and jitter
 // ---------------------------------------------------------------------------
 
+import { MikroMCPError } from "../domain/errors/error-types.js";
+
 export interface RetryOptions {
   /** Maximum number of retry attempts (default 3). */
   maxRetries: number;
@@ -23,19 +25,21 @@ const RETRYABLE_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENO
 /**
  * Determine whether an error is safe to retry.
  *
+ * - `MikroMCPError` instances are retried per their `recoverability.retryable` flag.
  * - Network errors identified by `code` property are retryable.
  * - HTTP 5xx responses (identified by `statusCode` >= 500) are retryable.
  * - HTTP 4xx (client errors) are NEVER retried.
  */
 function isRetryable(error: unknown): boolean {
+  // Enriched domain errors carry an explicit retryability signal.
+  if (error instanceof MikroMCPError) {
+    return error.recoverability.retryable;
+  }
   if (error instanceof Error) {
-    // Network-level error codes
     const code = (error as NodeJS.ErrnoException).code;
     if (code && RETRYABLE_CODES.has(code)) {
       return true;
     }
-
-    // HTTP status codes (e.g. from HttpError)
     const statusCode = (error as { statusCode?: number }).statusCode;
     if (typeof statusCode === "number") {
       return statusCode >= 500;
