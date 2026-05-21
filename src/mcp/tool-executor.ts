@@ -131,6 +131,8 @@ export async function executeToolCall(
         circuitBreakers.set(routerId, cb);
       }
 
+      toolContext.circuitBreaker = cb;
+
       const { confirmationToken: _ct, ...handlerArgs } = args;
 
       const snapshotIds: string[] = [];

@@ -160,6 +160,54 @@ describe("apply_plan", () => {
       applyTool.inputSchema.parse({ routerId: "edge-01", steps: [], extra: true }),
     ).toThrow();
   });
+
+  it("fails fast without invoking the sub-tool handler when the circuit breaker is already open", async () => {
+    const { CircuitBreaker } = await import("../../../../src/adapter/circuit-breaker.js");
+    const { MikroMCPError, ErrorCategory } = await import("../../../../src/domain/errors/error-types.js");
+
+    const cb = new CircuitBreaker("test-router", { failureThreshold: 1, cooldownMs: 60_000 });
+
+    // Trip the breaker open with one transient failure
+    const transient = new MikroMCPError({
+      category: ErrorCategory.ROUTER_UNREACHABLE,
+      code: "ECONNREFUSED",
+      message: "down",
+      recoverability: { retryable: true, suggestedAction: "retry" },
+    });
+    await cb.execute(() => Promise.reject(transient)).catch(() => {});
+    // breaker is now open (failureThreshold 1)
+
+    const handlerSpy = vi.fn().mockResolvedValue({ content: "ok", structuredContent: { action: "created" } });
+    const spyTool: ToolDefinition = {
+      name: "manage_route",
+      title: "Manage Route",
+      description: "",
+      inputSchema: { parse: (p: unknown) => p } as unknown as import("zod").ZodType,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      snapshotPaths: [],
+      handler: handlerSpy,
+    };
+
+    const tools = createChangeManagementTools([spyTool]);
+    const applyTool = tools.find((t) => t.name === "apply_plan")!;
+
+    const ctx = makeContext();
+    ctx.circuitBreaker = cb;
+
+    const result = await applyTool.handler(
+      { routerId: "edge-01", steps: [{ tool: "manage_route", params: { action: "add" } }] },
+      ctx,
+    );
+
+    // The sub-tool handler must never have been called — the open breaker rejected the step
+    expect(handlerSpy).not.toHaveBeenCalled();
+
+    // apply_plan must report failure
+    expect(result.isError).toBe(true);
+    const structured = result.structuredContent as Record<string, unknown>;
+    expect(structured.status).toBe("failed");
+    expect(structured.failedStep).toBe(0);
+  });
 });
 
 describe("rollback_change", () => {

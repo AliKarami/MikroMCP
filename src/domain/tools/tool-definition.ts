@@ -6,6 +6,7 @@ import type { SshClient } from "../../adapter/ssh-client.js";
 import type { FtpClient } from "../../adapter/ftp-client.js";
 import type { RouterRegistry } from "../../config/router-registry.js";
 import type { ConnectionPool } from "../../adapter/connection-pool.js";
+import type { CircuitBreaker } from "../../adapter/circuit-breaker.js";
 
 export interface ToolAnnotations {
   readOnlyHint: boolean;
@@ -37,6 +38,8 @@ export interface ToolContext {
   identity: Identity;
   routerRegistry?: RouterRegistry;
   connectionPool?: ConnectionPool;
+  /** Per-router circuit breaker — set for router-context calls; used by apply_plan to gate sub-steps. */
+  circuitBreaker?: CircuitBreaker;
 }
 
 export interface ToolResult {
