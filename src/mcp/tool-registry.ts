@@ -1,9 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { allTools } from "../domain/tools/index.js";
-import { RouterRegistry } from "../config/router-registry.js";
-import { ConnectionPool } from "../adapter/connection-pool.js";
-import { CircuitBreaker } from "../adapter/circuit-breaker.js";
+import type { RouterRegistry } from "../config/router-registry.js";
+import type { ConnectionPool } from "../adapter/connection-pool.js";
+import type { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import { createLogger } from "../observability/logger.js";
 import type { AppConfig } from "../config/app-config.js";
 import type { IdentityRegistry } from "../config/identity-registry.js";

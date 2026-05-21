@@ -1,0 +1,147 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { executeToolCall, type ToolExecutorDeps } from "../../../src/mcp/tool-executor.js";
+import type { ToolDefinition } from "../../../src/domain/tools/tool-definition.js";
+import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
+
+// Stub modules that require real I/O or external state
+vi.mock("../../../src/observability/audit-log.js", () => ({ auditLog: vi.fn() }));
+vi.mock("../../../src/domain/snapshot/snapshot-engine.js", () => ({ takeSnapshot: vi.fn() }));
+vi.mock("../../../src/domain/snapshot/write-journal.js", () => ({
+  recordAttempt: vi.fn().mockReturnValue("j1"),
+  recordOutcome: vi.fn(),
+}));
+vi.mock("../../../src/adapter/adapter-factory.js", () => ({
+  createSshClient: vi.fn().mockReturnValue({}),
+  createFtpClient: vi.fn().mockReturnValue({}),
+}));
+
+function makeReadTool(
+  handler: ToolDefinition["handler"],
+  overrides: Partial<ToolDefinition> = {},
+): ToolDefinition {
+  return {
+    name: "test_read",
+    title: "Test Read",
+    description: "test",
+    inputSchema: { parse: (x: unknown) => x } as unknown as ToolDefinition["inputSchema"],
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    handler,
+    ...overrides,
+  };
+}
+
+function makeDeps(overrides: Partial<ToolExecutorDeps> = {}): ToolExecutorDeps {
+  const fakeRouter = {
+    id: "r1",
+    host: "h",
+    port: 80,
+    tls: { enabled: false, rejectUnauthorized: false },
+    credentials: { source: "env" as const, envPrefix: "ROUTER_R1" },
+    tags: [],
+    rosVersion: "7.x",
+  };
+  return {
+    registry: {
+      getRouter: vi.fn().mockReturnValue(fakeRouter),
+    } as unknown as ToolExecutorDeps["registry"],
+    pool: {
+      getClient: vi.fn().mockReturnValue({}),
+      removeClient: vi.fn(),
+    } as unknown as ToolExecutorDeps["pool"],
+    circuitBreakers: new Map(),
+    config: {
+      stdioIdentity: undefined,
+      retry: { maxRetries: 0, baseDelayMs: 0, maxDelayMs: 0 },
+      circuitBreaker: { failureThreshold: 5, cooldownMs: 30_000 },
+      ssh: { commandTimeoutMs: 1000, maxOutputBytes: 1024 },
+    } as unknown as ToolExecutorDeps["config"],
+    identityRegistry: {
+      getIdentities: () => [],
+    } as unknown as ToolExecutorDeps["identityRegistry"],
+    ...overrides,
+  };
+}
+
+describe("executeToolCall", () => {
+  beforeEach(() => {
+    process.env.ROUTER_R1_USER = "u";
+    process.env.ROUTER_R1_PASS = "p";
+  });
+  afterEach(() => {
+    delete process.env.ROUTER_R1_USER;
+    delete process.env.ROUTER_R1_PASS;
+  });
+
+  it("happy path — read tool returns formatted result", async () => {
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: { x: 1 } }));
+    const deps = makeDeps();
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0].text).toContain("ok");
+  });
+
+  it("missing routerId — returns isError with MISSING_ROUTER_ID code", async () => {
+    const tool = makeReadTool(async () => ({ content: "never", structuredContent: {} }));
+    const deps = makeDeps();
+
+    const result = await executeToolCall(tool, {}, deps);
+
+    expect(result.isError).toBe(true);
+    const sc = result.structuredContent as { code?: string };
+    expect(sc?.code).toBe("MISSING_ROUTER_ID");
+  });
+
+  it("error path — handler throws MikroMCPError, response has isError and error code", async () => {
+    const tool = makeReadTool(async () => {
+      throw new MikroMCPError({
+        category: ErrorCategory.NOT_FOUND,
+        code: "X_NOT_FOUND",
+        message: "thing not found",
+        recoverability: { retryable: false, suggestedAction: "check id" },
+      });
+    });
+    const deps = makeDeps();
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+    expect(result.isError).toBe(true);
+    const sc = result.structuredContent as { code?: string };
+    expect(sc?.code).toBe("X_NOT_FOUND");
+  });
+
+  it("circuit breaker reuse — same router creates only one breaker", async () => {
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: {} }));
+    const deps = makeDeps();
+
+    await executeToolCall(tool, { routerId: "r1" }, deps);
+    await executeToolCall(tool, { routerId: "r1" }, deps);
+
+    expect(deps.circuitBreakers.size).toBe(1);
+  });
+
+  it("skipRouterContext — registry.getRouter is never called, handler still runs", async () => {
+    let handlerRan = false;
+    const tool = makeReadTool(
+      async () => {
+        handlerRan = true;
+        return { content: "fleet-ok", structuredContent: {} };
+      },
+      { skipRouterContext: true },
+    );
+    const deps = makeDeps();
+
+    const result = await executeToolCall(tool, {}, deps);
+
+    expect(deps.registry.getRouter).not.toHaveBeenCalled();
+    expect(handlerRan).toBe(true);
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0].text).toContain("fleet-ok");
+  });
+});
