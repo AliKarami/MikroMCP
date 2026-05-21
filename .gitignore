@@ -10,3 +10,4 @@ config/identities.yaml
 coverage/
 .DS_Store
 .worktrees/
+.claude/worktrees/
