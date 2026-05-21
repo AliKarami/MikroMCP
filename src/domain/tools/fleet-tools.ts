@@ -138,7 +138,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         routerId: "(fleet)",
         phase: "attempt",
         params: { toolName: parsed.toolName, routerIds: parsed.routerIds, tags: parsed.tags },
-      });
+      }, context.appConfig.auditLogPath);
 
       if (parsed.toolName === "bulk_execute" || parsed.toolName === "check_router_health") {
         throw new MikroMCPError({
@@ -208,7 +208,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           routerId: "(fleet)",
           phase: "success",
           params: { toolName: parsed.toolName, succeeded: 0, failed: 0 },
-        });
+        }, context.appConfig.auditLogPath);
         return {
           content: `Executed ${parsed.toolName} on 0 routers: 0 succeeded, 0 failed`,
           structuredContent: {
@@ -250,7 +250,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             phase: "success",
             params: parsed.params as Record<string, unknown>,
             durationMs: elapsed,
-          });
+          }, context.appConfig.auditLogPath);
           return { routerId: router.id, status: "ok", result, durationMs: elapsed };
         } catch (err) {
           const elapsed = Date.now() - start;
@@ -267,7 +267,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             params: parsed.params as Record<string, unknown>,
             outcome: message,
             durationMs: elapsed,
-          });
+          }, context.appConfig.auditLogPath);
           return { routerId: router.id, status: "error", error: message, durationMs: elapsed };
         }
       }
@@ -292,7 +292,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         routerId: "(fleet)",
         phase: "success",
         params: { toolName: parsed.toolName, succeeded, failed },
-      });
+      }, context.appConfig.auditLogPath);
 
       return {
         content: `Executed ${parsed.toolName} on ${results.length} routers: ${succeeded} succeeded, ${failed} failed`,

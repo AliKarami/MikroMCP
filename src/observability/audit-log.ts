@@ -1,4 +1,4 @@
-import { appendFileSync } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { createLogger } from "./logger.js";
 import type { AuditEvent } from "../types.js";
 
@@ -33,18 +33,12 @@ export function redactParams(params: Record<string, unknown>): Record<string, un
   return out;
 }
 
-const auditFilePath = process.env.MIKROMCP_AUDIT_LOG_PATH || undefined;
-
-export function auditLog(event: AuditEvent): void {
+export function auditLog(event: AuditEvent, auditLogPath?: string): void {
   const safeEvent = { ...event, params: redactParams(event.params) };
-
   log.info(safeEvent, "audit");
-
-  if (auditFilePath) {
-    try {
-      appendFileSync(auditFilePath, JSON.stringify(safeEvent) + "\n");
-    } catch (err) {
-      log.error({ err, auditFilePath }, "Failed to write audit event to file");
-    }
+  if (auditLogPath) {
+    appendFile(auditLogPath, JSON.stringify(safeEvent) + "\n").catch((err) => {
+      log.error({ err, auditLogPath }, "Failed to write audit event to file");
+    });
   }
 }
