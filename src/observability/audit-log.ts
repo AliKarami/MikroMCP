@@ -4,12 +4,26 @@ import type { AuditEvent } from "../types.js";
 
 const log = createLogger("audit");
 
-const SENSITIVE_KEYS = new Set(["password", "token", "secret", "authorization", "credentials"]);
+const SENSITIVE_KEYS = new Set([
+  "password",
+  "pass",
+  "token",
+  "secret",
+  "authorization",
+  "credentials",
+  "privatekey",
+  "presharedkey",
+  "psk",
+  "passphrase",
+  "community",
+  "apikey",
+  "confirmationsecret",
+]);
 
 export function redactParams(params: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(params)) {
-    if (SENSITIVE_KEYS.has(key)) continue;
+    if (SENSITIVE_KEYS.has(key.toLowerCase())) continue;
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       out[key] = redactParams(value as Record<string, unknown>);
     } else {

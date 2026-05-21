@@ -1,11 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   createRateLimiter,
   readBody,
   BodyTooLargeError,
+  connectHttp,
 } from "../../../src/mcp/transports/http.js";
 import { Readable } from "node:stream";
 import type { IncomingMessage } from "node:http";
+import http from "node:http";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { IdentityRegistry } from "../../../src/config/identity-registry.js";
 
 function makeRequestStream(body: string): IncomingMessage {
   return Readable.from([Buffer.from(body)]) as unknown as IncomingMessage;
@@ -64,5 +68,68 @@ describe("readBody", () => {
   it("rejects with SyntaxError when body is invalid JSON", async () => {
     const req = makeRequestStream("not-json");
     await expect(readBody(req, 1024 * 1024)).rejects.toThrow(SyntaxError);
+  });
+});
+
+describe("createRateLimiter — window eviction", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("exposes a sweep that drops windows older than the rate window", () => {
+    vi.useFakeTimers();
+    const limiter = createRateLimiter(5);
+    limiter("1.1.1.1");
+    limiter("2.2.2.2");
+    expect(limiter.size()).toBe(2);
+    vi.advanceTimersByTime(61_000);
+    limiter.sweep();
+    expect(limiter.size()).toBe(0);
+  });
+});
+
+function getRequest(port: number, path: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = http.get(`http://127.0.0.1:${port}${path}`, (res) => {
+      let body = "";
+      res.on("data", (chunk: Buffer) => {
+        body += chunk.toString();
+      });
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+    });
+    req.on("error", reject);
+  });
+}
+
+describe("connectHttp — /healthz endpoint", () => {
+  it("returns 200 {status:'ok'} without Authorization and bypasses the rate limiter", async () => {
+    const mockMakeServer = vi.fn(() => ({}) as unknown as McpServer);
+    const mockIdentityRegistry = {
+      findIdentityByToken: vi.fn(),
+      getIdentities: vi.fn().mockReturnValue([]),
+    } as unknown as IdentityRegistry;
+
+    // rateLimitRpm: 1 — any second request to a rate-limited path would get 429.
+    // /healthz must bypass the limiter, so both requests below must return 200.
+    const server = await connectHttp(
+      mockMakeServer,
+      { port: 0, bindHost: "127.0.0.1", maxBodyBytes: 1024 * 1024, rateLimitRpm: 1 },
+      mockIdentityRegistry,
+    );
+    const { port } = server.address() as import("node:net").AddressInfo;
+
+    try {
+      const response1 = await getRequest(port, "/healthz");
+      expect(response1.status).toBe(200);
+      expect(JSON.parse(response1.body)).toEqual({ status: "ok" });
+
+      // Second request from the same IP — rate limiter is at 1 rpm, but /healthz bypasses it.
+      const response2 = await getRequest(port, "/healthz");
+      expect(response2.status).toBe(200);
+      expect(JSON.parse(response2.body)).toEqual({ status: "ok" });
+
+      // /healthz must not touch the MCP server factory.
+      expect(mockMakeServer).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

@@ -44,6 +44,31 @@ describe("auditLog — credential stripping", () => {
   });
 });
 
+describe("redactParams — crypto material", () => {
+  it("strips VPN/crypto secret fields regardless of camelCase", async () => {
+    vi.resetModules();
+    const { redactParams } = await import("../../../src/observability/audit-log.js");
+    const redacted = redactParams({
+      routerId: "r1",
+      privateKey: "WG-PRIVATE",
+      preSharedKey: "PSK-VALUE",
+      psk: "PSK2",
+      passphrase: "p4ss",
+      community: "SNMP-COMMUNITY",
+      apiKey: "AK",
+      keep: "visible",
+    });
+    expect(redacted.routerId).toBe("r1");
+    expect(redacted.keep).toBe("visible");
+    expect(redacted.privateKey).toBeUndefined();
+    expect(redacted.preSharedKey).toBeUndefined();
+    expect(redacted.psk).toBeUndefined();
+    expect(redacted.passphrase).toBeUndefined();
+    expect(redacted.community).toBeUndefined();
+    expect(redacted.apiKey).toBeUndefined();
+  });
+});
+
 describe("auditLog — file sink", () => {
   let dir: string;
 

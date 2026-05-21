@@ -10,6 +10,22 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- `GET /healthz` endpoint on the HTTP transport for container liveness/readiness probes (unauthenticated, not rate-limited).
+
+### Changed
+- Server version is derived from `package.json` (generated `src/version.ts`) instead of a hardcoded string.
+
+### Fixed
+- Read tools now retry on transient HTTP 5xx / timeout / busy responses (the retry engine previously honoured only raw network errors).
+- Circuit breaker half-open state now admits a single recovery probe at a time.
+- `apply_plan` records real per-step duration in the write journal instead of a hardcoded zero.
+- Audit log and write journal now redact VPN/crypto secrets (WireGuard private keys, IPSec PSK, SNMP community strings).
+- HTTP rate-limiter no longer leaks memory — stale per-IP windows are swept periodically.
+
+### Removed
+- Unused `pagination` configuration block.
+
 ---
 
 ## [1.0.10] - 2026-05-20

@@ -50,6 +50,15 @@ ROUTER_CORE01_PASS=secret \
   mikromcp serve
 ```
 
+**Endpoints:**
+
+| Path | Method | Auth required | Description |
+|---|---|---|---|
+| `/mcp` | GET / POST | Yes (Bearer token) | Streamable HTTP MCP transport |
+| `/sse` | GET | Yes (Bearer token) | Legacy SSE MCP transport |
+| `/messages` | POST | Yes (Bearer token) | Legacy SSE message posting |
+| `/healthz` | GET | No | Liveness/readiness probe — returns `200 {"status":"ok"}`. Not rate-limited. Suitable for Kubernetes `livenessProbe` / `readinessProbe` and Docker `HEALTHCHECK`. |
+
 For Docker and systemd deployment, see [Connecting to AI Assistants](Connecting-to-AI-Assistants#using-docker).
 
 ---
