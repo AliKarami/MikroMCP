@@ -90,6 +90,37 @@ describe("CircuitBreaker", () => {
   });
 });
 
+describe("CircuitBreaker — half-open single-probe gate", () => {
+  it("rejects a second concurrent call while a half-open probe is in flight", async () => {
+    const cb = new CircuitBreaker("r1", { failureThreshold: 1, cooldownMs: 0 });
+    const transient = new MikroMCPError({
+      category: ErrorCategory.ROUTER_UNREACHABLE,
+      code: "ECONNREFUSED",
+      message: "down",
+      recoverability: { retryable: true, suggestedAction: "retry" },
+    });
+
+    // Trip the breaker open, then let cooldown (0ms) move it to half-open.
+    await expect(cb.execute(() => Promise.reject(transient))).rejects.toThrow();
+
+    let releaseProbe!: () => void;
+    const probe = cb.execute(
+      () => new Promise<string>((resolve) => { releaseProbe = () => resolve("ok"); }),
+    );
+
+    // Second call arrives while the probe is still pending.
+    await expect(cb.execute(() => Promise.resolve("second"))).rejects.toThrow(
+      /probe is already in flight/i,
+    );
+
+    releaseProbe();
+    await expect(probe).resolves.toBe("ok");
+
+    // Circuit is now closed — a normal call should succeed.
+    await expect(cb.execute(() => Promise.resolve("third"))).resolves.toBe("third");
+  });
+});
+
 describe("circuit breaker - failure filtering", () => {
   it("does not count VALIDATION errors as failures", async () => {
     const cb = new CircuitBreaker("r1", { failureThreshold: 2, cooldownMs: 30000 });
