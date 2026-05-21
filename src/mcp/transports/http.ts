@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -105,7 +105,7 @@ export async function connectHttp(
   makeServer: () => McpServer,
   config: HttpTransportConfig,
   identityRegistry: IdentityRegistry,
-): Promise<void> {
+): Promise<Server> {
   const { port, bindHost, maxBodyBytes, rateLimitRpm } = config;
   const checkRateLimit = createRateLimiter(rateLimitRpm);
   const sweepTimer = setInterval(() => checkRateLimit.sweep(), 60_000);
@@ -117,15 +117,21 @@ export async function connectHttp(
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const ip = req.socket.remoteAddress ?? "unknown";
 
+    const url = new URL(req.url ?? "/", `http://localhost:${port}`);
+    const { pathname } = url;
+
+    if (pathname === "/healthz") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
     if (!checkRateLimit(ip)) {
       log.warn({ ip }, "Rate limit exceeded");
       res.writeHead(429, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Too many requests. Retry after 60 seconds." }));
       return;
     }
-
-    const url = new URL(req.url ?? "/", `http://localhost:${port}`);
-    const { pathname } = url;
 
     try {
       if (pathname === "/mcp" || pathname === "/sse" || pathname === "/messages") {
@@ -185,6 +191,8 @@ export async function connectHttp(
     });
     httpServer.on("error", reject);
   });
+
+  return httpServer;
 }
 
 async function handleMcpRequest(
