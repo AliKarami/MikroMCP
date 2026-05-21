@@ -3,6 +3,7 @@ import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+import { auditLog } from "../../observability/audit-log.js";
 import { checkAuthz } from "../../middleware/authz.js";
 import { createSshClient, createFtpClient } from "../../adapter/adapter-factory.js";
 import { getCredentials } from "../../config/secrets.js";
@@ -128,6 +129,18 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         "bulk_execute invoked",
       );
 
+      auditLog({
+        type: "audit",
+        ts: new Date().toISOString(),
+        correlationId: context.correlationId,
+        identityId: context.identity.id,
+        role: context.identity.role,
+        tool: "bulk_execute",
+        routerId: "(fleet)",
+        phase: "attempt",
+        params: { toolName: parsed.toolName, routerIds: parsed.routerIds, tags: parsed.tags },
+      });
+
       if (parsed.toolName === "bulk_execute" || parsed.toolName === "check_router_health") {
         throw new MikroMCPError({
           category: ErrorCategory.VALIDATION,
@@ -186,6 +199,17 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       }
 
       if (routers.length === 0 && preErrors.length === 0) {
+        auditLog({
+          type: "audit",
+          ts: new Date().toISOString(),
+          correlationId: context.correlationId,
+          identityId: context.identity.id,
+          role: context.identity.role,
+          tool: "bulk_execute",
+          routerId: "(fleet)",
+          phase: "success",
+          params: { toolName: parsed.toolName, succeeded: 0, failed: 0 },
+        });
         return {
           content: `Executed ${parsed.toolName} on 0 routers: 0 succeeded, 0 failed`,
           structuredContent: {
@@ -220,10 +244,37 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             toolParams as Record<string, unknown>,
             routerContext,
           );
-          return { routerId: router.id, status: "ok", result, durationMs: Date.now() - start };
+          const elapsed = Date.now() - start;
+          auditLog({
+            type: "audit",
+            ts: new Date().toISOString(),
+            correlationId: context.correlationId,
+            identityId: context.identity.id,
+            role: context.identity.role,
+            tool: parsed.toolName,
+            routerId: router.id,
+            phase: "success",
+            params: parsed.params as Record<string, unknown>,
+            durationMs: elapsed,
+          });
+          return { routerId: router.id, status: "ok", result, durationMs: elapsed };
         } catch (err) {
+          const elapsed = Date.now() - start;
           const message = err instanceof Error ? err.message : String(err);
-          return { routerId: router.id, status: "error", error: message, durationMs: Date.now() - start };
+          auditLog({
+            type: "audit",
+            ts: new Date().toISOString(),
+            correlationId: context.correlationId,
+            identityId: context.identity.id,
+            role: context.identity.role,
+            tool: parsed.toolName,
+            routerId: router.id,
+            phase: "failure",
+            params: parsed.params as Record<string, unknown>,
+            outcome: message,
+            durationMs: elapsed,
+          });
+          return { routerId: router.id, status: "error", error: message, durationMs: elapsed };
         }
       }
 
@@ -236,6 +287,18 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
 
       const succeeded = results.filter((r) => r.status === "ok").length;
       const failed = results.filter((r) => r.status === "error").length;
+
+      auditLog({
+        type: "audit",
+        ts: new Date().toISOString(),
+        correlationId: context.correlationId,
+        identityId: context.identity.id,
+        role: context.identity.role,
+        tool: "bulk_execute",
+        routerId: "(fleet)",
+        phase: "success",
+        params: { toolName: parsed.toolName, succeeded, failed },
+      });
 
       return {
         content: `Executed ${parsed.toolName} on ${results.length} routers: ${succeeded} succeeded, ${failed} failed`,

@@ -12,6 +12,11 @@ vi.mock("../../../src/middleware/authz.js", () => ({
   checkAuthz: vi.fn(),
 }));
 
+vi.mock("../../../src/observability/audit-log.js", async (orig) => {
+  const actual = await orig<typeof import("../../../src/observability/audit-log.js")>();
+  return { ...actual, auditLog: vi.fn() };
+});
+
 vi.mock("../../../src/adapter/adapter-factory.js", () => ({
   createSshClient: vi.fn().mockReturnValue({}),
   createFtpClient: vi.fn().mockReturnValue({}),
@@ -22,6 +27,7 @@ vi.mock("../../../src/config/secrets.js", () => ({
 }));
 
 import { checkAuthz } from "../../../src/middleware/authz.js";
+import { auditLog } from "../../../src/observability/audit-log.js";
 
 const mockReadTool: ToolDefinition = {
   name: "list_interfaces",
@@ -399,6 +405,51 @@ describe("fleet-tools", () => {
         succeeded: 2,
         failed: 1,
       });
+    });
+
+    it("emits audit events for the fan-out and per router", async () => {
+      vi.mocked(auditLog).mockClear();
+      vi.mocked(mockReadTool.handler).mockResolvedValue({ content: "ok", structuredContent: {} });
+
+      const mockRegistry = {
+        getRouter: vi.fn().mockImplementation((id: string) => makeRouterConfig(id)),
+        listRouters: vi.fn(),
+        hasRouter: vi.fn(),
+      };
+      const mockPool = {
+        getClient: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue([]),
+        } as unknown as RouterOSRestClient),
+      };
+      const ctx = makeContext({
+        routerRegistry: mockRegistry as unknown as ToolContext["routerRegistry"],
+        connectionPool: mockPool as unknown as ToolContext["connectionPool"],
+      });
+
+      await bulkTool.handler(
+        { toolName: "list_interfaces", routerIds: ["r1", "r2"], params: {}, concurrency: 5 },
+        ctx,
+      );
+
+      const calls = vi.mocked(auditLog).mock.calls.map((c) => c[0]);
+
+      // Overall attempt event
+      expect(calls).toEqual(
+        expect.arrayContaining([expect.objectContaining({ tool: "bulk_execute", phase: "attempt" })]),
+      );
+
+      // Overall success event
+      expect(calls).toEqual(
+        expect.arrayContaining([expect.objectContaining({ tool: "bulk_execute", phase: "success" })]),
+      );
+
+      // Per-router events — one per router with the router's id, tool, and phase
+      expect(calls).toEqual(
+        expect.arrayContaining([expect.objectContaining({ tool: "list_interfaces", routerId: "r1", phase: "success" })]),
+      );
+      expect(calls).toEqual(
+        expect.arrayContaining([expect.objectContaining({ tool: "list_interfaces", routerId: "r2", phase: "success" })]),
+      );
     });
 
     it("respects concurrency limit by batching", async () => {
