@@ -182,7 +182,10 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         const stepStartMs = Date.now();
 
         try {
-          const result = await tool.handler(stepParams, context);
+          const runStep = () => tool.handler(stepParams, context);
+          const result = context.circuitBreaker
+            ? await context.circuitBreaker.execute(runStep)
+            : await runStep();
           recordOutcome({ journalPath, journalId: stepJournalId, phase: "success", durationMs: Date.now() - stepStartMs });
           results.push({
             stepIndex: i,
