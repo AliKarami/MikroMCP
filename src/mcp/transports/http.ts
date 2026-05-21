@@ -16,28 +16,42 @@ export class BodyTooLargeError extends Error {
   }
 }
 
-export function createRateLimiter(rpm: number): (ip: string) => boolean {
-  if (rpm === 0) return () => true;
+export interface RateLimiter {
+  (ip: string): boolean;
+  sweep(): void;
+  size(): number;
+}
 
+export function createRateLimiter(rpm: number): RateLimiter {
   const WINDOW_MS = 60_000;
   const windows = new Map<string, { count: number; windowStart: number }>();
 
-  return (ip: string): boolean => {
+  const check = (ip: string): boolean => {
+    if (rpm === 0) return true;
     const now = Date.now();
     const entry = windows.get(ip);
-
     if (!entry || now - entry.windowStart >= WINDOW_MS) {
       windows.set(ip, { count: 1, windowStart: now });
       return true;
     }
-
     if (entry.count >= rpm) {
       return false;
     }
-
     entry.count++;
     return true;
   };
+
+  const limiter = check as RateLimiter;
+  limiter.sweep = () => {
+    const now = Date.now();
+    for (const [ip, entry] of windows) {
+      if (now - entry.windowStart >= WINDOW_MS) {
+        windows.delete(ip);
+      }
+    }
+  };
+  limiter.size = () => windows.size;
+  return limiter;
 }
 
 export async function readBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
@@ -94,6 +108,8 @@ export async function connectHttp(
 ): Promise<void> {
   const { port, bindHost, maxBodyBytes, rateLimitRpm } = config;
   const checkRateLimit = createRateLimiter(rateLimitRpm);
+  const sweepTimer = setInterval(() => checkRateLimit.sweep(), 60_000);
+  sweepTimer.unref();
 
   const streamableSessions = new Map<string, StreamableHTTPServerTransport>();
   const sseTransports = new Map<string, SSEServerTransport>();
@@ -156,6 +172,8 @@ export async function connectHttp(
       }
     }
   });
+
+  httpServer.on("close", () => clearInterval(sweepTimer));
 
   await new Promise<void>((resolve, reject) => {
     httpServer.listen(port, bindHost, () => {

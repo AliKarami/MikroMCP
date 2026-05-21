@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   createRateLimiter,
   readBody,
@@ -64,5 +64,20 @@ describe("readBody", () => {
   it("rejects with SyntaxError when body is invalid JSON", async () => {
     const req = makeRequestStream("not-json");
     await expect(readBody(req, 1024 * 1024)).rejects.toThrow(SyntaxError);
+  });
+});
+
+describe("createRateLimiter — window eviction", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("exposes a sweep that drops windows older than the rate window", () => {
+    vi.useFakeTimers();
+    const limiter = createRateLimiter(5);
+    limiter("1.1.1.1");
+    limiter("2.2.2.2");
+    expect(limiter.size()).toBe(2);
+    vi.advanceTimersByTime(61_000);
+    limiter.sweep();
+    expect(limiter.size()).toBe(0);
   });
 });
