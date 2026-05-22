@@ -52,6 +52,11 @@ const COUNTER_PROPS = [
   "tx-error",
   "rx-error",
   "tx-queue-drop",
+  "fp-tx-byte",
+  "fp-rx-byte",
+  "fp-tx-packet",
+  "fp-rx-packet",
+  "fp-rps-drop",
 ];
 
 const listInterfacesTool: ToolDefinition = {
@@ -106,18 +111,19 @@ const listInterfacesTool: ToolDefinition = {
       // Apply pagination
       const paginated = interfaces.slice(parsed.offset, parsed.offset + parsed.limit);
 
-      // Strip counters if not requested
-      const results = parsed.includeCounters
-        ? paginated
-        : paginated.map((iface) => {
-            const cleaned: Record<string, unknown> = {};
-            for (const [key, value] of Object.entries(iface)) {
-              if (!COUNTER_PROPS.includes(key)) {
-                cleaned[key] = value;
-              }
-            }
-            return cleaned;
-          });
+      // Strip counters if not requested and add computed status field
+      const results = paginated.map((iface) => {
+        const rec = iface as Record<string, unknown>;
+        const isRunning = rec.running === true || rec.running === "true";
+        const isDisabled = rec.disabled === true || rec.disabled === "true";
+        const enriched: Record<string, unknown> = { status: isDisabled ? "disabled" : isRunning ? "up" : "down" };
+        for (const [key, value] of Object.entries(rec)) {
+          if (parsed.includeCounters || !COUNTER_PROPS.includes(key)) {
+            enriched[key] = value;
+          }
+        }
+        return enriched;
+      });
 
       const hasMore = parsed.offset + parsed.limit < total;
 
@@ -125,11 +131,11 @@ const listInterfacesTool: ToolDefinition = {
         `Interfaces on ${context.routerId}: ${total} total, showing ${results.length} (offset ${parsed.offset})`,
       ];
       for (const iface of results) {
-        const rec = iface as Record<string, string>;
+        const rec = iface as Record<string, unknown>;
         const name = rec.name ?? rec[".id"] ?? "unknown";
         const type = rec.type ?? parsed.type;
-        const running = rec.running === "true" ? "UP" : "DOWN";
-        lines.push(`  ${name} [${type}] ${running}`);
+        const status = String(rec.status).toUpperCase();
+        lines.push(`  ${name} [${type}] ${status}`);
       }
 
       return {

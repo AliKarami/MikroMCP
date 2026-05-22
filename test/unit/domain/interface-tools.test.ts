@@ -96,6 +96,92 @@ describe("list_interfaces", () => {
     });
   });
 
+  describe("handler - running status", () => {
+    it("computes status=up when running is boolean true", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", name: "ether1", type: "ether", running: true, disabled: false },
+      ]);
+      const result = await listInterfacesTool.handler({ routerId: "test-router" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      const iface = (sc.interfaces as Record<string, unknown>[])[0];
+      expect(iface.status).toBe("up");
+      expect(result.content).toContain("UP");
+    });
+
+    it("computes status=up when running is string 'true'", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", name: "ether1", type: "ether", running: "true", disabled: "false" },
+      ]);
+      const result = await listInterfacesTool.handler({ routerId: "test-router" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      const iface = (sc.interfaces as Record<string, unknown>[])[0];
+      expect(iface.status).toBe("up");
+      expect(result.content).toContain("UP");
+    });
+
+    it("computes status=down when running is boolean false", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", name: "ether1", type: "ether", running: false, disabled: false },
+      ]);
+      const result = await listInterfacesTool.handler({ routerId: "test-router" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      const iface = (sc.interfaces as Record<string, unknown>[])[0];
+      expect(iface.status).toBe("down");
+      expect(result.content).toContain("DOWN");
+    });
+
+    it("computes status=disabled when disabled is true", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", name: "ether1", type: "ether", running: false, disabled: true },
+      ]);
+      const result = await listInterfacesTool.handler({ routerId: "test-router" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      const iface = (sc.interfaces as Record<string, unknown>[])[0];
+      expect(iface.status).toBe("disabled");
+    });
+  });
+
+  describe("handler - counter stripping", () => {
+    const ifaceWithFpCounters = {
+      ".id": "*1",
+      name: "ether1",
+      type: "ether",
+      running: true,
+      disabled: false,
+      "fp-rx-byte": 123456,
+      "fp-tx-byte": 654321,
+      "fp-rx-packet": 100,
+      "fp-tx-packet": 200,
+      "fp-rps-drop": 0,
+      "tx-byte": 1000,
+      "rx-byte": 2000,
+    };
+
+    it("strips fp-* counters when includeCounters is false (default)", async () => {
+      const ctx = makeContext([ifaceWithFpCounters]);
+      const result = await listInterfacesTool.handler({ routerId: "test-router" }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      const iface = (sc.interfaces as Record<string, unknown>[])[0];
+      expect(iface["fp-rx-byte"]).toBeUndefined();
+      expect(iface["fp-tx-byte"]).toBeUndefined();
+      expect(iface["fp-rps-drop"]).toBeUndefined();
+      expect(iface["tx-byte"]).toBeUndefined();
+    });
+
+    it("includes fp-* counters when includeCounters is true", async () => {
+      const ctx = makeContext([ifaceWithFpCounters]);
+      const result = await listInterfacesTool.handler(
+        { routerId: "test-router", includeCounters: true },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      const iface = (sc.interfaces as Record<string, unknown>[])[0];
+      expect(iface["fp-rx-byte"]).toBe(123456);
+      expect(iface["fp-tx-byte"]).toBe(654321);
+      expect(iface["tx-byte"]).toBe(1000);
+    });
+  });
+
   describe("handler - macAddress filter", () => {
     const sampleIfaces = [
       {
