@@ -28,6 +28,7 @@ Each release section covers changes **since the previous release only**.
 - HTTP rate-limiter no longer leaks memory — stale per-IP windows are swept periodically.
 - The pooled RouterOS REST client is now evicted after a router authentication failure, so the next call rebuilds it with fresh credentials.
 - `bulk_execute` fleet operations are now written to the audit log (previously produced no audit trail).
+- `mikromcp init` now writes empty `allowedRouters`/`allowedToolPatterns` (the documented "all" sentinel) instead of `["*"]`, which silently denied access to every router.
 - `apply_plan` sub-steps now run through the per-router circuit breaker, so a plan fails fast against a router the breaker already knows is down.
 
 ### Removed

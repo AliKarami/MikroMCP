@@ -365,10 +365,10 @@ function writeIdentitiesYaml(data: CollectedData): boolean {
     token: data.tokenHash,
     role: data.role,
     allowedRouters:
-      data.allowedRouters === "*" ? ["*"] : data.allowedRouters.split(",").map((s) => s.trim()),
+      data.allowedRouters === "*" ? [] : data.allowedRouters.split(",").map((s) => s.trim()),
     allowedToolPatterns:
       data.allowedToolPatterns === "*"
-        ? ["*"]
+        ? []
         : data.allowedToolPatterns.split(",").map((s) => s.trim()),
   };
 
