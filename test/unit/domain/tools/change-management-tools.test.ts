@@ -10,7 +10,15 @@ vi.mock("node:fs", () => ({
   mkdirSync: vi.fn(),
 }));
 
+vi.mock("node:fs/promises", () => ({
+  appendFile: vi.fn().mockResolvedValue(undefined),
+  mkdir: vi.fn().mockResolvedValue(undefined),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn().mockResolvedValue("{}"),
+}));
+
 import * as nodeFs from "node:fs";
+import * as nodeFsp from "node:fs/promises";
 
 const ROUTE_RECORD = { ".id": "*1", "dst-address": "10.0.0.0/8", "gateway": "192.168.1.1", "routing-table": "main" };
 
@@ -131,8 +139,8 @@ describe("apply_plan", () => {
   });
 
   it("records a numeric durationMs in the journal outcome line for a successful step", async () => {
-    const appendFsSpy = vi.mocked(nodeFs.appendFileSync);
-    appendFsSpy.mockClear();
+    const appendFileSpy = vi.mocked(nodeFsp.appendFile);
+    appendFileSpy.mockClear();
 
     const manageRoute = makeManageRoute("created");
     const tools = createChangeManagementTools([manageRoute]);
@@ -144,12 +152,13 @@ describe("apply_plan", () => {
       ctx,
     );
 
-    // at least one appended line must be the step outcome
-    const calls = appendFsSpy.mock.calls;
-    expect(calls.length).toBeGreaterThanOrEqual(2);
+    // Wait for fire-and-forget writes to complete
+    await vi.waitFor(() => {
+      expect(appendFileSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
 
     // The outcome line is the last call; parse all lines and find the success phase
-    const allLines = calls.map((c) => JSON.parse(c[1] as string) as Record<string, unknown>);
+    const allLines = appendFileSpy.mock.calls.map((c) => JSON.parse(c[1] as string) as Record<string, unknown>);
     const outcomeLine = allLines.find((l) => l.phase === "success");
 
     expect(outcomeLine).toBeDefined();
@@ -248,9 +257,12 @@ describe("rollback_change", () => {
   });
 
   it("dryRun returns restore plan without applying", async () => {
+    // Journal file read uses node:fs readFileSync (in change-management-tools.ts)
     (nodeFs.readFileSync as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce(`${JOURNAL_LINE_ATTEMPT}\n${JOURNAL_LINE_SUCCESS}\n`)
-      .mockReturnValueOnce(SNAPSHOT_CONTENT);
+      .mockReturnValueOnce(`${JOURNAL_LINE_ATTEMPT}\n${JOURNAL_LINE_SUCCESS}\n`);
+    // Snapshot file read uses node:fs/promises readFile (in snapshot-engine.ts)
+    (nodeFsp.readFile as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(SNAPSHOT_CONTENT);
 
     const tools = createChangeManagementTools([]);
     const rollbackTool = tools.find((t) => t.name === "rollback_change")!;

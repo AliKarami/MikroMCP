@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("node:fs", () => ({ appendFileSync: vi.fn(), mkdirSync: vi.fn() }));
+vi.mock("node:fs/promises", () => ({ appendFile: vi.fn().mockResolvedValue(undefined), mkdir: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("nanoid", () => ({ nanoid: () => "journal-id-1" }));
 
-import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import { recordAttempt, recordOutcome } from "../../../../src/domain/snapshot/write-journal.js";
 
 describe("recordAttempt", () => {
@@ -22,7 +22,7 @@ describe("recordAttempt", () => {
     expect(id).toBe("journal-id-1");
   });
 
-  it("appends a JSON line to the journal file", () => {
+  it("appends a JSON line to the journal file", async () => {
     recordAttempt({
       journalPath: "/tmp/journal.ndjson",
       identityId: "alice",
@@ -32,15 +32,17 @@ describe("recordAttempt", () => {
       params: { action: "add" },
       snapshotIds: [],
     });
-    expect(fs.appendFileSync).toHaveBeenCalledOnce();
-    const line = (fs.appendFileSync as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    await vi.waitFor(() => {
+      expect(fsp.appendFile).toHaveBeenCalledOnce();
+    });
+    const line = (fsp.appendFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
     const parsed = JSON.parse(line.trim());
     expect(parsed.phase).toBe("attempt");
     expect(parsed.tool).toBe("manage_route");
     expect(parsed.id).toBe("journal-id-1");
   });
 
-  it("redacts sensitive param keys", () => {
+  it("redacts sensitive param keys", async () => {
     recordAttempt({
       journalPath: "/tmp/journal.ndjson",
       identityId: "alice",
@@ -50,7 +52,10 @@ describe("recordAttempt", () => {
       params: { action: "add", password: "secret" },
       snapshotIds: [],
     });
-    const line = (fs.appendFileSync as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    await vi.waitFor(() => {
+      expect(fsp.appendFile).toHaveBeenCalledOnce();
+    });
+    const line = (fsp.appendFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
     expect(line).not.toContain("secret");
   });
 });
@@ -58,18 +63,24 @@ describe("recordAttempt", () => {
 describe("recordOutcome", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("appends a success line with durationMs", () => {
+  it("appends a success line with durationMs", async () => {
     recordOutcome({ journalPath: "/tmp/journal.ndjson", journalId: "j1", phase: "success", durationMs: 120 });
-    const line = (fs.appendFileSync as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    await vi.waitFor(() => {
+      expect(fsp.appendFile).toHaveBeenCalledOnce();
+    });
+    const line = (fsp.appendFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
     const parsed = JSON.parse(line.trim());
     expect(parsed.id).toBe("j1");
     expect(parsed.phase).toBe("success");
     expect(parsed.durationMs).toBe(120);
   });
 
-  it("appends a failure line with outcome code", () => {
+  it("appends a failure line with outcome code", async () => {
     recordOutcome({ journalPath: "/tmp/journal.ndjson", journalId: "j1", phase: "failure", outcome: "ROUTER_DOWN", durationMs: 50 });
-    const line = (fs.appendFileSync as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    await vi.waitFor(() => {
+      expect(fsp.appendFile).toHaveBeenCalledOnce();
+    });
+    const line = (fsp.appendFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
     const parsed = JSON.parse(line.trim());
     expect(parsed.phase).toBe("failure");
     expect(parsed.outcome).toBe("ROUTER_DOWN");

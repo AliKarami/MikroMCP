@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { join } from "node:path";
 
-vi.mock("node:fs", () => ({
-  mkdirSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  readFileSync: vi.fn(),
+vi.mock("node:fs/promises", () => ({
+  mkdir: vi.fn().mockResolvedValue(undefined),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn(),
 }));
 vi.mock("nanoid", () => ({ nanoid: () => "abc123" }));
 
-import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import { takeSnapshot, loadSnapshot } from "../../../../src/domain/snapshot/snapshot-engine.js";
 import type { RouterOSRestClient } from "../../../../src/adapter/rest-client.js";
 
@@ -30,12 +30,12 @@ describe("takeSnapshot", () => {
     const meta = await takeSnapshot(client, "edge-01", "ip/route", "/tmp/snapshots");
 
     expect(client.get).toHaveBeenCalledWith("ip/route", {});
-    expect(fs.mkdirSync).toHaveBeenCalledWith(
+    expect(fsp.mkdir).toHaveBeenCalledWith(
       join("/tmp/snapshots", "edge-01"),
       { recursive: true },
     );
-    expect(fs.writeFileSync).toHaveBeenCalledOnce();
-    const written = JSON.parse((fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0][1] as string);
+    expect(fsp.writeFile).toHaveBeenCalledOnce();
+    const written = JSON.parse((fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string);
     expect(written.routerId).toBe("edge-01");
     expect(written.path).toBe("ip/route");
     expect(written.records).toEqual(RECORDS);
@@ -52,10 +52,10 @@ describe("takeSnapshot", () => {
 });
 
 describe("loadSnapshot", () => {
-  it("parses JSON file and returns records", () => {
+  it("parses JSON file and returns records", async () => {
     const stored = { id: "snap1", routerId: "edge-01", path: "ip/route", ts: "2026-01-01T00:00:00Z", records: RECORDS };
-    (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue(JSON.stringify(stored));
-    const result = loadSnapshot("/tmp/snapshots/edge-01/snap1.json");
+    (fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue(JSON.stringify(stored));
+    const result = await loadSnapshot("/tmp/snapshots/edge-01/snap1.json");
     expect(result).toEqual(stored);
   });
 });
