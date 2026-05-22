@@ -58,6 +58,7 @@ ROUTER_CORE01_PASS=secret \
 | `/sse` | GET | Yes (Bearer token) | Legacy SSE MCP transport |
 | `/messages` | POST | Yes (Bearer token) | Legacy SSE message posting |
 | `/healthz` | GET | No | Liveness/readiness probe — returns `200 {"status":"ok"}`. Not rate-limited. Suitable for Kubernetes `livenessProbe` / `readinessProbe` and Docker `HEALTHCHECK`. |
+| `/metrics` | GET | No | Prometheus metrics exposition — returns per-tool call counters (`mikromcp_tool_calls_total`). Not rate-limited. Suitable for Prometheus scraping. |
 
 For Docker and systemd deployment, see [Connecting to AI Assistants](Connecting-to-AI-Assistants#using-docker).
 
