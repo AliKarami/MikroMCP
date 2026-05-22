@@ -126,6 +126,23 @@ describe("executeToolCall", () => {
     expect(deps.circuitBreakers.size).toBe(1);
   });
 
+  it("evicts the pooled client when a call fails with ROUTER_AUTH_FAILED", async () => {
+    const removeClient = vi.fn();
+    const deps = makeDeps({
+      pool: { getClient: vi.fn().mockReturnValue({}), removeClient } as never,
+    });
+    const tool = makeReadTool(async () => {
+      throw new MikroMCPError({
+        category: ErrorCategory.ROUTER_AUTH_FAILED,
+        code: "HTTP_401",
+        message: "auth failed",
+        recoverability: { retryable: false, suggestedAction: "fix creds" },
+      });
+    });
+    await executeToolCall(tool, { routerId: "r1" }, deps);
+    expect(removeClient).toHaveBeenCalledWith("r1");
+  });
+
   it("skipRouterContext — registry.getRouter is never called, handler still runs", async () => {
     let handlerRan = false;
     const tool = makeReadTool(
