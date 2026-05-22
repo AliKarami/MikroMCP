@@ -30,6 +30,9 @@ export interface AppConfig {
     failureThreshold: number;
     cooldownMs: number;
   };
+  retention: {
+    snapshotMaxAgeDays: number;
+  };
 }
 
 import { join } from "node:path";
@@ -80,6 +83,9 @@ export function loadAppConfig(): AppConfig {
     circuitBreaker: {
       failureThreshold: 5,
       cooldownMs: 30_000,
+    },
+    retention: {
+      snapshotMaxAgeDays: parseInt(env.MIKROMCP_SNAPSHOT_RETENTION_DAYS ?? "30", 10),
     },
   };
 }

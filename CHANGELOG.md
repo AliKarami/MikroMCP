@@ -12,6 +12,7 @@ Each release section covers changes **since the previous release only**.
 
 ### Added
 - `GET /healthz` endpoint on the HTTP transport for container liveness/readiness probes (unauthenticated, not rate-limited).
+- `MIKROMCP_SNAPSHOT_RETENTION_DAYS` (default 30) — config snapshots older than this are pruned at server startup.
 
 ### Changed
 - Server version is derived from `package.json` (generated `src/version.ts`) instead of a hardcoded string.
