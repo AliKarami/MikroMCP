@@ -18,6 +18,15 @@ export const SEMANTIC_KEYS: Record<string, readonly string[]> = {
   "system/script": ["name"],
   "system/package": ["name"],
   "container": ["name"],
+  "certificate": ["name"],
+  "file": ["name"],
+  "interface/vrrp": ["name"],
+  "ip/dhcp-server": ["name"],
+  "ip/ipsec/peer": ["name"],
+  "ip/pool": ["name"],
+  "queue/simple": ["name"],
+  "tool/netwatch": ["host"],
+  "user": ["name"],
 };
 
 function normalizeValue(v: string): string {

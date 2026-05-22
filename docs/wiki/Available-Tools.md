@@ -1268,6 +1268,8 @@ Restore the RouterOS section state captured before a previous `apply_plan` run. 
 
 **Example prompt:** "Roll back the last change on core-01 — something broke after the firewall update."
 
+> **Diffing behaviour:** rollback identifies which records to update, create, or remove by matching snapshot records to current records using a per-RouterOS-path semantic key (e.g. `name` for most named resources, `host` for netwatch entries). For singleton settings resources without a natural identity field — notably `system/clock` — no semantic key is defined and rollback falls back to whole-record signature matching, which may reapply a changed record as a delete-then-create rather than an in-place update.
+
 ---
 
 ## Fleet Operations
@@ -1289,15 +1291,26 @@ Probe one or more routers for reachability, REST API availability, SSH availabil
 
 ### `bulk_execute` — Write
 
-Fan out any base tool call to multiple routers by ID or tag with configurable concurrency. Fleet tools and change-management tools cannot be used as the inner tool.
+Fan out any single-router tool call to multiple routers by ID or tag with configurable concurrency. Fleet tools cannot be used as the inner tool. Non-destructive tools fan out immediately. Destructive tools require a two-step confirmation flow (see below).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
+| `toolName` | string | — | Name of the single-router tool to fan out |
 | `routerIds` | string[] | — | List of router IDs to target (use `tags` or `routerIds`, not both) |
-| `tags` | string[] | — | Target all routers matching any of these tags |
-| `tool` | string | — | Name of the base tool to call on each router |
-| `params` | object | — | Parameters for the tool call (omit `routerId` — set per router) |
-| `concurrency` | integer | `3` | Maximum simultaneous calls (1–10) |
-| `stopOnError` | boolean | `false` | Abort remaining routers if any call fails |
+| `tags` | string[] | — | Target all routers with ALL of these tags (mutually exclusive with `routerIds`) |
+| `params` | object | — | Parameters for the tool call (omit `routerId` — injected per router) |
+| `concurrency` | integer | `5` | Maximum simultaneous calls (1–20) |
+| `confirmationToken` | string | — | Fleet confirmation token from a prior `APPROVAL_REQUIRED` response. Required to fan out a destructive tool. |
 
-**Example prompt:** "Run `get_system_status` on all routers tagged 'branch' and summarize which ones have high CPU usage."
+#### Fanning out destructive tools (two-step confirmation)
+
+Destructive tools (those with `destructiveHint: true`) require `MIKROMCP_CONFIRMATION_SECRET` to be configured on the server. The flow is:
+
+1. Call `bulk_execute` with the desired `toolName`, `routerIds`/`tags`, and `params` — **without** `confirmationToken`. The server returns an `APPROVAL_REQUIRED` error containing a `confirmationToken` in its `details`.
+2. Re-submit the **identical** call with `confirmationToken` set to the value from step 1. The tool fans out to all resolved routers.
+
+Tokens expire after 5 minutes and are single-use. If the router set or params change between calls, the token is rejected.
+
+**Example prompt (non-destructive):** "Run `list_interfaces` on all routers tagged 'branch' and summarize the results."
+
+**Example prompt (destructive):** "Reboot all routers with tag 'maintenance-window'. First call `bulk_execute` with `toolName: reboot` to get a confirmation token, then re-submit with that token."

@@ -14,6 +14,7 @@ import type { McpToolResponse } from "./response-formatter.js";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 import { enrichError } from "../domain/errors/error-enricher.js";
 import { createLogger } from "../observability/logger.js";
+import { recordToolCall } from "../observability/metrics.js";
 import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { ToolContext, ToolDefinition } from "../domain/tools/tool-definition.js";
 import type { RouterRegistry } from "../config/router-registry.js";
@@ -59,7 +60,9 @@ export async function executeToolCall(
           connectionPool: pool,
           appConfig: config,
         };
-        return formatToolResult(await tool.handler(args, fleetContext));
+        const fleetResult = await tool.handler(args, fleetContext);
+        recordToolCall(tool.name, "success");
+        return formatToolResult(fleetResult);
       }
 
       const routerId = args.routerId as string | undefined;
@@ -197,6 +200,7 @@ export async function executeToolCall(
       }
 
       log.info({ tool: tool.name, routerId, correlationId }, "Tool executed successfully");
+      recordToolCall(tool.name, "success");
       return formatToolResult(result);
     } catch (err) {
       const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: tool.name });
@@ -239,6 +243,7 @@ export async function executeToolCall(
       }
 
       log.error({ err: error, tool: tool.name, correlationId }, "Tool execution failed");
+      recordToolCall(tool.name, "error");
       return formatError(error);
     }
   });

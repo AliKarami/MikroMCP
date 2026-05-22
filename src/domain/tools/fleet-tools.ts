@@ -6,6 +6,7 @@ import { createLogger } from "../../observability/logger.js";
 import { auditLog } from "../../observability/audit-log.js";
 import { checkAuthz } from "../../middleware/authz.js";
 import { buildRouterToolContext } from "../../mcp/tool-context.js";
+import { checkFleetConfirmation } from "../../middleware/fleet-confirmation.js";
 
 const log = createLogger("fleet-tools");
 
@@ -19,11 +20,26 @@ const bulkExecuteInputSchema = z
   .object({
     toolName: z.string().describe("Name of the tool to fan out (must be a single-router tool)"),
     routerIds: z.array(z.string()).optional().describe("Explicit list of router IDs to target"),
-    tags: z.array(z.string()).optional().describe("Target all routers with ALL of these tags (mutually exclusive with routerIds)"),
+    tags: z
+      .array(z.string())
+      .optional()
+      .describe("Target all routers with ALL of these tags (mutually exclusive with routerIds)"),
     params: z
       .record(z.string(), z.unknown())
       .describe("Params to pass to the tool (omit routerId — injected per router)"),
-    concurrency: z.number().int().min(1).max(20).default(5).describe("Max simultaneous router calls"),
+    concurrency: z
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(5)
+      .describe("Max simultaneous router calls"),
+    confirmationToken: z
+      .string()
+      .optional()
+      .describe(
+        "Fleet confirmation token from a prior APPROVAL_REQUIRED response. Required to fan out a destructive tool.",
+      ),
   })
   .strict();
 
@@ -95,7 +111,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     name: "bulk_execute",
     title: "Bulk Execute",
     description:
-      "Fan out a single-router tool to multiple routers in parallel (up to `concurrency` at a time). Target routers via explicit routerIds or by tag. Destructive tools are not allowed. Returns per-router results with succeeded/failed counts.",
+      "Fan out a single-router tool to multiple routers in parallel (up to `concurrency` at a time). Target routers via explicit routerIds or by tag. Non-destructive tools fan out immediately. Destructive tools require a two-step confirmation: call without `confirmationToken` to receive a fleet token (requires `MIKROMCP_CONFIRMATION_SECRET`), then re-call with that token to proceed. Returns per-router results with succeeded/failed counts.",
     inputSchema: bulkExecuteInputSchema,
     annotations: {
       readOnlyHint: false,
@@ -166,19 +182,6 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       }
       const targetTool: ToolDefinition = foundTool;
 
-      if (targetTool.annotations.destructiveHint) {
-        throw new MikroMCPError({
-          category: ErrorCategory.VALIDATION,
-          code: "BULK_DESTRUCTIVE_NOT_ALLOWED",
-          message: `Tool "${parsed.toolName}" is destructive. Destructive tools require per-router confirmation and cannot be fanned out via bulk_execute.`,
-          recoverability: {
-            retryable: false,
-            suggestedAction:
-              "Call the tool directly on each router to provide the required confirmation token.",
-          },
-        });
-      }
-
       // Pre-resolution errors (unknown IDs) become immediate error results
       const preErrors: BulkResult[] = [];
       let routers: RouterConfig[];
@@ -189,12 +192,44 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             resolved.push(context.routerRegistry!.getRouter(id));
           } catch {
             log.warn({ routerId: id }, "bulk_execute: router not found");
-            preErrors.push({ routerId: id, status: "error", error: `Router "${id}" not found in registry`, durationMs: 0 });
+            preErrors.push({
+              routerId: id,
+              status: "error",
+              error: `Router "${id}" not found in registry`,
+              durationMs: 0,
+            });
           }
         }
         routers = resolved;
       } else {
         routers = context.routerRegistry!.listRouters(parsed.tags!);
+      }
+
+      if (targetTool.annotations.destructiveHint) {
+        const secret = context.appConfig.confirmationSecret;
+        if (!secret) {
+          throw new MikroMCPError({
+            category: ErrorCategory.CONFIGURATION,
+            code: "FLEET_CONFIRMATION_UNAVAILABLE",
+            message:
+              "Fanning out a destructive tool requires MIKROMCP_CONFIRMATION_SECRET to be configured.",
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Set MIKROMCP_CONFIRMATION_SECRET, or call the tool per-router.",
+            },
+          });
+        }
+        const routerIdList = routers.map((r) => r.id);
+        checkFleetConfirmation(
+          {
+            toolName: parsed.toolName,
+            routerIds: routerIdList,
+            params: parsed.params as Record<string, unknown>,
+            identityId: context.identity.id,
+            submittedToken: parsed.confirmationToken,
+          },
+          secret,
+        );
       }
 
       if (routers.length === 0 && preErrors.length === 0) {

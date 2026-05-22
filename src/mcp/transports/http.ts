@@ -7,6 +7,7 @@ import { createLogger } from "../../observability/logger.js";
 import type { IdentityRegistry } from "../../config/identity-registry.js";
 import { authenticateHttp, withIdentity } from "../../middleware/auth.js";
 import { MikroMCPError } from "../../domain/errors/error-types.js";
+import { renderPrometheus } from "../../observability/metrics.js";
 
 const log = createLogger("transport-http");
 
@@ -123,6 +124,12 @@ export async function connectHttp(
     if (pathname === "/healthz") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    if (pathname === "/metrics") {
+      res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+      res.end(renderPrometheus());
       return;
     }
 
