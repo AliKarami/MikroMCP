@@ -193,6 +193,84 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
+## 🔜 v1.2 — VLAN CRUD, IP Pools & WAN Services
+
+**Goal:** Close the most common day-one gaps: VLAN management beyond create, IP pools (the shared prerequisite for PPPoE, DHCP server, and OpenVPN), the WAN DHCP client, static DHCP lease management, and the IP services port table.
+
+- **VLAN completeness:**
+  - `list_vlans` — list all VLAN interfaces with ID, parent interface, MTU, and status
+  - `manage_vlan` — update and remove VLAN interfaces (idempotent by name; complements the existing `create_vlan`)
+- **IP Pools:**
+  - `list_ip_pools` — list IP pools with range and next-used address (`/ip/pool`)
+  - `manage_ip_pool` — create/update/remove IP pools (idempotent by name)
+- **DHCP Client (WAN):**
+  - `list_dhcp_clients` — DHCP client entries per interface with lease state and assigned address (`/ip/dhcp-client`)
+  - `manage_dhcp_client` — add/update/remove DHCP client on an interface
+- **Static DHCP Leases:**
+  - `manage_dhcp_lease` — add/remove static DHCP leases (idempotent by MAC address; complements the existing `list_dhcp_leases`)
+- **IP Services:**
+  - `list_ip_services` — list IP service ports (SSH, API, WWW, Winbox, etc.) with port and allowed address (`/ip/service`)
+  - `manage_ip_service` — enable/disable a service or change its port and allowed-address filter
+
+---
+
+## 🔜 v1.3 — PPPoE & OpenVPN
+
+**Goal:** Cover the three most widely deployed WAN and overlay tunnel types that require interface-level CRUD beyond what `run_command` should handle.
+
+- **PPPoE Client:**
+  - `list_pppoe_clients` — PPPoE client interfaces with connection state, assigned IP, and uptime (`/interface/pppoe-client`)
+  - `manage_pppoe_client` — add/update/remove PPPoE client interfaces (idempotent by name; includes dry-run)
+- **OpenVPN Client:**
+  - `list_ovpn_clients` — OpenVPN client interfaces with connection state and remote endpoint (`/interface/ovpn-client`)
+  - `manage_ovpn_client` — add/update/remove OpenVPN client instances (idempotent by name; certificate and credential references)
+- **OpenVPN Server:**
+  - `get_ovpn_server` — read OpenVPN server configuration (`/interface/ovpn-server/server`)
+  - `manage_ovpn_server` — enable/disable OpenVPN server and configure port, protocol, cipher, and certificate
+
+---
+
+## 🔜 v1.4 — System Administration Depth
+
+**Goal:** Move beyond read-only monitoring to full system lifecycle management: firmware, backup/restore, log targets, NTP write, and user group management.
+
+- **User Groups:**
+  - `list_user_groups` — user groups with policy bitmask (`/user/group`)
+  - `manage_user_group` — create/update/remove user groups (idempotent by name; complements `manage_user`)
+- **Firmware Upgrade:**
+  - `get_upgrade_status` — check for available RouterOS/firmware upgrades and current channel (`/system/upgrade`, `/system/routerboard`)
+  - `manage_upgrade` — trigger package download or schedule upgrade (dry-run required; destructive — requires confirmation token)
+- **Config Backup & Restore:**
+  - `create_backup` — create a router config backup file (binary or plaintext export) and return the file path (`/system/backup`)
+  - `export_config` — export the running config as a RouterOS script (equivalent to `/export`)
+- **Log Rule Management:**
+  - `list_log_rules` — log rules with topics, action, and prefix (`/system/logging`)
+  - `manage_log_rule` — add/remove/disable log rules (idempotent by topic+action)
+  - `list_log_actions` — log action targets (memory, disk, remote syslog) (`/system/logging/action`)
+  - `manage_log_action` — create/update log action targets
+- **NTP Management:**
+  - `manage_ntp_client` — configure NTP client: enable/disable, set servers, and VLAN source address (`/system/ntp/client`); complements the existing `get_ntp_settings`
+
+---
+
+## 🔜 v1.5 — Container Depth & Diagnostics
+
+**Goal:** Complete the container management surface with config/env/mount tooling, and add the bandwidth-test diagnostic that is missing from the current tool suite.
+
+- **Container Configuration:**
+  - `get_container_config` — read global container configuration (registry URL, RAM limit, veth interface) (`/container/config`)
+  - `manage_container_config` — update global container settings
+- **Container Environment Variables:**
+  - `list_container_envs` — environment variables for a container or across all containers (`/container/envs`)
+  - `manage_container_env` — add/remove environment variable entries (idempotent by name+key)
+- **Container Mounts:**
+  - `list_container_mounts` — volume mount definitions with source, destination, and container association (`/container/mounts`)
+  - `manage_container_mount` — add/remove container mount entries (idempotent by name)
+- **Bandwidth Test:**
+  - `bandwidth_test` — run a RouterOS bandwidth test from the router to a remote host and return throughput in both directions (`/tool/bandwidth-test`); read-only hint, configurable duration and protocol (TCP/UDP)
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
