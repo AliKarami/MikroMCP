@@ -41,6 +41,87 @@ describe("computeRestorePlan", () => {
     const plan = computeRestorePlan("some/unknown/path", [rec], []);
     expect(plan.toCreate).toHaveLength(1);
   });
+
+  it("treats a changed property on a keyed certificate as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "name": "my-ca", "trusted": "yes" };
+    const current: RouterOSRecord = { ".id": "*9", "name": "my-ca", "trusted": "no" };
+    const plan = computeRestorePlan("certificate", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
+
+  it("treats a changed property on a keyed file as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "name": "flash/script.rsc", "size": "100" };
+    const current: RouterOSRecord = { ".id": "*9", "name": "flash/script.rsc", "size": "200" };
+    const plan = computeRestorePlan("file", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
+
+  it("treats a changed property on a keyed interface/vrrp as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "name": "vrrp1", "priority": "100" };
+    const current: RouterOSRecord = { ".id": "*9", "name": "vrrp1", "priority": "150" };
+    const plan = computeRestorePlan("interface/vrrp", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
+
+  it("treats a changed property on a keyed ip/dhcp-server as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "name": "dhcp1", "disabled": "false" };
+    const current: RouterOSRecord = { ".id": "*9", "name": "dhcp1", "disabled": "true" };
+    const plan = computeRestorePlan("ip/dhcp-server", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
+
+  it("treats a changed property on a keyed ip/ipsec/peer as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "name": "peer1", "address": "10.0.0.1" };
+    const current: RouterOSRecord = { ".id": "*9", "name": "peer1", "address": "10.0.0.2" };
+    const plan = computeRestorePlan("ip/ipsec/peer", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
+
+  it("treats a changed property on a keyed ip/pool as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "name": "dhcp-pool", "ranges": "192.168.1.10-192.168.1.100" };
+    const current: RouterOSRecord = { ".id": "*9", "name": "dhcp-pool", "ranges": "192.168.1.10-192.168.1.200" };
+    const plan = computeRestorePlan("ip/pool", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
+
+  it("treats a changed property on a keyed queue/simple as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "name": "client-limit", "max-limit": "10M/10M" };
+    const current: RouterOSRecord = { ".id": "*9", "name": "client-limit", "max-limit": "20M/20M" };
+    const plan = computeRestorePlan("queue/simple", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
+
+  it("treats a changed property on a keyed tool/netwatch as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "host": "8.8.8.8", "interval": "00:01:00" };
+    const current: RouterOSRecord = { ".id": "*9", "host": "8.8.8.8", "interval": "00:05:00" };
+    const plan = computeRestorePlan("tool/netwatch", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
+
+  it("treats a changed property on a keyed user as an update, not delete+create", () => {
+    const before: RouterOSRecord = { ".id": "*1", "name": "admin2", "group": "write" };
+    const current: RouterOSRecord = { ".id": "*9", "name": "admin2", "group": "read" };
+    const plan = computeRestorePlan("user", [before], [current]);
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+  });
 });
 
 describe("applyRestorePlan", () => {

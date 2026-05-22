@@ -1268,6 +1268,8 @@ Restore the RouterOS section state captured before a previous `apply_plan` run. 
 
 **Example prompt:** "Roll back the last change on core-01 — something broke after the firewall update."
 
+> **Diffing behaviour:** rollback identifies which records to update, create, or remove by matching snapshot records to current records using a per-RouterOS-path semantic key (e.g. `name` for most named resources, `host` for netwatch entries). For singleton settings resources without a natural identity field — notably `system/clock` — no semantic key is defined and rollback falls back to whole-record signature matching, which may reapply a changed record as a delete-then-create rather than an in-place update.
+
 ---
 
 ## Fleet Operations
