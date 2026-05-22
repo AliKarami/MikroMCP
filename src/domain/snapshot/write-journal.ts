@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { nanoid } from "nanoid";
 import { redactParams } from "../../observability/audit-log.js";
@@ -24,10 +24,10 @@ interface OutcomeArgs {
   outcome?: string;
 }
 
-function appendLine(filePath: string, obj: Record<string, unknown>): void {
+async function appendLine(filePath: string, obj: Record<string, unknown>): Promise<void> {
   try {
-    mkdirSync(dirname(filePath), { recursive: true });
-    appendFileSync(filePath, JSON.stringify(obj) + "\n");
+    await mkdir(dirname(filePath), { recursive: true });
+    await appendFile(filePath, JSON.stringify(obj) + "\n");
   } catch (err) {
     log.error({ err, filePath }, "Failed to write to write journal");
   }
@@ -35,7 +35,7 @@ function appendLine(filePath: string, obj: Record<string, unknown>): void {
 
 export function recordAttempt(args: AttemptArgs): string {
   const id = nanoid();
-  appendLine(args.journalPath, {
+  void appendLine(args.journalPath, {
     id,
     ts: new Date().toISOString(),
     identityId: args.identityId,
@@ -50,7 +50,7 @@ export function recordAttempt(args: AttemptArgs): string {
 }
 
 export function recordOutcome(args: OutcomeArgs): void {
-  appendLine(args.journalPath, {
+  void appendLine(args.journalPath, {
     id: args.journalId,
     ts: new Date().toISOString(),
     phase: args.phase,

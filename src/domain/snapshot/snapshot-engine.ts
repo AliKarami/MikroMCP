@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { nanoid } from "nanoid";
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
@@ -32,13 +32,13 @@ export async function takeSnapshot(
   const filePath = join(dir, `${id}.json`);
   const ts = new Date().toISOString();
 
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   const stored: StoredSnapshot = { id, routerId, path, ts, records };
-  writeFileSync(filePath, JSON.stringify(stored, null, 2));
+  await writeFile(filePath, JSON.stringify(stored, null, 2));
 
   return { id, routerId, path, ts, filePath, recordCount: records.length };
 }
 
-export function loadSnapshot(filePath: string): StoredSnapshot {
-  return JSON.parse(readFileSync(filePath, "utf-8")) as StoredSnapshot;
+export async function loadSnapshot(filePath: string): Promise<StoredSnapshot> {
+  return JSON.parse(await readFile(filePath, "utf-8")) as StoredSnapshot;
 }

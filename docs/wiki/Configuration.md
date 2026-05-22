@@ -65,6 +65,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport; omit for built-in superadmin |
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret for confirmation tokens — **required in HTTP mode** |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | Path for NDJSON audit log file; omit to disable file sink |
+| `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
 | `MIKROMCP_CMD_ALLOW` | — | Global command allowlist for `run_command` (comma-separated patterns) |
 | `MIKROMCP_CMD_DENY` | — | Global command denylist for `run_command` (comma-separated patterns) |
 | `ROUTER_<PREFIX>_USER` | — | Router username (matches `envPrefix` in YAML) |

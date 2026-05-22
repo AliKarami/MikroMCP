@@ -201,6 +201,14 @@ export async function executeToolCall(
     } catch (err) {
       const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: tool.name });
 
+      if (error.category === ErrorCategory.ROUTER_AUTH_FAILED) {
+        const failedRouterId = args.routerId as string | undefined;
+        if (failedRouterId) {
+          pool.removeClient(failedRouterId);
+          log.info({ routerId: failedRouterId }, "Evicted pooled client after auth failure");
+        }
+      }
+
       if (journalId) {
         recordOutcome({
           journalPath: config.journalPath!,

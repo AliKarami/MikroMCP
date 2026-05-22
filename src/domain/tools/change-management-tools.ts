@@ -273,7 +273,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
 
       for (const snapshotId of snapshotIds) {
         const filePath = `${snapshotDir}/${context.routerId}/${snapshotId}.json`;
-        const stored = loadSnapshot(filePath);
+        const stored = await loadSnapshot(filePath);
         const current = await context.routerClient.get<RouterOSRecord>(stored.path, {});
         const plan = computeRestorePlan(stored.path, stored.records, current);
         restorePlans.push(plan);
