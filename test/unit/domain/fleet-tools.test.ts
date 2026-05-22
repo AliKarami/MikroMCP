@@ -215,16 +215,13 @@ describe("fleet-tools", () => {
       });
     });
 
-    it("throws VALIDATION when target tool has destructiveHint: true", async () => {
+    it("throws CONFIGURATION when destructive tool is used and confirmationSecret is not configured", async () => {
       const ctx = makeFleetContext();
       await expect(
-        bulkTool.handler(
-          { toolName: "reboot", routerIds: ["r1"], params: {} },
-          ctx,
-        ),
+        bulkTool.handler({ toolName: "reboot", routerIds: ["r1"], params: {} }, ctx),
       ).rejects.toMatchObject({
-        category: ErrorCategory.VALIDATION,
-        code: "BULK_DESTRUCTIVE_NOT_ALLOWED",
+        category: ErrorCategory.CONFIGURATION,
+        code: "FLEET_CONFIRMATION_UNAVAILABLE",
       });
     });
 
@@ -485,6 +482,71 @@ describe("fleet-tools", () => {
         totalRouters: 4,
         succeeded: 4,
         failed: 0,
+      });
+    });
+  });
+
+  describe("handler — bulk_execute destructive confirmation", () => {
+    function makeFleetContextWithSecret(secret: string | undefined): ToolContext {
+      return makeFleetContext({
+        appConfig: {
+          ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+          confirmationSecret: secret,
+        } as unknown as AppConfig,
+      });
+    }
+
+    it("returns APPROVAL_REQUIRED with a confirmationToken when no token is provided and secret is set", async () => {
+      const ctx = makeFleetContextWithSecret("fleet-secret");
+      await expect(
+        bulkTool.handler({ toolName: "reboot", routerIds: ["r1", "r2"], params: {} }, ctx),
+      ).rejects.toMatchObject({
+        category: ErrorCategory.APPROVAL_REQUIRED,
+        code: "FLEET_CONFIRMATION_REQUIRED",
+        details: expect.objectContaining({ confirmationToken: expect.any(String) }),
+      });
+    });
+
+    it("fans out the destructive tool when the correct token is provided", async () => {
+      vi.mocked(mockDestructiveTool.handler).mockResolvedValue({
+        content: "rebooted",
+        structuredContent: {},
+      });
+
+      const ctx = makeFleetContextWithSecret("fleet-secret");
+
+      // First call — get the token
+      let token = "";
+      try {
+        await bulkTool.handler({ toolName: "reboot", routerIds: ["r1", "r2"], params: {} }, ctx);
+      } catch (err) {
+        token = (err as MikroMCPError).details!.confirmationToken as string;
+      }
+      expect(token).toBeTruthy();
+
+      // Second call — re-use same context with matching pool/registry
+      const ctx2 = makeFleetContextWithSecret("fleet-secret");
+      const result = await bulkTool.handler(
+        { toolName: "reboot", routerIds: ["r1", "r2"], params: {}, confirmationToken: token },
+        ctx2,
+      );
+
+      expect(result.structuredContent).toMatchObject({
+        toolName: "reboot",
+        totalRouters: 2,
+        succeeded: 2,
+        failed: 0,
+      });
+      expect(mockDestructiveTool.handler).toHaveBeenCalledTimes(2);
+    });
+
+    it("returns FLEET_CONFIRMATION_UNAVAILABLE when confirmationSecret is not configured", async () => {
+      const ctx = makeFleetContextWithSecret(undefined);
+      await expect(
+        bulkTool.handler({ toolName: "reboot", routerIds: ["r1"], params: {} }, ctx),
+      ).rejects.toMatchObject({
+        category: ErrorCategory.CONFIGURATION,
+        code: "FLEET_CONFIRMATION_UNAVAILABLE",
       });
     });
   });
