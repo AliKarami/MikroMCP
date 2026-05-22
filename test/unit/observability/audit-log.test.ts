@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AuditEvent } from "../../../src/types.js";
@@ -76,14 +76,13 @@ describe("auditLog — file sink", () => {
     dir = mkdtempSync(join(tmpdir(), "mikromcp-audit-"));
   });
 
-  it("writes NDJSON line to file when MIKROMCP_AUDIT_LOG_PATH is set", async () => {
+  it("writes NDJSON line to file when path is passed as second argument", async () => {
     vi.resetModules();
     const auditFile = join(dir, "audit.ndjson");
-    process.env.MIKROMCP_AUDIT_LOG_PATH = auditFile;
-    try {
-      const { auditLog } = await import("../../../src/observability/audit-log.js");
-      const event = makeEvent({ phase: "success", durationMs: 42 });
-      auditLog(event);
+    const { auditLog } = await import("../../../src/observability/audit-log.js");
+    const event = makeEvent({ phase: "success", durationMs: 42 });
+    auditLog(event, auditFile);
+    await vi.waitFor(() => {
       const lines = readFileSync(auditFile, "utf-8").trim().split("\n");
       expect(lines).toHaveLength(1);
       const parsed = JSON.parse(lines[0]);
@@ -91,14 +90,11 @@ describe("auditLog — file sink", () => {
       expect(parsed.phase).toBe("success");
       expect(parsed.durationMs).toBe(42);
       expect(parsed.identityId).toBe("ci-pipeline");
-    } finally {
-      delete process.env.MIKROMCP_AUDIT_LOG_PATH;
-    }
+    });
   });
 
-  it("does not write file when MIKROMCP_AUDIT_LOG_PATH is unset", async () => {
+  it("does not write file when no path is passed", async () => {
     vi.resetModules();
-    delete process.env.MIKROMCP_AUDIT_LOG_PATH;
     const { auditLog } = await import("../../../src/observability/audit-log.js");
     expect(() => auditLog(makeEvent())).not.toThrow();
   });

@@ -5,8 +5,7 @@ import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 import { auditLog } from "../../observability/audit-log.js";
 import { checkAuthz } from "../../middleware/authz.js";
-import { createSshClient, createFtpClient } from "../../adapter/adapter-factory.js";
-import { getCredentials } from "../../config/secrets.js";
+import { buildRouterToolContext } from "../../mcp/tool-context.js";
 
 const log = createLogger("fleet-tools");
 
@@ -139,7 +138,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         routerId: "(fleet)",
         phase: "attempt",
         params: { toolName: parsed.toolName, routerIds: parsed.routerIds, tags: parsed.tags },
-      });
+      }, context.appConfig.auditLogPath);
 
       if (parsed.toolName === "bulk_execute" || parsed.toolName === "check_router_health") {
         throw new MikroMCPError({
@@ -209,7 +208,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           routerId: "(fleet)",
           phase: "success",
           params: { toolName: parsed.toolName, succeeded: 0, failed: 0 },
-        });
+        }, context.appConfig.auditLogPath);
         return {
           content: `Executed ${parsed.toolName} on 0 routers: 0 succeeded, 0 failed`,
           structuredContent: {
@@ -226,19 +225,14 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         const start = Date.now();
         try {
           checkAuthz(context.identity, parsed.toolName, router.id);
-          const credentials = getCredentials(router);
-          const client = context.connectionPool!.getClient(router, credentials);
-          const sshClient = createSshClient(router, {});
-          const ftpClient = createFtpClient(router);
-          const routerContext: ToolContext = {
-            routerClient: client,
-            routerId: router.id,
-            correlationId: context.correlationId,
+          const routerContext = buildRouterToolContext({
             routerConfig: router,
-            sshClient,
-            ftpClient,
+            correlationId: context.correlationId,
             identity: context.identity,
-          };
+            pool: context.connectionPool!,
+            config: context.appConfig,
+            registry: context.routerRegistry,
+          });
           const toolParams = { ...parsed.params, routerId: router.id };
           const result = await targetTool.handler(
             toolParams as Record<string, unknown>,
@@ -256,7 +250,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             phase: "success",
             params: parsed.params as Record<string, unknown>,
             durationMs: elapsed,
-          });
+          }, context.appConfig.auditLogPath);
           return { routerId: router.id, status: "ok", result, durationMs: elapsed };
         } catch (err) {
           const elapsed = Date.now() - start;
@@ -273,7 +267,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             params: parsed.params as Record<string, unknown>,
             outcome: message,
             durationMs: elapsed,
-          });
+          }, context.appConfig.auditLogPath);
           return { routerId: router.id, status: "error", error: message, durationMs: elapsed };
         }
       }
@@ -298,7 +292,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         routerId: "(fleet)",
         phase: "success",
         params: { toolName: parsed.toolName, succeeded, failed },
-      });
+      }, context.appConfig.auditLogPath);
 
       return {
         content: `Executed ${parsed.toolName} on ${results.length} routers: ${succeeded} succeeded, ${failed} failed`,

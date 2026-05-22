@@ -1,7 +1,5 @@
 import { z } from "zod";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
@@ -148,9 +146,8 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
       const parsed = applyPlanInputSchema.parse(params);
       log.info({ routerId: context.routerId, stepCount: parsed.steps.length }, "Applying plan");
 
-      const dataDir = process.env.MIKROMCP_DATA_DIR ?? join(homedir(), ".mikromcp", "data");
-      const journalPath = `${dataDir}/write-journal.ndjson`;
-      const snapshotDir = `${dataDir}/snapshots`;
+      const journalPath = context.appConfig.journalPath;
+      const snapshotDir = context.appConfig.snapshotDir;
 
       const results = [];
 
@@ -258,9 +255,8 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     },
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       const parsed = rollbackChangeInputSchema.parse(params);
-      const dataDir = process.env.MIKROMCP_DATA_DIR ?? join(homedir(), ".mikromcp", "data");
-      const journalPath = `${dataDir}/write-journal.ndjson`;
-      const snapshotDir = `${dataDir}/snapshots`;
+      const journalPath = context.appConfig.journalPath;
+      const snapshotDir = context.appConfig.snapshotDir;
 
       log.info({ routerId: context.routerId, journalId: parsed.journalId }, "Rolling back change");
 

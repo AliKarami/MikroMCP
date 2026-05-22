@@ -57,6 +57,7 @@ export async function executeToolCall(
           identity,
           routerRegistry: registry,
           connectionPool: pool,
+          appConfig: config,
         };
         return formatToolResult(await tool.handler(args, fleetContext));
       }
@@ -110,7 +111,7 @@ export async function executeToolCall(
           routerId,
           phase: "attempt",
           params: args,
-        });
+        }, config.auditLogPath);
       }
 
       const toolContext = buildRouterToolContext({
@@ -192,7 +193,7 @@ export async function executeToolCall(
           phase: "success",
           params: args,
           durationMs: Date.now() - startMs,
-        });
+        }, config.auditLogPath);
       }
 
       log.info({ tool: tool.name, routerId, correlationId }, "Tool executed successfully");
@@ -226,7 +227,7 @@ export async function executeToolCall(
           params: args,
           outcome: error.code,
           durationMs: Date.now() - startMs,
-        });
+        }, config.auditLogPath);
       }
 
       log.error({ err: error, tool: tool.name, correlationId }, "Tool execution failed");

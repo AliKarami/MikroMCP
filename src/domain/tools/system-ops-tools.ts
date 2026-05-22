@@ -239,14 +239,8 @@ const runCommandTool: ToolDefinition = {
     const parsed = runCommandInputSchema.parse(params);
     log.info({ routerId: context.routerId, command: parsed.command }, "Running command");
 
-    const globalAllow = (process.env.MIKROMCP_CMD_ALLOW ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const globalDeny = (process.env.MIKROMCP_CMD_DENY ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const globalAllow = context.appConfig.cmdAllow;
+    const globalDeny = context.appConfig.cmdDeny;
 
     const policy = resolveCommandPolicy(context.routerConfig, globalAllow, globalDeny);
     checkCommand(parsed.command, policy);

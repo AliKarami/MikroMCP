@@ -29,6 +29,8 @@ function makeContext(
     create?: ReturnType<typeof vi.fn>;
     remove?: ReturnType<typeof vi.fn>;
     routerConfig?: RouterConfig;
+    cmdAllow?: string[];
+    cmdDeny?: string[];
   } = {},
 ): ToolContext {
   return {
@@ -45,6 +47,10 @@ function makeContext(
       create: overrides.create ?? vi.fn().mockResolvedValue({ ".id": "*1" }),
       remove: overrides.remove ?? vi.fn().mockResolvedValue(undefined),
     } as unknown as RouterOSRestClient,
+    appConfig: {
+      cmdAllow: overrides.cmdAllow ?? [],
+      cmdDeny: overrides.cmdDeny ?? [],
+    } as unknown as import("../../../src/config/app-config.js").AppConfig,
   };
 }
 

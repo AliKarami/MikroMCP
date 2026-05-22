@@ -6,6 +6,7 @@ import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import type { AppConfig } from "../../../src/config/app-config.js";
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 vi.mock("../../../src/middleware/authz.js", () => ({
@@ -91,6 +92,7 @@ function makeContext(overrides: Partial<ToolContext> = {}): ToolContext {
       create: vi.fn().mockResolvedValue({ ".id": "*1" }),
       remove: vi.fn().mockResolvedValue(undefined),
     } as unknown as RouterOSRestClient,
+    appConfig: { ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 } } as unknown as AppConfig,
     ...overrides,
   };
 }

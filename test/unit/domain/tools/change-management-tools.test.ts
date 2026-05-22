@@ -35,6 +35,10 @@ function makeContext(records = [ROUTE_RECORD]): ToolContext {
     sshClient: {} as unknown as import("../../../../src/adapter/ssh-client.js").SshClient,
     ftpClient: {} as unknown as import("../../../../src/adapter/ftp-client.js").FtpClient,
     identity: { id: "alice", role: "admin", allowedRouters: [], allowedToolPatterns: [] },
+    appConfig: {
+      journalPath: "/tmp/test-mikromcp/write-journal.ndjson",
+      snapshotDir: "/tmp/test-mikromcp/snapshots",
+    } as unknown as import("../../../../src/config/app-config.js").AppConfig,
   };
 }
 

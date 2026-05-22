@@ -30,5 +30,6 @@ export function buildRouterToolContext(args: BuildContextArgs): ToolContext {
     identity,
     routerRegistry: registry,
     connectionPool: pool,
+    appConfig: config,
   };
 }
