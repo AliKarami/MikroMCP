@@ -165,6 +165,18 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
+## ✅ v1.1 — Correctness, Security Hardening & New Orchestration Features
+
+**Goal:** Deliver the correctness fixes, security hardening, and orchestration improvements deferred from v1.0.
+
+- **Correctness:** retry engine now honours `MikroMCPError.recoverability` and retries on HTTP 5xx / timeout / busy; circuit breaker half-open state admits a single recovery probe at a time; `apply_plan` records real per-step duration and runs sub-steps through the per-router circuit breaker
+- **Security hardening:** audit log and write journal redact VPN/crypto secrets (WireGuard private keys, IPSec PSK, SNMP community strings); `MIKROMCP_AUDIT_LOG_PATH` via dotenv now activates the file sink; HTTP rate-limiter sweeps stale windows to bound memory; pooled REST client is evicted on auth failure
+- **Operability:** `GET /healthz` probe endpoint (unauthenticated, not rate-limited); `GET /metrics` Prometheus endpoint (`mikromcp_tool_calls_total`); snapshot retention pruning (`MIKROMCP_SNAPSHOT_RETENTION_DAYS`); async file I/O for snapshots, write journal, and audit log
+- **Orchestration:** fleet-confirmed destructive `bulk_execute` (two-step HMAC flow); expanded snapshot semantic keys so `rollback_change` produces in-place updates for certificates, files, VRRP, DHCP servers, IPSec peers, IP pools, simple queues, netwatch entries, and users; `bulk_execute` fleet operations now produce an audit trail
+- **Config & tooling:** server version derived from `package.json`; `mikromcp init` fixed to write `[]` (allow-all sentinel) instead of `["*"]`; unused `pagination` config block removed
+
+---
+
 ## ✅ v1.0 — Production Release
 
 **Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams and accessible to individual users — not adding new router surfaces.

@@ -362,12 +362,13 @@ Run when merging a release PR into `main`:
 1. Move all items from `[Unreleased]` in `CHANGELOG.md` to a new `## [X.Y.Z] - YYYY-MM-DD` section.
 2. `npm version <major|minor|patch>` — bumps `package.json` + `package-lock.json`. (`npm version` auto-runs `scripts/sync-version.mjs`, which regenerates `src/version.ts`.)
 3. Update README version badge: `version-v<X.Y.Z>`.
-4. Flip `🔜` → `✅` in `ROADMAP.md` and `docs/wiki/Roadmap.md`.
-5. Update `docs/wiki/Available-Tools.md` for any new/changed tools.
-6. Commit on the release branch: `chore: bump version to X.Y.Z`.
-7. Open PR, squash-merge into `main`.
-8. `git tag vX.Y.Z && git push origin vX.Y.Z`
-9. CI `release.yml` auto-runs: builds binaries, pushes Docker images, creates GitHub Release (uses the release section from `CHANGELOG.md` as release notes).
+4. Update `server.json` — change BOTH the top-level `"version"` field AND `packages[0].version` to `"X.Y.Z"`.
+5. Flip `🔜` → `✅` in `ROADMAP.md` and `docs/wiki/Roadmap.md`.
+6. Update `docs/wiki/Available-Tools.md` for any new/changed tools.
+7. Commit on the release branch: `chore: bump version to X.Y.Z`.
+8. Open PR, squash-merge into `main`.
+9. `git tag vX.Y.Z && git push origin vX.Y.Z`
+10. CI `release.yml` auto-runs: builds binaries, pushes Docker images, creates GitHub Release (uses the release section from `CHANGELOG.md` as release notes).
 
 ## What not to do
 
