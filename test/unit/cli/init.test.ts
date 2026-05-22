@@ -176,8 +176,8 @@ describe("runInit — identity creation", () => {
     expect(parsed.identities["claude"]).toMatchObject({
       token: "$2a$12$mockhash",
       role: "operator",
-      allowedRouters: ["*"],
-      allowedToolPatterns: ["*"],
+      allowedRouters: [],
+      allowedToolPatterns: [],
     });
   });
 
@@ -335,5 +335,74 @@ describe("runInit — existing routers.yaml merge", () => {
     // New router added
     expect(parsed.routers["new-router"]).toBeDefined();
     expect((parsed.routers["new-router"] as { host: string }).host).toBe("10.0.0.2");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Identity field mapping — allowedRouters / allowedToolPatterns
+// ---------------------------------------------------------------------------
+
+describe("runInit — allowedRouters / allowedToolPatterns mapping", () => {
+  let tmpDir: string;
+
+  function setupIdentityPrompts(allowedRouters: string, allowedToolPatterns: string) {
+    mockInput
+      .mockResolvedValueOnce("r-01")           // routerId
+      .mockResolvedValueOnce("10.0.0.1")       // host
+      .mockResolvedValueOnce("80")             // port
+      .mockResolvedValueOnce("ROUTER_R_01")    // envPrefix
+      .mockResolvedValueOnce("admin")          // routerUser
+      .mockResolvedValueOnce("pass")           // routerPass
+      .mockResolvedValueOnce("")               // tags
+      .mockResolvedValueOnce("7")              // rosVersion
+      .mockResolvedValueOnce("myid")           // identityId
+      .mockResolvedValueOnce(allowedRouters)   // allowedRouters
+      .mockResolvedValueOnce(allowedToolPatterns); // allowedToolPatterns
+
+    mockSelect
+      .mockResolvedValueOnce("operator") // role
+      .mockResolvedValueOnce("stdio");   // transport
+
+    mockConfirm
+      .mockResolvedValueOnce(false)  // tls
+      .mockResolvedValueOnce(true)   // createIdentity
+      .mockResolvedValueOnce(false)  // writeEnv
+      .mockResolvedValueOnce(false); // claudeDesktop
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpDir = makeTempProject();
+    mockHomedirRef.value = tmpDir;
+  });
+
+  it('maps "*" input to [] for both allowedRouters and allowedToolPatterns', async () => {
+    setupIdentityPrompts("*", "*");
+
+    const { runInit } = await import("../../../src/cli/init.js");
+    await runInit();
+
+    const identitiesPath = join(tmpDir, ".mikromcp", "identities.yaml");
+    const parsed = yamlParse(readFileSync(identitiesPath, "utf-8")) as {
+      identities: Record<string, { allowedRouters: string[]; allowedToolPatterns: string[] }>;
+    };
+
+    expect(parsed.identities["myid"].allowedRouters).toEqual([]);
+    expect(parsed.identities["myid"].allowedToolPatterns).toEqual([]);
+  });
+
+  it("maps comma-separated input to individual strings for allowedRouters and allowedToolPatterns", async () => {
+    setupIdentityPrompts("r1, r2", "list_*, get_*");
+
+    const { runInit } = await import("../../../src/cli/init.js");
+    await runInit();
+
+    const identitiesPath = join(tmpDir, ".mikromcp", "identities.yaml");
+    const parsed = yamlParse(readFileSync(identitiesPath, "utf-8")) as {
+      identities: Record<string, { allowedRouters: string[]; allowedToolPatterns: string[] }>;
+    };
+
+    expect(parsed.identities["myid"].allowedRouters).toEqual(["r1", "r2"]);
+    expect(parsed.identities["myid"].allowedToolPatterns).toEqual(["list_*", "get_*"]);
   });
 });
