@@ -65,6 +65,10 @@ MikroMCP exists because raw router CLI access is the wrong abstraction for AI ag
   <img src="docs/assets/demo-1.gif" width="900" />
 </p>
 
+### Review by Claude
+
+![Claude Reviewed Router Configuration](docs/assets/claude-review.png)
+
 ### MCP Inspector
 
 ![The 77 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
