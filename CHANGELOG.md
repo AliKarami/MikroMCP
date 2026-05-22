@@ -10,26 +10,31 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] - 2026-05-22
+
 ### Added
-- `bulk_execute` can now fan out destructive tools when given a fleet confirmation token (two-step HMAC flow; requires `MIKROMCP_CONFIRMATION_SECRET`).
-- Expanded snapshot semantic keys so `rollback_change` produces in-place updates (instead of delete-then-create) for certificates, files, VRRP, DHCP servers, IPSec peers, IP pools, simple queues, netwatch entries, and users.
-- `GET /metrics` Prometheus endpoint exposing per-tool call counters (`mikromcp_tool_calls_total`).
 - `GET /healthz` endpoint on the HTTP transport for container liveness/readiness probes (unauthenticated, not rate-limited).
+- `GET /metrics` Prometheus endpoint exposing per-tool call counters (`mikromcp_tool_calls_total`).
+- `bulk_execute` can now fan out destructive tools when given a fleet confirmation token (two-step HMAC flow; requires `MIKROMCP_CONFIRMATION_SECRET`).
 - `MIKROMCP_SNAPSHOT_RETENTION_DAYS` (default 30) — config snapshots older than this are pruned at server startup.
+- Expanded snapshot semantic keys so `rollback_change` produces in-place updates (instead of delete-then-create) for certificates, files, VRRP, DHCP servers, IPSec peers, IP pools, simple queues, netwatch entries, and users.
 
 ### Changed
 - Server version is derived from `package.json` (generated `src/version.ts`) instead of a hardcoded string.
+- Snapshot, write-journal, and audit-log file writes are now asynchronous (non-blocking).
 
 ### Fixed
 - Read tools now retry on transient HTTP 5xx / timeout / busy responses (the retry engine previously honoured only raw network errors).
 - Circuit breaker half-open state now admits a single recovery probe at a time.
-- `apply_plan` records real per-step duration in the write journal instead of a hardcoded zero.
+- `apply_plan` records real per-step duration in the write journal, and its sub-steps now run through the per-router circuit breaker so a plan fails fast against a router known to be down.
 - Audit log and write journal now redact VPN/crypto secrets (WireGuard private keys, IPSec PSK, SNMP community strings).
+- `MIKROMCP_AUDIT_LOG_PATH` set via `~/.mikromcp/.env` now activates the audit file sink (it was read before dotenv loaded and silently ignored).
 - HTTP rate-limiter no longer leaks memory — stale per-IP windows are swept periodically.
-- The pooled RouterOS REST client is now evicted after a router authentication failure, so the next call rebuilds it with fresh credentials.
+- The pooled RouterOS REST client is now evicted after a router authentication failure.
 - `bulk_execute` fleet operations are now written to the audit log (previously produced no audit trail).
 - `mikromcp init` now writes empty `allowedRouters`/`allowedToolPatterns` (the documented "all" sentinel) instead of `["*"]`, which silently denied access to every router.
-- `apply_plan` sub-steps now run through the per-router circuit breaker, so a plan fails fast against a router the breaker already knows is down.
 
 ### Removed
 - Unused `pagination` configuration block.

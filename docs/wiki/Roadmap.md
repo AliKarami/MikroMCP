@@ -69,6 +69,16 @@ Tools: `check_router_health`, `bulk_execute`.
 
 ---
 
+## ✅ v1.1 — Correctness, Security Hardening & New Orchestration Features
+
+Retry engine honours `MikroMCPError.recoverability`; circuit breaker half-open single-probe gate; `apply_plan` real duration + circuit breaker for sub-steps.  
+Security: secret redaction in audit/journal, rate-limiter memory fix, REST client eviction on auth failure, dotenv audit-path fix.  
+Operability: `/healthz` probe, `/metrics` Prometheus endpoint, snapshot retention pruning, async file I/O.  
+Orchestration: fleet-confirmed destructive `bulk_execute`, expanded rollback semantic keys, `bulk_execute` audit trail.  
+Config: version from `package.json`, `mikromcp init` allow-all fix, `pagination` config removed.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
