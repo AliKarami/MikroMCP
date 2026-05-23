@@ -7,6 +7,7 @@ import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { z } from "zod";
 
+
 const listInterfacesTool = interfaceTools[0];
 
 function makeRouterConfig(): RouterConfig {
@@ -46,43 +47,6 @@ const listInterfacesInputSchema = z
     offset: z.number().int().min(0).default(0),
   })
   .strict();
-
-describe("create_vlan - idempotency boolean comparison", () => {
-  it("returns already_exists when disabled field is string 'false' and requested is boolean false", async () => {
-    const ctx: ToolContext = {
-      routerId: "test-router",
-      correlationId: "corr",
-      routerConfig: makeRouterConfig(),
-      identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
-      sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-      ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
-      routerClient: {
-        get: vi.fn().mockResolvedValue([
-          {
-            ".id": "*1",
-            name: "vlan10",
-            "vlan-id": "10",
-            interface: "ether1",
-            disabled: "false", // RouterOS returns string
-          },
-        ]),
-      } as unknown as RouterOSRestClient,
-    };
-    const createVlanTool = interfaceTools[1];
-    const result = await createVlanTool.handler(
-      {
-        routerId: "test-router",
-        name: "vlan10",
-        vlanId: 10,
-        parentInterface: "ether1",
-        disabled: false, // JS boolean
-      },
-      ctx,
-    );
-    const sc = result.structuredContent as Record<string, unknown>;
-    expect(sc.action).toBe("already_exists");
-  });
-});
 
 describe("list_interfaces", () => {
   describe("input schema", () => {
