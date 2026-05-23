@@ -760,7 +760,7 @@ Add, update, or remove an OpenVPN client interface. Idempotent by name: add retu
 | `action` | enum | — | `add`, `update`, or `remove` |
 | `name` | string | — | OpenVPN interface name — idempotency key |
 | `connectTo` | string | — | Remote server address (required for add) |
-| `port` | integer | — | Remote port (default 1194) |
+| `port` | integer | `1194` | Remote port |
 | `mode` | enum | — | `ip` or `ethernet` |
 | `protocol` | enum | — | `tcp-client` or `udp` |
 | `certificate` | string | — | Certificate name from certificate store |
