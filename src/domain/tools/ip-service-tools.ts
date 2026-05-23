@@ -130,6 +130,17 @@ const manageIpServiceTool: ToolDefinition = {
         });
       }
 
+      // Already in desired state — idempotent no-op
+      const isCurrentlyDisabled = (existing as Record<string, unknown>).disabled === "true" || (existing as Record<string, unknown>).disabled === true;
+      const wouldBeDisabled = parsed.action === "disable";
+      if (isCurrentlyDisabled === wouldBeDisabled) {
+        const alreadyState = parsed.action === "disable" ? "disabled" : "enabled";
+        return {
+          content: `IP service "${parsed.name}" is already ${alreadyState}. No changes made.`,
+          structuredContent: { action: "no_change", name: parsed.name, id: existing[".id"] },
+        };
+      }
+
       if (parsed.dryRun) {
         return {
           content: `Dry run: Would ${parsed.action} IP service "${parsed.name}".`,

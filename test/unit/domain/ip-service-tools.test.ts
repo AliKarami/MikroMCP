@@ -123,12 +123,12 @@ describe("ipServiceTools", () => {
     it("disables a service", async () => {
       const ctx = makeContext();
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "disable", name: "telnet" },
+        { routerId: "test-router", action: "disable", name: "ssh" },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/service", "*4", { disabled: "true" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/service", "*3", { disabled: "true" });
     });
 
     it("enables a service", async () => {
@@ -145,7 +145,7 @@ describe("ipServiceTools", () => {
     it("dry_run returns diff without updating", async () => {
       const ctx = makeContext();
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "disable", name: "telnet", dryRun: true },
+        { routerId: "test-router", action: "enable", name: "telnet", dryRun: true },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -158,6 +158,30 @@ describe("ipServiceTools", () => {
       await expect(
         manageTool.handler({ routerId: "test-router", action: "enable", name: "ssh" }, ctx),
       ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND });
+    });
+
+    it("returns no_change when service is already in desired state (disable)", async () => {
+      // telnet is already disabled in sampleServices
+      const ctx = makeContext();
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "disable", name: "telnet" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("no_change");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("returns no_change when service is already in desired state (enable)", async () => {
+      // ssh is already enabled in sampleServices
+      const ctx = makeContext();
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "enable", name: "ssh" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("no_change");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
     });
   });
 });
