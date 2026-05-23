@@ -25,6 +25,7 @@ import { ipsecTools } from "./ipsec-tools.js";
 import { certificateTools } from "./certificate-tools.js";
 import { userTools } from "./user-tools.js";
 import { dhcpServerTools } from "./dhcp-server-tools.js";
+import { ipPoolTools } from "./ip-pool-tools.js";
 import { queueTools } from "./queue-tools.js";
 import { vrrpTools } from "./vrrp-tools.js";
 import { networkServicesTools } from "./network-services-tools.js";
@@ -56,6 +57,7 @@ const baseTools: ToolDefinition[] = [
   ...certificateTools,
   ...userTools,
   ...dhcpServerTools,
+  ...ipPoolTools,
   ...queueTools,
   ...vrrpTools,
   ...networkServicesTools,
