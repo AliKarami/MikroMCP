@@ -16,7 +16,7 @@ flowchart LR
     end
 
     subgraph Core["MikroMCP server"]
-        Registry["Tool registry\n77 typed tools"]
+        Registry["Tool registry\n82 typed tools"]
         Schemas["Zod schemas\nstrict validation"]
         Auth["Identity, RBAC\nconfirmation gate"]
         Safety["Retry, circuit breaker\naudit, snapshots, journal"]
@@ -115,7 +115,7 @@ flowchart TD
 |---|---|---|
 | Entry point | `src/main.ts` | Loads config, selects transport, starts server |
 | Tool registry | `src/mcp/tool-registry.ts` | Registers tools; injects circuit breaker, retry, correlation ID, credentials |
-| All tools | `src/domain/tools/index.ts` | Aggregates all 77 `ToolDefinition` arrays |
+| All tools | `src/domain/tools/index.ts` | Aggregates all 82 `ToolDefinition` arrays |
 | REST client | `src/adapter/rest-client.ts` | `get`, `getOne`, `create`, `update`, `remove`, `execute` over HTTPS |
 | SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping`, `/tool/traceroute`, `/tool/torch`, and `run_command` |
 | FTP adapter | `src/adapter/ftp-client.ts` | Uploads files via `upload_file` |
