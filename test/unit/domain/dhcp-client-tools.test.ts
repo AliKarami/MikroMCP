@@ -50,6 +50,70 @@ describe("dhcpClientTools", () => {
     it("manage_dhcp_client has snapshotPaths", () => expect(manageTool.snapshotPaths).toContain("ip/dhcp-client"));
   });
 
+  describe("input schema validation", () => {
+    it("rejects extra fields on list schema", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        listTool.handler({ routerId: "test-router", unknownField: true }, ctx),
+      ).rejects.toThrow();
+    });
+
+    it("rejects extra fields on manage schema", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        manageTool.handler(
+          { routerId: "test-router", action: "add", interface: "ether1", unknownField: true },
+          ctx,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("accepts valid list_dhcp_clients input with defaults", async () => {
+      const ctx = makeContext([]);
+      const result = await listTool.handler({ routerId: "test-router" }, ctx);
+      expect(result).toBeDefined();
+      expect(result.structuredContent).toBeDefined();
+    });
+
+    it("rejects invalid status value", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        listTool.handler({ routerId: "test-router", status: "invalid-status" }, ctx),
+      ).rejects.toThrow();
+    });
+
+    it("accepts valid manage_dhcp_client input with defaults", async () => {
+      const ctx = makeContext([]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "add", interface: "ether1" },
+        ctx,
+      );
+      expect(result).toBeDefined();
+      expect(result.structuredContent).toBeDefined();
+    });
+
+    it("rejects invalid action value", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        manageTool.handler(
+          { routerId: "test-router", action: "invalid-action", interface: "ether1" },
+          ctx,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("rejects comment exceeding max length", async () => {
+      const ctx = makeContext([]);
+      const longComment = "a".repeat(256);
+      await expect(
+        manageTool.handler(
+          { routerId: "test-router", action: "add", interface: "ether1", comment: longComment },
+          ctx,
+        ),
+      ).rejects.toThrow();
+    });
+  });
+
   describe("list_dhcp_clients handler", () => {
     const clients = [
       { ".id": "*1", interface: "ether1", status: "bound", address: "192.168.1.100/24", disabled: "false" },
