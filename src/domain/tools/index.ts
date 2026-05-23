@@ -30,6 +30,7 @@ import { queueTools } from "./queue-tools.js";
 import { vrrpTools } from "./vrrp-tools.js";
 import { networkServicesTools } from "./network-services-tools.js";
 import { vlanTools } from "./vlan-tools.js";
+import { dhcpClientTools } from "./dhcp-client-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -63,6 +64,7 @@ const baseTools: ToolDefinition[] = [
   ...vrrpTools,
   ...networkServicesTools,
   ...vlanTools,
+  ...dhcpClientTools,
 ];
 
 export const allTools: ToolDefinition[] = [
