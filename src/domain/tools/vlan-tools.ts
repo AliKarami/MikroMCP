@@ -40,7 +40,7 @@ const manageVlanTool: ToolDefinition = {
   inputSchema: manageVlanInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
