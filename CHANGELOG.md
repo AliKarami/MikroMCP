@@ -10,6 +10,10 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+---
+
+## [1.2.0] - 2026-05-23
+
 ### Added
 - `manage_vlan` — add, remove, enable, or disable VLAN interfaces (idempotent by name; supersedes `create_vlan`)
 - `list_ip_pools`, `manage_ip_pool` — IP address pool tools (renamed from `list_dhcp_pools`/`manage_dhcp_pool`; pools serve any subsystem, not only DHCP)
