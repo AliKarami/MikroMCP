@@ -137,6 +137,18 @@ describe("ipPoolTools", () => {
       expect(sc.action).toBe("dry_run");
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
     });
+
+    it("includes next-pool in body when nextPool is provided", async () => {
+      const ctx = makeContext([]);
+      await manageTool.handler(
+        { routerId: "test-router", action: "add", name: "pool1", ranges: "192.168.1.100-192.168.1.200", nextPool: "pool2" },
+        ctx,
+      );
+      expect(ctx.routerClient.create).toHaveBeenCalledWith(
+        "ip/pool",
+        expect.objectContaining({ "next-pool": "pool2" }),
+      );
+    });
   });
 
   describe("manage_ip_pool handler - remove", () => {
@@ -159,6 +171,17 @@ describe("ipPoolTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("not_found");
+    });
+
+    it("dry_run returns preview without calling remove", async () => {
+      const ctx = makeContext([{ ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" }]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", name: "pool1", dryRun: true },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("dry_run");
+      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
     });
   });
 });

@@ -177,6 +177,38 @@ describe("dhcpServerTools", () => {
       expect((sc.servers as unknown[]).length).toBe(2);
       expect(sc.total).toBe(3);
     });
+
+    it("respects limit — returns up to limit servers", async () => {
+      const servers = Array.from({ length: 5 }, (_, i) => ({
+        ".id": `*${i}`,
+        name: `dhcp${i}`,
+        interface: `ether${i}`,
+        "address-pool": `pool${i}`,
+        disabled: "false",
+      }));
+      const ctx = makeContext(servers);
+      const result = await listServersTool.handler({ routerId: "test-router", limit: 2 }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.servers as unknown[]).length).toBe(2);
+      expect(sc.total).toBe(5);
+      expect(sc.hasMore).toBe(true);
+    });
+
+    it("respects offset pagination", async () => {
+      const servers = Array.from({ length: 5 }, (_, i) => ({
+        ".id": `*${i}`,
+        name: `dhcp${i}`,
+        interface: `ether${i}`,
+        "address-pool": `pool${i}`,
+        disabled: "false",
+      }));
+      const ctx = makeContext(servers);
+      const result = await listServersTool.handler({ routerId: "test-router", limit: 2, offset: 3 }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.servers as unknown[]).length).toBe(2);
+      expect(sc.offset).toBe(3);
+      expect(sc.hasMore).toBe(false);
+    });
   });
 
   describe("handler — manage_dhcp_server add", () => {
