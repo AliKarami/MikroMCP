@@ -697,6 +697,113 @@ Enable or disable a RouterOS IP service. Port changes are intentionally excluded
 
 ---
 
+## PPPoE & OpenVPN
+
+### `list_pppoe_clients` — Read
+
+List PPPoE client interfaces on a MikroTik router with connection state, assigned IP, and uptime. Supports filtering by parent interface and status.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Filter by parent interface name (exact match) |
+| `status` | enum | `all` | `connected`, `disconnected`, or `all` |
+| `limit` | integer | `100` | Max results (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "List all connected PPPoE clients on core-router"
+
+---
+
+### `manage_pppoe_client` — Write · Idempotent
+
+Add, update, or remove a PPPoE client interface. Idempotent by name: add returns `already_exists` when the same name, interface, and user already exist. Update returns `no_change` when all specified fields already match. Password is always written when provided (RouterOS does not expose it in GET).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | enum | — | `add`, `update`, or `remove` |
+| `name` | string | — | PPPoE interface name — idempotency key |
+| `interface` | string | — | Parent interface, e.g. `ether1` (required for add) |
+| `user` | string | — | PPPoE username (required for add) |
+| `password` | string | — | PPPoE password (write-only) |
+| `serviceName` | string | — | PPPoE service name filter |
+| `addDefaultRoute` | boolean | — | Install default route via this connection |
+| `dialOnDemand` | boolean | — | Connect only when traffic is present |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add a PPPoE client named pppoe-wan on ether1 with username myisp and password secret123"
+
+---
+
+### `list_ovpn_clients` — Read
+
+List OpenVPN client interfaces on a MikroTik router with connection state and remote endpoint. Supports pagination.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | integer | `100` | Max results (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "List OpenVPN clients on branch-router"
+
+---
+
+### `manage_ovpn_client` — Write · Idempotent
+
+Add, update, or remove an OpenVPN client interface. Idempotent by name: add returns `already_exists` when the same name and `connectTo` already exist. Update returns `no_change` when all specified fields already match. Password is always written when provided.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | enum | — | `add`, `update`, or `remove` |
+| `name` | string | — | OpenVPN interface name — idempotency key |
+| `connectTo` | string | — | Remote server address (required for add) |
+| `port` | integer | — | Remote port (default 1194) |
+| `mode` | enum | — | `ip` or `ethernet` |
+| `protocol` | enum | — | `tcp-client` or `udp` |
+| `certificate` | string | — | Certificate name from certificate store |
+| `user` | string | — | OpenVPN username |
+| `password` | string | — | OpenVPN password (write-only) |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add an OpenVPN client named ovpn-hq connecting to 203.0.113.10 using certificate hq-cert"
+
+---
+
+### `get_ovpn_server` — Read
+
+Read the OpenVPN server configuration from a MikroTik router, including enabled state, port, protocol, cipher, auth, and certificate.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+
+**Example prompt:** "Show the OpenVPN server configuration on core-router"
+
+---
+
+### `manage_ovpn_server` — Write · Destructive · Idempotent
+
+Enable or disable the OpenVPN server, or update its configuration. Enable/disable are idempotent — returns `no_change` when already in the desired state. The `set` action returns `no_change` when all specified fields already match.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | enum | — | `enable`, `disable`, or `set` |
+| `port` | integer | — | Listening port (set only) |
+| `mode` | enum | — | `ip` or `ethernet` (set only) |
+| `protocol` | enum | — | `tcp-server` or `udp` (set only) |
+| `certificate` | string | — | Server certificate name (set only) |
+| `cipher` | enum | — | `blowfish128`, `aes128-cbc`, `aes192-cbc`, `aes256-cbc`, `aes128-gcm`, `aes256-gcm`, or `none` (set only) |
+| `auth` | enum | — | `md5`, `sha1`, `sha256`, `sha512`, or `null` (set only) |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Enable the OpenVPN server on core-router and set the certificate to server-cert"
+
+---
+
 ## Routing
 
 ### `list_routes` — Read
