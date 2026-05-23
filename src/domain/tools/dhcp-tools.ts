@@ -46,7 +46,7 @@ const listDhcpLeasesTool: ToolDefinition = {
   name: "list_dhcp_leases",
   title: "List DHCP Leases",
   description:
-    "List DHCP leases on a MikroTik router with optional filtering by server, status, and MAC address. Supports pagination.",
+    "List DHCP leases on a MikroTik router with optional filtering by server, status, lease type (dynamic/static), and MAC address. Supports pagination.",
   inputSchema: listDhcpLeasesInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -205,6 +205,16 @@ const manageDhcpLeaseTool: ToolDefinition = {
               alternativeTools: ["list_dhcp_leases"],
             },
           });
+        }
+
+        // Already static — idempotent return
+        const existingDynamic = (existing as Record<string, unknown>).dynamic;
+        const isAlreadyStatic = existingDynamic === "false" || existingDynamic === false;
+        if (isAlreadyStatic) {
+          return {
+            content: `Lease for ${upperMac} (${existing.address ?? "unknown"}) is already static. No changes made.`,
+            structuredContent: { action: "already_static", macAddress: upperMac, id: existing[".id"] },
+          };
         }
 
         if (parsed.dryRun) {
