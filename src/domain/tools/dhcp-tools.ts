@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { enrichError } from "../errors/error-enricher.js";
+import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("dhcp-tools");
@@ -26,6 +27,10 @@ const listDhcpLeasesInputSchema = z
       .string()
       .optional()
       .describe("Filter by MAC address (exact match, case-insensitive)"),
+    leaseType: z
+      .enum(["dynamic", "static", "all"])
+      .default("all")
+      .describe("Filter by lease type (dynamic or static)"),
     limit: z
       .number()
       .int()
@@ -91,6 +96,15 @@ const listDhcpLeasesTool: ToolDefinition = {
         });
       }
 
+      if (parsed.leaseType !== "all") {
+        leases = leases.filter((lease) => {
+          const rec = lease as Record<string, unknown>;
+          const isDynamic = rec.dynamic === true || rec.dynamic === "true";
+          if (parsed.leaseType === "dynamic") return isDynamic;
+          return !isDynamic; // static
+        });
+      }
+
       const total = leases.length;
 
       const paginated = leases.slice(parsed.offset, parsed.offset + parsed.limit);
@@ -132,4 +146,115 @@ const listDhcpLeasesTool: ToolDefinition = {
   },
 };
 
-export const dhcpTools: ToolDefinition[] = [listDhcpLeasesTool];
+const manageDhcpLeaseInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z
+      .enum(["make-static", "remove"])
+      .describe(
+        "Action to perform: make-static converts a dynamic lease to static; remove deletes the lease",
+      ),
+    macAddress: z
+      .string()
+      .describe("MAC address of the lease — idempotency key (case-insensitive)"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
+
+const manageDhcpLeaseTool: ToolDefinition = {
+  name: "manage_dhcp_lease",
+  title: "Manage DHCP Lease",
+  description:
+    "Convert a dynamic DHCP lease to static (make-static) or remove a lease. Idempotent by MAC address.",
+  inputSchema: manageDhcpLeaseInputSchema,
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  snapshotPaths: ["ip/dhcp-server/lease"],
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = manageDhcpLeaseInputSchema.parse(params);
+    const upperMac = parsed.macAddress.toUpperCase();
+
+    log.info(
+      { routerId: context.routerId, action: parsed.action, macAddress: upperMac },
+      "Managing DHCP lease",
+    );
+
+    try {
+      const allLeases = await context.routerClient.get<RouterOSRecord>("ip/dhcp-server/lease", {
+        limit: undefined,
+        offset: undefined,
+      });
+      const existing = (allLeases as Record<string, string>[]).find(
+        (l) => (l["mac-address"] ?? "").toUpperCase() === upperMac,
+      );
+
+      if (parsed.action === "make-static") {
+        if (!existing) {
+          throw new MikroMCPError({
+            category: ErrorCategory.NOT_FOUND,
+            code: "DHCP_LEASE_NOT_FOUND",
+            message: `No DHCP lease found for MAC address ${upperMac}.`,
+            details: { macAddress: upperMac },
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Verify the MAC address with list_dhcp_leases.",
+              alternativeTools: ["list_dhcp_leases"],
+            },
+          });
+        }
+
+        if (parsed.dryRun) {
+          return {
+            content: `Dry run: Would convert lease for ${upperMac} (${existing.address ?? "unknown"}) to static.`,
+            structuredContent: {
+              action: "dry_run",
+              diff: [{ property: "dynamic", before: "true", after: "false" }],
+              lease: existing,
+            },
+          };
+        }
+
+        await context.routerClient.update("ip/dhcp-server/lease", existing[".id"], {
+          dynamic: "false",
+        });
+        log.info({ macAddress: upperMac, id: existing[".id"] }, "DHCP lease converted to static");
+        return {
+          content: `Lease for ${upperMac} (${existing.address ?? "unknown"}) converted to static.`,
+          structuredContent: { action: "made-static", macAddress: upperMac, id: existing[".id"] },
+        };
+      }
+
+      // remove
+      if (!existing) {
+        return {
+          content: `No DHCP lease found for MAC address ${upperMac}. Nothing to remove.`,
+          structuredContent: { action: "not_found", macAddress: upperMac },
+        };
+      }
+      if (parsed.dryRun) {
+        return {
+          content: `Dry run: Would remove lease for ${upperMac}.`,
+          structuredContent: {
+            action: "dry_run",
+            diff: [{ property: "mac-address", before: upperMac, after: null }],
+          },
+        };
+      }
+      await context.routerClient.remove("ip/dhcp-server/lease", existing[".id"]);
+      log.info({ macAddress: upperMac }, "DHCP lease removed");
+      return {
+        content: `Removed DHCP lease for ${upperMac}.`,
+        structuredContent: { action: "removed", macAddress: upperMac, id: existing[".id"] },
+      };
+    } catch (err) {
+      if (err instanceof MikroMCPError) throw err;
+      throw enrichError(err, { routerId: context.routerId, tool: "manage_dhcp_lease" });
+    }
+  },
+};
+
+export const dhcpTools: ToolDefinition[] = [listDhcpLeasesTool, manageDhcpLeaseTool];

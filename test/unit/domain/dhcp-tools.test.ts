@@ -2,9 +2,11 @@ import { describe, it, expect, vi, type MockedFunction } from "vitest";
 import { dhcpTools } from "../../../src/domain/tools/dhcp-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
 import { z } from "zod";
 
-const tool = dhcpTools[0];
+const listTool = dhcpTools[0];
+const tool = listTool;
 
 // Inline schema for isolated validation tests (avoids importing internal implementation detail)
 const listDhcpInputSchema = z
@@ -19,11 +21,15 @@ const listDhcpInputSchema = z
   .strict();
 
 function makeContext(leases: Record<string, unknown>[]): ToolContext {
-  const mockGet = vi.fn().mockResolvedValue(leases);
   return {
     routerId: "test-router",
     correlationId: "test-corr",
-    routerClient: { get: mockGet } as unknown as RouterOSRestClient,
+    routerClient: {
+      get: vi.fn().mockResolvedValue(leases),
+      create: vi.fn().mockResolvedValue({ ".id": "*1" }),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RouterOSRestClient,
   };
 }
 
@@ -153,5 +159,153 @@ describe("list_dhcp_leases tool", () => {
       expect(result.content).not.toContain("undefined");
       expect(result.content).not.toContain("()");
     });
+  });
+});
+
+describe("list_dhcp_leases - leaseType filter", () => {
+  const leases = [
+    {
+      ".id": "*1",
+      address: "192.168.1.10",
+      "mac-address": "AA:BB:CC:DD:EE:01",
+      status: "bound",
+      dynamic: "true",
+    },
+    {
+      ".id": "*2",
+      address: "192.168.1.20",
+      "mac-address": "AA:BB:CC:DD:EE:02",
+      status: "bound",
+      dynamic: "false",
+    },
+  ];
+
+  it("filters dynamic leases", async () => {
+    const ctx = makeContext(leases);
+    const result = await listTool.handler({ routerId: "test-router", leaseType: "dynamic" }, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect((sc.leases as unknown[]).length).toBe(1);
+  });
+
+  it("filters static leases", async () => {
+    const ctx = makeContext(leases);
+    const result = await listTool.handler({ routerId: "test-router", leaseType: "static" }, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect((sc.leases as unknown[]).length).toBe(1);
+  });
+
+  it("returns all when leaseType is all", async () => {
+    const ctx = makeContext(leases);
+    const result = await listTool.handler({ routerId: "test-router", leaseType: "all" }, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect((sc.leases as unknown[]).length).toBe(2);
+  });
+});
+
+describe("manage_dhcp_lease", () => {
+  it("tool is named manage_dhcp_lease", () => expect(dhcpTools[1].name).toBe("manage_dhcp_lease"));
+  it("is not readOnly", () => expect(dhcpTools[1].annotations.readOnlyHint).toBe(false));
+  it("has snapshotPaths", () =>
+    expect(dhcpTools[1].snapshotPaths).toContain("ip/dhcp-server/lease"));
+
+  it("make-static converts dynamic lease", async () => {
+    const dynamicLease = {
+      ".id": "*1",
+      "mac-address": "AA:BB:CC:DD:EE:01",
+      address: "192.168.1.10",
+      dynamic: "true",
+    };
+    const ctx = makeContext([dynamicLease]);
+    const result = await dhcpTools[1].handler(
+      { routerId: "test-router", action: "make-static", macAddress: "AA:BB:CC:DD:EE:01" },
+      ctx,
+    );
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.action).toBe("made-static");
+    expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/dhcp-server/lease", "*1", {
+      dynamic: "false",
+    });
+  });
+
+  it("throws NOT_FOUND when MAC not in lease table", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      dhcpTools[1].handler(
+        { routerId: "test-router", action: "make-static", macAddress: "FF:FF:FF:FF:FF:FF" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND });
+  });
+
+  it("removes lease by MAC address", async () => {
+    const lease = { ".id": "*1", "mac-address": "AA:BB:CC:DD:EE:01", address: "192.168.1.10" };
+    const ctx = makeContext([lease]);
+    const result = await dhcpTools[1].handler(
+      { routerId: "test-router", action: "remove", macAddress: "AA:BB:CC:DD:EE:01" },
+      ctx,
+    );
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.action).toBe("removed");
+    expect(ctx.routerClient.remove).toHaveBeenCalledWith("ip/dhcp-server/lease", "*1");
+  });
+
+  it("returns not_found on remove when MAC missing", async () => {
+    const ctx = makeContext([]);
+    const result = await dhcpTools[1].handler(
+      { routerId: "test-router", action: "remove", macAddress: "FF:FF:FF:FF:FF:FF" },
+      ctx,
+    );
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.action).toBe("not_found");
+  });
+
+  it("dry_run for make-static returns diff without updating", async () => {
+    const dynamicLease = {
+      ".id": "*1",
+      "mac-address": "AA:BB:CC:DD:EE:01",
+      address: "192.168.1.10",
+      dynamic: "true",
+    };
+    const ctx = makeContext([dynamicLease]);
+    const result = await dhcpTools[1].handler(
+      {
+        routerId: "test-router",
+        action: "make-static",
+        macAddress: "AA:BB:CC:DD:EE:01",
+        dryRun: true,
+      },
+      ctx,
+    );
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.action).toBe("dry_run");
+    expect(ctx.routerClient.update).not.toHaveBeenCalled();
+  });
+
+  it("dry_run for remove returns diff without removing", async () => {
+    const lease = { ".id": "*1", "mac-address": "AA:BB:CC:DD:EE:01", address: "192.168.1.10" };
+    const ctx = makeContext([lease]);
+    const result = await dhcpTools[1].handler(
+      {
+        routerId: "test-router",
+        action: "remove",
+        macAddress: "AA:BB:CC:DD:EE:01",
+        dryRun: true,
+      },
+      ctx,
+    );
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.action).toBe("dry_run");
+    expect(ctx.routerClient.remove).not.toHaveBeenCalled();
+  });
+
+  it("MAC address matching is case-insensitive", async () => {
+    const lease = { ".id": "*1", "mac-address": "AA:BB:CC:DD:EE:01", address: "192.168.1.10" };
+    const ctx = makeContext([lease]);
+    const result = await dhcpTools[1].handler(
+      { routerId: "test-router", action: "remove", macAddress: "aa:bb:cc:dd:ee:01" },
+      ctx,
+    );
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.action).toBe("removed");
   });
 });
