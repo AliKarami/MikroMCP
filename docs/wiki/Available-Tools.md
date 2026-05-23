@@ -1,6 +1,6 @@
 # Available Tools
 
-All 77 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
+All 82 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -292,20 +292,23 @@ List network interfaces with optional filtering and pagination.
 
 ---
 
-### `create_vlan` — Write · Idempotent
+### `manage_vlan` — Write · Idempotent
 
-Create a VLAN sub-interface. Returns `already_exists` if a VLAN with the same ID on the same parent already exists with matching config. Throws `CONFLICT` if it exists with different config.
+Add, remove, enable, or disable a VLAN sub-interface. Idempotent by `name`. `add` returns `already_exists` when the interface already exists with matching config; throws `CONFLICT` if it exists with different config.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
 | `name` | string | — | Interface name (e.g. `vlan100`) |
-| `vlanId` | integer | — | VLAN ID (1–4094) |
-| `interface` | string | — | Parent interface (e.g. `ether1`) |
+| `vlanId` | integer | — | VLAN ID (1–4094); required for `add` |
+| `parentInterface` | string | — | Parent interface (e.g. `ether1`); required for `add` |
+| `mtu` | `number` | `1500` | MTU size (68–9000; applies on add only) |
+| `disabled` | `boolean` | `false` | Create the VLAN in disabled state (add only) |
 | `comment` | string | — | Optional comment |
 | `dryRun` | boolean | `false` | Preview without applying |
 
-**Example prompt:** "Create VLAN 100 on ether1 of core-01 named vlan100."
+**Example prompt:** "Create VLAN 100 on ether1 of core-01 named vlan100, then disable it for maintenance."
 
 ---
 
@@ -541,10 +544,11 @@ List DHCP leases with optional filtering.
 | `server` | string | — | Filter by DHCP server name |
 | `status` | `bound` \| `waiting` \| `offered` | — | Filter by lease status |
 | `macAddress` | string | — | Filter by client MAC address |
+| `leaseType` | `dynamic` \| `static` \| `all` | `all` | Filter by lease type |
 | `limit` | integer | `100` | Results per page (1–500) |
 | `offset` | integer | `0` | Pagination offset |
 
-**Example prompt:** "Show active DHCP leases on edge-01, filtered to MAC aa:bb:cc:dd:ee:ff."
+**Example prompt:** "Show all static DHCP leases on edge-01."
 
 ---
 
@@ -581,9 +585,9 @@ Add, remove, enable, or disable a DHCP server instance. Idempotent by `name`.
 
 ---
 
-### `list_dhcp_pools` — Read
+### `list_ip_pools` — Read
 
-List DHCP address pools and their IP ranges.
+List IP address pools and their ranges. Pools serve any subsystem (DHCP, PPP, hotspot), not only DHCP servers.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -595,7 +599,7 @@ List DHCP address pools and their IP ranges.
 
 ---
 
-### `manage_dhcp_pool` — Write · Idempotent
+### `manage_ip_pool` — Write · Idempotent
 
 Add or remove an IP address pool. Idempotent by `name`.
 
@@ -609,6 +613,87 @@ Add or remove an IP address pool. Idempotent by `name`.
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Create an IP pool named lan-pool with range 192.168.1.100–192.168.1.200 on core-01."
+
+---
+
+### `manage_dhcp_lease` — Write · Idempotent
+
+Convert a dynamic DHCP lease to static or remove a lease. Idempotent by MAC address — `make-static` is a no-op when the lease is already static.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `make-static` \| `remove` | — | Operation to perform |
+| `macAddress` | string | — | Client MAC address (idempotency key) |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Make the DHCP lease for MAC aa:bb:cc:dd:ee:ff static on edge-01."
+
+---
+
+### `list_dhcp_clients` — Read
+
+List DHCP client configurations — which interfaces obtain their IP address via DHCP.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Filter by interface name |
+| `status` | `enum` | `"all"` | Filter by status: `bound`, `searching`, `requesting`, `init`, `all` |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which interfaces on edge-01 are configured as DHCP clients?"
+
+---
+
+### `manage_dhcp_client` — Write · Idempotent
+
+Add, remove, enable, or disable a DHCP client on an interface. Idempotent by `interface`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
+| `interface` | string | — | Interface name (idempotency key) |
+| `usePeerDns` | `boolean` | `true` | Use DNS servers advertised by DHCP server (add only) |
+| `usePeerNtp` | `boolean` | `false` | Use NTP servers advertised by DHCP server (add only) |
+| `addDefaultRoute` | `boolean` | `true` | Install default route from DHCP offer (add only) |
+| `comment` | string | — | Optional comment |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add a DHCP client on ether1 of edge-01 to obtain an IP from the upstream provider."
+
+---
+
+## IP Services
+
+### `list_ip_services` — Read
+
+List RouterOS IP services with their port, enabled/disabled status, and allowed address restrictions.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `name` | `enum` | — | Filter to a specific service (api, api-ssl, ssh, telnet, www, www-ssl, winbox, ftp) |
+| `enabled` | `boolean` | — | When `true`, return only enabled services; when `false`, only disabled |
+
+**Example prompt:** "Show me which IP services are enabled on core-01 and what ports they use."
+
+---
+
+### `manage_ip_service` — Write · Idempotent
+
+Enable or disable a RouterOS IP service. Port changes are intentionally excluded to prevent accidental lockout. Returns `no_change` when the service is already in the requested state.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `enable` \| `disable` | — | Operation to perform |
+| `name` | `api` \| `api-ssl` \| `ssh` \| `telnet` \| `www` \| `www-ssl` \| `winbox` \| `ftp` | — | Service name to manage |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Disable telnet and FTP on core-01 — only SSH and API-SSL should be allowed."
 
 ---
 

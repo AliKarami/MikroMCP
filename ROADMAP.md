@@ -193,24 +193,16 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v1.2 — VLAN CRUD, IP Pools & WAN Services
+## ✅ v1.2 — DHCP & Interface Completeness
 
-**Goal:** Close the most common day-one gaps: VLAN management beyond create, IP pools (the shared prerequisite for PPPoE, DHCP server, and OpenVPN), the WAN DHCP client, static DHCP lease management, and the IP services port table.
+**Goal:** Fill the remaining DHCP gaps, unify VLAN management under a single tool, and expose IP services for management.
 
-- **VLAN completeness:**
-  - `list_vlans` — list all VLAN interfaces with ID, parent interface, MTU, and status
-  - `manage_vlan` — update and remove VLAN interfaces (idempotent by name; complements the existing `create_vlan`)
-- **IP Pools:**
-  - `list_ip_pools` — list IP pools with range and next-used address (`/ip/pool`)
-  - `manage_ip_pool` — create/update/remove IP pools (idempotent by name)
-- **DHCP Client (WAN):**
-  - `list_dhcp_clients` — DHCP client entries per interface with lease state and assigned address (`/ip/dhcp-client`)
-  - `manage_dhcp_client` — add/update/remove DHCP client on an interface
-- **Static DHCP Leases:**
-  - `manage_dhcp_lease` — add/remove static DHCP leases (idempotent by MAC address; complements the existing `list_dhcp_leases`)
-- **IP Services:**
-  - `list_ip_services` — list IP service ports (SSH, API, WWW, Winbox, etc.) with port and allowed address (`/ip/service`)
-  - `manage_ip_service` — enable/disable a service or change its port and allowed-address filter
+- **Breaking renames:** `create_vlan` → `manage_vlan`; `list_dhcp_pools` → `list_ip_pools`; `manage_dhcp_pool` → `manage_ip_pool`
+- **`manage_vlan`** — add, remove, enable, or disable VLAN interfaces (full lifecycle, idempotent by name)
+- **`list_ip_pools`, `manage_ip_pool`** — semantically accurate rename; pools serve any subsystem, not only DHCP
+- **DHCP improvements:** `manage_dhcp_lease` (MAC-keyed; make-static action with idempotent no-op when already static); `leaseType` filter on `list_dhcp_leases`; `offset` on `list_dhcp_servers`
+- **DHCP clients:** `list_dhcp_clients`, `manage_dhcp_client` — configure which interfaces obtain IP via DHCP
+- **IP services:** `list_ip_services`, `manage_ip_service` — enable/disable api, api-ssl, ssh, telnet, www, www-ssl, winbox, ftp (port changes excluded to prevent lockout)
 
 ---
 

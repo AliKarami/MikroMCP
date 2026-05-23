@@ -18,6 +18,7 @@ const listDhcpServersInputSchema = z
       .max(500)
       .default(100)
       .describe("Maximum number of DHCP servers to return"),
+    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
   })
   .strict();
 
@@ -41,20 +42,23 @@ const listDhcpServersTool: ToolDefinition = {
         offset: undefined,
       });
 
-      const filtered = parsed.interface
-        ? (allServers as Record<string, string>[]).filter(
-            (s) => s.interface === parsed.interface,
-          )
+      let filtered = parsed.interface
+        ? (allServers as Record<string, string>[]).filter((s) => s.interface === parsed.interface)
         : (allServers as Record<string, string>[]);
-      const servers = filtered.slice(0, parsed.limit);
+
+      const total = filtered.length;
+      const servers = filtered.slice(parsed.offset, parsed.offset + parsed.limit);
+      const hasMore = parsed.offset + parsed.limit < total;
 
       return {
-        content: `DHCP servers on ${context.routerId}: ${servers.length} returned (${allServers.length} total)`,
+        content: `DHCP servers on ${context.routerId}: ${total} total, showing ${servers.length} (offset ${parsed.offset})`,
         structuredContent: {
           routerId: context.routerId,
           servers,
-          total: allServers.length,
-          returned: servers.length,
+          total,
+          hasMore,
+          offset: parsed.offset,
+          limit: parsed.limit,
         },
       };
     } catch (err) {
@@ -269,201 +273,4 @@ const manageDhcpServerTool: ToolDefinition = {
   },
 };
 
-const listDhcpPoolsInputSchema = z
-  .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    name: z.string().optional().describe("Filter by pool name (substring match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of pools to return"),
-  })
-  .strict();
-
-const listDhcpPoolsTool: ToolDefinition = {
-  name: "list_dhcp_pools",
-  title: "List DHCP Pools",
-  description: "List IP pools on a MikroTik router.",
-  inputSchema: listDhcpPoolsInputSchema,
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
-    const parsed = listDhcpPoolsInputSchema.parse(params);
-    log.info({ routerId: context.routerId }, "Listing DHCP pools");
-    try {
-      const allPools = await context.routerClient.get<RouterOSRecord>("ip/pool", {
-        limit: undefined,
-        offset: undefined,
-      });
-
-      const filtered = parsed.name
-        ? (allPools as Record<string, string>[]).filter((p) =>
-            (p.name ?? "").includes(parsed.name!),
-          )
-        : (allPools as Record<string, string>[]);
-      const pools = filtered.slice(0, parsed.limit);
-
-      return {
-        content: `DHCP pools on ${context.routerId}: ${pools.length} returned (${allPools.length} total)`,
-        structuredContent: {
-          routerId: context.routerId,
-          pools,
-          total: allPools.length,
-          returned: pools.length,
-        },
-      };
-    } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_dhcp_pools" });
-    }
-  },
-};
-
-const manageDhcpPoolInputSchema = z
-  .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    action: z.enum(["add", "remove"]).describe("Action to perform"),
-    name: z.string().describe("Pool name — idempotency key"),
-    ranges: z
-      .string()
-      .optional()
-      .describe("IP range (e.g. '192.168.1.100-192.168.1.200'; required for add)"),
-    nextPool: z.string().optional().describe("Next pool name for overflow"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
-  })
-  .strict();
-
-const manageDhcpPoolTool: ToolDefinition = {
-  name: "manage_dhcp_pool",
-  title: "Manage DHCP Pool",
-  description:
-    "Add or remove an IP pool. Idempotent by name: add returns already_exists if a pool with the same name and ranges already exists.",
-  inputSchema: manageDhcpPoolInputSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-  snapshotPaths: ["ip/pool"],
-  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
-    const parsed = manageDhcpPoolInputSchema.parse(params);
-    log.info(
-      { routerId: context.routerId, action: parsed.action, name: parsed.name },
-      "Managing DHCP pool",
-    );
-    try {
-      const allPools = await context.routerClient.get<RouterOSRecord>("ip/pool", {
-        limit: undefined,
-        offset: undefined,
-      });
-      const existing = (allPools as Record<string, string>[]).find(
-        (p) => p.name === parsed.name,
-      );
-
-      if (parsed.action === "add") {
-        if (!parsed.ranges) {
-          throw new MikroMCPError({
-            category: ErrorCategory.VALIDATION,
-            code: "DHCP_POOL_RANGES_REQUIRED",
-            message: "ranges is required when adding a DHCP pool.",
-            details: { name: parsed.name },
-            recoverability: {
-              retryable: false,
-              suggestedAction: "Provide the IP range (e.g. '192.168.1.100-192.168.1.200').",
-            },
-          });
-        }
-
-        if (existing) {
-          if (existing.ranges === parsed.ranges) {
-            return {
-              content: `DHCP pool "${parsed.name}" already exists with the same ranges. No changes made.`,
-              structuredContent: { action: "already_exists", pool: existing },
-            };
-          }
-          throw new MikroMCPError({
-            category: ErrorCategory.CONFLICT,
-            code: "DHCP_POOL_CONFLICT",
-            message: `DHCP pool "${parsed.name}" exists with different ranges.`,
-            details: {
-              existing: existing.ranges,
-              requested: parsed.ranges,
-            },
-            recoverability: {
-              retryable: false,
-              suggestedAction: "Remove the existing pool first or use a different name.",
-              alternativeTools: ["manage_dhcp_pool"],
-            },
-          });
-        }
-
-        if (parsed.dryRun) {
-          const diff = [
-            { property: "name", before: null, after: parsed.name },
-            { property: "ranges", before: null, after: parsed.ranges },
-            ...(parsed.nextPool
-              ? [{ property: "next-pool", before: null, after: parsed.nextPool }]
-              : []),
-          ];
-          return {
-            content: `Dry run: Would add DHCP pool "${parsed.name}".`,
-            structuredContent: { action: "dry_run", diff },
-          };
-        }
-
-        const body: Record<string, string> = {
-          name: parsed.name,
-          ranges: parsed.ranges,
-        };
-        if (parsed.nextPool) body["next-pool"] = parsed.nextPool;
-
-        const created = await context.routerClient.create("ip/pool", body);
-        log.info({ name: parsed.name, id: created[".id"] }, "DHCP pool added");
-        return {
-          content: `Added DHCP pool "${parsed.name}".`,
-          structuredContent: { action: "created", pool: created },
-        };
-      }
-
-      // remove
-      if (!existing) {
-        return {
-          content: `DHCP pool "${parsed.name}" not found. Nothing to remove.`,
-          structuredContent: { action: "not_found", name: parsed.name },
-        };
-      }
-      if (parsed.dryRun) {
-        return {
-          content: `Dry run: Would remove DHCP pool "${parsed.name}".`,
-          structuredContent: {
-            action: "dry_run",
-            diff: [{ property: "name", before: parsed.name, after: null }],
-          },
-        };
-      }
-      await context.routerClient.remove("ip/pool", existing[".id"]);
-      log.info({ name: parsed.name }, "DHCP pool removed");
-      return {
-        content: `Removed DHCP pool "${parsed.name}".`,
-        structuredContent: { action: "removed", name: parsed.name, id: existing[".id"] },
-      };
-    } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_dhcp_pool" });
-    }
-  },
-};
-
-export const dhcpServerTools: ToolDefinition[] = [
-  listDhcpServersTool,
-  manageDhcpServerTool,
-  listDhcpPoolsTool,
-  manageDhcpPoolTool,
-];
+export const dhcpServerTools: ToolDefinition[] = [listDhcpServersTool, manageDhcpServerTool];

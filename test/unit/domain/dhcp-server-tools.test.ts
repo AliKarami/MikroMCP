@@ -44,30 +44,22 @@ function makeContext(records: Record<string, unknown>[] = []): ToolContext {
   };
 }
 
-const [listServersTool, manageServerTool, listPoolsTool, managePoolTool] = dhcpServerTools;
+const [listServersTool, manageServerTool] = dhcpServerTools;
 
 describe("dhcpServerTools", () => {
   describe("metadata", () => {
-    it("exports 4 tools", () => expect(dhcpServerTools).toHaveLength(4));
+    it("exports 2 tools", () => expect(dhcpServerTools).toHaveLength(2));
 
     it("has correct tool names", () => {
       expect(listServersTool.name).toBe("list_dhcp_servers");
       expect(manageServerTool.name).toBe("manage_dhcp_server");
-      expect(listPoolsTool.name).toBe("list_dhcp_pools");
-      expect(managePoolTool.name).toBe("manage_dhcp_pool");
     });
 
     it("list_dhcp_servers is readOnly", () =>
       expect(listServersTool.annotations.readOnlyHint).toBe(true));
 
-    it("list_dhcp_pools is readOnly", () =>
-      expect(listPoolsTool.annotations.readOnlyHint).toBe(true));
-
     it("manage_dhcp_server is not readOnly", () =>
       expect(manageServerTool.annotations.readOnlyHint).toBe(false));
-
-    it("manage_dhcp_pool is not readOnly", () =>
-      expect(managePoolTool.annotations.readOnlyHint).toBe(false));
   });
 
   describe("input schema — list_dhcp_servers", () => {
@@ -88,28 +80,6 @@ describe("dhcpServerTools", () => {
 
     it("rejects limit out of range", () => {
       const result = listServersTool.inputSchema.safeParse({ routerId: "r1", limit: 0 });
-      expect(result.success).toBe(false);
-    });
-  });
-
-  describe("input schema — list_dhcp_pools", () => {
-    it("parses valid input", () => {
-      const result = listPoolsTool.inputSchema.safeParse({ routerId: "r1" });
-      expect(result.success).toBe(true);
-    });
-
-    it("applies default limit of 100", () => {
-      const result = listPoolsTool.inputSchema.parse({ routerId: "r1" });
-      expect(result.limit).toBe(100);
-    });
-
-    it("rejects extra fields", () => {
-      const result = listPoolsTool.inputSchema.safeParse({ routerId: "r1", extra: true });
-      expect(result.success).toBe(false);
-    });
-
-    it("rejects limit out of range", () => {
-      const result = listPoolsTool.inputSchema.safeParse({ routerId: "r1", limit: 0 });
       expect(result.success).toBe(false);
     });
   });
@@ -150,46 +120,6 @@ describe("dhcpServerTools", () => {
         routerId: "r1",
         action: "update",
         name: "dhcp1",
-      });
-      expect(result.success).toBe(false);
-    });
-  });
-
-  describe("input schema — manage_dhcp_pool", () => {
-    it("parses valid add input", () => {
-      const result = managePoolTool.inputSchema.safeParse({
-        routerId: "r1",
-        action: "add",
-        name: "pool1",
-        ranges: "192.168.1.100-192.168.1.200",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("applies default dryRun=false", () => {
-      const result = managePoolTool.inputSchema.parse({
-        routerId: "r1",
-        action: "add",
-        name: "pool1",
-      });
-      expect(result.dryRun).toBe(false);
-    });
-
-    it("rejects extra fields", () => {
-      const result = managePoolTool.inputSchema.safeParse({
-        routerId: "r1",
-        action: "add",
-        name: "pool1",
-        extra: true,
-      });
-      expect(result.success).toBe(false);
-    });
-
-    it("rejects invalid action", () => {
-      const result = managePoolTool.inputSchema.safeParse({
-        routerId: "r1",
-        action: "enable",
-        name: "pool1",
       });
       expect(result.success).toBe(false);
     });
@@ -247,46 +177,37 @@ describe("dhcpServerTools", () => {
       expect((sc.servers as unknown[]).length).toBe(2);
       expect(sc.total).toBe(3);
     });
-  });
 
-  describe("handler — list_dhcp_pools", () => {
-    it("returns pools in structuredContent", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
-        { ".id": "*2", name: "pool2", ranges: "10.0.0.10-10.0.0.50" },
-      ]);
-      const result = await listPoolsTool.handler({ routerId: "test-router" }, ctx);
+    it("respects limit — returns up to limit servers", async () => {
+      const servers = Array.from({ length: 5 }, (_, i) => ({
+        ".id": `*${i}`,
+        name: `dhcp${i}`,
+        interface: `ether${i}`,
+        "address-pool": `pool${i}`,
+        disabled: "false",
+      }));
+      const ctx = makeContext(servers);
+      const result = await listServersTool.handler({ routerId: "test-router", limit: 2 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.pools as unknown[]).length).toBe(2);
-      expect(sc.total).toBe(2);
+      expect((sc.servers as unknown[]).length).toBe(2);
+      expect(sc.total).toBe(5);
+      expect(sc.hasMore).toBe(true);
     });
 
-    it("filters by name substring", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "dhcp-pool" },
-        { ".id": "*2", name: "wifi-pool" },
-      ]);
-      const result = await listPoolsTool.handler(
-        { routerId: "test-router", name: "dhcp" },
-        ctx,
-      );
+    it("respects offset pagination", async () => {
+      const servers = Array.from({ length: 5 }, (_, i) => ({
+        ".id": `*${i}`,
+        name: `dhcp${i}`,
+        interface: `ether${i}`,
+        "address-pool": `pool${i}`,
+        disabled: "false",
+      }));
+      const ctx = makeContext(servers);
+      const result = await listServersTool.handler({ routerId: "test-router", limit: 2, offset: 3 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.pools as unknown[]).length).toBe(1);
-    });
-
-    it("applies limit", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "pool1" },
-        { ".id": "*2", name: "pool2" },
-        { ".id": "*3", name: "pool3" },
-      ]);
-      const result = await listPoolsTool.handler(
-        { routerId: "test-router", limit: 2 },
-        ctx,
-      );
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.pools as unknown[]).length).toBe(2);
-      expect(sc.total).toBe(3);
+      expect((sc.servers as unknown[]).length).toBe(2);
+      expect(sc.offset).toBe(3);
+      expect(sc.hasMore).toBe(false);
     });
   });
 
@@ -504,143 +425,4 @@ describe("dhcpServerTools", () => {
     });
   });
 
-  describe("handler — manage_dhcp_pool add", () => {
-    it("creates pool when not found", async () => {
-      const ctx = makeContext([]);
-      const result = await managePoolTool.handler(
-        {
-          routerId: "test-router",
-          action: "add",
-          name: "pool1",
-          ranges: "192.168.1.100-192.168.1.200",
-        },
-        ctx,
-      );
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect(sc.action).toBe("created");
-      expect(ctx.routerClient.create).toHaveBeenCalledWith(
-        "ip/pool",
-        expect.objectContaining({ name: "pool1", ranges: "192.168.1.100-192.168.1.200" }),
-      );
-    });
-
-    it("returns already_exists when pool has same ranges", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
-      ]);
-      const result = await managePoolTool.handler(
-        {
-          routerId: "test-router",
-          action: "add",
-          name: "pool1",
-          ranges: "192.168.1.100-192.168.1.200",
-        },
-        ctx,
-      );
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect(sc.action).toBe("already_exists");
-      expect(ctx.routerClient.create).not.toHaveBeenCalled();
-    });
-
-    it("throws CONFLICT when pool exists with different ranges", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "pool1", ranges: "10.0.0.10-10.0.0.50" },
-      ]);
-      await expect(
-        managePoolTool.handler(
-          {
-            routerId: "test-router",
-            action: "add",
-            name: "pool1",
-            ranges: "192.168.1.100-192.168.1.200",
-          },
-          ctx,
-        ),
-      ).rejects.toMatchObject({ category: ErrorCategory.CONFLICT });
-    });
-
-    it("throws VALIDATION error when ranges is missing", async () => {
-      const ctx = makeContext([]);
-      await expect(
-        managePoolTool.handler(
-          { routerId: "test-router", action: "add", name: "pool1" },
-          ctx,
-        ),
-      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "DHCP_POOL_RANGES_REQUIRED" });
-    });
-
-    it("dry_run returns preview without calling create", async () => {
-      const ctx = makeContext([]);
-      const result = await managePoolTool.handler(
-        {
-          routerId: "test-router",
-          action: "add",
-          name: "pool1",
-          ranges: "192.168.1.100-192.168.1.200",
-          dryRun: true,
-        },
-        ctx,
-      );
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect(sc.action).toBe("dry_run");
-      expect(ctx.routerClient.create).not.toHaveBeenCalled();
-    });
-
-    it("includes next-pool in body when provided", async () => {
-      const ctx = makeContext([]);
-      await managePoolTool.handler(
-        {
-          routerId: "test-router",
-          action: "add",
-          name: "pool1",
-          ranges: "192.168.1.100-192.168.1.200",
-          nextPool: "pool2",
-        },
-        ctx,
-      );
-      expect(ctx.routerClient.create).toHaveBeenCalledWith(
-        "ip/pool",
-        expect.objectContaining({ "next-pool": "pool2" }),
-      );
-    });
-  });
-
-  describe("handler — manage_dhcp_pool remove", () => {
-    it("removes pool when found", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
-      ]);
-      const result = await managePoolTool.handler(
-        { routerId: "test-router", action: "remove", name: "pool1" },
-        ctx,
-      );
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect(sc.action).toBe("removed");
-      expect(ctx.routerClient.remove).toHaveBeenCalledWith("ip/pool", "*1");
-    });
-
-    it("returns not_found when pool already gone", async () => {
-      const ctx = makeContext([]);
-      const result = await managePoolTool.handler(
-        { routerId: "test-router", action: "remove", name: "pool1" },
-        ctx,
-      );
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect(sc.action).toBe("not_found");
-      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
-    });
-
-    it("dry_run returns preview without calling remove", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
-      ]);
-      const result = await managePoolTool.handler(
-        { routerId: "test-router", action: "remove", name: "pool1", dryRun: true },
-        ctx,
-      );
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect(sc.action).toBe("dry_run");
-      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
-    });
-  });
 });

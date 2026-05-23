@@ -12,6 +12,25 @@ Each release section covers changes **since the previous release only**.
 
 ---
 
+## [1.2.0] - 2026-05-23
+
+### Added
+- `manage_vlan` — add, remove, enable, or disable VLAN interfaces (idempotent by name; supersedes `create_vlan`)
+- `list_ip_pools`, `manage_ip_pool` — IP address pool tools (renamed from `list_dhcp_pools`/`manage_dhcp_pool`; pools serve any subsystem, not only DHCP)
+- `manage_dhcp_lease` — convert dynamic DHCP leases to static or remove leases (idempotent by MAC address; make-static is a no-op when lease is already static)
+- `list_dhcp_clients`, `manage_dhcp_client` — DHCP client configuration per interface (which interfaces obtain IP via DHCP)
+- `list_ip_services`, `manage_ip_service` — view and enable/disable RouterOS IP services (api, api-ssl, ssh, telnet, www, www-ssl, winbox, ftp; port changes excluded to prevent lockout)
+
+### Changed
+- `list_dhcp_leases` gains `leaseType` filter (`dynamic`, `static`, `all`) to distinguish lease types
+- `list_dhcp_servers` gains `offset` parameter for consistent pagination across all list tools
+
+### Removed
+- `create_vlan` — replaced by `manage_vlan` which covers the full interface lifecycle
+- `list_dhcp_pools`, `manage_dhcp_pool` — renamed to `list_ip_pools`, `manage_ip_pool`
+
+---
+
 ## [1.1.0] - 2026-05-22
 
 ### Added

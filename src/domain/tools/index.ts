@@ -25,9 +25,13 @@ import { ipsecTools } from "./ipsec-tools.js";
 import { certificateTools } from "./certificate-tools.js";
 import { userTools } from "./user-tools.js";
 import { dhcpServerTools } from "./dhcp-server-tools.js";
+import { ipPoolTools } from "./ip-pool-tools.js";
 import { queueTools } from "./queue-tools.js";
 import { vrrpTools } from "./vrrp-tools.js";
 import { networkServicesTools } from "./network-services-tools.js";
+import { vlanTools } from "./vlan-tools.js";
+import { dhcpClientTools } from "./dhcp-client-tools.js";
+import { ipServiceTools } from "./ip-service-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -56,9 +60,13 @@ const baseTools: ToolDefinition[] = [
   ...certificateTools,
   ...userTools,
   ...dhcpServerTools,
+  ...ipPoolTools,
   ...queueTools,
   ...vrrpTools,
   ...networkServicesTools,
+  ...vlanTools,
+  ...dhcpClientTools,
+  ...ipServiceTools,
 ];
 
 export const allTools: ToolDefinition[] = [

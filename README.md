@@ -12,12 +12,12 @@
 
 [![CI](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml)
 [![Release](https://github.com/AliKarami/MikroMCP/actions/workflows/release.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/release.yml)
-[![Version](https://img.shields.io/badge/version-v1.1.0-EA580C)](package.json)
+[![Version](https://img.shields.io/badge/version-v1.2.0-EA580C)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-339933)](package.json)
 [![RouterOS 7.x](https://img.shields.io/badge/RouterOS-7.x-293239)](https://help.mikrotik.com/docs/display/ROS/REST+API)
 [![MCP Server](https://img.shields.io/badge/MCP-server-6f42c1)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/MCP%20tools-77-0f766e)](#available-tools)
+[![Tools](https://img.shields.io/badge/MCP%20tools-82-0f766e)](#available-tools)
 [![MikroMCP MCP server](https://glama.ai/mcp/servers/AliKarami/MikroMCP/badges/score.svg)](https://glama.ai/mcp/servers/AliKarami/MikroMCP)
 
 MikroMCP exists because raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas, idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC, audit logs, snapshots, and rollback-aware change workflows.
@@ -71,7 +71,7 @@ MikroMCP exists because raw router CLI access is the wrong abstraction for AI ag
 
 ### MCP Inspector
 
-![The 77 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
+![The 82 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
 
 ---
 
@@ -285,14 +285,16 @@ All settings can be placed in `~/.mikromcp/.env` or passed as environment variab
 
 ## Available Tools
 
-MikroMCP currently registers **77 MCP tools**.
+MikroMCP currently registers **82 MCP tools**.
 
 | Area                    | Tools                                                                                                                                                                                                     |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | System                  | `get_system_status`, `get_system_clock`, `set_system_clock`, `reboot`                                                                                                                                     |
-| Interfaces and IP       | `list_interfaces`, `create_vlan`, `manage_ip_address`                                                                                                                                                     |
-| DHCP and DNS            | `list_dhcp_leases`, `list_dns_entries`, `manage_dns_entry`, `get_dns_settings`                                                                                                                            |
-| DHCP Servers & Pools    | `list_dhcp_servers`, `manage_dhcp_server`, `list_dhcp_pools`, `manage_dhcp_pool`                                                                                                                          |
+| Interfaces and IP       | `list_interfaces`, `manage_vlan`, `manage_ip_address`                                                                                                                                                     |
+| DHCP and DNS            | `list_dhcp_leases`, `manage_dhcp_lease`, `list_dns_entries`, `manage_dns_entry`, `get_dns_settings`                                                                                                       |
+| DHCP Servers & Pools    | `list_dhcp_servers`, `manage_dhcp_server`, `list_ip_pools`, `manage_ip_pool`                                                                                                                              |
+| DHCP Clients            | `list_dhcp_clients`, `manage_dhcp_client`                                                                                                                                                                 |
+| IP Services             | `list_ip_services`, `manage_ip_service`                                                                                                                                                                   |
 | Routing                 | `list_routes`, `manage_route`, `list_routing_rules`, `manage_routing_rule`, `list_routing_tables`, `manage_routing_table`                                                                                 |
 | Routing protocols       | `list_bgp_peers`, `list_ospf_neighbors`                                                                                                                                                                   |
 | Firewall                | `list_firewall_rules`, `manage_firewall_rule`, `list_mangle_rules`, `manage_mangle_rule`, `list_address_list_entries`, `manage_address_list_entry`                                                        |
@@ -419,7 +421,7 @@ AI assistants can use MikroMCP to:
 | [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration)                             | Router registry, credentials, all environment variables    |
 | [Connecting to Claude Desktop](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-Claude-Desktop) | Register MikroMCP in Claude Desktop                      |
 | [Connecting to AI Assistants](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-AI-Assistants) | Claude Code, Cursor, Codex, HTTP/Docker/systemd            |
-| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 77 tools — parameters and example prompts              |
+| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 82 tools — parameters and example prompts              |
 | [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers, request pipeline, auth model                |
 | [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling)                           | Error categories, retry engine, circuit breaker            |
 | [Running](https://github.com/AliKarami/MikroMCP/wiki/Running)                                         | Run commands, HTTP transport, troubleshooting              |

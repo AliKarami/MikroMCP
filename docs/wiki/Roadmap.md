@@ -79,6 +79,13 @@ Config: version from `package.json`, `mikromcp init` allow-all fix, `pagination`
 
 ---
 
+## ✅ v1.2 — DHCP & Interface Completeness
+
+New tools: `manage_vlan` (full VLAN lifecycle, replaces `create_vlan`), `list_ip_pools`/`manage_ip_pool` (renamed from `list_dhcp_pools`/`manage_dhcp_pool`), `manage_dhcp_lease` (make-static / remove, MAC-keyed idempotency), `list_dhcp_clients`/`manage_dhcp_client` (DHCP client configuration per interface), `list_ip_services`/`manage_ip_service` (view and toggle RouterOS IP services without port changes).  
+Improvements: `list_dhcp_leases` gains `leaseType` filter; `list_dhcp_servers` gains `offset` pagination parameter.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
