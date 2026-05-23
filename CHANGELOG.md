@@ -10,6 +10,14 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- `list_pppoe_clients` — list PPPoE client interfaces with connection state; filters by parent interface and status (connected/disconnected/all); supports pagination
+- `manage_pppoe_client` — add, update, or remove PPPoE client interfaces (idempotent by name+interface+user for add; no_change guard on update; password always written when provided since RouterOS does not expose it in GET)
+- `list_ovpn_clients` — list OpenVPN client interfaces with connection state and remote endpoint; supports pagination
+- `manage_ovpn_client` — add, update, or remove OpenVPN client interfaces (idempotent by name+connectTo for add; no_change guard on update; certificate and credential references)
+- `get_ovpn_server` — read OpenVPN server configuration (port, mode, protocol, certificate, cipher, auth, enabled state)
+- `manage_ovpn_server` — enable/disable the OpenVPN server or update its configuration (port, mode, protocol, certificate, cipher, auth); enable/disable are idempotent; set returns no_change when all fields already match
+
 ---
 
 ## [1.2.0] - 2026-05-23

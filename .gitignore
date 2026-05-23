@@ -11,3 +11,4 @@ coverage/
 .DS_Store
 .worktrees/
 .claude/worktrees/
+.worktrees/

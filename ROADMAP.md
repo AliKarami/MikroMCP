@@ -206,19 +206,11 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## 🔜 v1.3 — PPPoE & OpenVPN
+## ✅ v1.3 — PPPoE & OpenVPN
 
-**Goal:** Cover the three most widely deployed WAN and overlay tunnel types that require interface-level CRUD beyond what `run_command` should handle.
-
-- **PPPoE Client:**
-  - `list_pppoe_clients` — PPPoE client interfaces with connection state, assigned IP, and uptime (`/interface/pppoe-client`)
-  - `manage_pppoe_client` — add/update/remove PPPoE client interfaces (idempotent by name; includes dry-run)
-- **OpenVPN Client:**
-  - `list_ovpn_clients` — OpenVPN client interfaces with connection state and remote endpoint (`/interface/ovpn-client`)
-  - `manage_ovpn_client` — add/update/remove OpenVPN client instances (idempotent by name; certificate and credential references)
-- **OpenVPN Server:**
-  - `get_ovpn_server` — read OpenVPN server configuration (`/interface/ovpn-server/server`)
-  - `manage_ovpn_server` — enable/disable OpenVPN server and configure port, protocol, cipher, and certificate
+PPPoE client: `list_pppoe_clients`, `manage_pppoe_client` (add/update/remove; idempotent; no_change guard on update; password always written when provided).
+OpenVPN client: `list_ovpn_clients`, `manage_ovpn_client` (add/update/remove; idempotent; certificate references).
+OpenVPN server: `get_ovpn_server` (read singleton config), `manage_ovpn_server` (enable/disable/set; idempotent).
 
 ---
 

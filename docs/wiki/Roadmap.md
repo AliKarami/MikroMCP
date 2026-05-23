@@ -86,6 +86,14 @@ Improvements: `list_dhcp_leases` gains `leaseType` filter; `list_dhcp_servers` g
 
 ---
 
+## ✅ v1.3 — PPPoE & OpenVPN
+
+`list_pppoe_clients`, `manage_pppoe_client` — PPPoE client management (add/update/remove, idempotent, no_change guard on update).
+`list_ovpn_clients`, `manage_ovpn_client` — OpenVPN client management (add/update/remove, idempotent, certificate references).
+`get_ovpn_server`, `manage_ovpn_server` — OpenVPN server singleton (read config; enable/disable/set; idempotent).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

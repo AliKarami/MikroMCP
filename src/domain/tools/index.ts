@@ -32,6 +32,8 @@ import { networkServicesTools } from "./network-services-tools.js";
 import { vlanTools } from "./vlan-tools.js";
 import { dhcpClientTools } from "./dhcp-client-tools.js";
 import { ipServiceTools } from "./ip-service-tools.js";
+import { pppoeTools } from "./pppoe-tools.js";
+import { ovpnTools } from "./ovpn-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -67,6 +69,8 @@ const baseTools: ToolDefinition[] = [
   ...vlanTools,
   ...dhcpClientTools,
   ...ipServiceTools,
+  ...pppoeTools,
+  ...ovpnTools,
 ];
 
 export const allTools: ToolDefinition[] = [
