@@ -302,7 +302,9 @@ Add, remove, enable, or disable a VLAN sub-interface. Idempotent by `name`. `add
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
 | `name` | string | — | Interface name (e.g. `vlan100`) |
 | `vlanId` | integer | — | VLAN ID (1–4094); required for `add` |
-| `interface` | string | — | Parent interface (e.g. `ether1`); required for `add` |
+| `parentInterface` | string | — | Parent interface (e.g. `ether1`); required for `add` |
+| `mtu` | `number` | `1500` | MTU size (68–9000; applies on add only) |
+| `disabled` | `boolean` | `false` | Create the VLAN in disabled state (add only) |
 | `comment` | string | — | Optional comment |
 | `dryRun` | boolean | `false` | Preview without applying |
 
@@ -637,6 +639,7 @@ List DHCP client configurations — which interfaces obtain their IP address via
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `interface` | string | — | Filter by interface name |
+| `status` | `enum` | `"all"` | Filter by status: `bound`, `searching`, `requesting`, `init`, `all` |
 | `limit` | integer | `100` | Results per page (1–500) |
 | `offset` | integer | `0` | Pagination offset |
 
@@ -653,6 +656,9 @@ Add, remove, enable, or disable a DHCP client on an interface. Idempotent by `in
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
 | `interface` | string | — | Interface name (idempotency key) |
+| `usePeerDns` | `boolean` | `true` | Use DNS servers advertised by DHCP server (add only) |
+| `usePeerNtp` | `boolean` | `false` | Use NTP servers advertised by DHCP server (add only) |
+| `addDefaultRoute` | `boolean` | `true` | Install default route from DHCP offer (add only) |
 | `comment` | string | — | Optional comment |
 | `dryRun` | boolean | `false` | Preview without applying |
 
@@ -669,6 +675,8 @@ List RouterOS IP services with their port, enabled/disabled status, and allowed 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
+| `name` | `enum` | — | Filter to a specific service (api, api-ssl, ssh, telnet, www, www-ssl, winbox, ftp) |
+| `enabled` | `boolean` | — | When `true`, return only enabled services; when `false`, only disabled |
 
 **Example prompt:** "Show me which IP services are enabled on core-01 and what ports they use."
 
@@ -682,7 +690,7 @@ Enable or disable a RouterOS IP service. Port changes are intentionally excluded
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `enable` \| `disable` | — | Operation to perform |
-| `service` | `api` \| `api-ssl` \| `ssh` \| `telnet` \| `www` \| `www-ssl` \| `winbox` \| `ftp` | — | RouterOS service name |
+| `name` | `api` \| `api-ssl` \| `ssh` \| `telnet` \| `www` \| `www-ssl` \| `winbox` \| `ftp` | — | Service name to manage |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Disable telnet and FTP on core-01 — only SSH and API-SSL should be allowed."
