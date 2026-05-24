@@ -10,6 +10,10 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+---
+
+## [1.3.0] - 2026-05-24
+
 ### Added
 - `list_pppoe_clients` — list PPPoE client interfaces with connection state; filters by parent interface and status (connected/disconnected/all); supports pagination
 - `manage_pppoe_client` — add, update, or remove PPPoE client interfaces (idempotent by name+interface+user for add; no_change guard on update; password always written when provided since RouterOS does not expose it in GET)
