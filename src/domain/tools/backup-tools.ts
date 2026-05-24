@@ -93,17 +93,10 @@ const exportConfigTool: ToolDefinition = {
     log.info({ routerId: context.routerId, compact: parsed.compact }, "Exporting config");
 
     try {
-      const body: Record<string, string> = {};
-      if (parsed.compact) {
-        body.compact = "yes";
-      }
       if (parsed.file !== undefined) {
-        body.file = parsed.file;
-      }
-
-      const script = await context.routerClient.execute<string>("system/export", body);
-
-      if (parsed.file !== undefined) {
+        const body: Record<string, string> = { file: parsed.file };
+        if (parsed.compact) body.compact = "yes";
+        await context.routerClient.execute("system/export", body);
         return {
           content: `Config exported to "${parsed.file}.rsc" on ${context.routerId}.`,
           structuredContent: {
@@ -113,7 +106,9 @@ const exportConfigTool: ToolDefinition = {
         };
       }
 
-      const scriptText = typeof script === "string" ? script : JSON.stringify(script);
+      // RouterOS REST API returns [] for inline export — text output requires SSH.
+      const sshCommand = parsed.compact ? "export compact" : "export";
+      const scriptText = await context.sshClient.execute(sshCommand);
 
       return {
         content: `Config export from ${context.routerId}:\n${scriptText}`,
