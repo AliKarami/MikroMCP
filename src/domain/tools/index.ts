@@ -35,6 +35,8 @@ import { dhcpClientTools } from "./dhcp-client-tools.js";
 import { ipServiceTools } from "./ip-service-tools.js";
 import { pppoeTools } from "./pppoe-tools.js";
 import { ovpnTools } from "./ovpn-tools.js";
+import { upgradeTools } from "./upgrade-tools.js";
+import { backupTools } from "./backup-tools.js";
 import { logTools } from "./log-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
@@ -74,6 +76,8 @@ const baseTools: ToolDefinition[] = [
   ...ipServiceTools,
   ...pppoeTools,
   ...ovpnTools,
+  ...upgradeTools,
+  ...backupTools,
   ...logTools,
 ];
 
