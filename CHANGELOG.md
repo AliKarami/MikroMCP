@@ -10,6 +10,19 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- `list_user_groups` — list local user groups with policy bitmask (`/user/group`)
+- `manage_user_group` — create, update, or remove user groups; idempotent by name; update action changes the policy string
+- `get_upgrade_status` — check RouterOS and routerboard firmware upgrade availability and current channel
+- `manage_upgrade` — trigger a package update check (`action=check`) or install an upgrade (`action=install`, destructive, reboots)
+- `create_backup` — create a binary router config backup file with optional encryption password
+- `export_config` — export running config as a RouterOS script text (`/export`); compact mode supported; optionally save to router file
+- `list_log_rules` — list system logging rules with topic substring and action name filters
+- `manage_log_rule` — add, remove, enable, or disable log rules; idempotent by topics+action composite key
+- `list_log_actions` — list log action targets (memory, disk, remote syslog, etc.) with type filter
+- `manage_log_action` — add or remove log action targets; idempotent by name; type required for add
+- `manage_ntp_client` — configure NTP client: enable/disable, set servers, mode, and VLAN source interface; complements `get_ntp_settings`
+
 ---
 
 ## [1.3.0] - 2026-05-24
