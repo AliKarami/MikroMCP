@@ -214,7 +214,7 @@ OpenVPN server: `get_ovpn_server` (read singleton config), `manage_ovpn_server` 
 
 ---
 
-## 🔜 v1.4 — System Administration Depth
+## ✅ v1.4 — System Administration Depth
 
 **Goal:** Move beyond read-only monitoring to full system lifecycle management: firmware, backup/restore, log targets, NTP write, and user group management.
 
