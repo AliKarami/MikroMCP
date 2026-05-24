@@ -24,6 +24,7 @@ import { createChangeManagementTools } from "./change-management-tools.js";
 import { ipsecTools } from "./ipsec-tools.js";
 import { certificateTools } from "./certificate-tools.js";
 import { userTools } from "./user-tools.js";
+import { userGroupTools } from "./user-group-tools.js";
 import { dhcpServerTools } from "./dhcp-server-tools.js";
 import { ipPoolTools } from "./ip-pool-tools.js";
 import { queueTools } from "./queue-tools.js";
@@ -61,6 +62,7 @@ const baseTools: ToolDefinition[] = [
   ...ipsecTools,
   ...certificateTools,
   ...userTools,
+  ...userGroupTools,
   ...dhcpServerTools,
   ...ipPoolTools,
   ...queueTools,
