@@ -181,6 +181,16 @@ describe("userGroupTools", () => {
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND });
     });
+
+    it("dry_run returns preview without calling update", async () => {
+      const ctx = makeContext([{ ".id": "*1", name: "ops", policy: "read" }]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "update", name: "ops", policy: "read,write", dryRun: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
   });
 
   describe("handler — manage_user_group remove", () => {

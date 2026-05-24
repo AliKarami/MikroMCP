@@ -94,9 +94,9 @@ const manageUserGroupTool: ToolDefinition = {
         const existing = (all as Record<string, string>[]).find((g) => g.name === parsed.name);
 
         if (existing) {
-          if (existing.policy === (parsed.policy ?? "")) {
+          if (parsed.policy === undefined || existing.policy === parsed.policy) {
             return {
-              content: `Group "${parsed.name}" already exists with the same policy. No changes made.`,
+              content: `User group "${parsed.name}" already exists. No changes made.`,
               structuredContent: { action: "already_exists", name: parsed.name, policy: existing.policy },
             };
           }
@@ -191,6 +191,13 @@ const manageUserGroupTool: ToolDefinition = {
         if (parsed.policy !== undefined) changes.policy = parsed.policy;
         if (parsed.skin !== undefined) changes.skin = parsed.skin;
 
+        if (Object.keys(changes).length === 0) {
+          return {
+            content: `User group "${parsed.name}" already has the requested configuration. No changes made.`,
+            structuredContent: { action: "no_change", name: parsed.name },
+          };
+        }
+
         await context.routerClient.update("user/group", existing[".id"], changes);
         log.info({ name: parsed.name }, "User group updated");
         return {
@@ -199,7 +206,6 @@ const manageUserGroupTool: ToolDefinition = {
         };
       }
 
-      // remove
       const all = await context.routerClient.get<RouterOSRecord>("user/group", {
         limit: undefined,
         offset: undefined,
