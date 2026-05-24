@@ -488,6 +488,97 @@ const listArpEntriesTool: ToolDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// manage_ntp_client
+// ---------------------------------------------------------------------------
+
+const manageNtpClientInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    enabled: z.boolean().optional().describe("Enable or disable the NTP client"),
+    mode: z
+      .enum(["unicast", "broadcast", "multicast", "manycast"])
+      .optional()
+      .describe("NTP client mode"),
+    servers: z.string().optional().describe("Comma-separated NTP server addresses"),
+    vlanInterface: z.string().optional().describe("VLAN interface for NTP communication"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
+
+const manageNtpClientTool: ToolDefinition = {
+  name: "manage_ntp_client",
+  title: "Manage NTP Client",
+  description:
+    "Update NTP client settings on a MikroTik router. Idempotent: returns already_set if no changes are needed.",
+  inputSchema: manageNtpClientInputSchema,
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  snapshotPaths: ["system/ntp/client"],
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = manageNtpClientInputSchema.parse(params);
+    log.info({ routerId: context.routerId }, "Managing NTP client settings");
+    try {
+      const results = await context.routerClient.get<RouterOSRecord>("system/ntp/client");
+      const current = (
+        Array.isArray(results) && results.length > 0 ? results[0] : results
+      ) as Record<string, string>;
+      const id = current[".id"];
+
+      const changes: Record<string, string> = {};
+      const diff: { property: string; before: string | undefined; after: string }[] = [];
+
+      if (parsed.enabled !== undefined && current.enabled !== String(parsed.enabled)) {
+        changes.enabled = String(parsed.enabled);
+        diff.push({ property: "enabled", before: current.enabled, after: String(parsed.enabled) });
+      }
+      if (parsed.mode !== undefined && current.mode !== parsed.mode) {
+        changes.mode = parsed.mode;
+        diff.push({ property: "mode", before: current.mode, after: parsed.mode });
+      }
+      if (parsed.servers !== undefined && current.servers !== parsed.servers) {
+        changes.servers = parsed.servers;
+        diff.push({ property: "servers", before: current.servers, after: parsed.servers });
+      }
+      if (parsed.vlanInterface !== undefined && current["vlan-interface"] !== parsed.vlanInterface) {
+        changes["vlan-interface"] = parsed.vlanInterface;
+        diff.push({
+          property: "vlan-interface",
+          before: current["vlan-interface"],
+          after: parsed.vlanInterface,
+        });
+      }
+
+      if (diff.length === 0) {
+        return {
+          content: `NTP client on ${context.routerId} already matches requested configuration.`,
+          structuredContent: { action: "already_set", routerId: context.routerId },
+        };
+      }
+
+      if (parsed.dryRun) {
+        return {
+          content: `Dry run: Would update NTP client on ${context.routerId}.`,
+          structuredContent: { action: "dry_run", diff },
+        };
+      }
+
+      await context.routerClient.update("system/ntp/client", id, changes);
+      log.info({ routerId: context.routerId }, "NTP client updated");
+      return {
+        content: `NTP client on ${context.routerId} updated.`,
+        structuredContent: { action: "updated", routerId: context.routerId, diff },
+      };
+    } catch (err) {
+      throw enrichError(err, { routerId: context.routerId, tool: "manage_ntp_client" });
+    }
+  },
+};
+
 export const networkServicesTools: ToolDefinition[] = [
   getSnmpSettingsTool,
   getNtpSettingsTool,
@@ -495,4 +586,5 @@ export const networkServicesTools: ToolDefinition[] = [
   manageNetwatchEntryTool,
   listNeighborsTool,
   listArpEntriesTool,
+  manageNtpClientTool,
 ];
