@@ -10,6 +10,10 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+---
+
+## [1.4.0] - 2026-05-24
+
 ### Added
 - `list_user_groups` — list local user groups with policy bitmask (`/user/group`)
 - `manage_user_group` — create, update, or remove user groups; idempotent by name; update action changes the policy string
