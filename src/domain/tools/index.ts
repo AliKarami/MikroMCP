@@ -24,6 +24,7 @@ import { createChangeManagementTools } from "./change-management-tools.js";
 import { ipsecTools } from "./ipsec-tools.js";
 import { certificateTools } from "./certificate-tools.js";
 import { userTools } from "./user-tools.js";
+import { userGroupTools } from "./user-group-tools.js";
 import { dhcpServerTools } from "./dhcp-server-tools.js";
 import { ipPoolTools } from "./ip-pool-tools.js";
 import { queueTools } from "./queue-tools.js";
@@ -34,6 +35,9 @@ import { dhcpClientTools } from "./dhcp-client-tools.js";
 import { ipServiceTools } from "./ip-service-tools.js";
 import { pppoeTools } from "./pppoe-tools.js";
 import { ovpnTools } from "./ovpn-tools.js";
+import { upgradeTools } from "./upgrade-tools.js";
+import { backupTools } from "./backup-tools.js";
+import { logTools } from "./log-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -61,6 +65,7 @@ const baseTools: ToolDefinition[] = [
   ...ipsecTools,
   ...certificateTools,
   ...userTools,
+  ...userGroupTools,
   ...dhcpServerTools,
   ...ipPoolTools,
   ...queueTools,
@@ -71,6 +76,9 @@ const baseTools: ToolDefinition[] = [
   ...ipServiceTools,
   ...pppoeTools,
   ...ovpnTools,
+  ...upgradeTools,
+  ...backupTools,
+  ...logTools,
 ];
 
 export const allTools: ToolDefinition[] = [

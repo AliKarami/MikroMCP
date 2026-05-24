@@ -17,7 +17,7 @@
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-339933)](package.json)
 [![RouterOS 7.x](https://img.shields.io/badge/RouterOS-7.x-293239)](https://help.mikrotik.com/docs/display/ROS/REST+API)
 [![MCP Server](https://img.shields.io/badge/MCP-server-6f42c1)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/MCP%20tools-88-0f766e)](#available-tools)
+[![Tools](https://img.shields.io/badge/MCP%20tools-99-0f766e)](#available-tools)
 [![MikroMCP MCP server](https://glama.ai/mcp/servers/AliKarami/MikroMCP/badges/score.svg)](https://glama.ai/mcp/servers/AliKarami/MikroMCP)
 
 MikroMCP exists because raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas, idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC, audit logs, snapshots, and rollback-aware change workflows.
@@ -71,7 +71,7 @@ MikroMCP exists because raw router CLI access is the wrong abstraction for AI ag
 
 ### MCP Inspector
 
-![The 88 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
+![The 99 registered MikroMCP tools with schemas](docs/assets/mcp-inspector-tools.png)
 
 ---
 
@@ -285,7 +285,7 @@ All settings can be placed in `~/.mikromcp/.env` or passed as environment variab
 
 ## Available Tools
 
-MikroMCP currently registers **88 MCP tools**.
+MikroMCP currently registers **99 MCP tools**.
 
 | Area                    | Tools                                                                                                                                                                                                     |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -422,7 +422,7 @@ AI assistants can use MikroMCP to:
 | [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration)                             | Router registry, credentials, all environment variables    |
 | [Connecting to Claude Desktop](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-Claude-Desktop) | Register MikroMCP in Claude Desktop                      |
 | [Connecting to AI Assistants](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-AI-Assistants) | Claude Code, Cursor, Codex, HTTP/Docker/systemd            |
-| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 88 tools — parameters and example prompts              |
+| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 99 tools — parameters and example prompts              |
 | [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers, request pipeline, auth model                |
 | [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling)                           | Error categories, retry engine, circuit breaker            |
 | [Running](https://github.com/AliKarami/MikroMCP/wiki/Running)                                         | Run commands, HTTP transport, troubleshooting              |

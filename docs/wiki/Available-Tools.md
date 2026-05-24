@@ -1,6 +1,6 @@
 # Available Tools
 
-All 82 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
+All 99 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -109,6 +109,65 @@ Enable or disable a RouterOS package. Changes take effect only after a router re
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Disable the `ipv6` package on edge-01, then reboot."
+
+---
+
+## Upgrade
+
+### `get_upgrade_status` — Read
+
+Check available RouterOS/firmware upgrades, current channel, and routerboard firmware versions.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+
+**Example prompt:** "Is there a RouterOS upgrade available for router core-sw?"
+
+---
+
+### `manage_upgrade` — Destructive
+
+Trigger a RouterOS package update check or start an upgrade installation. The `install` action causes a router reboot.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `action` | enum | — | `check` (non-destructive) or `install` (destructive, reboots) |
+| `dryRun` | boolean | false | Preview without executing |
+
+**Example prompt:** "Check for RouterOS upgrades on router border-r1, then install if a newer version is available"
+
+---
+
+## Backup & Config Export
+
+### `create_backup` — Write
+
+Create a binary RouterOS configuration backup file on the router filesystem. Optionally encrypt with a password.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `name` | string | `backup` | Backup file name (without .backup extension) |
+| `password` | string | — | Optional encryption password |
+| `dryRun` | boolean | false | Preview without creating |
+
+**Example prompt:** "Create an encrypted backup named 'pre-upgrade' on router home-gw"
+
+---
+
+### `export_config` — Read
+
+Export the running RouterOS configuration as a RouterOS script (equivalent to `/export`). Returns the full config text inline, or saves to a router file.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `compact` | boolean | false | Export only non-default settings |
+| `file` | string | — | Save to a router file instead of returning inline (filename without extension) |
+
+**Example prompt:** "Export the full running config from router core-sw as a script"
 
 ---
 
@@ -1175,6 +1234,38 @@ Add, remove, enable, disable, or change the password of a RouterOS user account.
 
 ---
 
+## User Groups
+
+### `list_user_groups` — Read
+
+List local user groups on a MikroTik router with their policy bitmask.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `limit` | number | 100 | Maximum groups to return (1–500) |
+
+**Example prompt:** "List all user groups on router home-gw"
+
+---
+
+### `manage_user_group` — Write
+
+Add, update, or remove a RouterOS user group. Idempotent by name. `update` changes the policy string; returns `no_change` if unchanged.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `action` | enum | — | `add`, `update`, or `remove` |
+| `name` | string | — | Group name (idempotency key) |
+| `policy` | string | — | Comma-separated policy list (e.g. `read,write,ftp`). Required for `add`. |
+| `skin` | string | — | Winbox skin (optional) |
+| `dryRun` | boolean | false | Preview without applying |
+
+**Example prompt:** "Add a user group named 'ops' with read and write policies on router home-gw"
+
+---
+
 ## Queues / QoS
 
 ### `list_queues` — Read
@@ -1269,6 +1360,23 @@ Read NTP client configuration: enabled state, primary and secondary server addre
 | `routerId` | string | — | Target router |
 
 **Example prompt:** "What NTP servers is edge-01 using?"
+
+---
+
+### `manage_ntp_client` — Write
+
+Configure the RouterOS NTP client: enable/disable, set server addresses, mode, and optional VLAN source interface. Idempotent — no-op when values already match. Complements `get_ntp_settings`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `enabled` | boolean | — | Enable or disable the NTP client |
+| `mode` | enum | — | `unicast`, `broadcast`, `multicast`, or `manycast` |
+| `servers` | string | — | Comma-separated NTP server addresses or hostnames |
+| `vlanInterface` | string | — | Source VLAN interface for NTP packets |
+| `dryRun` | boolean | false | Preview without applying |
+
+**Example prompt:** "Set the NTP servers to pool.ntp.org on router home-gw and enable the client"
 
 ---
 
@@ -1410,6 +1518,73 @@ Read and filter the system log. Client-side filtering by topic, message prefix, 
 | `sinceMinutes` | integer | — | Only return entries from the last N minutes (1–1440) |
 
 **Example prompt:** "Show me firewall log entries from the last 30 minutes on core-01."
+
+---
+
+## Log Rules & Actions
+
+### `list_log_rules` — Read
+
+List RouterOS system logging rules with topics, action target, and enabled status.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `topics` | string | — | Filter by topics (substring match) |
+| `logAction` | string | — | Filter by action name (exact match) |
+| `limit` | number | 100 | Maximum rules to return (1–500) |
+
+**Example prompt:** "Show all log rules that send to disk on router home-gw"
+
+---
+
+### `manage_log_rule` — Write
+
+Add, remove, enable, or disable a RouterOS system logging rule. Idempotent by topics+action composite key.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `action` | enum | — | `add`, `remove`, `enable`, or `disable` |
+| `topics` | string | — | Log topics (e.g. `firewall`, `system,!debug`) |
+| `logAction` | string | — | Log action name to route to (e.g. `memory`, `disk`) |
+| `prefix` | string | — | Optional log entry prefix |
+| `dryRun` | boolean | false | Preview without applying |
+
+**Example prompt:** "Add a log rule to send firewall topics to the remote syslog action on router edge-r1"
+
+---
+
+### `list_log_actions` — Read
+
+List RouterOS log action targets (memory, disk, remote syslog, etc.).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `type` | enum | — | Filter by type: `memory`, `disk`, `remote`, `echo`, `email` |
+| `limit` | number | 100 | Maximum actions to return (1–500) |
+
+**Example prompt:** "List all remote syslog action targets on router home-gw"
+
+---
+
+### `manage_log_action` — Write
+
+Add or remove a RouterOS log action target. Idempotent by name. `type` is required when adding.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router identifier |
+| `action` | enum | — | `add` or `remove` |
+| `name` | string | — | Action name (idempotency key) |
+| `type` | enum | — | Action type (required for add): `memory`, `disk`, `remote`, `echo`, `email` |
+| `remote` | string | — | Remote syslog server IP (for `type=remote`) |
+| `remotePort` | number | — | Remote syslog UDP port (default 514) |
+| `diskFileName` | string | — | Disk log file name (for `type=disk`) |
+| `dryRun` | boolean | false | Preview without applying |
+
+**Example prompt:** "Add a remote syslog action named 'central-syslog' pointing to 10.0.0.50 on router home-gw"
 
 ---
 

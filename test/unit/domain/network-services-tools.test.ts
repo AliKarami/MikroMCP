@@ -55,7 +55,7 @@ const [
 
 describe("networkServicesTools", () => {
   describe("metadata", () => {
-    it("exports 6 tools", () => expect(networkServicesTools).toHaveLength(6));
+    it("exports 7 tools", () => expect(networkServicesTools).toHaveLength(7));
 
     it("has correct tool names", () => {
       expect(getSnmpSettingsTool.name).toBe("get_snmp_settings");
@@ -481,6 +481,125 @@ describe("networkServicesTools", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.neighbors as unknown[]).length).toBe(2);
       expect(sc.total).toBe(3);
+    });
+  });
+
+  describe("manage_ntp_client", () => {
+    const manageTool = networkServicesTools[6];
+
+    it("has correct name", () => expect(manageTool.name).toBe("manage_ntp_client"));
+    it("is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
+    it("is not destructive", () => expect(manageTool.annotations.destructiveHint).toBe(false));
+    it("is idempotent", () => expect(manageTool.annotations.idempotentHint).toBe(true));
+
+    describe("input schema", () => {
+      it("parses valid input with enabled only", () => {
+        expect(
+          manageTool.inputSchema.safeParse({ routerId: "r1", enabled: true }).success,
+        ).toBe(true);
+      });
+      it("dryRun defaults to false", () => {
+        expect(manageTool.inputSchema.parse({ routerId: "r1", enabled: true }).dryRun).toBe(false);
+      });
+      it("rejects extra fields", () => {
+        expect(
+          manageTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success,
+        ).toBe(false);
+      });
+      it("rejects invalid mode", () => {
+        expect(
+          manageTool.inputSchema.safeParse({ routerId: "r1", mode: "foobar" }).success,
+        ).toBe(false);
+      });
+      it("validates mode enum", () => {
+        expect(
+          manageTool.inputSchema.safeParse({ routerId: "r1", mode: "unicast" }).success,
+        ).toBe(true);
+      });
+    });
+
+    function makeNtpContext(
+      current: Record<string, unknown> = {
+        ".id": "*1",
+        enabled: "true",
+        mode: "unicast",
+        servers: "pool.ntp.org",
+      },
+    ): ToolContext {
+      return {
+        routerId: "test-router",
+        correlationId: "test-corr",
+        routerConfig: makeRouterConfig(),
+        sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
+        ftpClient: {
+          upload: vi.fn().mockResolvedValue(undefined),
+          connect: vi.fn().mockResolvedValue(undefined),
+        } as unknown as FtpClient,
+        identity: {
+          id: "superadmin-builtin",
+          name: "admin",
+          role: "superadmin",
+          allowedRouters: ["*"],
+          allowedToolPatterns: ["*"],
+        } as unknown as ToolContext["identity"],
+        routerClient: {
+          get: vi.fn().mockResolvedValue([current]),
+          update: vi.fn().mockResolvedValue(undefined),
+        } as unknown as RouterOSRestClient,
+      };
+    }
+
+    it("returns already_set when no changes needed", async () => {
+      const ctx = makeNtpContext({
+        ".id": "*1",
+        enabled: "true",
+        mode: "unicast",
+        servers: "pool.ntp.org",
+      });
+      const result = await manageTool.handler(
+        { routerId: "test-router", enabled: true, mode: "unicast", servers: "pool.ntp.org" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_set");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("updates enabled field", async () => {
+      const ctx = makeNtpContext({ ".id": "*1", enabled: "true", mode: "unicast" });
+      const result = await manageTool.handler(
+        { routerId: "test-router", enabled: false },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith(
+        "system/ntp/client",
+        "*1",
+        expect.objectContaining({ enabled: "false" }),
+      );
+    });
+
+    it("updates servers field", async () => {
+      const ctx = makeNtpContext({ ".id": "*1", enabled: "true", servers: "old.ntp.org" });
+      const result = await manageTool.handler(
+        { routerId: "test-router", servers: "0.pool.ntp.org,1.pool.ntp.org" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith(
+        "system/ntp/client",
+        "*1",
+        expect.objectContaining({ servers: "0.pool.ntp.org,1.pool.ntp.org" }),
+      );
+    });
+
+    it("dry_run returns preview without calling update", async () => {
+      const ctx = makeNtpContext({ ".id": "*1", enabled: "true" });
+      const result = await manageTool.handler(
+        { routerId: "test-router", enabled: false, dryRun: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
     });
   });
 
