@@ -280,6 +280,7 @@ const manageWgIfaceTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  snapshotPaths: ["interface/wireguard"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageWgIfaceInputSchema.parse(params);
     log.info(

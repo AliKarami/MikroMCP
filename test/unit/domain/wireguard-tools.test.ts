@@ -123,6 +123,14 @@ describe("manage_wireguard_interface", () => {
       expect((result.structuredContent as Record<string, unknown>).action).toBe("disabled");
       expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/wireguard", "*1", { disabled: "true" });
     });
+
+    it("enables an interface", async () => {
+      const disabledIface = { ...WG_IFACE, disabled: "true" };
+      const ctx = makeWgIfaceContext([disabledIface]);
+      const result = await manageWgIfaceTool.handler({ routerId: "test-router", action: "enable", name: "wg0" }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("enabled");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/wireguard", "*1", { disabled: "false" });
+    });
   });
 });
 
