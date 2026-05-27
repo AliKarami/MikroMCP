@@ -45,6 +45,13 @@ describe("networkTestTools", () => {
       expect(fetchUrlTool.annotations.destructiveHint).toBe(false);
       expect(listConnectionsTool.annotations.destructiveHint).toBe(false);
     });
+    it("bandwidth_test and fetch_url are not idempotent", () => {
+      expect(bandwidthTestTool.annotations.idempotentHint).toBe(false);
+      expect(fetchUrlTool.annotations.idempotentHint).toBe(false);
+    });
+    it("list_connections is idempotent", () => {
+      expect(listConnectionsTool.annotations.idempotentHint).toBe(true);
+    });
   });
 
   describe("bandwidth_test input schema", () => {
@@ -63,6 +70,7 @@ describe("networkTestTools", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.txMbps).toBeDefined();
       expect(sc.rxMbps).toBeDefined();
+      expect(sc.lostPackets).toBe("0");
       expect(ctx.routerClient.execute).toHaveBeenCalledWith(
         "tool/bandwidth-test",
         expect.objectContaining({ address: "10.0.0.2", protocol: "tcp", direction: "both" }),
@@ -101,6 +109,10 @@ describe("networkTestTools", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.outputFile).toBe("flash/response.txt");
       expect(sc.body).toBeUndefined();
+      expect(ctx.routerClient.execute).toHaveBeenCalledWith(
+        "tool/fetch",
+        expect.objectContaining({ output: "flash/response.txt" }),
+      );
     });
 
     it("truncates body over 64KB", async () => {
