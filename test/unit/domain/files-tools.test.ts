@@ -73,8 +73,8 @@ describe("files tools", () => {
   });
 
   describe("metadata", () => {
-    it("exports 3 tools", () => {
-      expect(filesTools).toHaveLength(3);
+    it("exports 4 tools", () => {
+      expect(filesTools).toHaveLength(4);
       expect(listFilesTool.name).toBe("list_files");
       expect(getFileContentTool.name).toBe("get_file_content");
       expect(uploadFileTool.name).toBe("upload_file");
@@ -205,6 +205,78 @@ describe("files tools", () => {
       await expect(
         uploadFileTool.handler({ routerId: "test-router", name: "test.rsc", content: "x" }, ctx),
       ).rejects.toMatchObject({ code: "FTP_SERVICE_UNAVAILABLE" });
+    });
+  });
+});
+
+describe("delete_file", () => {
+  const deleteFileTool = filesTools.find((t) => t.name === "delete_file")!;
+
+  const FILE_RECORD = { ".id": "*A", name: "flash/my-backup.backup", type: "backup", size: "1024" };
+
+  function makeDeleteContext(files: Record<string, unknown>[] = [FILE_RECORD]) {
+    return {
+      routerId: "test-router",
+      correlationId: "test-corr",
+      routerConfig: {} as RouterConfig,
+      sshClient: {} as SshClient,
+      ftpClient: {} as FtpClient,
+      identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+      routerClient: {
+        get: vi.fn().mockResolvedValue(files),
+        remove: vi.fn().mockResolvedValue(undefined),
+      } as unknown as RouterOSRestClient,
+    } as unknown as ToolContext;
+  }
+
+  describe("metadata", () => {
+    it("exists in filesTools", () => expect(deleteFileTool).toBeDefined());
+    it("is not readOnly", () => expect(deleteFileTool.annotations.readOnlyHint).toBe(false));
+    it("is not destructive", () => expect(deleteFileTool.annotations.destructiveHint).toBe(false));
+    it("is idempotent", () => expect(deleteFileTool.annotations.idempotentHint).toBe(true));
+  });
+
+  describe("input schema", () => {
+    it("requires name", () => {
+      expect(deleteFileTool.inputSchema.safeParse({ routerId: "r1" }).success).toBe(false);
+    });
+    it("dryRun defaults false", () => {
+      expect(deleteFileTool.inputSchema.parse({ routerId: "r1", name: "f.txt" }).dryRun).toBe(false);
+    });
+    it("rejects extra fields", () => {
+      expect(deleteFileTool.inputSchema.safeParse({ routerId: "r1", name: "f.txt", extra: true }).success).toBe(false);
+    });
+  });
+
+  describe("handler", () => {
+    it("deletes file when found", async () => {
+      const ctx = makeDeleteContext();
+      const result = await deleteFileTool.handler({ routerId: "test-router", name: "flash/my-backup.backup" }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("deleted");
+      expect(ctx.routerClient.remove).toHaveBeenCalledWith("file", "*A");
+    });
+
+    it("returns not_found gracefully when file missing", async () => {
+      const ctx = makeDeleteContext([]);
+      const result = await deleteFileTool.handler({ routerId: "test-router", name: "missing.rsc" }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("not_found");
+      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
+    });
+
+    it("dry_run returns preview without calling remove", async () => {
+      const ctx = makeDeleteContext();
+      const result = await deleteFileTool.handler(
+        { routerId: "test-router", name: "flash/my-backup.backup", dryRun: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
+    });
+
+    it("propagates network errors", async () => {
+      const ctx = makeDeleteContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("net"));
+      await expect(deleteFileTool.handler({ routerId: "test-router", name: "f.txt" }, ctx)).rejects.toThrow();
     });
   });
 });
