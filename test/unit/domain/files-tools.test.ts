@@ -232,7 +232,7 @@ describe("delete_file", () => {
   describe("metadata", () => {
     it("exists in filesTools", () => expect(deleteFileTool).toBeDefined());
     it("is not readOnly", () => expect(deleteFileTool.annotations.readOnlyHint).toBe(false));
-    it("is not destructive", () => expect(deleteFileTool.annotations.destructiveHint).toBe(false));
+    it("is destructive", () => expect(deleteFileTool.annotations.destructiveHint).toBe(true));
     it("is idempotent", () => expect(deleteFileTool.annotations.idempotentHint).toBe(true));
   });
 

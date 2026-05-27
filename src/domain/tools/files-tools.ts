@@ -202,7 +202,7 @@ const deleteFileTool: ToolDefinition = {
   inputSchema: deleteFileInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
