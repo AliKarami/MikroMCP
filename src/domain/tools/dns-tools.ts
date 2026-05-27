@@ -278,4 +278,96 @@ const getDnsSettingsTool: ToolDefinition = {
   },
 };
 
-export const dnsTools: ToolDefinition[] = [listDnsTool, manageDnsTool, getDnsSettingsTool];
+const manageDnsSettingsInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    servers: z.string().optional().describe("Comma-separated upstream DNS server IPs (e.g. '8.8.8.8,1.1.1.1')"),
+    allowRemoteRequests: z.boolean().optional().describe("Allow router to answer DNS queries from the network"),
+    maxUdpPacketSize: z.number().int().min(512).max(65535).optional().describe("Maximum UDP packet size in bytes"),
+    cacheMaxTtl: z.string().optional().describe("Maximum cache TTL (e.g. '1d', '00:30:00')"),
+    cacheSize: z.number().int().min(1).optional().describe("DNS cache size in KiB"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
+
+const manageDnsSettingsTool: ToolDefinition = {
+  name: "manage_dns_settings",
+  title: "Manage DNS Settings",
+  description:
+    "Update DNS resolver settings (upstream servers, cache size, cache TTL, allow-remote-requests). Idempotent: returns no_change if nothing differs.",
+  inputSchema: manageDnsSettingsInputSchema,
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  snapshotPaths: ["ip/dns"],
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = manageDnsSettingsInputSchema.parse(params);
+    log.info({ routerId: context.routerId }, "Managing DNS settings");
+    try {
+      const results = await context.routerClient.get<RouterOSRecord>("ip/dns");
+      const current = (Array.isArray(results) && results.length > 0 ? results[0] : results) as Record<string, string>;
+      const id = current[".id"];
+
+      const changes: Record<string, string> = {};
+      const diff: { property: string; before: string | null; after: string }[] = [];
+
+      if (parsed.servers !== undefined && current.servers !== parsed.servers) {
+        changes.servers = parsed.servers;
+        diff.push({ property: "servers", before: current.servers ?? null, after: parsed.servers });
+      }
+      if (parsed.allowRemoteRequests !== undefined) {
+        const next = String(parsed.allowRemoteRequests);
+        if (current["allow-remote-requests"] !== next) {
+          changes["allow-remote-requests"] = next;
+          diff.push({ property: "allow-remote-requests", before: current["allow-remote-requests"] ?? null, after: next });
+        }
+      }
+      if (parsed.maxUdpPacketSize !== undefined) {
+        const next = String(parsed.maxUdpPacketSize);
+        if (current["max-udp-packet-size"] !== next) {
+          changes["max-udp-packet-size"] = next;
+          diff.push({ property: "max-udp-packet-size", before: current["max-udp-packet-size"] ?? null, after: next });
+        }
+      }
+      if (parsed.cacheMaxTtl !== undefined && current["cache-max-ttl"] !== parsed.cacheMaxTtl) {
+        changes["cache-max-ttl"] = parsed.cacheMaxTtl;
+        diff.push({ property: "cache-max-ttl", before: current["cache-max-ttl"] ?? null, after: parsed.cacheMaxTtl });
+      }
+      if (parsed.cacheSize !== undefined) {
+        const next = String(parsed.cacheSize);
+        if (current["cache-size"] !== next) {
+          changes["cache-size"] = next;
+          diff.push({ property: "cache-size", before: current["cache-size"] ?? null, after: next });
+        }
+      }
+
+      if (Object.keys(changes).length === 0) {
+        return {
+          content: "DNS settings already match requested values. No changes made.",
+          structuredContent: { action: "no_change", routerId: context.routerId },
+        };
+      }
+
+      if (parsed.dryRun) {
+        return {
+          content: `Dry run: Would update DNS settings on ${context.routerId}.`,
+          structuredContent: { action: "dry_run", diff },
+        };
+      }
+
+      await context.routerClient.update("ip/dns", id, changes);
+      log.info({ routerId: context.routerId, changes: Object.keys(changes) }, "DNS settings updated");
+      return {
+        content: `Updated DNS settings on ${context.routerId}.`,
+        structuredContent: { action: "updated", routerId: context.routerId, diff },
+      };
+    } catch (err) {
+      throw enrichError(err, { routerId: context.routerId, tool: "manage_dns_settings" });
+    }
+  },
+};
+
+export const dnsTools: ToolDefinition[] = [listDnsTool, manageDnsTool, getDnsSettingsTool, manageDnsSettingsTool];
