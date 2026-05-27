@@ -99,7 +99,7 @@ describe("networkTestTools", () => {
       expect(sc.body).toBe("Hello World");
       expect(ctx.routerClient.execute).toHaveBeenCalledWith(
         "tool/fetch",
-        expect.objectContaining({ url: "http://example.com", "http-method": "GET" }),
+        expect.objectContaining({ url: "http://example.com", "http-method": "get" }),
       );
     });
 

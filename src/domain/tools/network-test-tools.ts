@@ -88,7 +88,7 @@ const fetchUrlTool: ToolDefinition = {
     const parsed = fetchUrlInputSchema.parse(params);
     log.info({ routerId: context.routerId, url: parsed.url, method: parsed.method }, "Fetching URL");
     try {
-      const body: Record<string, string> = { url: parsed.url, "http-method": parsed.method };
+      const body: Record<string, string> = { url: parsed.url, "http-method": parsed.method.toLowerCase() };
       if (parsed.httpData) body["http-data"] = parsed.httpData;
       if (parsed.outputFile) body.output = parsed.outputFile;
 
