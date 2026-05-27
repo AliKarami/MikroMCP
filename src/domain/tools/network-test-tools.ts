@@ -90,7 +90,12 @@ const fetchUrlTool: ToolDefinition = {
     try {
       const body: Record<string, string> = { url: parsed.url, "http-method": parsed.method.toLowerCase() };
       if (parsed.httpData) body["http-data"] = parsed.httpData;
-      if (parsed.outputFile) body.output = parsed.outputFile;
+      if (parsed.outputFile) {
+        body.output = "file";
+        body["dst-path"] = parsed.outputFile;
+      } else {
+        body.output = "user";
+      }
 
       const result = await context.routerClient.execute<Record<string, string>>("tool/fetch", body);
       const statusCode = result.status ?? null;

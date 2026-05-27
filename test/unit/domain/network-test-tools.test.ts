@@ -99,7 +99,7 @@ describe("networkTestTools", () => {
       expect(sc.body).toBe("Hello World");
       expect(ctx.routerClient.execute).toHaveBeenCalledWith(
         "tool/fetch",
-        expect.objectContaining({ url: "http://example.com", "http-method": "get" }),
+        expect.objectContaining({ url: "http://example.com", "http-method": "get", output: "user" }),
       );
     });
 
@@ -111,7 +111,7 @@ describe("networkTestTools", () => {
       expect(sc.body).toBeUndefined();
       expect(ctx.routerClient.execute).toHaveBeenCalledWith(
         "tool/fetch",
-        expect.objectContaining({ output: "flash/response.txt" }),
+        expect.objectContaining({ output: "file", "dst-path": "flash/response.txt" }),
       );
     });
 
