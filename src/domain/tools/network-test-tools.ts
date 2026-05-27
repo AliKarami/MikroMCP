@@ -97,8 +97,9 @@ const fetchUrlTool: ToolDefinition = {
         body.output = "user";
       }
 
-      const result = await context.routerClient.execute<Record<string, string>>("tool/fetch", body);
-      const statusCode = result.status ?? null;
+      const sections = await context.routerClient.execute<Record<string, string>[]>("tool/fetch", body);
+      const finished = sections.find((s) => s.status === "finished") ?? sections[sections.length - 1];
+      const statusCode = finished?.code ?? null;
 
       if (parsed.outputFile) {
         return {
@@ -107,7 +108,7 @@ const fetchUrlTool: ToolDefinition = {
         };
       }
 
-      let responseBody = result.data ?? "";
+      let responseBody = finished?.data ?? "";
       if (responseBody.length > BODY_CAP) {
         responseBody = responseBody.slice(0, BODY_CAP) + "[TRUNCATED]";
       }

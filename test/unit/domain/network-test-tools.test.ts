@@ -7,7 +7,10 @@ import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 
 const BW_RESULT = { "tx-current": "100000000", "rx-current": "50000000", "lost-packets": "0" };
-const FETCH_RESULT = { status: "200", data: "Hello World" };
+const FETCH_RESULT = [
+  { ".section": "0", status: "connecting" },
+  { ".section": "1", status: "finished", code: "200", data: "Hello World", downloaded: "1", total: "1", duration: "0s" },
+];
 const CONN1 = { ".id": "*1", "src-address": "10.0.0.1:12345", "dst-address": "8.8.8.8:443", protocol: "tcp" };
 
 function makeContext(executeResult: unknown = {}, getResult: unknown[] = []) {
@@ -104,7 +107,7 @@ describe("networkTestTools", () => {
     });
 
     it("returns outputFile path instead of body when outputFile provided", async () => {
-      const ctx = makeContext({ status: "200" });
+      const ctx = makeContext([{ ".section": "0", status: "finished", code: "200" }]);
       const result = await fetchUrlTool.handler({ routerId: "test-router", url: "http://example.com", outputFile: "flash/response.txt" }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.outputFile).toBe("flash/response.txt");
@@ -117,7 +120,7 @@ describe("networkTestTools", () => {
 
     it("truncates body over 64KB", async () => {
       const bigBody = "x".repeat(70000);
-      const ctx = makeContext({ status: "200", data: bigBody });
+      const ctx = makeContext([{ ".section": "0", status: "finished", code: "200", data: bigBody }]);
       const result = await fetchUrlTool.handler({ routerId: "test-router", url: "http://example.com" }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.body as string).length).toBeLessThanOrEqual(65537 + 15);
