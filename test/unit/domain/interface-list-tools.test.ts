@@ -53,6 +53,16 @@ describe("interfaceListTools", () => {
       expect(manageListTool.annotations.destructiveHint).toBe(false);
       expect(manageMemberTool.annotations.destructiveHint).toBe(false);
     });
+    it("all tools are idempotent", () => {
+      expect(listListsTool.annotations.idempotentHint).toBe(true);
+      expect(manageListTool.annotations.idempotentHint).toBe(true);
+      expect(manageMemberTool.annotations.idempotentHint).toBe(true);
+    });
+    it("none are openWorld", () => {
+      expect(listListsTool.annotations.openWorldHint).toBe(false);
+      expect(manageListTool.annotations.openWorldHint).toBe(false);
+      expect(manageMemberTool.annotations.openWorldHint).toBe(false);
+    });
   });
 
   describe("list_interface_lists", () => {
@@ -111,6 +121,15 @@ describe("interfaceListTools", () => {
     it("rejects invalid action", () => {
       expect(manageListTool.inputSchema.safeParse({ routerId: "r1", action: "enable", name: "WAN" }).success).toBe(false);
     });
+    it("rejects extra fields", () => {
+      expect(manageListTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "WAN", extra: true }).success).toBe(false);
+    });
+    it("dry_run on remove returns preview without deleting", async () => {
+      const ctx = makeContext([LIST1]);
+      const result = await manageListTool.handler({ routerId: "test-router", action: "remove", name: "WAN", dryRun: true }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
+    });
   });
 
   describe("manage_interface_list_member", () => {
@@ -150,6 +169,12 @@ describe("interfaceListTools", () => {
 
     it("rejects extra fields", () => {
       expect(manageMemberTool.inputSchema.safeParse({ routerId: "r1", action: "add", list: "WAN", interface: "ether1", extra: true }).success).toBe(false);
+    });
+    it("dry_run on remove returns preview without deleting", async () => {
+      const ctx = makeContext([], [MEMBER1]);
+      const result = await manageMemberTool.handler({ routerId: "test-router", action: "remove", list: "WAN", interface: "ether1", dryRun: true }, ctx);
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
     });
   });
 });

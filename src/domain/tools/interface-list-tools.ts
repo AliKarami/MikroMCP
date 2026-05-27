@@ -34,6 +34,7 @@ const listInterfaceListsTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, lists, total: all.length, returned: lists.length },
       };
     } catch (err) {
+      if (err instanceof MikroMCPError) throw err;
       throw enrichError(err, { routerId: context.routerId, tool: "list_interface_lists" });
     }
   },
