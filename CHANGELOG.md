@@ -30,6 +30,11 @@ Each release section covers changes **since the previous release only**.
 - `list_ppp_profiles` tool — list PPP profiles including built-in defaults
 - `manage_ppp_profile` tool — add/update/remove PPP profiles
 
+### Fixed
+- `fetch_url` — RouterOS requires `http-method` in lowercase; uppercase values (`GET`/`POST`) were rejected with HTTP 400
+- `fetch_url` — added `output=user` for inline body response; fixed file-save mode to use `output=file` + `dst-path` (was incorrectly setting `output=<filepath>`)
+- `fetch_url` — RouterOS `/tool/fetch` returns a streaming array of progress sections; handler now finds the `finished` section and reads `code` (HTTP status) and `data` (body) from it
+
 ---
 
 ## [1.4.0] - 2026-05-24
