@@ -10,6 +10,10 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+---
+
+## [1.5.0] - 2026-05-28
+
 ### Added
 - `manage_dns_settings` tool — write upstream servers, cache TTL, allow-remote-requests
 - `delete_file` tool — delete a file from the router filesystem by name

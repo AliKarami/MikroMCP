@@ -94,6 +94,30 @@ Improvements: `list_dhcp_leases` gains `leaseType` filter; `list_dhcp_servers` g
 
 ---
 
+## ✅ v1.4 — System Administration Depth
+
+`list_user_groups`, `manage_user_group` — local user group management with policy bitmask.
+`get_upgrade_status`, `manage_upgrade` — RouterOS upgrade check and install.
+`create_backup`, `export_config` — binary backup and text config export.
+`list_log_rules`, `manage_log_rule`, `list_log_actions`, `manage_log_action` — system logging configuration.
+`manage_ntp_client` — NTP client configuration (complements `get_ntp_settings`).
+
+---
+
+## ✅ v1.5 — Container Depth & Diagnostics
+
+`get_container_config`, `manage_container_config` — global container settings (registry, RAM, veth).
+`list_container_envs`, `manage_container_env` — container environment variables.
+`list_container_mounts`, `manage_container_mount` — container volume mounts.
+`bandwidth_test`, `fetch_url`, `list_connections` — network diagnostic tools.
+`list_interface_lists`, `manage_interface_list`, `manage_interface_list_member` — interface list management.
+`list_ppp_profiles`, `manage_ppp_profile` — PPP profile management.
+`delete_file` — delete router filesystem files.
+`manage_dns_settings` — write DNS upstream servers, cache TTL, and allow-remote-requests.
+`manage_ipsec_policy`, `manage_wireguard_interface` — IPSec policy and WireGuard interface management.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
