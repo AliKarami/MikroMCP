@@ -38,6 +38,7 @@ import { ovpnTools } from "./ovpn-tools.js";
 import { upgradeTools } from "./upgrade-tools.js";
 import { backupTools } from "./backup-tools.js";
 import { logTools } from "./log-tools.js";
+import { networkTestTools } from "./network-test-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -79,6 +80,7 @@ const baseTools: ToolDefinition[] = [
   ...upgradeTools,
   ...backupTools,
   ...logTools,
+  ...networkTestTools,
 ];
 
 export const allTools: ToolDefinition[] = [
