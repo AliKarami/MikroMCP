@@ -63,6 +63,40 @@ describe("containerConfigTools", () => {
     });
   });
 
+  describe("input schemas", () => {
+    it("get_container_config rejects extra fields", () => {
+      expect(getConfigTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false);
+    });
+
+    it("manage_container_config rejects extra fields", () => {
+      expect(manageConfigTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false);
+    });
+
+    it("manage_container_config dryRun defaults false", () => {
+      expect(manageConfigTool.inputSchema.parse({ routerId: "r1" }).dryRun).toBe(false);
+    });
+
+    it("list_container_envs applies default limit 100", () => {
+      expect(listEnvsTool.inputSchema.parse({ routerId: "r1" }).limit).toBe(100);
+    });
+
+    it("list_container_envs rejects limit out of range", () => {
+      expect(listEnvsTool.inputSchema.safeParse({ routerId: "r1", limit: 0 }).success).toBe(false);
+    });
+
+    it("manage_container_env rejects extra fields", () => {
+      expect(manageEnvTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "x", key: "K", extra: true }).success).toBe(false);
+    });
+
+    it("manage_container_env dryRun defaults false", () => {
+      expect(manageEnvTool.inputSchema.parse({ routerId: "r1", action: "add", name: "x", key: "K" }).dryRun).toBe(false);
+    });
+
+    it("manage_container_mount rejects extra fields", () => {
+      expect(manageMountTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "m", extra: true }).success).toBe(false);
+    });
+  });
+
   describe("get_container_config", () => {
     it("returns config fields", async () => {
       const ctx = makeContext();

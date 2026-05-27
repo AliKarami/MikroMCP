@@ -218,7 +218,7 @@ const manageContainerEnvTool: ToolDefinition = {
             },
           });
         }
-        if (!parsed.value) {
+        if (parsed.value === undefined) {
           throw new MikroMCPError({
             category: ErrorCategory.VALIDATION,
             code: "ENV_VALUE_REQUIRED",
