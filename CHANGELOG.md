@@ -10,6 +10,26 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- `manage_dns_settings` tool — write upstream servers, cache TTL, allow-remote-requests
+- `delete_file` tool — delete a file from the router filesystem by name
+- `manage_ipsec_policy` tool — add/remove/enable/disable IPSec policies
+- `manage_wireguard_interface` tool — add/remove/enable/disable WireGuard interfaces
+- `get_container_config` tool — read global container registry/RAM/veth config
+- `manage_container_config` tool — write global container config settings
+- `list_container_envs` tool — list container environment variable entries
+- `manage_container_env` tool — add/remove container environment variables
+- `list_container_mounts` tool — list container volume mount definitions
+- `manage_container_mount` tool — add/remove container volume mounts
+- `bandwidth_test` tool — run RouterOS bandwidth test to a remote btest server
+- `fetch_url` tool — send HTTP/HTTPS request from the router using /tool/fetch
+- `list_connections` tool — list active firewall connection tracking entries
+- `list_interface_lists` tool — list all interface lists
+- `manage_interface_list` tool — add/remove interface lists
+- `manage_interface_list_member` tool — add/remove interfaces from interface lists
+- `list_ppp_profiles` tool — list PPP profiles including built-in defaults
+- `manage_ppp_profile` tool — add/update/remove PPP profiles
+
 ---
 
 ## [1.4.0] - 2026-05-24
