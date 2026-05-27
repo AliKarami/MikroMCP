@@ -23,8 +23,8 @@ const listPppProfilesTool: ToolDefinition = {
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listPppProfilesInputSchema.parse(params);
-    log.info({ routerId: context.routerId }, "Listing PPP profiles");
     try {
+      log.info({ routerId: context.routerId }, "Listing PPP profiles");
       const all = await context.routerClient.get<RouterOSRecord>("ppp/profile", { limit: undefined, offset: undefined });
       const filtered = parsed.name
         ? (all as Record<string, string>[]).filter((p) => p.name === parsed.name)
@@ -79,9 +79,18 @@ const managePppProfileTool: ToolDefinition = {
           };
         }
         if (parsed.dryRun) {
+          const diff: { property: string; before: null; after: string }[] = [
+            { property: "name", before: null, after: parsed.name },
+          ];
+          if (parsed.localAddress) diff.push({ property: "local-address", before: null, after: parsed.localAddress });
+          if (parsed.remoteAddress) diff.push({ property: "remote-address", before: null, after: parsed.remoteAddress });
+          if (parsed.dnsServer) diff.push({ property: "dns-server", before: null, after: parsed.dnsServer });
+          if (parsed.rateLimit) diff.push({ property: "rate-limit", before: null, after: parsed.rateLimit });
+          if (parsed.sessionTimeout) diff.push({ property: "session-timeout", before: null, after: parsed.sessionTimeout });
+          if (parsed.comment) diff.push({ property: "comment", before: null, after: parsed.comment });
           return {
             content: `Dry run: Would create PPP profile "${parsed.name}".`,
-            structuredContent: { action: "dry_run", diff: [{ property: "name", before: null, after: parsed.name }] },
+            structuredContent: { action: "dry_run", diff },
           };
         }
         const body: Record<string, string> = { name: parsed.name };
@@ -105,6 +114,7 @@ const managePppProfileTool: ToolDefinition = {
             category: ErrorCategory.NOT_FOUND,
             code: "PPP_PROFILE_NOT_FOUND",
             message: `PPP profile "${parsed.name}" not found.`,
+            details: { name: parsed.name },
             recoverability: { retryable: false, suggestedAction: "Verify with list_ppp_profiles.", alternativeTools: ["list_ppp_profiles"] },
           });
         }

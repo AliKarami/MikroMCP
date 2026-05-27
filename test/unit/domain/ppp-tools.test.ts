@@ -103,8 +103,12 @@ describe("pppTools", () => {
 
     it("dry_run returns preview without create", async () => {
       const ctx = makeContext([]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "add", name: "broadband", dryRun: true }, ctx);
-      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      const result = await manageTool.handler({ routerId: "test-router", action: "add", name: "broadband", rateLimit: "10M/10M", dryRun: true }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("dry_run");
+      const diff = sc.diff as Array<{ property: string; before: null; after: string }>;
+      expect(diff.some((d) => d.property === "name")).toBe(true);
+      expect(diff.some((d) => d.property === "rate-limit" && d.after === "10M/10M")).toBe(true);
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
     });
   });
@@ -135,6 +139,16 @@ describe("pppTools", () => {
       const ctx = makeContext([PROFILE1]);
       const result = await manageTool.handler({ routerId: "test-router", action: "update", name: "broadband", rateLimit: "20M/20M", dryRun: true }, ctx);
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("dry_run returns diff without updating", async () => {
+      const ctx = makeContext([PROFILE1]);
+      const result = await manageTool.handler({ routerId: "test-router", action: "update", name: "broadband", rateLimit: "20M/20M", dryRun: true }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("dry_run");
+      const diff = sc.diff as Array<{ property: string; before: string; after: string }>;
+      expect(diff.some((d) => d.property === "rate-limit" && d.before === "10M/10M" && d.after === "20M/20M")).toBe(true);
       expect(ctx.routerClient.update).not.toHaveBeenCalled();
     });
   });
