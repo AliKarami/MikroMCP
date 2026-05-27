@@ -234,6 +234,7 @@ describe("delete_file", () => {
     it("is not readOnly", () => expect(deleteFileTool.annotations.readOnlyHint).toBe(false));
     it("is destructive", () => expect(deleteFileTool.annotations.destructiveHint).toBe(true));
     it("is idempotent", () => expect(deleteFileTool.annotations.idempotentHint).toBe(true));
+    it("requires confirmation for all roles", () => expect(deleteFileTool.requiresConfirmationForAll).toBe(true));
   });
 
   describe("input schema", () => {

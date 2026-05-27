@@ -45,8 +45,9 @@ export async function checkConfirmation(
   params: Record<string, unknown>,
   identity: Identity,
   secret: string,
+  forceAll = false,
 ): Promise<void> {
-  if (BYPASS_ROLES.includes(identity.role)) return;
+  if (!forceAll && BYPASS_ROLES.includes(identity.role)) return;
 
   evictExpired();
 
