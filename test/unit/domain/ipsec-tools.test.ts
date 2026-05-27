@@ -46,9 +46,140 @@ function makeContext(peers: Record<string, unknown>[] = []): ToolContext {
 
 const [listPeersTool, listPoliciesTool, managePeerTool] = ipsecTools;
 
+describe("manage_ipsec_policy", () => {
+  const managePolicyTool = ipsecTools.find((t) => t.name === "manage_ipsec_policy")!;
+
+  const POLICY = {
+    ".id": "*1",
+    "src-address": "10.0.0.0/24",
+    "dst-address": "192.168.1.0/24",
+    tunnel: "true",
+    action: "encrypt",
+    level: "require",
+    disabled: "false",
+  };
+
+  function makePolicyContext(policies: Record<string, unknown>[] = []) {
+    return {
+      routerId: "test-router",
+      correlationId: "test-corr",
+      routerConfig: {} as RouterConfig,
+      sshClient: {} as SshClient,
+      ftpClient: {} as FtpClient,
+      identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+      routerClient: {
+        get: vi.fn().mockResolvedValue(policies),
+        create: vi.fn().mockResolvedValue({ ".id": "*2" }),
+        update: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      } as unknown as RouterOSRestClient,
+    } as unknown as ToolContext;
+  }
+
+  describe("metadata", () => {
+    it("exists in ipsecTools", () => expect(managePolicyTool).toBeDefined());
+    it("is not readOnly", () => expect(managePolicyTool.annotations.readOnlyHint).toBe(false));
+    it("is not destructive", () => expect(managePolicyTool.annotations.destructiveHint).toBe(false));
+  });
+
+  describe("input schema", () => {
+    it("parses valid add input", () => {
+      expect(managePolicyTool.inputSchema.safeParse({
+        routerId: "r1", action: "add",
+        srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24", ipsecAction: "encrypt",
+      }).success).toBe(true);
+    });
+    it("tunnel defaults false", () => {
+      expect(managePolicyTool.inputSchema.parse({
+        routerId: "r1", action: "add",
+        srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24", ipsecAction: "encrypt",
+      }).tunnel).toBe(false);
+    });
+    it("rejects invalid action", () => {
+      expect(managePolicyTool.inputSchema.safeParse({ routerId: "r1", action: "update", srcAddress: "0.0.0.0/0", dstAddress: "0.0.0.0/0" }).success).toBe(false);
+    });
+    it("rejects extra fields", () => {
+      expect(managePolicyTool.inputSchema.safeParse({ routerId: "r1", action: "remove", srcAddress: "0.0.0.0/0", dstAddress: "0.0.0.0/0", extra: true }).success).toBe(false);
+    });
+  });
+
+  describe("handler — add", () => {
+    it("creates policy when not found", async () => {
+      const ctx = makePolicyContext([]);
+      const result = await managePolicyTool.handler(
+        { routerId: "test-router", action: "add", srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24", tunnel: true, ipsecAction: "encrypt" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
+      expect(ctx.routerClient.create).toHaveBeenCalledWith("ip/ipsec/policy", expect.objectContaining({ "src-address": "10.0.0.0/24", "dst-address": "192.168.1.0/24" }));
+    });
+
+    it("returns already_exists when policy matches", async () => {
+      const ctx = makePolicyContext([POLICY]);
+      const result = await managePolicyTool.handler(
+        { routerId: "test-router", action: "add", srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24", tunnel: true, ipsecAction: "encrypt" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+      expect(ctx.routerClient.create).not.toHaveBeenCalled();
+    });
+
+    it("dry_run returns preview without create", async () => {
+      const ctx = makePolicyContext([]);
+      const result = await managePolicyTool.handler(
+        { routerId: "test-router", action: "add", srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24", ipsecAction: "encrypt", dryRun: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ctx.routerClient.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("handler — remove", () => {
+    it("removes policy when found", async () => {
+      const ctx = makePolicyContext([POLICY]);
+      const result = await managePolicyTool.handler(
+        { routerId: "test-router", action: "remove", srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24", tunnel: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("removed");
+      expect(ctx.routerClient.remove).toHaveBeenCalledWith("ip/ipsec/policy", "*1");
+    });
+
+    it("returns not_found gracefully when already gone", async () => {
+      const ctx = makePolicyContext([]);
+      const result = await managePolicyTool.handler(
+        { routerId: "test-router", action: "remove", srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("not_found");
+    });
+  });
+
+  describe("handler — enable/disable", () => {
+    it("disables a policy", async () => {
+      const ctx = makePolicyContext([POLICY]);
+      const result = await managePolicyTool.handler(
+        { routerId: "test-router", action: "disable", srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24", tunnel: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("disabled");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/ipsec/policy", "*1", { disabled: "true" });
+    });
+
+    it("throws NOT_FOUND on enable/disable when missing", async () => {
+      const { ErrorCategory } = await import("../../../src/domain/errors/error-types.js");
+      const ctx = makePolicyContext([]);
+      await expect(
+        managePolicyTool.handler({ routerId: "test-router", action: "enable", srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24" }, ctx),
+      ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND });
+    });
+  });
+});
+
 describe("ipsecTools", () => {
   describe("metadata", () => {
-    it("exports 3 tools", () => expect(ipsecTools).toHaveLength(3));
+    it("exports 4 tools", () => expect(ipsecTools).toHaveLength(4));
 
     it("has correct tool names", () => {
       expect(listPeersTool.name).toBe("list_ipsec_peers");
