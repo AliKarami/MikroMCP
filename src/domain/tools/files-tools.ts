@@ -186,4 +186,78 @@ const uploadFileTool: ToolDefinition = {
   },
 };
 
-export const filesTools: ToolDefinition[] = [listFilesTool, getFileContentTool, uploadFileTool];
+const deleteFileInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    name: z.string().describe("Exact file name on the router (e.g. flash/backup.backup)"),
+    dryRun: z.boolean().default(false).describe("Preview deletion without removing the file"),
+  })
+  .strict();
+
+const deleteFileTool: ToolDefinition = {
+  name: "delete_file",
+  title: "Delete File",
+  description:
+    "Delete a file from the router filesystem by name. Idempotent: returns not_found gracefully if the file does not exist.",
+  inputSchema: deleteFileInputSchema,
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = deleteFileInputSchema.parse(params);
+    log.info({ routerId: context.routerId, name: parsed.name }, "Deleting file");
+    try {
+      const all = await context.routerClient.get<RouterOSRecord>(FILE_PATH, {
+        limit: undefined,
+        offset: undefined,
+      });
+      const file = all.find((f) => (f as Record<string, string>).name === parsed.name) as
+        | Record<string, string>
+        | undefined;
+
+      if (!file) {
+        return {
+          content: `File "${parsed.name}" not found on ${context.routerId}. Nothing to delete.`,
+          structuredContent: { action: "not_found", name: parsed.name, routerId: context.routerId },
+        };
+      }
+
+      if (parsed.dryRun) {
+        return {
+          content: `Dry run: Would delete "${parsed.name}" from ${context.routerId}.`,
+          structuredContent: {
+            action: "dry_run",
+            name: parsed.name,
+            id: file[".id"],
+            routerId: context.routerId,
+          },
+        };
+      }
+
+      await context.routerClient.remove(FILE_PATH, file[".id"]);
+      log.info({ name: parsed.name, id: file[".id"] }, "File deleted");
+      return {
+        content: `Deleted "${parsed.name}" from ${context.routerId}.`,
+        structuredContent: {
+          action: "deleted",
+          name: parsed.name,
+          id: file[".id"],
+          routerId: context.routerId,
+        },
+      };
+    } catch (err) {
+      if (err instanceof MikroMCPError) throw err;
+      throw enrichError(err, { routerId: context.routerId, tool: "delete_file" });
+    }
+  },
+};
+
+export const filesTools: ToolDefinition[] = [
+  listFilesTool,
+  getFileContentTool,
+  uploadFileTool,
+  deleteFileTool,
+];

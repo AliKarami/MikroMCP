@@ -237,7 +237,7 @@ OpenVPN server: `get_ovpn_server` (read singleton config), `manage_ovpn_server` 
 
 ---
 
-## 🔜 v1.5 — Container Depth & Diagnostics
+## ✅ v1.5 — Container Depth & Diagnostics (99 → 117 tools)
 
 **Goal:** Complete the container management surface with config/env/mount tooling, and add the bandwidth-test diagnostic that is missing from the current tool suite.
 

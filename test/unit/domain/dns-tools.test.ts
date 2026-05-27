@@ -39,7 +39,7 @@ const [listDnsTool, manageDnsTool, getDnsSettingsTool] = dnsTools;
 
 describe("dnsTools", () => {
   describe("metadata", () => {
-    it("exports 3 tools", () => expect(dnsTools).toHaveLength(3));
+    it("exports 4 tools", () => expect(dnsTools).toHaveLength(4));
     it("list_dns_entries is readOnly", () =>
       expect(listDnsTool.annotations.readOnlyHint).toBe(true));
     it("get_dns_settings is readOnly", () =>
@@ -119,6 +119,98 @@ describe("dnsTools", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("dry_run");
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("manage_dns_settings", () => {
+  const manageDnsSettingsTool = dnsTools.find((t) => t.name === "manage_dns_settings")!;
+
+  const CURRENT_SETTINGS = {
+    ".id": "*1",
+    servers: "8.8.8.8,8.8.4.4",
+    "allow-remote-requests": "false",
+    "max-udp-packet-size": "4096",
+    "cache-max-ttl": "1w",
+    "cache-size": "2048",
+  };
+
+  function makeSettingsContext(settings = CURRENT_SETTINGS) {
+    return {
+      routerId: "test-router",
+      correlationId: "test-corr",
+      routerConfig: {} as RouterConfig,
+      sshClient: {} as SshClient,
+      ftpClient: {} as FtpClient,
+      identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+      routerClient: {
+        get: vi.fn().mockResolvedValue([settings]),
+        update: vi.fn().mockResolvedValue(undefined),
+      } as unknown as RouterOSRestClient,
+    } as unknown as ToolContext;
+  }
+
+  describe("metadata", () => {
+    it("exists in dnsTools", () => expect(manageDnsSettingsTool).toBeDefined());
+    it("is not readOnly", () => expect(manageDnsSettingsTool.annotations.readOnlyHint).toBe(false));
+    it("is not destructive", () => expect(manageDnsSettingsTool.annotations.destructiveHint).toBe(false));
+    it("is idempotent", () => expect(manageDnsSettingsTool.annotations.idempotentHint).toBe(true));
+  });
+
+  describe("input schema", () => {
+    it("accepts minimal input", () => {
+      expect(manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1" }).success).toBe(true);
+    });
+    it("dryRun defaults false", () => {
+      expect(manageDnsSettingsTool.inputSchema.parse({ routerId: "r1" }).dryRun).toBe(false);
+    });
+    it("rejects extra fields", () => {
+      expect(manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false);
+    });
+    it("rejects maxUdpPacketSize out of range", () => {
+      expect(manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", maxUdpPacketSize: 100 }).success).toBe(false);
+    });
+  });
+
+  describe("handler", () => {
+    it("returns no_change when nothing differs", async () => {
+      const ctx = makeSettingsContext();
+      const result = await manageDnsSettingsTool.handler(
+        { routerId: "test-router", servers: "8.8.8.8,8.8.4.4" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("no_change");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("updates changed fields", async () => {
+      const ctx = makeSettingsContext();
+      const result = await manageDnsSettingsTool.handler(
+        { routerId: "test-router", servers: "1.1.1.1", allowRemoteRequests: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith(
+        "ip/dns",
+        "*1",
+        expect.objectContaining({ servers: "1.1.1.1", "allow-remote-requests": "true" }),
+      );
+    });
+
+    it("dry_run returns diff without calling update", async () => {
+      const ctx = makeSettingsContext();
+      const result = await manageDnsSettingsTool.handler(
+        { routerId: "test-router", servers: "1.1.1.1", dryRun: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("propagates network errors", async () => {
+      const ctx = makeSettingsContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("net"));
+      await expect(manageDnsSettingsTool.handler({ routerId: "test-router" }, ctx)).rejects.toThrow();
     });
   });
 });

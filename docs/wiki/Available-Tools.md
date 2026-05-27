@@ -1,6 +1,6 @@
 # Available Tools
 
-All 99 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
+All 117 tools exposed by MikroMCP. Every tool requires a `routerId` parameter (string) that matches an entry in your `config/routers.yaml`.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -1681,3 +1681,309 @@ Tokens expire after 5 minutes and are single-use. If the router set or params ch
 **Example prompt (non-destructive):** "Run `list_interfaces` on all routers tagged 'branch' and summarize the results."
 
 **Example prompt (destructive):** "Reboot all routers with tag 'maintenance-window'. First call `bulk_execute` with `toolName: reboot` to get a confirmation token, then re-submit with that token."
+
+---
+
+## DNS Settings
+
+### `manage_dns_settings` — Write · Idempotent
+
+Update DNS resolver settings. Idempotent — returns `no_change` if nothing differs.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `servers` | string | — | Comma-separated upstream DNS server IPs |
+| `allowRemoteRequests` | bool | — | Allow router to answer DNS queries from the network |
+| `maxUdpPacketSize` | int (512–65535) | — | Maximum UDP packet size in bytes |
+| `cacheMaxTtl` | string | — | Maximum cache TTL (e.g. `1d`) |
+| `cacheSize` | int | — | DNS cache size in KiB |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Set the DNS servers on router home-gw to 1.1.1.1 and 8.8.8.8"
+
+---
+
+## Files
+
+### `delete_file` — Write
+
+Delete a file from the router filesystem by name. Idempotent — returns `not_found` gracefully if the file does not exist.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `name` | string | — | Exact file name (e.g. `flash/backup.backup`) |
+| `dryRun` | boolean | `false` | Preview deletion without removing |
+
+**Example prompt:** "Delete flash/old-backup.backup from router branch-1"
+
+---
+
+## IPSec Policies
+
+### `manage_ipsec_policy` — Write · Idempotent
+
+Add, remove, enable, or disable an IPSec policy. Idempotent by composite key `srcAddress`+`dstAddress`+`tunnel`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add`\|`remove`\|`enable`\|`disable` | — | Action to perform |
+| `srcAddress` | string | — | Source CIDR |
+| `dstAddress` | string | — | Destination CIDR |
+| `tunnel` | bool | `false` | Tunnel mode (part of idempotency key) |
+| `ipsecAction` | `encrypt`\|`discard`\|`none` | — | IPSec action (required for add) |
+| `level` | `require`\|`use`\|`unique` | `require` | SA level |
+| `saSourceAddress` | string | — | SA source IP for tunnel mode |
+| `saDstAddress` | string | — | SA destination IP for tunnel mode |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Add an IPSec encrypt policy from 10.0.0.0/24 to 192.168.1.0/24 in tunnel mode on router vpn-hub"
+
+---
+
+## WireGuard Interfaces
+
+### `manage_wireguard_interface` — Write · Idempotent
+
+Add, remove, enable, or disable a WireGuard interface. Idempotent by name. RouterOS generates the private key on create — it is never passed in. The public key is returned after creation.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add`\|`remove`\|`enable`\|`disable` | — | Action to perform |
+| `name` | string | — | Interface name (idempotency key) |
+| `listenPort` | int (1–65535) | — | UDP listen port (RouterOS picks one if omitted) |
+| `mtu` | int (1280–65535) | `1420` | MTU |
+| `comment` | string | — | Optional comment |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Create a new WireGuard interface named wg1 listening on port 51821 on router vpn-hub"
+
+---
+
+## Container Configuration
+
+### `get_container_config` — Read
+
+Read global container configuration: registry URL, RAM high-water mark, and veth interface name.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+
+**Example prompt:** "Show me the container configuration on router core"
+
+---
+
+### `manage_container_config` — Write · Idempotent
+
+Update global container settings (registry URL, RAM high-water mark, veth interface). Idempotent — returns `no_change` if nothing differs.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `registryUrl` | string | — | Container registry URL |
+| `ramHighMb` | int | — | RAM high-water mark in MB |
+| `vethInterface` | string | — | Veth interface name |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Set the container registry to https://my.registry.io on router core"
+
+---
+
+### `list_container_envs` — Read
+
+List container environment variable entries, optionally filtered by container name.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `name` | string | — | Filter by container name (exact match) |
+| `limit` | int (1–500) | `100` | Maximum entries to return |
+
+**Example prompt:** "List all environment variables for container my-app on router core"
+
+---
+
+### `manage_container_env` — Write · Idempotent
+
+Add or remove a container environment variable. Idempotent by `name`+`key`. `add` returns `already_exists` if the entry matches; throws `CONFLICT` if the key exists with a different value.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add`\|`remove` | — | Action to perform |
+| `name` | string | — | Container name |
+| `key` | string | — | Environment variable name |
+| `value` | string | — | Environment variable value (required for add) |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Add environment variable DEBUG=true to container my-app on router core"
+
+---
+
+### `list_container_mounts` — Read
+
+List container volume mount definitions with source path, destination path, and mount name.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `name` | string | — | Filter by mount name (exact match) |
+| `limit` | int (1–500) | `100` | Maximum entries to return |
+
+**Example prompt:** "Show me all container mounts on router core"
+
+---
+
+### `manage_container_mount` — Write · Idempotent
+
+Add or remove a container volume mount. Idempotent by `name`. `add` returns `already_exists` if mount exists with matching paths; throws `CONFLICT` if name exists with different paths.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add`\|`remove` | — | Action to perform |
+| `name` | string | — | Mount name (idempotency key) |
+| `src` | string | — | Host source path (required for add) |
+| `dst` | string | — | Container destination path (required for add) |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Add a mount named app-data mapping /mnt/data to /data for containers on router core"
+
+---
+
+## Network Diagnostics
+
+### `bandwidth_test` — Read
+
+Run a RouterOS bandwidth test from the router to a remote host running a RouterOS btest server. Returns TX/RX throughput in Mbps.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `address` | string | — | Remote host running RouterOS btest server |
+| `protocol` | `tcp`\|`udp` | `tcp` | Test protocol |
+| `direction` | `send`\|`receive`\|`both` | `both` | Test direction |
+| `duration` | int (1–30) | `5` | Test duration in seconds |
+
+**Example prompt:** "Run a bandwidth test from router home-gw to 192.168.99.2 for 10 seconds"
+
+---
+
+### `fetch_url` — Read
+
+Send an HTTP/HTTPS GET or POST request from the router. Response body returned inline (capped at 64 KB). Use `outputFile` to save to the router filesystem instead.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `url` | string | — | URL to fetch |
+| `method` | `GET`\|`POST` | `GET` | HTTP method |
+| `httpData` | string | — | Request body for POST |
+| `outputFile` | string | — | Router file path to save response instead of returning inline |
+
+**Example prompt:** "Fetch http://10.0.0.1/status from router core-sw and show me the response body"
+
+---
+
+### `list_connections` — Read
+
+List active connection tracking entries from the router firewall table. Filters applied client-side.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `srcAddress` | string | — | Substring match on source address |
+| `dstAddress` | string | — | Substring match on destination address |
+| `protocol` | string | — | Exact match (e.g. `tcp`, `udp`) |
+| `limit` | int (1–500) | `100` | Maximum connections to return |
+
+**Example prompt:** "Show me all active TCP connections from 192.168.1.0/24 on router edge"
+
+---
+
+## Interface Lists
+
+### `list_interface_lists` — Read
+
+List all interface lists defined on the router.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `limit` | int (1–500) | `100` | Maximum lists to return |
+
+**Example prompt:** "List all interface lists on router core"
+
+---
+
+### `manage_interface_list` — Write · Idempotent
+
+Add or remove an interface list. Idempotent by name. Removing a list that has members is blocked by RouterOS.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add`\|`remove` | — | Action to perform |
+| `name` | string | — | Interface list name (idempotency key) |
+| `comment` | string | — | Optional comment |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Create an interface list named WAN on router edge"
+
+---
+
+### `manage_interface_list_member` — Write · Idempotent
+
+Add or remove an interface from an interface list. Idempotent by `list`+`interface` composite key.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add`\|`remove` | — | Action to perform |
+| `list` | string | — | Interface list name |
+| `interface` | string | — | Interface name to add/remove |
+| `comment` | string | — | Optional comment |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Add ether1 to the WAN interface list on router edge"
+
+---
+
+## PPP Profiles
+
+### `list_ppp_profiles` — Read
+
+List PPP profiles including the built-in `default` and `default-encryption` profiles.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `name` | string | — | Filter by profile name (exact match) |
+| `limit` | int (1–500) | `100` | Maximum profiles to return |
+
+**Example prompt:** "Show me all PPP profiles on router isp-edge"
+
+---
+
+### `manage_ppp_profile` — Write · Idempotent
+
+Add, update, or remove a PPP profile. Idempotent by name. `update` returns `no_change` when values already match. Built-in profiles cannot be removed.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add`\|`update`\|`remove` | — | Action to perform |
+| `name` | string | — | Profile name (idempotency key) |
+| `localAddress` | string | — | Local IP for router end of PPP link |
+| `remoteAddress` | string | — | IP or pool name assigned to client |
+| `dnsServer` | string | — | DNS server IP pushed to client |
+| `rateLimit` | string | — | Rate limit string (e.g. `10M/10M`) |
+| `sessionTimeout` | string | — | Session timeout (e.g. `1h`) |
+| `comment` | string | — | Optional comment |
+| `dryRun` | boolean | `false` | Preview changes without applying |
+
+**Example prompt:** "Create a PPP profile named broadband with rate limit 10M/10M and session timeout 24h on router isp-edge"

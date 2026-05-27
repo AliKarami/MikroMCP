@@ -314,8 +314,176 @@ const manageIpsecPeerTool: ToolDefinition = {
   },
 };
 
+const manageIpsecPolicyInputSchema = z
+  .object({
+    routerId: z.string().describe("Target router identifier from the router registry"),
+    action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
+    srcAddress: z.string().describe("Source CIDR — part of composite idempotency key"),
+    dstAddress: z.string().describe("Destination CIDR — part of composite idempotency key"),
+    tunnel: z.boolean().default(false).describe("Tunnel mode — part of composite idempotency key"),
+    ipsecAction: z
+      .enum(["encrypt", "discard", "none"])
+      .optional()
+      .describe("IPSec action (required for add)"),
+    level: z.enum(["require", "use", "unique"]).default("require").describe("SA level"),
+    saSourceAddress: z.string().optional().describe("SA source IP for tunnel mode"),
+    saDstAddress: z.string().optional().describe("SA destination IP for tunnel mode"),
+    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+  })
+  .strict();
+
+const manageIpsecPolicyTool: ToolDefinition = {
+  name: "manage_ipsec_policy",
+  title: "Manage IPSec Policy",
+  description:
+    "Add, remove, enable, or disable an IPSec policy. Idempotent by composite key (srcAddress + dstAddress + tunnel).",
+  inputSchema: manageIpsecPolicyInputSchema,
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  snapshotPaths: ["ip/ipsec/policy"],
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = manageIpsecPolicyInputSchema.parse(params);
+    log.info({ routerId: context.routerId, action: parsed.action }, "Managing IPSec policy");
+    try {
+      const all = await context.routerClient.get<RouterOSRecord>("ip/ipsec/policy", {
+        limit: undefined,
+        offset: undefined,
+      });
+      const tunnelStr = String(parsed.tunnel);
+      const existing = (all as Record<string, string>[]).find(
+        (p) =>
+          p["src-address"] === parsed.srcAddress &&
+          p["dst-address"] === parsed.dstAddress &&
+          p.tunnel === tunnelStr,
+      );
+
+      if (parsed.action === "add") {
+        if (existing) {
+          return {
+            content: `IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress} already exists. No changes made.`,
+            structuredContent: { action: "already_exists", policy: existing },
+          };
+        }
+        if (!parsed.ipsecAction) {
+          throw new MikroMCPError({
+            category: ErrorCategory.VALIDATION,
+            code: "IPSEC_POLICY_ACTION_REQUIRED",
+            message: "ipsecAction is required when adding an IPSec policy.",
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Provide ipsecAction: encrypt, discard, or none.",
+            },
+          });
+        }
+        if (parsed.dryRun) {
+          return {
+            content: `Dry run: Would add IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress}.`,
+            structuredContent: {
+              action: "dry_run",
+              diff: [
+                { property: "src-address", before: null, after: parsed.srcAddress },
+                { property: "dst-address", before: null, after: parsed.dstAddress },
+                { property: "action", before: null, after: parsed.ipsecAction },
+              ],
+            },
+          };
+        }
+        const body: Record<string, string> = {
+          "src-address": parsed.srcAddress,
+          "dst-address": parsed.dstAddress,
+          tunnel: tunnelStr,
+          action: parsed.ipsecAction,
+          level: parsed.level,
+        };
+        if (parsed.saSourceAddress) body["sa-src-address"] = parsed.saSourceAddress;
+        if (parsed.saDstAddress) body["sa-dst-address"] = parsed.saDstAddress;
+        const created = await context.routerClient.create("ip/ipsec/policy", body);
+        log.info({ id: created[".id"] }, "IPSec policy added");
+        return {
+          content: `Added IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress}.`,
+          structuredContent: { action: "created", policy: created },
+        };
+      }
+
+      if (parsed.action === "remove") {
+        if (!existing) {
+          return {
+            content: `IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress} not found. Nothing to remove.`,
+            structuredContent: {
+              action: "not_found",
+              srcAddress: parsed.srcAddress,
+              dstAddress: parsed.dstAddress,
+            },
+          };
+        }
+        if (parsed.dryRun) {
+          return {
+            content: `Dry run: Would remove IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress}.`,
+            structuredContent: {
+              action: "dry_run",
+              diff: [{ property: "src-address", before: parsed.srcAddress, after: null }],
+            },
+          };
+        }
+        await context.routerClient.remove("ip/ipsec/policy", existing[".id"]);
+        log.info({ id: existing[".id"] }, "IPSec policy removed");
+        return {
+          content: `Removed IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress}.`,
+          structuredContent: { action: "removed", id: existing[".id"] },
+        };
+      }
+
+      // enable / disable
+      if (!existing) {
+        throw new MikroMCPError({
+          category: ErrorCategory.NOT_FOUND,
+          code: "IPSEC_POLICY_NOT_FOUND",
+          message: `IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress} not found.`,
+          recoverability: {
+            retryable: false,
+            suggestedAction: "Verify with list_ipsec_policies.",
+            alternativeTools: ["list_ipsec_policies"],
+          },
+        });
+      }
+      if (parsed.dryRun) {
+        return {
+          content: `Dry run: Would ${parsed.action} IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress}.`,
+          structuredContent: {
+            action: "dry_run",
+            diff: [
+              {
+                property: "disabled",
+                before: existing.disabled,
+                after: parsed.action === "disable" ? "true" : "false",
+              },
+            ],
+          },
+        };
+      }
+      await context.routerClient.update("ip/ipsec/policy", existing[".id"], {
+        disabled: parsed.action === "disable" ? "true" : "false",
+      });
+      const resultAction = parsed.action === "disable" ? "disabled" : "enabled";
+      log.info({ id: existing[".id"], action: resultAction }, "IPSec policy updated");
+      return {
+        content: `IPSec policy ${parsed.srcAddress} → ${parsed.dstAddress} ${resultAction}.`,
+        structuredContent: { action: resultAction, id: existing[".id"] },
+      };
+    } catch (err) {
+      if (err instanceof MikroMCPError) throw err;
+      throw enrichError(err, { routerId: context.routerId, tool: "manage_ipsec_policy" });
+    }
+  },
+};
+
 export const ipsecTools: ToolDefinition[] = [
   listIpsecPeersTool,
   listIpsecPoliciesTool,
   manageIpsecPeerTool,
+  manageIpsecPolicyTool,
 ];

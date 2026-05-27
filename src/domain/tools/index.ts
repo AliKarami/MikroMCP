@@ -35,9 +35,13 @@ import { dhcpClientTools } from "./dhcp-client-tools.js";
 import { ipServiceTools } from "./ip-service-tools.js";
 import { pppoeTools } from "./pppoe-tools.js";
 import { ovpnTools } from "./ovpn-tools.js";
+import { pppTools } from "./ppp-tools.js";
 import { upgradeTools } from "./upgrade-tools.js";
 import { backupTools } from "./backup-tools.js";
 import { logTools } from "./log-tools.js";
+import { networkTestTools } from "./network-test-tools.js";
+import { containerConfigTools } from "./container-config-tools.js";
+import { interfaceListTools } from "./interface-list-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -76,9 +80,13 @@ const baseTools: ToolDefinition[] = [
   ...ipServiceTools,
   ...pppoeTools,
   ...ovpnTools,
+  ...pppTools,
   ...upgradeTools,
   ...backupTools,
   ...logTools,
+  ...networkTestTools,
+  ...containerConfigTools,
+  ...interfaceListTools,
 ];
 
 export const allTools: ToolDefinition[] = [
