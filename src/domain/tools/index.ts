@@ -40,6 +40,8 @@ import { upgradeTools } from "./upgrade-tools.js";
 import { backupTools } from "./backup-tools.js";
 import { logTools } from "./log-tools.js";
 import { networkTestTools } from "./network-test-tools.js";
+import { containerConfigTools } from "./container-config-tools.js";
+import { interfaceListTools } from "./interface-list-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -83,6 +85,8 @@ const baseTools: ToolDefinition[] = [
   ...backupTools,
   ...logTools,
   ...networkTestTools,
+  ...containerConfigTools,
+  ...interfaceListTools,
 ];
 
 export const allTools: ToolDefinition[] = [
