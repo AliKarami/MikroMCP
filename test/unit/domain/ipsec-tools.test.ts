@@ -133,6 +133,17 @@ describe("manage_ipsec_policy", () => {
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
     });
+
+    it("throws VALIDATION when ipsecAction missing on add", async () => {
+      const { ErrorCategory } = await import("../../../src/domain/errors/error-types.js");
+      const ctx = makePolicyContext([]);
+      await expect(
+        managePolicyTool.handler(
+          { routerId: "test-router", action: "add", srcAddress: "10.0.0.0/24", dstAddress: "192.168.1.0/24" },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION });
+    });
   });
 
   describe("handler — remove", () => {
