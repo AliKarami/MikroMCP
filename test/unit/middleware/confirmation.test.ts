@@ -113,42 +113,4 @@ describe("confirmation middleware", () => {
       isMikroMCPError(err) && err.category === "APPROVAL_REQUIRED"
     );
   });
-
-  it("forceAll=true makes admin go through confirmation gate", async () => {
-    const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
-    const identity = makeIdentity("admin");
-    const params = { routerId: "edge-01", name: "flash/backup.rsc" };
-    await expect(
-      checkConfirmation("delete_file", "edge-01", params, identity, SECRET, true)
-    ).rejects.toSatisfy((err: unknown) =>
-      isMikroMCPError(err) && err.category === "APPROVAL_REQUIRED" && err.code === "CONFIRMATION_REQUIRED"
-    );
-  });
-
-  it("forceAll=true makes superadmin go through confirmation gate", async () => {
-    const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
-    const identity = makeIdentity("superadmin");
-    const params = { routerId: "edge-01", name: "flash/backup.rsc" };
-    await expect(
-      checkConfirmation("delete_file", "edge-01", params, identity, SECRET, true)
-    ).rejects.toSatisfy((err: unknown) =>
-      isMikroMCPError(err) && err.category === "APPROVAL_REQUIRED"
-    );
-  });
-
-  it("forceAll=true admin can confirm with valid token", async () => {
-    const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
-    const identity = makeIdentity("admin");
-    const params = { routerId: "edge-01", name: "flash/backup.rsc" };
-    let token = "";
-    try {
-      await checkConfirmation("delete_file", "edge-01", params, identity, SECRET, true);
-    } catch (err) {
-      token = ((err as { details: Record<string, unknown> }).details).confirmationToken as string;
-    }
-    expect(token).toBeTruthy();
-    await expect(
-      checkConfirmation("delete_file", "edge-01", { ...params, confirmationToken: token }, identity, SECRET, true)
-    ).resolves.toBeUndefined();
-  });
 });

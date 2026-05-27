@@ -26,8 +26,6 @@ export interface ToolDefinition {
   snapshotPaths?: string[];
   /** When true, tool-registry skips per-router setup (routerId, circuit breaker, client). Use for fleet tools that manage their own router contexts. */
   skipRouterContext?: boolean;
-  /** When true, confirmation is required for all identities including admin/superadmin — no role bypass. */
-  requiresConfirmationForAll?: boolean;
   handler: (params: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>;
 }
 

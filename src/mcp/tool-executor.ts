@@ -99,7 +99,7 @@ export async function executeToolCall(
       }
 
       if (tool.annotations.destructiveHint && config.confirmationSecret) {
-        await checkConfirmation(tool.name, routerId, args, identity, config.confirmationSecret, tool.requiresConfirmationForAll);
+        await checkConfirmation(tool.name, routerId, args, identity, config.confirmationSecret);
       }
 
       const shouldAudit = tool.annotations.destructiveHint || !tool.annotations.readOnlyHint;

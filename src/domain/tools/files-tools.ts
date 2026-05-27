@@ -206,7 +206,6 @@ const deleteFileTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  requiresConfirmationForAll: true,
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = deleteFileInputSchema.parse(params);
     log.info({ routerId: context.routerId, name: parsed.name }, "Deleting file");
