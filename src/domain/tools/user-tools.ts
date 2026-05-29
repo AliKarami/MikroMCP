@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -9,15 +10,9 @@ const log = createLogger("user-tools");
 
 const listUsersInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     group: z.string().optional().describe("Filter by group name (exact match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of users to return"),
+    limit,
   })
   .strict();
 
@@ -73,7 +68,7 @@ const listUsersTool: ToolDefinition = {
 
 const manageUserInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z
       .enum(["add", "remove", "enable", "disable", "set-password"])
       .describe("Action to perform"),
@@ -85,7 +80,7 @@ const manageUserInputSchema = z
     password: z.string().optional().describe("Password (required for add and set-password)"),
     address: z.string().optional().describe("Allowed source address or range"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

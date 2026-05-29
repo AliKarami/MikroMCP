@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -40,7 +41,7 @@ const SECTION_PATHS: Record<Exclude<Section, "all">, string> = {
 
 const inputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     sections: z
       .array(z.enum(SECTION_VALUES))
       .default(["all"])

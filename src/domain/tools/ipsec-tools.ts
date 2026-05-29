@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -9,15 +10,9 @@ const log = createLogger("ipsec-tools");
 
 const listIpsecPeersInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     address: z.string().optional().describe("Filter by remote address (substring match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of peers to return"),
+    limit,
   })
   .strict();
 
@@ -65,7 +60,7 @@ const listIpsecPeersTool: ToolDefinition = {
 
 const listIpsecPoliciesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     srcAddress: z
       .string()
       .optional()
@@ -74,13 +69,7 @@ const listIpsecPoliciesInputSchema = z
       .string()
       .optional()
       .describe("Filter by destination address (substring match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of policies to return"),
+    limit,
   })
   .strict();
 
@@ -130,7 +119,7 @@ const listIpsecPoliciesTool: ToolDefinition = {
 
 const manageIpsecPeerInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z.string().describe("Peer name — idempotency key"),
     address: z.string().optional().describe("Remote gateway address (required for add)"),
@@ -141,7 +130,7 @@ const manageIpsecPeerInputSchema = z
       .describe("IKE exchange mode"),
     profile: z.string().optional().describe("IKE profile name"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -315,7 +304,7 @@ const manageIpsecPeerTool: ToolDefinition = {
 
 const manageIpsecPolicyInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     srcAddress: z.string().describe("Source CIDR — part of composite idempotency key"),
     dstAddress: z.string().describe("Destination CIDR — part of composite idempotency key"),
@@ -327,7 +316,7 @@ const manageIpsecPolicyInputSchema = z
     level: z.enum(["require", "use", "unique"]).default("require").describe("SA level"),
     saSourceAddress: z.string().optional().describe("SA source IP for tunnel mode"),
     saDstAddress: z.string().optional().describe("SA destination IP for tunnel mode"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -16,9 +17,9 @@ const OVPN_SERVER_PATH = "interface/ovpn-server/server";
 
 const listOvpnClientsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum number of clients to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    routerId,
+    limit,
+    offset,
   })
   .strict();
 
@@ -66,7 +67,7 @@ const listOvpnClientsTool: ToolDefinition = {
 
 const manageOvpnClientInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "update", "remove"]).describe("Action to perform"),
     name: z.string().describe("OpenVPN client interface name — idempotency key"),
     connectTo: z.string().optional().describe("Remote server address (required for add)"),
@@ -76,7 +77,7 @@ const manageOvpnClientInputSchema = z
     certificate: z.string().optional().describe("Client certificate name"),
     user: z.string().optional().describe("VPN username"),
     password: z.string().optional().describe("VPN password (never logged)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -84,7 +85,7 @@ const manageOvpnClientTool: ToolDefinition = {
   name: "manage_ovpn_client",
   title: "Manage OpenVPN Client",
   description:
-    "Add, update, or remove an OpenVPN client interface. Idempotent by name: add returns already_exists if same name+connectTo exists; throws CONFLICT if same name exists with different connectTo. Update builds a diff of changed fields and returns no_change when nothing differs. Password is always written when provided because RouterOS does not expose it in GET.",
+    "Add, update, or remove an OpenVPN client interface. Idempotent by name (already_exists on matching name+connectTo; CONFLICT on differing connectTo; no_change when an update differs in nothing). Password is always written when provided since RouterOS does not return it on GET.",
   inputSchema: manageOvpnClientInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -280,7 +281,7 @@ const manageOvpnClientTool: ToolDefinition = {
 
 const getOvpnServerInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
   })
   .strict();
 
@@ -317,7 +318,7 @@ const getOvpnServerTool: ToolDefinition = {
     openWorldHint: false,
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
-    const parsed = getOvpnServerInputSchema.parse(params);
+    getOvpnServerInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Getting OpenVPN server configuration");
     try {
       const records = await context.routerClient.get<RouterOSRecord>(OVPN_SERVER_PATH, {
@@ -325,7 +326,7 @@ const getOvpnServerTool: ToolDefinition = {
         offset: undefined,
       });
 
-      const server = fetchOvpnServer(records, parsed.routerId);
+      const server = fetchOvpnServer(records, context.routerId);
 
       return {
         content: `OpenVPN server on ${context.routerId}: enabled=${server.enabled}, port=${server.port}, protocol=${server.protocol}`,
@@ -341,7 +342,7 @@ const getOvpnServerTool: ToolDefinition = {
 
 const manageOvpnServerInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["enable", "disable", "set"]).describe("Action to perform"),
     port: z.number().int().min(1).max(65535).optional().describe("Listening port (set action only)"),
     mode: z.enum(["ip", "ethernet"]).optional().describe("Tunnel mode (set action only)"),
@@ -355,7 +356,7 @@ const manageOvpnServerInputSchema = z
       .enum(["md5", "sha1", "sha256", "sha512", "null"])
       .optional()
       .describe("Authentication algorithm (set action only)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -363,7 +364,7 @@ const manageOvpnServerTool: ToolDefinition = {
   name: "manage_ovpn_server",
   title: "Manage OpenVPN Server",
   description:
-    "Enable, disable, or configure the OpenVPN server on a MikroTik router. The server is a singleton — there is only one per router. Throws NOT_FOUND if the OpenVPN package is not installed. For set action, at least one configuration field must be provided.",
+    "Enable, disable, or configure the OpenVPN server (a per-router singleton). Throws NOT_FOUND if the OpenVPN package is not installed. The set action requires at least one configuration field.",
   inputSchema: manageOvpnServerInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -382,7 +383,7 @@ const manageOvpnServerTool: ToolDefinition = {
         offset: undefined,
       });
 
-      const server = fetchOvpnServer(records, parsed.routerId);
+      const server = fetchOvpnServer(records, context.routerId);
       const serverId = server[".id"];
 
       if (parsed.action === "enable" || parsed.action === "disable") {

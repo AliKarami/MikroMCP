@@ -219,6 +219,7 @@ Two transports:
 |---|---|---|
 | `MIKROMCP_TRANSPORT` | `stdio` | `stdio` or `http` |
 | `MIKROMCP_CONFIG_PATH` | `config/routers.yaml` | Path to router registry |
+| `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId` (falls back to the sole router if only one is configured) |
 | `MIKROMCP_LOG_LEVEL` | `info` | `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP transport only |
 | `MIKROMCP_IDENTITIES_PATH` | `config/identities.yaml` | Path to identity/token registry |

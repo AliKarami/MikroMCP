@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -21,7 +22,7 @@ async function findMangleRuleByComment(
 
 const listMangleRulesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     chain: z
       .string()
       .optional()
@@ -82,14 +83,14 @@ const listMangleRulesTool: ToolDefinition = {
 
 const manageMangleRuleInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     comment: z.string().describe("Idempotency key — uniquely identifies this mangle rule"),
     chain: z
       .string()
       .optional()
       .describe("Mangle chain (required on add): prerouting, input, forward, output, postrouting"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
     srcAddress: z.string().optional().describe("Source IP/CIDR to match"),
     dstAddress: z.string().optional().describe("Destination IP/CIDR to match"),
     srcAddressList: z.string().optional().describe("Source address list name to match"),

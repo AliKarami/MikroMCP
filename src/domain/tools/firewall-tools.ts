@@ -4,8 +4,9 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -38,7 +39,7 @@ async function findRuleByComment(
 
 const listFirewallRulesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     table: z
       .enum(["filter", "nat"])
       .default("filter")
@@ -51,14 +52,8 @@ const listFirewallRulesInputSchema = z
       .enum(["true", "false", "all"])
       .default("all")
       .describe("Filter by disabled state: true, false, or all"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of rules to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -111,46 +106,14 @@ const listFirewallRulesTool: ToolDefinition = {
 
       const { items: paginated, total, hasMore } = paginate(rules, parsed.offset, parsed.limit);
 
-      const lines: string[] = [
-        `Firewall ${parsed.table} rules on ${context.routerId}: ${total} total, showing ${paginated.length} (offset ${parsed.offset})`,
-      ];
-
-      for (const rule of paginated) {
-        const rec = rule as Record<string, unknown>;
-
-        const chain = rec.chain ?? "?";
-        const action = rec.action ?? "?";
-        const isDisabled = rec.disabled === true || rec.disabled === "true";
-
-        let line = `  [${chain}]`;
-
-        if (rec.protocol !== undefined) {
-          line += ` ${rec.protocol}`;
-        }
-
-        if (rec["src-address"] !== undefined) {
-          line += ` src:${rec["src-address"]}`;
-        }
-
-        if (rec["dst-address"] !== undefined) {
-          line += ` dst:${rec["dst-address"]}`;
-        }
-
-        line += ` => ${action}`;
-
-        if (isDisabled) {
-          line += " [disabled]";
-        }
-
-        if (rec.comment !== undefined) {
-          line += ` // ${rec.comment}`;
-        }
-
-        lines.push(line);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary(
+          `Firewall ${parsed.table} rules`,
+          context.routerId,
+          paginated.length,
+          total,
+          parsed.offset,
+        ),
         structuredContent: {
           routerId: context.routerId,
           table: parsed.table,
@@ -173,7 +136,7 @@ const listFirewallRulesTool: ToolDefinition = {
 
 const manageFirewallRuleInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     table: z
       .enum(["filter", "nat"])
       .default("filter")

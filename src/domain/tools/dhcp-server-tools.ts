@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -11,16 +12,10 @@ const log = createLogger("dhcp-server-tools");
 
 const listDhcpServersInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z.string().optional().describe("Filter by interface name (exact match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of DHCP servers to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -69,14 +64,14 @@ const listDhcpServersTool: ToolDefinition = {
 
 const manageDhcpServerInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z.string().describe("Server name — idempotency key"),
     interface: z.string().optional().describe("Interface to serve DHCP on (required for add)"),
     addressPool: z.string().optional().describe("IP pool name (required for add)"),
     leaseTime: z.string().optional().describe("Lease duration (e.g. '1d', '12h')"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

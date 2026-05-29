@@ -69,7 +69,6 @@ describe("list_interfaces", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       const iface = (sc.interfaces as Record<string, unknown>[])[0];
       expect(iface.status).toBe("up");
-      expect(result.content).toContain("UP");
     });
 
     it("computes status=up when running is string 'true'", async () => {
@@ -80,7 +79,6 @@ describe("list_interfaces", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       const iface = (sc.interfaces as Record<string, unknown>[])[0];
       expect(iface.status).toBe("up");
-      expect(result.content).toContain("UP");
     });
 
     it("computes status=down when running is boolean false", async () => {
@@ -91,7 +89,6 @@ describe("list_interfaces", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       const iface = (sc.interfaces as Record<string, unknown>[])[0];
       expect(iface.status).toBe("down");
-      expect(result.content).toContain("DOWN");
     });
 
     it("computes status=disabled when disabled is true", async () => {

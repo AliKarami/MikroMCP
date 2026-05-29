@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -11,10 +12,10 @@ const log = createLogger("ip-pool-tools");
 
 const listIpPoolsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by pool name (substring match)"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum number of pools to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -64,7 +65,7 @@ const listIpPoolsTool: ToolDefinition = {
 
 const manageIpPoolInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     name: z.string().describe("Pool name — idempotency key"),
     ranges: z
@@ -72,7 +73,7 @@ const manageIpPoolInputSchema = z
       .optional()
       .describe("IP range (e.g. '192.168.1.100-192.168.1.200'; required for add)"),
     nextPool: z.string().optional().describe("Next pool name for overflow"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

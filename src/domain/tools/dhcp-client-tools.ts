@@ -1,24 +1,25 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 
 const log = createLogger("dhcp-client-tools");
 
 const listDhcpClientsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z.string().optional().describe("Filter by interface name (exact match)"),
     status: z
       .enum(["bound", "searching", "requesting", "init", "all"])
       .default("all")
       .describe("Filter by DHCP client status"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum number of clients to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -55,20 +56,8 @@ const listDhcpClientsTool: ToolDefinition = {
 
       const { items: clients, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
-      const lines: string[] = [
-        `DHCP clients on ${context.routerId}: ${total} total, showing ${clients.length} (offset ${parsed.offset})`,
-      ];
-      for (const c of clients) {
-        const rec = c as Record<string, unknown>;
-        const iface = rec.interface ?? "unknown";
-        const status = rec.status ?? "unknown";
-        const address = rec.address ?? rec["active-address"] ?? "-";
-        const isDisabled = rec.disabled === true || rec.disabled === "true";
-        lines.push(`  ${iface}  [${status}]  ${address}${isDisabled ? "  DISABLED" : ""}`);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("DHCP clients", context.routerId, clients.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           clients,
@@ -86,14 +75,14 @@ const listDhcpClientsTool: ToolDefinition = {
 
 const manageDhcpClientInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     interface: z.string().describe("Interface name — idempotency key (e.g. ether1, ether2)"),
     usePeerDns: z.boolean().default(true).describe("Use DNS servers provided by DHCP server (add only)"),
     usePeerNtp: z.boolean().default(false).describe("Use NTP servers provided by DHCP server (add only)"),
     addDefaultRoute: z.boolean().default(true).describe("Add default route from DHCP (add only)"),
     comment: z.string().max(255).optional().describe("Optional comment (add only)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

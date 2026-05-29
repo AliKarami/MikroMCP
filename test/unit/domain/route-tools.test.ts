@@ -247,19 +247,20 @@ describe("route tools", () => {
       expect(sc.hasMore).toBe(true);
     });
 
-    it("formats route information correctly in content", async () => {
+    it("returns route information in structuredContent", async () => {
       const ctx = makeContext([sampleRoutes[0]]);
       const result = await listRoutesTool.handler({ routerId: "test-router" }, ctx);
-      expect(result.content).toContain("10.0.0.0/8");
-      expect(result.content).toContain("192.168.1.1");
-      expect(result.content).toContain("[20]");
-      expect(result.content).toContain("ACTIVE");
+      const sc = result.structuredContent as Record<string, unknown>;
+      const route = (sc.routes as Record<string, unknown>[])[0];
+      expect(route["dst-address"]).toBe("10.0.0.0/8");
+      expect(route.gateway).toBe("192.168.1.1");
     });
 
-    it("includes DYNAMIC flag only when set", async () => {
-      const ctx = makeContext([sampleRoutes[2]]);
+    it("returns a concise summary in content", async () => {
+      const ctx = makeContext([sampleRoutes[0]]);
       const result = await listRoutesTool.handler({ routerId: "test-router" }, ctx);
-      expect(result.content).toContain("DYNAMIC");
+      expect(result.content).toContain("Routes on test-router");
+      expect(result.content).toContain("structuredContent");
     });
   });
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -11,7 +12,7 @@ const ADDRESS_LIST_PATH = "ip/firewall/address-list";
 
 const listAddressListInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     list: z.string().optional().describe("Filter by address list name"),
     address: z.string().optional().describe("Filter by address (IP or CIDR)"),
   })
@@ -56,13 +57,13 @@ const listAddressListTool: ToolDefinition = {
 
 const manageAddressListInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     list: z.string().describe("Address list name"),
     address: z.string().describe("IP address or CIDR to add/remove"),
     comment: z.string().optional().describe("Optional comment for the entry"),
     timeout: z.string().optional().describe("Expiry timeout (e.g. 1d, 2h30m) — omit for permanent"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

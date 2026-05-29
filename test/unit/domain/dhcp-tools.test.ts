@@ -146,10 +146,12 @@ describe("list_dhcp_leases tool", () => {
       expect(sc.hasMore).toBe(true);
     });
 
-    it("formats host-name in content when present", async () => {
+    it("returns host-name in structuredContent when present", async () => {
       const ctx = makeContext([sampleLeases[0]]);
       const result = await listTool.handler({ routerId: "test-router" }, ctx);
-      expect(result.content).toContain("laptop");
+      const sc = result.structuredContent as Record<string, unknown>;
+      const lease = (sc.leases as Record<string, unknown>[])[0];
+      expect(lease["host-name"]).toBe("laptop");
     });
 
     it("omits host-name in content when missing", async () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -11,7 +12,7 @@ const SCRIPT_PATH = "system/script";
 
 const listScriptsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by script name (substring match)"),
   })
   .strict();
@@ -56,7 +57,7 @@ const listScriptsTool: ToolDefinition = {
 
 const manageScriptInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "update", "remove"]).describe("Action to perform"),
     name: z.string().describe("Script name — idempotency key"),
     source: z.string().optional().describe("Script body (required for add and update)"),
@@ -65,7 +66,7 @@ const manageScriptInputSchema = z
       .boolean()
       .optional()
       .describe("Allow script to run without elevated permissions"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -232,7 +233,7 @@ const manageScriptTool: ToolDefinition = {
 
 const runScriptInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().describe("Name of the script to execute"),
   })
   .strict();

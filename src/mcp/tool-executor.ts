@@ -24,6 +24,46 @@ import type { IdentityRegistry } from "../config/identity-registry.js";
 
 const log = createLogger("tool-executor");
 
+/**
+ * Resolve the target router id for a tool call. Precedence:
+ *   1. Explicit `routerId` argument (must be a known router).
+ *   2. `MIKROMCP_DEFAULT_ROUTER` config (must be a known router).
+ *   3. The sole configured router when exactly one exists.
+ * Throws a VALIDATION error listing available routers when none applies.
+ */
+function resolveRouterId(
+  explicit: string | undefined,
+  registry: RouterRegistry,
+  config: AppConfig,
+): string {
+  if (explicit) {
+    return explicit;
+  }
+
+  const fallback = config.defaultRouter ?? registry.soleRouterId();
+  if (fallback) {
+    return fallback;
+  }
+
+  const available = registry.routerIds();
+  throw new MikroMCPError({
+    category: ErrorCategory.VALIDATION,
+    code: "MISSING_ROUTER_ID",
+    message:
+      available.length > 0
+        ? `routerId is required: more than one router is configured. Available: ${available.join(", ")}.`
+        : "routerId is required, but no routers are configured.",
+    details: { availableRouters: available },
+    recoverability: {
+      retryable: false,
+      suggestedAction:
+        available.length > 0
+          ? "Provide a routerId, or set MIKROMCP_DEFAULT_ROUTER to choose a default."
+          : "Configure at least one router in routers.yaml.",
+    },
+  });
+}
+
 export interface ToolExecutorDeps {
   registry: RouterRegistry;
   pool: ConnectionPool;
@@ -65,18 +105,8 @@ export async function executeToolCall(
         return formatToolResult(fleetResult);
       }
 
-      const routerId = args.routerId as string | undefined;
-      if (!routerId) {
-        throw new MikroMCPError({
-          category: ErrorCategory.VALIDATION,
-          code: "MISSING_ROUTER_ID",
-          message: "routerId is required",
-          recoverability: {
-            retryable: false,
-            suggestedAction: "Provide a valid routerId parameter.",
-          },
-        });
-      }
+      const routerId = resolveRouterId(args.routerId as string | undefined, registry, config);
+      args.routerId = routerId;
 
       checkAuthz(identity, tool.name, routerId);
 

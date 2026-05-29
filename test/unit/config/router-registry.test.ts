@@ -95,6 +95,48 @@ routers:
     expect(registry.getRouter("home").sshFingerprint).toBe("sha256hexvalue");
   });
 
+  it("soleRouterId returns the id when exactly one router is configured", () => {
+    const registry = new RouterRegistry(tempYaml(VALID_CONFIG));
+    expect(registry.soleRouterId()).toBe("home");
+  });
+
+  it("soleRouterId returns undefined when more than one router is configured", () => {
+    const path = tempYaml(`
+routers:
+  home:
+    host: 192.168.1.1
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: false
+    credentials:
+      source: env
+      envPrefix: ROUTER_HOME
+    tags: []
+    rosVersion: "7"
+  office:
+    host: 192.168.2.1
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: false
+    credentials:
+      source: env
+      envPrefix: ROUTER_OFFICE
+    tags: []
+    rosVersion: "7"
+`);
+    const registry = new RouterRegistry(path);
+    expect(registry.soleRouterId()).toBeUndefined();
+    expect(registry.routerIds().sort()).toEqual(["home", "office"]);
+  });
+
+  it("soleRouterId returns undefined when no routers are configured", () => {
+    const registry = new RouterRegistry(join(tmpdir(), "does-not-exist.yaml"));
+    expect(registry.soleRouterId()).toBeUndefined();
+    expect(registry.routerIds()).toEqual([]);
+  });
+
   it("throws on invalid port value", () => {
     const path = tempYaml(`
 routers:

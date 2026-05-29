@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -10,17 +11,11 @@ const log = createLogger("dns-tools");
 
 const listDnsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by hostname (partial match)"),
     type: z.enum(["A", "CNAME", "TXT", "all"]).default("all").describe("Filter by record type"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of entries to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -57,15 +52,8 @@ const listDnsTool: ToolDefinition = {
 
       const { items: paginated, total, hasMore } = paginate(entries, parsed.offset, parsed.limit);
 
-      const lines = [`DNS entries on ${context.routerId}: ${total} total`];
-      for (const entry of paginated) {
-        const rec = entry as Record<string, string>;
-        const value = rec.address ?? rec.cname ?? rec.text ?? "?";
-        lines.push(`  ${rec.name} ${rec.type ?? "A"} → ${value}`);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("DNS entries", context.routerId, paginated.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           entries: paginated,
@@ -83,7 +71,7 @@ const listDnsTool: ToolDefinition = {
 
 const manageDnsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     name: z.string().min(1).describe("Hostname for the DNS record (e.g. server.example.com)"),
     type: z.enum(["A", "CNAME", "TXT"]).default("A").describe("DNS record type"),
@@ -93,7 +81,7 @@ const manageDnsInputSchema = z
     ttl: z.string().optional().describe("TTL value (e.g. 1d, 00:05:00)"),
     comment: z.string().max(255).optional().describe("Optional comment"),
     disabled: z.boolean().default(false).describe("Whether the entry should be disabled"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -230,7 +218,7 @@ const manageDnsTool: ToolDefinition = {
 
 const getDnsSettingsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
   })
   .strict();
 
@@ -278,13 +266,13 @@ const getDnsSettingsTool: ToolDefinition = {
 
 const manageDnsSettingsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     servers: z.string().optional().describe("Comma-separated upstream DNS server IPs (e.g. '8.8.8.8,1.1.1.1')"),
     allowRemoteRequests: z.boolean().optional().describe("Allow router to answer DNS queries from the network"),
     maxUdpPacketSize: z.number().int().min(512).max(65535).optional().describe("Maximum UDP packet size in bytes"),
     cacheMaxTtl: z.string().optional().describe("Maximum cache TTL (e.g. '1d', '00:30:00')"),
     cacheSize: z.number().int().min(1).optional().describe("DNS cache size in KiB"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

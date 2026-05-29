@@ -48,6 +48,8 @@ function makeDeps(overrides: Partial<ToolExecutorDeps> = {}): ToolExecutorDeps {
   return {
     registry: {
       getRouter: vi.fn().mockReturnValue(fakeRouter),
+      soleRouterId: vi.fn().mockReturnValue(undefined),
+      routerIds: vi.fn().mockReturnValue(["r1", "r2"]),
     } as unknown as ToolExecutorDeps["registry"],
     pool: {
       getClient: vi.fn().mockReturnValue({}),
@@ -96,6 +98,29 @@ describe("executeToolCall", () => {
     expect(result.isError).toBe(true);
     const sc = result.structuredContent as { code?: string };
     expect(sc?.code).toBe("MISSING_ROUTER_ID");
+  });
+
+  it("omitted routerId — falls back to MIKROMCP_DEFAULT_ROUTER", async () => {
+    const handler = vi.fn(async () => ({ content: "ok", structuredContent: {} }));
+    const tool = makeReadTool(handler);
+    const deps = makeDeps();
+    (deps.config as { defaultRouter?: string }).defaultRouter = "r1";
+
+    const result = await executeToolCall(tool, {}, deps);
+
+    expect(result.isError).toBeFalsy();
+    expect(deps.registry.getRouter).toHaveBeenCalledWith("r1");
+  });
+
+  it("omitted routerId — falls back to the sole configured router", async () => {
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: {} }));
+    const deps = makeDeps();
+    (deps.registry.soleRouterId as ReturnType<typeof vi.fn>).mockReturnValue("r1");
+
+    const result = await executeToolCall(tool, {}, deps);
+
+    expect(result.isError).toBeFalsy();
+    expect(deps.registry.getRouter).toHaveBeenCalledWith("r1");
   });
 
   it("error path — handler throws MikroMCPError, response has isError and error code", async () => {

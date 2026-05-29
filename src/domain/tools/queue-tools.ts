@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -9,15 +10,9 @@ const log = createLogger("queue-tools");
 
 const listQueuesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     target: z.string().optional().describe("Filter by target address (substring match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of queues to return"),
+    limit,
   })
   .strict();
 
@@ -65,14 +60,14 @@ const listQueuesTool: ToolDefinition = {
 
 const manageQueueInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z.string().describe("Queue name — idempotency key"),
     target: z.string().optional().describe("Target address (required for add; e.g. '192.168.1.0/24')"),
     maxLimit: z.string().optional().describe("Max upload/download limit (e.g. '10M/10M')"),
     limitAt: z.string().optional().describe("Guaranteed rate (e.g. '1M/1M')"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

@@ -1,11 +1,12 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 
 const log = createLogger("pppoe-tools");
 
@@ -13,14 +14,14 @@ const PPPOE_PATH = "interface/pppoe-client";
 
 const listPppoeClientsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z.string().optional().describe("Filter by parent interface name (exact match)"),
     status: z
       .enum(["connected", "disconnected", "all"])
       .default("all")
       .describe("Filter by running status"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum number of clients to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -63,19 +64,8 @@ const listPppoeClientsTool: ToolDefinition = {
 
       const { items: clients, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
-      const lines: string[] = [
-        `PPPoE clients on ${context.routerId}: ${total} total, showing ${clients.length} (offset ${parsed.offset})`,
-      ];
-      for (const c of clients) {
-        const name = c.name ?? "unknown";
-        const iface = c.interface ?? "unknown";
-        const user = c.user ?? "-";
-        const status = isRunning(c) ? "connected" : "disconnected";
-        lines.push(`  ${name}  [${iface}]  user=${user}  ${status}`);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("PPPoE clients", context.routerId, clients.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           clients,
@@ -93,7 +83,7 @@ const listPppoeClientsTool: ToolDefinition = {
 
 const managePppoeClientInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "update", "remove"]).describe("Action to perform"),
     name: z.string().describe("PPPoE client interface name — idempotency key (e.g. pppoe-wan)"),
     interface: z.string().optional().describe("Parent interface (required for add)"),
@@ -102,7 +92,7 @@ const managePppoeClientInputSchema = z
     serviceName: z.string().optional().describe("PPPoE service name filter (leave empty to match any)"),
     addDefaultRoute: z.boolean().optional().describe("Add default route via PPPoE (yes/no)"),
     dialOnDemand: z.boolean().optional().describe("Dial on demand instead of always-on (yes/no)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -110,7 +100,7 @@ const managePppoeClientTool: ToolDefinition = {
   name: "manage_pppoe_client",
   title: "Manage PPPoE Client",
   description:
-    "Add, update, or remove a PPPoE client interface. Idempotent by name: add returns already_exists if same name+interface+user exists; throws CONFLICT if same name exists with different config. Update builds a diff of changed fields and returns no_change when nothing differs. Password is always written when provided because RouterOS does not expose it in GET.",
+    "Add, update, or remove a PPPoE client interface. Idempotent by name (already_exists on matching name+interface+user; CONFLICT on differing config; no_change when an update differs in nothing). Password is always written when provided since RouterOS does not return it on GET.",
   inputSchema: managePppoeClientInputSchema,
   annotations: {
     readOnlyHint: false,

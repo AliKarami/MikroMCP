@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -11,7 +12,7 @@ const CONTAINER_PATH = "container";
 
 const listContainersInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
   })
   .strict();
 
@@ -48,7 +49,7 @@ const listContainersTool: ToolDefinition = {
 
 const manageContainerInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["create", "start", "stop", "remove"]).describe("Action to perform"),
     name: z.string().describe("Container name — idempotency key"),
     remoteImage: z
@@ -67,7 +68,7 @@ const manageContainerInputSchema = z
       .optional()
       .describe("RouterOS environment list name for container env vars"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -75,7 +76,7 @@ const manageContainerTool: ToolDefinition = {
   name: "manage_container",
   title: "Manage Container",
   description:
-    "Create, start, stop, or remove a RouterOS container. create requires a pre-configured veth interface. start/stop are no-ops if the container is already in the target state. remove throws NOT_FOUND if the container does not exist. Supports dry-run.",
+    "Create, start, stop, or remove a RouterOS container. create needs a pre-configured veth interface; start/stop are no-ops when already in the target state; remove throws NOT_FOUND when absent. Supports dry-run.",
   inputSchema: manageContainerInputSchema,
   annotations: {
     readOnlyHint: false,

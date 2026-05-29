@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -14,7 +15,7 @@ function sanitizeComment(comment: string | undefined): string | undefined {
 
 const manageVlanInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z
       .enum(["add", "remove", "enable", "disable"])
       .describe("Action to perform"),
@@ -28,7 +29,7 @@ const manageVlanInputSchema = z
     mtu: z.number().int().min(68).max(9000).default(1500).describe("MTU size (add only)"),
     disabled: z.boolean().default(false).describe("Whether to create the VLAN disabled (add only)"),
     comment: z.string().max(255).optional().describe("Optional comment (add only)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

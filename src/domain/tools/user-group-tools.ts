@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -9,14 +10,8 @@ const log = createLogger("user-group-tools");
 
 const listUserGroupsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of groups to return"),
+    routerId,
+    limit,
   })
   .strict();
 
@@ -57,12 +52,12 @@ const listUserGroupsTool: ToolDefinition = {
 
 const manageUserGroupInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "update", "remove"]).describe("Action to perform"),
     name: z.string().describe("Group name — idempotency key"),
     policy: z.string().optional().describe("Comma-separated policy list (e.g. 'read,write,ftp')"),
     skin: z.string().optional().describe("Optional skin name for the group"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
