@@ -423,6 +423,7 @@ AI assistants can use MikroMCP to:
 | [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration)                             | Router registry, credentials, all environment variables    |
 | [Connecting to Claude Desktop](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-Claude-Desktop) | Register MikroMCP in Claude Desktop                      |
 | [Connecting to AI Assistants](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-AI-Assistants) | Claude Code, Cursor, Codex, HTTP/Docker/systemd            |
+| [Using the Skill](docs/wiki/Using-the-Skill.md)                                                        | Install the MikroMCP usage skill so your AI assistant drives the tools safely. |
 | [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 117 tools — parameters and example prompts              |
 | [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers, request pipeline, auth model                |
 | [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling)                           | Error categories, retry engine, circuit breaker            |

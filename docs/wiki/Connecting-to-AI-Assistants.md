@@ -252,3 +252,9 @@ The bearer token in the `Authorization` header does not match any identity in `c
 
 **Router errors after connecting**
 MikroMCP connected successfully but the router is unreachable. See the [RouterOS API Setup](RouterOS-API-Setup.md) page and the Troubleshooting section in [Getting-Started.md](Getting-Started.md).
+
+## Usage skill
+
+For best results, install the MikroMCP usage skill so the assistant knows how to
+drive the tools safely (dry-run → confirm → rollback, fleet ops, diagnosis). See
+[Using the Skill](Using-the-Skill.md).
