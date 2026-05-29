@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { enrichError } from "../errors/error-enricher.js";
-import { MikroMCPError } from "../errors/error-types.js";
+import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 import { resolveCommandPolicy, checkCommand } from "./command-guard.js";
 
@@ -51,7 +50,7 @@ const getSystemClockTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "get_system_clock" });
+      throw toolError(err, context, "get_system_clock");
     }
   },
 };
@@ -136,8 +135,7 @@ const setSystemClockTool: ToolDefinition = {
         structuredContent: { action: "updated", routerId: context.routerId, diff },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "set_system_clock" });
+      throw toolError(err, context, "set_system_clock");
     }
   },
 };
@@ -201,7 +199,7 @@ const rebootTool: ToolDefinition = {
         structuredContent: { action: "rebooting", delay: parsed.delay, routerId: context.routerId },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "reboot" });
+      throw toolError(err, context, "reboot");
     }
   },
 };
@@ -280,8 +278,7 @@ const runCommandTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "run_command" });
+      throw toolError(err, context, "run_command");
     }
   },
 };

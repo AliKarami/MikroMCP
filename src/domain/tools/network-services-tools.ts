@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -54,8 +54,7 @@ const getSnmpSettingsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "get_snmp_settings" });
+      throw toolError(err, context, "get_snmp_settings");
     }
   },
 };
@@ -107,8 +106,7 @@ const getNtpSettingsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "get_ntp_settings" });
+      throw toolError(err, context, "get_ntp_settings");
     }
   },
 };
@@ -167,7 +165,7 @@ const listNetwatchEntriesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_netwatch_entries" });
+      throw toolError(err, context, "list_netwatch_entries");
     }
   },
 };
@@ -359,8 +357,7 @@ const manageNetwatchEntryTool: ToolDefinition = {
         structuredContent: { action: resultAction, host: parsed.host, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_netwatch_entry" });
+      throw toolError(err, context, "manage_netwatch_entry");
     }
   },
 };
@@ -420,7 +417,7 @@ const listNeighborsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_neighbors" });
+      throw toolError(err, context, "list_neighbors");
     }
   },
 };
@@ -483,7 +480,7 @@ const listArpEntriesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_arp_entries" });
+      throw toolError(err, context, "list_arp_entries");
     }
   },
 };
@@ -574,7 +571,7 @@ const manageNtpClientTool: ToolDefinition = {
         structuredContent: { action: "updated", routerId: context.routerId, diff },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_ntp_client" });
+      throw toolError(err, context, "manage_ntp_client");
     }
   },
 };

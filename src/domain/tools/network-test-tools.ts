@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("network-test-tools");
@@ -55,7 +55,7 @@ const bandwidthTestTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "bandwidth_test" });
+      throw toolError(err, context, "bandwidth_test");
     }
   },
 };
@@ -117,7 +117,7 @@ const fetchUrlTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, url: parsed.url, statusCode, body: responseBody },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "fetch_url" });
+      throw toolError(err, context, "fetch_url");
     }
   },
 };
@@ -161,7 +161,7 @@ const listConnectionsTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, connections, total: all.length, returned: connections.length },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_connections" });
+      throw toolError(err, context, "list_connections");
     }
   },
 };

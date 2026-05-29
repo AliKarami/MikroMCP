@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -74,8 +74,7 @@ const listLogRulesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_log_rules" });
+      throw toolError(err, context, "list_log_rules");
     }
   },
 };
@@ -246,8 +245,7 @@ const manageLogRuleTool: ToolDefinition = {
         },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_log_rule" });
+      throw toolError(err, context, "manage_log_rule");
     }
   },
 };
@@ -308,8 +306,7 @@ const listLogActionsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_log_actions" });
+      throw toolError(err, context, "list_log_actions");
     }
   },
 };
@@ -467,8 +464,7 @@ const manageLogActionTool: ToolDefinition = {
         },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_log_action" });
+      throw toolError(err, context, "manage_log_action");
     }
   },
 };

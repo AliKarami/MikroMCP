@@ -7,6 +7,8 @@ import { auditLog } from "../../observability/audit-log.js";
 import { checkAuthz } from "../../middleware/authz.js";
 import { buildRouterToolContext } from "../../mcp/tool-context.js";
 import { checkFleetConfirmation } from "../../middleware/fleet-confirmation.js";
+import { takeSnapshot } from "../snapshot/snapshot-engine.js";
+import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 
 const log = createLogger("fleet-tools");
 
@@ -111,7 +113,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     name: "bulk_execute",
     title: "Bulk Execute",
     description:
-      "Fan out a single-router tool to multiple routers in parallel (up to `concurrency` at a time). Target routers via explicit routerIds or by tag. Non-destructive tools fan out immediately. Destructive tools require a two-step confirmation: call without `confirmationToken` to receive a fleet token (requires `MIKROMCP_CONFIRMATION_SECRET`), then re-call with that token to proceed. Returns per-router results with succeeded/failed counts.",
+      "Fan out a single-router tool to multiple routers in parallel (up to `concurrency` at a time). Target routers via explicit routerIds or by tag. Non-destructive tools fan out immediately. Destructive tools require a two-step confirmation: call without `confirmationToken` to receive a fleet token (requires `MIKROMCP_CONFIRMATION_SECRET`), then re-call with that token to proceed. Write operations take a per-router config snapshot and journal entry before applying, so fleet changes can be rolled back. Returns per-router results with succeeded/failed counts.",
     inputSchema: bulkExecuteInputSchema,
     annotations: {
       readOnlyHint: false,
@@ -256,8 +258,13 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         };
       }
 
+      const isWrite = !targetTool.annotations.readOnlyHint;
+      const snapshotDir = context.appConfig.snapshotDir;
+      const journalPath = context.appConfig.journalPath;
+
       async function runForRouter(router: RouterConfig): Promise<BulkResult> {
         const start = Date.now();
+        let journalId: string | undefined;
         try {
           checkAuthz(context.identity, parsed.toolName, router.id);
           const routerContext = buildRouterToolContext({
@@ -269,11 +276,47 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             registry: context.routerRegistry,
           });
           const toolParams = { ...parsed.params, routerId: router.id };
+
+          const snapshotIds: string[] = [];
+          if (isWrite && targetTool.snapshotPaths && targetTool.snapshotPaths.length > 0) {
+            for (const path of targetTool.snapshotPaths) {
+              try {
+                const meta = await takeSnapshot(
+                  routerContext.routerClient,
+                  router.id,
+                  path,
+                  snapshotDir,
+                );
+                snapshotIds.push(meta.id);
+              } catch (err) {
+                log.warn(
+                  { err, path, routerId: router.id },
+                  "bulk_execute snapshot failed — proceeding without snapshot",
+                );
+              }
+            }
+          }
+
+          if (isWrite && journalPath) {
+            journalId = recordAttempt({
+              journalPath,
+              identityId: context.identity.id,
+              role: context.identity.role,
+              tool: parsed.toolName,
+              routerId: router.id,
+              params: toolParams as Record<string, unknown>,
+              snapshotIds,
+            });
+          }
+
           const result = await targetTool.handler(
             toolParams as Record<string, unknown>,
             routerContext,
           );
           const elapsed = Date.now() - start;
+          if (journalId) {
+            recordOutcome({ journalPath: journalPath!, journalId, phase: "success", durationMs: elapsed });
+          }
           auditLog({
             type: "audit",
             ts: new Date().toISOString(),
@@ -290,6 +333,9 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         } catch (err) {
           const elapsed = Date.now() - start;
           const message = err instanceof Error ? err.message : String(err);
+          if (journalId) {
+            recordOutcome({ journalPath: journalPath!, journalId, phase: "failure", outcome: message, durationMs: elapsed });
+          }
           auditLog({
             type: "audit",
             ts: new Date().toISOString(),

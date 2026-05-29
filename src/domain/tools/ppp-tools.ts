@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -35,8 +35,7 @@ const listPppProfilesTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, profiles, total: all.length, returned: profiles.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_ppp_profiles" });
+      throw toolError(err, context, "list_ppp_profiles");
     }
   },
 };
@@ -186,8 +185,7 @@ const managePppProfileTool: ToolDefinition = {
         structuredContent: { action: "removed", name: parsed.name, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_ppp_profile" });
+      throw toolError(err, context, "manage_ppp_profile");
     }
   },
 };

@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("wireguard-tools");
 
@@ -40,9 +42,7 @@ const listWgTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const total = interfaces.length;
-      const paginated = interfaces.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
 
       const lines = [`WireGuard interfaces on ${context.routerId}: ${total} total`];
       for (const iface of paginated) {
@@ -63,7 +63,7 @@ const listWgTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_wireguard_interfaces" });
+      throw toolError(err, context, "list_wireguard_interfaces");
     }
   },
 };
@@ -106,9 +106,7 @@ const listPeersTool: ToolDefinition = {
         filter,
       });
 
-      const total = allPeers.length;
-      const peers = allPeers.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: peers, total, hasMore } = paginate(allPeers, parsed.offset, parsed.limit);
 
       const lines = [`WireGuard peers on ${context.routerId}: ${total} total`];
       for (const peer of peers) {
@@ -131,7 +129,7 @@ const listPeersTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_wireguard_peers" });
+      throw toolError(err, context, "list_wireguard_peers");
     }
   },
 };
@@ -244,8 +242,7 @@ const managePeerTool: ToolDefinition = {
         structuredContent: { action: "removed", interface: parsed.interface, id: rec[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_wireguard_peer" });
+      throw toolError(err, context, "manage_wireguard_peer");
     }
   },
 };
@@ -395,8 +392,7 @@ const manageWgIfaceTool: ToolDefinition = {
         structuredContent: { action: resultAction, name: parsed.name, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_wireguard_interface" });
+      throw toolError(err, context, "manage_wireguard_interface");
     }
   },
 };

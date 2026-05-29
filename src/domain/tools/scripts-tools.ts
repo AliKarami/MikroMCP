@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -49,8 +49,7 @@ const listScriptsTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, scripts, total: scripts.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_scripts" });
+      throw toolError(err, context, "list_scripts");
     }
   },
 };
@@ -226,8 +225,7 @@ const manageScriptTool: ToolDefinition = {
         recoverability: { retryable: false, suggestedAction: "Use one of: add, update, remove." },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_script" });
+      throw toolError(err, context, "manage_script");
     }
   },
 };
@@ -286,8 +284,7 @@ const runScriptTool: ToolDefinition = {
         structuredContent: { action: "executed", name: parsed.name },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "run_script" });
+      throw toolError(err, context, "run_script");
     }
   },
 };

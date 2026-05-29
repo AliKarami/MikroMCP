@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { enrichError } from "../errors/error-enricher.js";
+import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("system-tools");
@@ -164,7 +164,7 @@ const getSystemStatusTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "get_system_status" });
+      throw toolError(err, context, "get_system_status");
     }
   },
 };

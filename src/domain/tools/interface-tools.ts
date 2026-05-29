@@ -1,8 +1,10 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("interface-tools");
 
@@ -97,10 +99,7 @@ const listInterfacesTool: ToolDefinition = {
         });
       }
 
-      const total = interfaces.length;
-
-      // Apply pagination
-      const paginated = interfaces.slice(parsed.offset, parsed.offset + parsed.limit);
+      const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
 
       // Strip counters if not requested and add computed status field
       const results = paginated.map((iface) => {
@@ -115,8 +114,6 @@ const listInterfacesTool: ToolDefinition = {
         }
         return enriched;
       });
-
-      const hasMore = parsed.offset + parsed.limit < total;
 
       const lines: string[] = [
         `Interfaces on ${context.routerId}: ${total} total, showing ${results.length} (offset ${parsed.offset})`,
@@ -141,7 +138,7 @@ const listInterfacesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_interfaces" });
+      throw toolError(err, context, "list_interfaces");
     }
   },
 };

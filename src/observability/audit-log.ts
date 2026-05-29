@@ -20,15 +20,21 @@ const SENSITIVE_KEYS = new Set([
   "confirmationsecret",
 ]);
 
+function redactValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactValue);
+  }
+  if (value !== null && typeof value === "object") {
+    return redactParams(value as Record<string, unknown>);
+  }
+  return value;
+}
+
 export function redactParams(params: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(params)) {
     if (SENSITIVE_KEYS.has(key.toLowerCase())) continue;
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      out[key] = redactParams(value as Record<string, unknown>);
-    } else {
-      out[key] = value;
-    }
+    out[key] = redactValue(value);
   }
   return out;
 }

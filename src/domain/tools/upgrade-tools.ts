@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("upgrade-tools");
@@ -59,7 +59,7 @@ const getUpgradeStatusTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "get_upgrade_status" });
+      throw toolError(err, context, "get_upgrade_status");
     }
   },
 };
@@ -120,7 +120,7 @@ const manageUpgradeTool: ToolDefinition = {
         structuredContent: { action: "install_triggered", routerId: parsed.routerId },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_upgrade" });
+      throw toolError(err, context, "manage_upgrade");
     }
   },
 };

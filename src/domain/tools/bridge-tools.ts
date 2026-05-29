@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("bridge-tools");
 
@@ -54,9 +56,7 @@ const listBridgesTool: ToolDefinition = {
         return { ...rec, ports: portsByBridge[rec.name] ?? [] };
       });
 
-      const total = enriched.length;
-      const paginated = enriched.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: paginated, total, hasMore } = paginate(enriched, parsed.offset, parsed.limit);
 
       const lines = [`Bridges on ${context.routerId}: ${total} total`];
       for (const b of paginated) {
@@ -81,7 +81,7 @@ const listBridgesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_bridges" });
+      throw toolError(err, context, "list_bridges");
     }
   },
 };
@@ -186,8 +186,7 @@ const manageBridgeTool: ToolDefinition = {
         structuredContent: { action: "removed", name: parsed.name, id: rec[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_bridge" });
+      throw toolError(err, context, "manage_bridge");
     }
   },
 };
@@ -295,8 +294,7 @@ const manageBridgePortTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_bridge_port" });
+      throw toolError(err, context, "manage_bridge_port");
     }
   },
 };

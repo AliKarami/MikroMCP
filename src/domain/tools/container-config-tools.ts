@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -40,7 +40,7 @@ const getContainerConfigTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "get_container_config" });
+      throw toolError(err, context, "get_container_config");
     }
   },
 };
@@ -115,7 +115,7 @@ const manageContainerConfigTool: ToolDefinition = {
         structuredContent: { action: "updated", routerId: context.routerId, diff },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_container_config" });
+      throw toolError(err, context, "manage_container_config");
     }
   },
 };
@@ -156,7 +156,7 @@ const listContainerEnvsTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, envs, total: all.length, returned: envs.length },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_container_envs" });
+      throw toolError(err, context, "list_container_envs");
     }
   },
 };
@@ -275,8 +275,7 @@ const manageContainerEnvTool: ToolDefinition = {
         structuredContent: { action: "removed", name: parsed.name, key: parsed.key },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_container_env" });
+      throw toolError(err, context, "manage_container_env");
     }
   },
 };
@@ -317,7 +316,7 @@ const listContainerMountsTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, mounts, total: all.length, returned: mounts.length },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_container_mounts" });
+      throw toolError(err, context, "list_container_mounts");
     }
   },
 };
@@ -429,8 +428,7 @@ const manageContainerMountTool: ToolDefinition = {
         structuredContent: { action: "removed", name: parsed.name },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_container_mount" });
+      throw toolError(err, context, "manage_container_mount");
     }
   },
 };

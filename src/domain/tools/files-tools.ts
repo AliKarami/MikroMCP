@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -54,8 +54,7 @@ const listFilesTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, files, total: files.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_files" });
+      throw toolError(err, context, "list_files");
     }
   },
 };
@@ -115,8 +114,7 @@ const getFileContentTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, name: parsed.name, contents },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "get_file_content" });
+      throw toolError(err, context, "get_file_content");
     }
   },
 };
@@ -167,7 +165,6 @@ const uploadFileTool: ToolDefinition = {
         structuredContent: { action: "uploaded", name: parsed.name, routerId: context.routerId },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
       if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ECONNREFUSED") {
         throw new MikroMCPError({
           category: ErrorCategory.CONFIGURATION,
@@ -181,7 +178,7 @@ const uploadFileTool: ToolDefinition = {
           },
         });
       }
-      throw enrichError(err, { routerId: context.routerId, tool: "upload_file" });
+      throw toolError(err, context, "upload_file");
     }
   },
 };
@@ -249,8 +246,7 @@ const deleteFileTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "delete_file" });
+      throw toolError(err, context, "delete_file");
     }
   },
 };

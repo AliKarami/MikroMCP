@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("ip-pool-tools");
 
@@ -41,9 +43,7 @@ const listIpPoolsTool: ToolDefinition = {
         filtered = filtered.filter((p) => (p.name ?? "").includes(parsed.name!));
       }
 
-      const total = filtered.length;
-      const pools = filtered.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: pools, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
       return {
         content: `IP pools on ${context.routerId}: ${total} total, showing ${pools.length} (offset ${parsed.offset})`,
@@ -57,7 +57,7 @@ const listIpPoolsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_ip_pools" });
+      throw toolError(err, context, "list_ip_pools");
     }
   },
 };
@@ -176,8 +176,7 @@ const manageIpPoolTool: ToolDefinition = {
         structuredContent: { action: "removed", name: parsed.name, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_ip_pool" });
+      throw toolError(err, context, "manage_ip_pool");
     }
   },
 };

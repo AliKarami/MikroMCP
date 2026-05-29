@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("ovpn-tools");
 
@@ -41,9 +43,7 @@ const listOvpnClientsTool: ToolDefinition = {
         offset: undefined,
       });
 
-      const total = allClients.length;
-      const clients = allClients.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: clients, total, hasMore } = paginate(allClients, parsed.offset, parsed.limit);
 
       return {
         content: `OpenVPN clients on ${context.routerId}: ${total} total, showing ${clients.length} (offset ${parsed.offset})`,
@@ -57,7 +57,7 @@ const listOvpnClientsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_ovpn_clients" });
+      throw toolError(err, context, "list_ovpn_clients");
     }
   },
 };
@@ -271,8 +271,7 @@ const manageOvpnClientTool: ToolDefinition = {
         structuredContent: { action: "removed", name: parsed.name, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_ovpn_client" });
+      throw toolError(err, context, "manage_ovpn_client");
     }
   },
 };
@@ -333,8 +332,7 @@ const getOvpnServerTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, server },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "get_ovpn_server" });
+      throw toolError(err, context, "get_ovpn_server");
     }
   },
 };
@@ -490,8 +488,7 @@ const manageOvpnServerTool: ToolDefinition = {
         structuredContent: { action: "updated", diff },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_ovpn_server" });
+      throw toolError(err, context, "manage_ovpn_server");
     }
   },
 };

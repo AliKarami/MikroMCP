@@ -42,6 +42,27 @@ describe("auditLog — credential stripping", () => {
     expect((redacted.nested as Record<string, unknown>).value).toBe(42);
     expect(redacted.top).toBe("ok");
   });
+
+  it("strips sensitive fields nested inside arrays of objects (apply_plan/bulk_execute steps)", async () => {
+    vi.resetModules();
+    const { redactParams } = await import("../../../src/observability/audit-log.js");
+    const params = {
+      steps: [
+        { tool: "manage_user", params: { name: "admin", password: "hunter2" } },
+        { tool: "manage_wireguard_peer", params: { privateKey: "WG-SECRET", endpoint: "1.2.3.4" } },
+      ],
+      top: "ok",
+    };
+    const redacted = redactParams(params);
+    const steps = redacted.steps as Array<Record<string, unknown>>;
+    const step0Params = steps[0].params as Record<string, unknown>;
+    const step1Params = steps[1].params as Record<string, unknown>;
+    expect(step0Params.password).toBeUndefined();
+    expect(step0Params.name).toBe("admin");
+    expect(step1Params.privateKey).toBeUndefined();
+    expect(step1Params.endpoint).toBe("1.2.3.4");
+    expect(redacted.top).toBe("ok");
+  });
 });
 
 describe("redactParams — crypto material", () => {

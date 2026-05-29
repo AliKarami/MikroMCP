@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -75,8 +75,7 @@ const listMangleRulesTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, rules, total: rules.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_mangle_rules" });
+      throw toolError(err, context, "list_mangle_rules");
     }
   },
 };
@@ -327,8 +326,7 @@ const manageMangleRuleTool: ToolDefinition = {
         },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_mangle_rule" });
+      throw toolError(err, context, "manage_mangle_rule");
     }
   },
 };
