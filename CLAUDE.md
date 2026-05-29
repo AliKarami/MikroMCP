@@ -248,7 +248,7 @@ Two transports:
 | Routes | `ip/route` |
 | Routing rules | `routing/rule` |
 | Routing tables | `routing/table` |
-| BGP peers | `routing/bgp/peer` |
+| BGP peers | `routing/bgp/session` |
 | OSPF neighbors | `routing/ospf/neighbor` |
 | DHCP leases | `ip/dhcp-server/lease` |
 | Firewall filter | `ip/firewall/filter` |
