@@ -79,7 +79,7 @@ Credentials are never logged or included in tool responses.
 
 ### Default router resolution
 
-When a tool call omits `routerId`, MikroMCP resolves the target router in two steps: first it checks `MIKROMCP_DEFAULT_ROUTER`; if that is unset it falls back to the sole configured router (when exactly one is defined in `routers.yaml`). If neither condition is met the call is rejected with a `CONFIGURATION` error. `mikromcp init` writes `MIKROMCP_DEFAULT_ROUTER` into `~/.mikromcp/.env` automatically, so single-router setups work without specifying `routerId` in every prompt.
+When a tool call omits `routerId`, MikroMCP resolves the target router in two steps: first it checks `MIKROMCP_DEFAULT_ROUTER`; if that is unset it falls back to the sole configured router (when exactly one is defined in `routers.yaml`). If neither condition is met (multiple routers, no default set) the call is rejected with a `VALIDATION` error (`MISSING_ROUTER_ID`) that lists the available routers. `mikromcp init` writes `MIKROMCP_DEFAULT_ROUTER` into `~/.mikromcp/.env` automatically, so single-router setups work without specifying `routerId` in every prompt.
 
 ---
 
