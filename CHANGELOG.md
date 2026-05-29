@@ -13,6 +13,7 @@ Each release section covers changes **since the previous release only**.
 ### Added
 - `MIKROMCP_DEFAULT_ROUTER` environment variable — sets the router used when a tool call omits `routerId`
 - MikroMCP usage skill (`skills/mikromcp/`) — a progressive-disclosure Claude Code skill for driving the tools safely (tool selection, dry-run/confirm/rollback flows, fleet ops, error recovery) with curated links to official MikroTik documentation. See `docs/wiki/Using-the-Skill.md`.
+- MCP server now sends a concise `instructions` string in the initialize response (safety nudge: dry-run writes, confirmation tokens, prefer dedicated tools over `run_command`) so any client gets baseline guidance even without the usage skill
 
 ### Changed
 - `routerId` is now optional on every router-scoped tool. When omitted, the server resolves it from `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when exactly one exists; otherwise it returns a `MISSING_ROUTER_ID` error listing available routers
