@@ -1,25 +1,20 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 
 const log = createLogger("wireguard-tools");
 
 const listWgInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of interfaces to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    routerId,
+    limit,
+    offset,
   })
   .strict();
 
@@ -44,15 +39,14 @@ const listWgTool: ToolDefinition = {
       });
       const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
 
-      const lines = [`WireGuard interfaces on ${context.routerId}: ${total} total`];
-      for (const iface of paginated) {
-        const rec = iface as Record<string, string>;
-        const running = rec.running === "true" ? "UP" : "DOWN";
-        lines.push(`  ${rec.name} [port=${rec["listen-port"] ?? "?"}] ${running}`);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary(
+          "WireGuard interfaces",
+          context.routerId,
+          paginated.length,
+          total,
+          parsed.offset,
+        ),
         structuredContent: {
           routerId: context.routerId,
           interfaces: paginated,
@@ -70,16 +64,10 @@ const listWgTool: ToolDefinition = {
 
 const listPeersInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z.string().optional().describe("Filter by WireGuard interface name"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of peers to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -108,17 +96,8 @@ const listPeersTool: ToolDefinition = {
 
       const { items: peers, total, hasMore } = paginate(allPeers, parsed.offset, parsed.limit);
 
-      const lines = [`WireGuard peers on ${context.routerId}: ${total} total`];
-      for (const peer of peers) {
-        const rec = peer as Record<string, string>;
-        const key = rec["public-key"] ? rec["public-key"].slice(0, 8) + "…" : "unknown";
-        lines.push(
-          `  [${rec.interface ?? "?"}] ${key} last-handshake=${rec["last-handshake"] ?? "never"}`,
-        );
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("WireGuard peers", context.routerId, peers.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           peers,
@@ -136,7 +115,7 @@ const listPeersTool: ToolDefinition = {
 
 const managePeerInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     interface: z.string().describe("WireGuard interface name (e.g. wg0)"),
     publicKey: z.string().min(1).describe("Peer public key in base64 format (44 characters)"),
@@ -146,7 +125,7 @@ const managePeerInputSchema = z
       .describe("Allowed IP address/CIDR for this peer (e.g. 10.0.0.2/32)"),
     endpoint: z.string().optional().describe("Peer endpoint as IP:port (e.g. 1.2.3.4:51820)"),
     comment: z.string().max(255).optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -249,7 +228,7 @@ const managePeerTool: ToolDefinition = {
 
 const manageWgIfaceInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z.string().describe("Interface name — idempotency key (e.g. wg0)"),
     listenPort: z
@@ -261,7 +240,7 @@ const manageWgIfaceInputSchema = z
       .describe("UDP listen port (RouterOS picks one if omitted)"),
     mtu: z.number().int().min(1280).max(65535).default(1420).describe("MTU (default 1420)"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

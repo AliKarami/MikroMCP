@@ -4,12 +4,13 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 
 const log = createLogger("dhcp-tools");
 
@@ -19,7 +20,7 @@ const log = createLogger("dhcp-tools");
 
 const listDhcpLeasesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     server: z.string().optional().describe("Filter by DHCP server name"),
     status: z
       .enum(["bound", "waiting", "offered", "blocked", "all"])
@@ -33,14 +34,8 @@ const listDhcpLeasesInputSchema = z
       .enum(["dynamic", "static", "all"])
       .default("all")
       .describe("Filter by lease type (dynamic or static)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of leases to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -109,27 +104,8 @@ const listDhcpLeasesTool: ToolDefinition = {
 
       const { items: paginated, total, hasMore } = paginate(leases, parsed.offset, parsed.limit);
 
-      const lines: string[] = [
-        `DHCP leases on ${context.routerId}: ${total} total, showing ${paginated.length} (offset ${parsed.offset})`,
-      ];
-
-      for (const lease of paginated) {
-        const rec = lease as Record<string, unknown>;
-
-        const address = rec.address ?? rec["active-address"] ?? "unknown";
-
-        const macAddress = rec["mac-address"] ?? rec["active-mac-address"] ?? "unknown";
-
-        const hostname = rec["host-name"];
-        const hostnameStr = hostname && hostname !== "" ? ` (${hostname})` : "";
-
-        const status = rec.status ?? "unknown";
-
-        lines.push(`  ${address}  ${macAddress}${hostnameStr}  [${status}]`);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("DHCP leases", context.routerId, paginated.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           leases: paginated,
@@ -147,7 +123,7 @@ const listDhcpLeasesTool: ToolDefinition = {
 
 const manageDhcpLeaseInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z
       .enum(["make-static", "remove"])
       .describe(
@@ -156,7 +132,7 @@ const manageDhcpLeaseInputSchema = z
     macAddress: z
       .string()
       .describe("MAC address of the lease — idempotency key (case-insensitive)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

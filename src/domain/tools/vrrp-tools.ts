@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -9,18 +10,12 @@ const log = createLogger("vrrp-tools");
 
 const listVrrpInstancesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z
       .string()
       .optional()
       .describe("Filter by master interface name (exact match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of instances to return"),
+    limit,
   })
   .strict();
 
@@ -68,7 +63,7 @@ const listVrrpInstancesTool: ToolDefinition = {
 
 const manageVrrpInstanceInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z.string().describe("VRRP interface name — idempotency key"),
     interface: z.string().optional().describe("Master interface (required for add)"),
@@ -83,7 +78,7 @@ const manageVrrpInstanceInputSchema = z
     interval: z.number().int().min(1).optional().describe("Advertisement interval in seconds"),
     version: z.enum(["2", "3"]).default("3").describe("VRRP protocol version"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

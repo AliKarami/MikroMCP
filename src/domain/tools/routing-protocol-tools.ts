@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -8,7 +9,7 @@ const log = createLogger("routing-protocol-tools");
 
 const listBgpPeersInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     state: z
       .string()
       .optional()
@@ -54,7 +55,7 @@ const listBgpPeersTool: ToolDefinition = {
 
 const listOspfNeighborsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     state: z.string().optional().describe("Filter by neighbor state (e.g. full, 2-way, init)"),
   })
   .strict();

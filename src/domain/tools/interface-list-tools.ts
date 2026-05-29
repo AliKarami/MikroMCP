@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -8,8 +9,8 @@ const log = createLogger("interface-list-tools");
 
 const listInterfaceListsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum lists to return"),
+    routerId,
+    limit,
   })
   .strict();
 
@@ -40,11 +41,11 @@ const listInterfaceListsTool: ToolDefinition = {
 
 const manageInterfaceListInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     name: z.string().describe("Interface list name — idempotency key"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -120,12 +121,12 @@ const manageInterfaceListTool: ToolDefinition = {
 
 const manageInterfaceListMemberInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     list: z.string().describe("Interface list name — part of composite idempotency key"),
     interface: z.string().describe("Interface name to add/remove — part of composite idempotency key"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 import { resolveCommandPolicy, checkCommand } from "./command-guard.js";
@@ -12,7 +13,7 @@ const log = createLogger("system-ops-tools");
 
 const getSystemClockInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
   })
   .strict();
 
@@ -61,11 +62,11 @@ const getSystemClockTool: ToolDefinition = {
 
 const setSystemClockInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     date: z.string().optional().describe("Date in RouterOS format: mon/dd/yyyy (e.g. jan/02/2006)"),
     time: z.string().optional().describe("Time in RouterOS format: hh:mm:ss (e.g. 15:04:05)"),
     timeZoneName: z.string().optional().describe("IANA timezone name (e.g. Europe/London, UTC)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -146,7 +147,7 @@ const setSystemClockTool: ToolDefinition = {
 
 const rebootInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     delay: z
       .number()
       .int()
@@ -212,7 +213,7 @@ const OUTPUT_MAX_CHARS = 4_000;
 
 const runCommandInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     command: z.string().min(1).describe("RouterOS console command to execute"),
     dryRun: z
       .boolean()
@@ -225,7 +226,7 @@ const runCommandTool: ToolDefinition = {
   name: "run_command",
   title: "Run Command",
   description:
-    "Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy — built-in deny list blocks destructive commands; optionally restrict further with an explicit allow list (cmdAllow in routers.yaml or MIKROMCP_CMD_ALLOW). Use dedicated tools (reboot, etc.) for controlled operations. Output capped at 4000 characters.",
+    "Execute an arbitrary RouterOS console command via SSH. Guarded by an allow/deny policy (built-in deny list blocks destructive commands; tighten via cmdAllow in routers.yaml or MIKROMCP_CMD_ALLOW). Prefer dedicated tools (reboot, etc.) where available. Output capped at 4000 characters.",
   inputSchema: runCommandInputSchema,
   annotations: {
     readOnlyHint: false,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -14,19 +15,13 @@ const logActionTypeEnum = z.enum(["memory", "disk", "remote", "echo", "email"]);
 
 const listLogRulesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     topics: z.string().optional().describe("Filter by topics (substring match)"),
     logAction: z
       .string()
       .optional()
       .describe("Filter by log action target (exact match on action field)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of rules to return (1-500, default 100)"),
+    limit,
   })
   .strict();
 
@@ -81,14 +76,14 @@ const listLogRulesTool: ToolDefinition = {
 
 const manageLogRuleInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     topics: z.string().describe("Log topics (e.g. firewall, system, info) — idempotency key"),
     logAction: z
       .string()
       .describe("Log action target name (RouterOS action field) — idempotency key"),
     prefix: z.string().optional().describe("Optional prefix to prepend to log messages"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -96,9 +91,7 @@ const manageLogRuleTool: ToolDefinition = {
   name: "manage_log_rule",
   title: "Manage Log Rule",
   description:
-    "Add, remove, enable, or disable a RouterOS logging rule. Idempotent by topics+logAction pair. " +
-    "add returns already_exists if matching rule found. remove returns not_found gracefully. " +
-    "enable/disable throw NOT_FOUND if rule not found. Supports dry-run.",
+    "Add, remove, enable, or disable a RouterOS logging rule. Idempotent by topics+logAction (add → already_exists on match; remove → not_found handled gracefully; enable/disable throw NOT_FOUND when absent). Supports dry-run.",
   inputSchema: manageLogRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -252,17 +245,11 @@ const manageLogRuleTool: ToolDefinition = {
 
 const listLogActionsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     type: logActionTypeEnum
       .optional()
       .describe("Filter by action type (exact match): memory, disk, remote, echo, email"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of actions to return (1-500, default 100)"),
+    limit,
   })
   .strict();
 
@@ -313,7 +300,7 @@ const listLogActionsTool: ToolDefinition = {
 
 const manageLogActionInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     name: z.string().describe("Log action name — idempotency key"),
     type: logActionTypeEnum
@@ -331,7 +318,7 @@ const manageLogActionInputSchema = z
       .string()
       .optional()
       .describe("Disk log file name without extension (for type=disk)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

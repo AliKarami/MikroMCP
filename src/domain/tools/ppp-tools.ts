@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -9,9 +10,9 @@ const log = createLogger("ppp-tools");
 
 const listPppProfilesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by profile name (exact match)"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum profiles to return"),
+    limit,
   })
   .strict();
 
@@ -42,7 +43,7 @@ const listPppProfilesTool: ToolDefinition = {
 
 const managePppProfileInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "update", "remove"]).describe("Action to perform"),
     name: z.string().describe("Profile name — idempotency key"),
     localAddress: z.string().optional().describe("Local IP assigned to router end of PPP link"),
@@ -51,7 +52,7 @@ const managePppProfileInputSchema = z
     rateLimit: z.string().optional().describe("Rate limit string (e.g. '10M/10M')"),
     sessionTimeout: z.string().optional().describe("Session timeout duration string (e.g. '1h')"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

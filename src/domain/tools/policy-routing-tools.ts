@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -12,7 +13,7 @@ const ROUTING_TABLE_PATH = "routing/table";
 
 const listRoutingRulesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     table: z.string().optional().describe("Filter by routing table name"),
     disabled: z.boolean().optional().describe("Filter by disabled state"),
   })
@@ -63,7 +64,7 @@ const listRoutingRulesTool: ToolDefinition = {
 
 const manageRoutingRuleInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     table: z
       .string()
@@ -80,7 +81,7 @@ const manageRoutingRuleInputSchema = z
       .max(4294967295)
       .optional()
       .describe("Rule priority (0–4294967295)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -283,7 +284,7 @@ const manageRoutingRuleTool: ToolDefinition = {
 
 const listRoutingTablesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
   })
   .strict();
 
@@ -320,11 +321,11 @@ const listRoutingTablesTool: ToolDefinition = {
 
 const manageRoutingTableInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     name: z.string().describe("Routing table name (idempotency key)"),
     fib: z.boolean().default(false).describe("Whether to sync this table with the FIB"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

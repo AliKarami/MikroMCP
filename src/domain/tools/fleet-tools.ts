@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { routerId } from "./schema-fields.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -14,7 +15,7 @@ const log = createLogger("fleet-tools");
 
 const checkHealthInputSchema = z
   .object({
-    routerId: z.string().describe("Target router to health-check"),
+    routerId,
   })
   .strict();
 
@@ -113,7 +114,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     name: "bulk_execute",
     title: "Bulk Execute",
     description:
-      "Fan out a single-router tool to multiple routers in parallel (up to `concurrency` at a time). Target routers via explicit routerIds or by tag. Non-destructive tools fan out immediately. Destructive tools require a two-step confirmation: call without `confirmationToken` to receive a fleet token (requires `MIKROMCP_CONFIRMATION_SECRET`), then re-call with that token to proceed. Write operations take a per-router config snapshot and journal entry before applying, so fleet changes can be rolled back. Returns per-router results with succeeded/failed counts.",
+      "Fan out a single-router tool to many routers in parallel (up to `concurrency`), targeted by routerIds or tag. Destructive tools need two-step confirmation: call without `confirmationToken` to get a fleet token (needs MIKROMCP_CONFIRMATION_SECRET), then re-call with it. Writes snapshot+journal each router for rollback. Returns per-router results with succeeded/failed counts.",
     inputSchema: bulkExecuteInputSchema,
     annotations: {
       readOnlyHint: false,

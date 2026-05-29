@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -13,7 +14,7 @@ const BODY_CAP = 65536;
 
 const bandwidthTestInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     address: z.string().describe("Remote host running RouterOS btest server"),
     protocol: z.enum(["tcp", "udp"]).default("tcp").describe("Test protocol"),
     direction: z.enum(["send", "receive", "both"]).default("both").describe("Test direction"),
@@ -66,7 +67,7 @@ const bandwidthTestTool: ToolDefinition = {
 
 const fetchUrlInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     url: z.string().url().describe("URL to fetch from the router"),
     method: z.enum(["GET", "POST"]).default("GET").describe("HTTP method"),
     httpData: z.string().optional().describe("Request body for POST"),
@@ -128,11 +129,11 @@ const fetchUrlTool: ToolDefinition = {
 
 const listConnectionsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     srcAddress: z.string().optional().describe("Filter by source address (substring match)"),
     dstAddress: z.string().optional().describe("Filter by destination address (substring match)"),
     protocol: z.string().optional().describe("Filter by protocol (exact match, e.g. tcp, udp, icmp)"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum connections to return"),
+    limit,
   })
   .strict();
 

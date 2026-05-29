@@ -1,11 +1,12 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 
 const log = createLogger("wifi-tools");
 
@@ -21,15 +22,9 @@ function wifiRegistrationPath(rosVersion: string): string {
 
 const listWifiInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of interfaces to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    routerId,
+    limit,
+    offset,
   })
   .strict();
 
@@ -56,15 +51,8 @@ const listWifiTool: ToolDefinition = {
       });
       const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
 
-      const lines = [`WiFi interfaces on ${context.routerId}: ${total} total`];
-      for (const iface of paginated) {
-        const rec = iface as Record<string, string>;
-        const status = rec.disabled === "true" ? "DISABLED" : "ENABLED";
-        lines.push(`  ${rec.name} [${rec.ssid ?? "no-ssid"}] ${status}`);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("WiFi interfaces", context.routerId, paginated.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           interfaces: paginated,
@@ -82,16 +70,10 @@ const listWifiTool: ToolDefinition = {
 
 const listWifiClientsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z.string().optional().describe("Filter by WiFi interface name"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of clients to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -117,16 +99,8 @@ const listWifiClientsTool: ToolDefinition = {
 
       const { items: clients, total, hasMore } = paginate(allClients, parsed.offset, parsed.limit);
 
-      const lines = [`WiFi clients on ${context.routerId}: ${total} total`];
-      for (const c of clients) {
-        const rec = c as Record<string, string>;
-        lines.push(
-          `  ${rec["mac-address"] ?? rec[".id"]} on ${rec.interface ?? "unknown"} signal=${rec["signal-strength"] ?? "?"}`,
-        );
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("WiFi clients", context.routerId, clients.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           clients,
@@ -144,11 +118,11 @@ const listWifiClientsTool: ToolDefinition = {
 
 const manageWifiInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().describe("WiFi interface name (e.g. wifi1, wlan1)"),
     disabled: z.boolean().optional().describe("Set to true to disable, false to enable"),
     ssid: z.string().max(32).optional().describe("New SSID to set"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

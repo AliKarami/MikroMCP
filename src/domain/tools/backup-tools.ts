@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -7,7 +8,7 @@ const log = createLogger("backup-tools");
 
 const createBackupInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().default("backup").describe("Backup file name (without extension)"),
     password: z.string().optional().describe("Password to encrypt the backup file"),
     dryRun: z.boolean().default(false).describe("Preview the backup without creating it"),
@@ -62,7 +63,7 @@ const createBackupTool: ToolDefinition = {
 
 const exportConfigInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     compact: z
       .boolean()
       .default(false)

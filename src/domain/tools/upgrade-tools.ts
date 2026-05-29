@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -8,7 +9,7 @@ const log = createLogger("upgrade-tools");
 
 const getUpgradeStatusInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
   })
   .strict();
 
@@ -66,7 +67,7 @@ const getUpgradeStatusTool: ToolDefinition = {
 
 const manageUpgradeInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z
       .enum(["check", "install"])
       .describe(

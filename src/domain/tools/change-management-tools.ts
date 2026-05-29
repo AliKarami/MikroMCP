@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { readFileSync } from "node:fs";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { routerId } from "./schema-fields.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
@@ -20,7 +21,7 @@ const stepSchema = z
 
 const planChangesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier"),
+    routerId,
     steps: z
       .array(stepSchema)
       .min(1)
@@ -31,7 +32,7 @@ const planChangesInputSchema = z
 
 const applyPlanInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier"),
+    routerId,
     steps: z
       .array(stepSchema)
       .min(1)
@@ -43,7 +44,7 @@ const applyPlanInputSchema = z
 
 const rollbackChangeInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier"),
+    routerId,
     journalId: z.string().describe("Journal entry ID from write-journal.ndjson to roll back"),
     dryRun: z.boolean().default(false).describe("Preview the restore plan without applying changes"),
   })
@@ -72,7 +73,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     name: "plan_changes",
     title: "Plan Changes",
     description:
-      "Preview a sequence of write operations without applying them. Each step is run with dryRun=true against the live router state. Returns the current state of affected RouterOS paths plus the predicted action for each step. Use apply_plan to execute the same steps for real.",
+      "Preview a sequence of write operations: each step runs with dryRun=true against live state, returning affected paths and the predicted action per step. Use apply_plan to execute the same steps for real.",
     inputSchema: planChangesInputSchema,
     annotations: {
       readOnlyHint: false,
@@ -133,7 +134,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     name: "apply_plan",
     title: "Apply Plan",
     description:
-      "Execute a sequence of write operations in order. Stops on the first failure. Each step is snapshotted and journaled individually. Requires a confirmationToken for non-admin identities (same two-step flow as other destructive tools). Use rollback_change with any resulting journal IDs to undo individual steps.",
+      "Execute write operations in order, stopping on first failure. Each step is snapshotted and journaled individually. Non-admin identities need a confirmationToken (same two-step flow as other destructive tools). Undo individual steps via rollback_change with the returned journal IDs.",
     inputSchema: applyPlanInputSchema,
     snapshotPaths: [],
     annotations: {
@@ -245,7 +246,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     name: "rollback_change",
     title: "Rollback Change",
     description:
-      "Restore the RouterOS state to what it was before a write, identified by its journal ID. Reads the before-snapshot from disk, computes the diff against live state, and applies the reverse diff. Use dryRun=true to preview the restore plan without applying. Requires MIKROMCP_DATA_DIR (or defaults to data/) to be configured.",
+      "Restore RouterOS state to before a write, identified by its journal ID: reads the before-snapshot, diffs against live state, and applies the reverse. Use dryRun=true to preview the restore plan. Requires MIKROMCP_DATA_DIR (defaults to data/).",
     inputSchema: rollbackChangeInputSchema,
     annotations: {
       readOnlyHint: false,

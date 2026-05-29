@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -11,7 +12,7 @@ const FILE_PATH = "file";
 
 const listFilesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by file name (substring match)"),
     type: z.string().optional().describe("Filter by file type (e.g. script, backup, package)"),
   })
@@ -61,7 +62,7 @@ const listFilesTool: ToolDefinition = {
 
 const getFileContentInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().describe("Exact file name on the router (e.g. flash/script.rsc)"),
   })
   .strict();
@@ -121,7 +122,7 @@ const getFileContentTool: ToolDefinition = {
 
 const uploadFileInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().describe("Target filename on the router (e.g. flash/my-script.rsc)"),
     content: z.string().describe("File content to upload (text)"),
     dryRun: z
@@ -135,7 +136,7 @@ const uploadFileTool: ToolDefinition = {
   name: "upload_file",
   title: "Upload File",
   description:
-    "Upload a text file to a MikroTik router via FTP using the router's credentials. Overwrites any existing file with the same name. Requires FTP permission on the router user — see config/routers.example.yaml for setup instructions. Supports dry-run (tests FTP connectivity only).",
+    "Upload a text file to a router via FTP using the router's credentials, overwriting any existing file of the same name. Requires FTP permission on the router user (see config/routers.example.yaml). Dry-run tests FTP connectivity only.",
   inputSchema: uploadFileInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -185,7 +186,7 @@ const uploadFileTool: ToolDefinition = {
 
 const deleteFileInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().describe("Exact file name on the router (e.g. flash/backup.backup)"),
     dryRun: z.boolean().default(false).describe("Preview deletion without removing the file"),
   })

@@ -1,25 +1,20 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 
 const log = createLogger("bridge-tools");
 
 const listBridgesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of bridges to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    routerId,
+    limit,
+    offset,
   })
   .strict();
 
@@ -58,19 +53,8 @@ const listBridgesTool: ToolDefinition = {
 
       const { items: paginated, total, hasMore } = paginate(enriched, parsed.offset, parsed.limit);
 
-      const lines = [`Bridges on ${context.routerId}: ${total} total`];
-      for (const b of paginated) {
-        const bRec = b as Record<string, unknown>;
-        const portList = (b.ports as RouterOSRecord[])
-          .map((p) => (p as Record<string, string>).interface)
-          .join(", ");
-        lines.push(
-          `  ${String(bRec.name)} [${(b.ports as unknown[]).length} ports${portList ? ": " + portList : ""}]`,
-        );
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("Bridges", context.routerId, paginated.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           bridges: paginated,
@@ -88,7 +72,7 @@ const listBridgesTool: ToolDefinition = {
 
 const manageBridgeInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["create", "remove"]).describe("Action to perform"),
     name: z
       .string()
@@ -97,7 +81,7 @@ const manageBridgeInputSchema = z
       .describe("Bridge interface name"),
     comment: z.string().max(255).optional().describe("Optional comment"),
     disabled: z.boolean().default(false).describe("Whether the bridge should be disabled"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -193,11 +177,11 @@ const manageBridgeTool: ToolDefinition = {
 
 const manageBridgePortInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     bridge: z.string().describe("Bridge interface name"),
     interface: z.string().describe("Interface to add or remove as a bridge port"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

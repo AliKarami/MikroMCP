@@ -58,6 +58,7 @@ Credentials are never logged or included in tool responses.
 |---|---|---|
 | `MIKROMCP_TRANSPORT` | `stdio` | Transport mode: `stdio` or `http` |
 | `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry YAML |
+| `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId`; falls back to the sole configured router when only one exists |
 | `MIKROMCP_LOG_LEVEL` | `info` | Log verbosity: `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP listen port (HTTP transport only) |
 | `MIKROMCP_BIND_HOST` | `127.0.0.1` | HTTP bind address (HTTP transport only) |

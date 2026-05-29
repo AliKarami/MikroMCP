@@ -4,8 +4,9 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -19,17 +20,11 @@ const log = createLogger("route-tools");
 
 const listRoutesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     activeOnly: z.boolean().default(false).describe("Return only active routes"),
     staticOnly: z.boolean().default(false).describe("Return only non-dynamic routes"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of routes to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -79,38 +74,8 @@ const listRoutesTool: ToolDefinition = {
 
       const { items: paginated, total, hasMore } = paginate(routes, parsed.offset, parsed.limit);
 
-      const lines: string[] = [
-        `Routes on ${context.routerId}: ${total} total, showing ${paginated.length} (offset ${parsed.offset})`,
-      ];
-
-      for (const route of paginated) {
-        const rec = route as Record<string, unknown>;
-
-        const dstAddress = rec["dst-address"] ?? "unknown";
-        const gateway = rec.gateway ?? rec["immediate-gw"] ?? "unknown";
-        const distance = rec.distance;
-        const active = rec.active === true || rec.active === "true";
-        const dynamic = rec.dynamic === true || rec.dynamic === "true";
-
-        let line = `  ${dstAddress} via ${gateway}`;
-
-        if (distance) {
-          line += ` [${distance}]`;
-        }
-
-        if (active) {
-          line += " ACTIVE";
-        }
-
-        if (dynamic) {
-          line += " DYNAMIC";
-        }
-
-        lines.push(line);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("Routes", context.routerId, paginated.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           routes: paginated,
@@ -132,7 +97,7 @@ const listRoutesTool: ToolDefinition = {
 
 const manageRouteInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform: add or remove a route"),
     dstAddress: cidrSchema.describe(
       "Destination address in CIDR notation or plain IP (auto-converted to /32), e.g. 10.0.0.0/8 or 10.77.0.4",

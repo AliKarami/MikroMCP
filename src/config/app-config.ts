@@ -4,6 +4,7 @@ export interface AppConfig {
   bindHost: string;
   logLevel: string;
   configPath: string;
+  defaultRouter: string | undefined;
   dataDir: string;
   snapshotDir: string;
   journalPath: string;
@@ -52,6 +53,7 @@ export function loadAppConfig(): AppConfig {
     bindHost: env.MIKROMCP_BIND_HOST ?? "127.0.0.1",
     logLevel: env.MIKROMCP_LOG_LEVEL ?? "info",
     configPath: env.MIKROMCP_CONFIG_PATH ?? join(mikromcpDir(), "routers.yaml"),
+    defaultRouter: env.MIKROMCP_DEFAULT_ROUTER || undefined,
     dataDir,
     snapshotDir: `${dataDir}/snapshots`,
     journalPath: `${dataDir}/write-journal.ndjson`,

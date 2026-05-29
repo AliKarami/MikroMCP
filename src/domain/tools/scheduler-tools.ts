@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -11,7 +12,7 @@ const SCHEDULER_PATH = "system/scheduler";
 
 const listScheduledJobsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by job name (exact match)"),
   })
   .strict();
@@ -54,7 +55,7 @@ const listScheduledJobsTool: ToolDefinition = {
 
 const manageScheduledJobInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "update", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z.string().describe("Job name — idempotency key"),
     onEvent: z
@@ -65,7 +66,7 @@ const manageScheduledJobInputSchema = z
     startTime: z.string().optional().describe("Start time (e.g. 00:00:00)"),
     interval: z.string().optional().describe("Run interval (e.g. 00:05:00 for every 5 minutes)"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

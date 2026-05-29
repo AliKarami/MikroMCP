@@ -1,16 +1,17 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listSummary } from "./pagination.js";
 
 const log = createLogger("interface-tools");
 
 const listInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     type: z
       .enum(["ether", "vlan", "bridge", "bonding", "wireguard", "gre", "all"])
       .default("all")
@@ -24,14 +25,8 @@ const listInputSchema = z
       .boolean()
       .default(false)
       .describe("Include traffic counters (tx-byte, rx-byte, etc.)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of interfaces to return"),
-    offset: z.number().int().min(0).default(0).describe("Offset for pagination"),
+    limit,
+    offset,
   })
   .strict();
 
@@ -115,19 +110,8 @@ const listInterfacesTool: ToolDefinition = {
         return enriched;
       });
 
-      const lines: string[] = [
-        `Interfaces on ${context.routerId}: ${total} total, showing ${results.length} (offset ${parsed.offset})`,
-      ];
-      for (const iface of results) {
-        const rec = iface as Record<string, unknown>;
-        const name = rec.name ?? rec[".id"] ?? "unknown";
-        const type = rec.type ?? parsed.type;
-        const status = String(rec.status).toUpperCase();
-        lines.push(`  ${name} [${type}] ${status}`);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: listSummary("Interfaces", context.routerId, results.length, total, parsed.offset),
         structuredContent: {
           routerId: context.routerId,
           interfaces: results,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -9,19 +10,13 @@ const log = createLogger("certificate-tools");
 
 const listCertificatesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by certificate name (substring match)"),
     expired: z
       .boolean()
       .optional()
       .describe("Filter by expiry status; omit to return all"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of certificates to return"),
+    limit,
   })
   .strict();
 
@@ -76,10 +71,10 @@ const listCertificatesTool: ToolDefinition = {
 
 const manageCertificateInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["remove", "trust", "untrust"]).describe("Action to perform"),
     name: z.string().describe("Certificate name — idempotency key"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

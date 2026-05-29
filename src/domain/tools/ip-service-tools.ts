@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -11,7 +12,7 @@ const SERVICE_NAMES = ["api", "api-ssl", "ssh", "telnet", "www", "www-ssl", "win
 
 const listIpServicesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z
       .enum(SERVICE_NAMES)
       .optional()
@@ -57,15 +58,8 @@ const listIpServicesTool: ToolDefinition = {
         });
       }
 
-      const lines: string[] = [`IP services on ${context.routerId}: ${filtered.length} returned`];
-      for (const s of filtered) {
-        const rec = s as Record<string, unknown>;
-        const isDisabled = rec.disabled === true || rec.disabled === "true";
-        lines.push(`  ${rec.name}  port:${rec.port ?? "-"}  [${isDisabled ? "DISABLED" : "enabled"}]`);
-      }
-
       return {
-        content: lines.join("\n"),
+        content: `IP services on ${context.routerId}: ${filtered.length} returned. Full records in structuredContent.`,
         structuredContent: {
           routerId: context.routerId,
           services: filtered,
@@ -80,7 +74,7 @@ const listIpServicesTool: ToolDefinition = {
 
 const manageIpServiceInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z
       .enum(["enable", "disable"])
       .describe(
@@ -89,7 +83,7 @@ const manageIpServiceInputSchema = z
     name: z
       .enum(SERVICE_NAMES)
       .describe("Service name to manage (api, api-ssl, ssh, telnet, www, www-ssl, winbox, ftp)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

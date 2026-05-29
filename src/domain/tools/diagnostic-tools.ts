@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -13,7 +14,7 @@ const log = createLogger("diagnostic-tools");
 
 const pingInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     address: z.string().describe("Target IP address or hostname to ping"),
     count: z
       .number()
@@ -96,7 +97,7 @@ const pingTool: ToolDefinition = {
 
 const tracerouteInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     address: z.string().describe("Target IP address or hostname to trace"),
     count: z.number().int().min(1).max(5).default(3).describe("Probes per hop (1–5)"),
     maxHops: z.number().int().min(1).max(30).default(15).describe("Maximum number of hops (1–30)"),
@@ -168,7 +169,7 @@ const tracerouteTool: ToolDefinition = {
 
 const torchInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z.string().describe("Interface name to monitor (e.g. ether1, bridge1)"),
     duration: z
       .number()
@@ -264,15 +265,9 @@ const torchTool: ToolDefinition = {
 
 const getLogInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum entries to return (1–500)"),
-    offset: z.number().int().min(0).default(0).describe("Pagination offset"),
+    routerId,
+    limit,
+    offset,
     topics: z
       .array(z.string())
       .optional()

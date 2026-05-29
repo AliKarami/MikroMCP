@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -12,7 +13,7 @@ const log = createLogger("container-config-tools");
 // ---------------------------------------------------------------------------
 
 const getContainerConfigInputSchema = z
-  .object({ routerId: z.string().describe("Target router identifier from the router registry") })
+  .object({ routerId })
   .strict();
 
 const getContainerConfigTool: ToolDefinition = {
@@ -51,11 +52,11 @@ const getContainerConfigTool: ToolDefinition = {
 
 const manageContainerConfigInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     registryUrl: z.string().optional().describe("Container registry URL"),
     ramHighMb: z.number().int().min(1).optional().describe("RAM high-water mark in MB"),
     vethInterface: z.string().optional().describe("Veth interface name for container networking"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -126,9 +127,9 @@ const manageContainerConfigTool: ToolDefinition = {
 
 const listContainerEnvsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by container name (exact match)"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum entries to return"),
+    limit,
   })
   .strict();
 
@@ -167,12 +168,12 @@ const listContainerEnvsTool: ToolDefinition = {
 
 const manageContainerEnvInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     name: z.string().describe("Container name"),
     key: z.string().describe("Environment variable name — part of idempotency key"),
     value: z.string().optional().describe("Environment variable value (required for add)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -286,9 +287,9 @@ const manageContainerEnvTool: ToolDefinition = {
 
 const listContainerMountsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     name: z.string().optional().describe("Filter by mount name (exact match)"),
-    limit: z.number().int().min(1).max(500).default(100).describe("Maximum entries to return"),
+    limit,
   })
   .strict();
 
@@ -327,12 +328,12 @@ const listContainerMountsTool: ToolDefinition = {
 
 const manageContainerMountInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     name: z.string().describe("Mount name — idempotency key"),
     src: z.string().optional().describe("Host source path (required for add)"),
     dst: z.string().optional().describe("Container destination path (required for add)"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

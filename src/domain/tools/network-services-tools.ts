@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -13,7 +14,7 @@ const log = createLogger("network-services-tools");
 
 const getSnmpSettingsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
   })
   .strict();
 
@@ -65,7 +66,7 @@ const getSnmpSettingsTool: ToolDefinition = {
 
 const getNtpSettingsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
   })
   .strict();
 
@@ -117,16 +118,10 @@ const getNtpSettingsTool: ToolDefinition = {
 
 const listNetwatchEntriesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     host: z.string().optional().describe("Filter by host (substring match)"),
     status: z.enum(["up", "down", "unknown"]).optional().describe("Filter by current status"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of entries to return"),
+    limit,
   })
   .strict();
 
@@ -176,7 +171,7 @@ const listNetwatchEntriesTool: ToolDefinition = {
 
 const manageNetwatchEntryInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     host: z.string().describe("Host to monitor — idempotency key"),
     port: z
@@ -189,7 +184,7 @@ const manageNetwatchEntryInputSchema = z
     interval: z.string().optional().describe("Check interval (e.g. '1m'; default '1m')"),
     timeout: z.string().optional().describe("Probe timeout (e.g. '500ms')"),
     comment: z.string().optional().describe("Optional comment"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 
@@ -368,15 +363,9 @@ const manageNetwatchEntryTool: ToolDefinition = {
 
 const listNeighborsInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z.string().optional().describe("Filter by interface name (substring match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of neighbors to return"),
+    limit,
   })
   .strict();
 
@@ -428,17 +417,11 @@ const listNeighborsTool: ToolDefinition = {
 
 const listArpEntriesInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     interface: z.string().optional().describe("Filter by interface (substring match)"),
     address: z.string().optional().describe("Filter by IP address (substring match)"),
     macAddress: z.string().optional().describe("Filter by MAC address (substring match)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(500)
-      .default(100)
-      .describe("Maximum number of ARP entries to return"),
+    limit,
   })
   .strict();
 
@@ -491,7 +474,7 @@ const listArpEntriesTool: ToolDefinition = {
 
 const manageNtpClientInputSchema = z
   .object({
-    routerId: z.string().describe("Target router identifier from the router registry"),
+    routerId,
     enabled: z.boolean().optional().describe("Enable or disable the NTP client"),
     mode: z
       .enum(["unicast", "broadcast", "multicast", "manycast"])
@@ -499,7 +482,7 @@ const manageNtpClientInputSchema = z
       .describe("NTP client mode"),
     servers: z.string().optional().describe("Comma-separated NTP server addresses"),
     vlanInterface: z.string().optional().describe("VLAN interface for NTP communication"),
-    dryRun: z.boolean().default(false).describe("Preview changes without applying"),
+    dryRun,
   })
   .strict();
 

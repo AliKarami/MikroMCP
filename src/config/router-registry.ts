@@ -105,4 +105,14 @@ export class RouterRegistry {
   hasRouter(id: string): boolean {
     return this.routers.has(id);
   }
+
+  /** The id of the only configured router, or undefined when zero or more than one exist. */
+  soleRouterId(): string | undefined {
+    return this.routers.size === 1 ? this.routers.keys().next().value : undefined;
+  }
+
+  /** All configured router ids, for error messages and discovery. */
+  routerIds(): string[] {
+    return Array.from(this.routers.keys());
+  }
 }
