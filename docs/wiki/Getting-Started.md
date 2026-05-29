@@ -64,12 +64,15 @@ mikromcp init
 ```
 
 The wizard will:
-1. Ask for your router's IP, port, and transport (HTTP/HTTPS)
+1. Ask for your router's IP, port, and TLS settings
 2. Ask for a router ID (e.g. `core-01`) and credentials
-3. Write `~/.mikromcp/routers.yaml` and `~/.mikromcp/.env`
-4. Test the connection before finishing
+3. Write `~/.mikromcp/routers.yaml` and `~/.mikromcp/.env` (including `MIKROMCP_DEFAULT_ROUTER` set to your router ID)
+4. Optionally register the server with Claude Desktop
+5. Print next-step instructions including a pointer to the usage skill
 
 Once complete, skip to [Step 5](#step-5--connect-to-your-ai-assistant).
+
+> **Tip:** Because the wizard sets `MIKROMCP_DEFAULT_ROUTER`, you can omit `routerId` in tool calls for single-router setups. MikroMCP will route to your configured router automatically.
 
 ### Manual config (alternative)
 
@@ -134,6 +137,18 @@ curl -sk https://10.0.0.1/rest/system/resource \
 - **Cursor** → see [Connecting-to-AI-Assistants.md](Connecting-to-AI-Assistants.md#cursor)
 - **Codex** → see [Connecting-to-AI-Assistants.md](Connecting-to-AI-Assistants.md#codex)
 - **Remote / Docker / service deployment** → see [Connecting-to-AI-Assistants.md](Connecting-to-AI-Assistants.md#generic-http-transport-for-remoteservice-deployments)
+
+---
+
+## Step 5b — Install the Usage Skill (recommended)
+
+The MikroMCP usage skill teaches your AI assistant how to use all 117 tools safely — dry-run before write, rollback patterns, fleet operations, and more. Install it once in Claude Code:
+
+```bash
+/mikromcp
+```
+
+See [Using-the-Skill](Using-the-Skill) for full installation and usage instructions.
 
 ---
 
