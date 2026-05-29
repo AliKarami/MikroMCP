@@ -140,6 +140,33 @@ function checkEnvVars(routers: RouterConfig[], transport: string): void {
   }
 }
 
+// ─── Default router check ────────────────────────────────────────────────
+
+function checkDefaultRouter(defaultRouter: string | undefined, routers: RouterConfig[]): void {
+  const ids = routers.map((r) => r.id);
+
+  if (defaultRouter) {
+    if (ids.includes(defaultRouter)) {
+      ok(`Default router: ${defaultRouter} (MIKROMCP_DEFAULT_ROUTER; used when routerId is omitted)`);
+    } else {
+      fail(
+        `MIKROMCP_DEFAULT_ROUTER="${defaultRouter}" does not match any configured router` +
+          (ids.length > 0 ? ` (available: ${ids.join(", ")})` : ""),
+      );
+    }
+    return;
+  }
+
+  if (routers.length === 1) {
+    ok(`Default router: ${ids[0]} (sole configured router; used when routerId is omitted)`);
+  } else if (routers.length > 1) {
+    warn(
+      `No MIKROMCP_DEFAULT_ROUTER set and ${routers.length} routers configured — ` +
+        `tool calls must specify routerId (set MIKROMCP_DEFAULT_ROUTER to choose a default)`,
+    );
+  }
+}
+
 // ─── Per-router connectivity ───────────────────────────────────────────────
 
 async function checkRouter(router: RouterConfig): Promise<void> {
@@ -291,6 +318,20 @@ function checkClaudeDesktop(): void {
   }
 }
 
+// ─── Usage skill check ───────────────────────────────────────────────────
+
+function checkSkill(): void {
+  const skillPath = `${homedir()}/.claude/skills/mikromcp/SKILL.md`;
+  if (existsSync(skillPath)) {
+    ok("Usage skill: installed (~/.claude/skills/mikromcp)");
+  } else {
+    warn(
+      "Usage skill not installed at ~/.claude/skills/mikromcp — " +
+        "your AI assistant will lack MikroMCP operating guidance. See docs/wiki/Using-the-Skill.md",
+    );
+  }
+}
+
 // ─── Update check ──────────────────────────────────────────────────────────
 
 async function checkForUpdates(): Promise<void> {
@@ -343,6 +384,11 @@ export async function runDoctor(): Promise<void> {
     checkEnvVars(routers, appConfig.transport);
   }
 
+  // 3b. Default router resolution
+  if (routers.length > 0) {
+    checkDefaultRouter(appConfig.defaultRouter, routers);
+  }
+
   // 4. Per-router connectivity
   for (const router of routers) {
     await checkRouter(router);
@@ -355,7 +401,10 @@ export async function runDoctor(): Promise<void> {
   // 6. Claude Desktop registration
   checkClaudeDesktop();
 
-  // 7. Update check
+  // 7. Usage skill
+  checkSkill();
+
+  // 8. Update check
   await checkForUpdates();
 
   // ─── Summary ─────────────────────────────────────────────────────────────
