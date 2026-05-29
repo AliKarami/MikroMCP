@@ -275,6 +275,7 @@ Documentation is updated in the **same PR** that ships the change — never as a
 |---|---|
 | New tool added | `docs/wiki/Available-Tools.md` (add full parameter table + example prompt), `README.md` (tool count, Available Tools table row), `CHANGELOG.md` (`[Unreleased]` → Added) |
 | Tool added/renamed/removed (skill sync) | `skills/mikromcp/references/tool-map.md` (the lockstep test `test/unit/skill/tool-map-sync.test.ts` will fail until updated) |
+| Tool added/renamed/removed (Available-Tools sync) | `docs/wiki/Available-Tools.md` (the lockstep test `test/unit/docs/available-tools-sync.test.ts` will fail until updated) |
 | Tool parameter changed | `docs/wiki/Available-Tools.md` (update parameter table), `CHANGELOG.md` (`[Unreleased]` → Changed) |
 | Tool removed or renamed | `docs/wiki/Available-Tools.md` (remove/rename entry), `README.md` (update table), `CHANGELOG.md` (`[Unreleased]` → Removed) |
 | New transport or auth mechanism | `docs/wiki/Architecture.md`, `docs/wiki/Connecting-to-AI-Assistants.md` |
