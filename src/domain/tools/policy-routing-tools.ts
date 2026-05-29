@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -56,8 +56,7 @@ const listRoutingRulesTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, rules, total: rules.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_routing_rules" });
+      throw toolError(err, context, "list_routing_rules");
     }
   },
 };
@@ -277,8 +276,7 @@ const manageRoutingRuleTool: ToolDefinition = {
         },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_routing_rule" });
+      throw toolError(err, context, "manage_routing_rule");
     }
   },
 };
@@ -315,8 +313,7 @@ const listRoutingTablesTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, tables, total: tables.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_routing_tables" });
+      throw toolError(err, context, "list_routing_tables");
     }
   },
 };
@@ -424,8 +421,7 @@ const manageRoutingTableTool: ToolDefinition = {
         recoverability: { retryable: false, suggestedAction: "Use one of: add, remove." },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_routing_table" });
+      throw toolError(err, context, "manage_routing_table");
     }
   },
 };

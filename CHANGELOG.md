@@ -10,6 +10,14 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Fixed
+- Audit log redaction now recurses into arrays, so secrets nested in step arrays (e.g. `apply_plan` / `bulk_execute` step params) are stripped instead of leaking
+- `manage_firewall_rule` idempotency now compares `src-address`, `dst-address`, and `protocol` in addition to chain/action/ports — previously rules differing only by address or protocol were treated as identical (returned `already_exists`) instead of raising a `CONFLICT`
+- `bulk_execute` now takes config snapshots and writes journal entries for destructive sub-operations, matching single-router write tools (enables rollback of fleet changes)
+
+### Changed
+- Internal: extracted a shared `paginate()` helper for client-side pagination, a shared `toolError()` handler-error wrapper, and made the circuit breaker `state` getter side-effect-free (the open→half-open transition is now explicit). No user-facing behaviour change.
+
 ---
 
 ## [1.5.0] - 2026-05-28

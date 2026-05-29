@@ -27,8 +27,19 @@ vi.mock("../../../src/config/secrets.js", () => ({
   getCredentials: vi.fn().mockReturnValue({ username: "admin", password: "pass" }),
 }));
 
+vi.mock("../../../src/domain/snapshot/snapshot-engine.js", () => ({
+  takeSnapshot: vi.fn().mockResolvedValue({ id: "snap-1" }),
+}));
+
+vi.mock("../../../src/domain/snapshot/write-journal.js", () => ({
+  recordAttempt: vi.fn().mockReturnValue("journal-1"),
+  recordOutcome: vi.fn(),
+}));
+
 import { checkAuthz } from "../../../src/middleware/authz.js";
 import { auditLog } from "../../../src/observability/audit-log.js";
+import { takeSnapshot } from "../../../src/domain/snapshot/snapshot-engine.js";
+import { recordAttempt, recordOutcome } from "../../../src/domain/snapshot/write-journal.js";
 
 const mockReadTool: ToolDefinition = {
   name: "list_interfaces",
@@ -58,7 +69,22 @@ const mockDestructiveTool: ToolDefinition = {
   handler: vi.fn(),
 };
 
-const fleetTools = createFleetTools([mockReadTool, mockDestructiveTool]);
+const mockWriteTool: ToolDefinition = {
+  name: "manage_route",
+  title: "Manage Route",
+  description: "Write route",
+  inputSchema: z.object({ routerId: z.string() }).strict(),
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  snapshotPaths: ["ip/route"],
+  handler: vi.fn().mockResolvedValue({ content: "ok", structuredContent: { action: "created" } }),
+};
+
+const fleetTools = createFleetTools([mockReadTool, mockDestructiveTool, mockWriteTool]);
 const healthTool = fleetTools.find((t) => t.name === "check_router_health")!;
 const bulkTool = fleetTools.find((t) => t.name === "bulk_execute")!;
 
@@ -483,6 +509,66 @@ describe("fleet-tools", () => {
         succeeded: 4,
         failed: 0,
       });
+    });
+  });
+
+  describe("handler — bulk_execute snapshot & journal", () => {
+    beforeEach(() => {
+      vi.mocked(takeSnapshot).mockClear();
+      vi.mocked(recordAttempt).mockClear();
+      vi.mocked(recordOutcome).mockClear();
+      vi.mocked(mockWriteTool.handler).mockReset();
+      vi.mocked(mockWriteTool.handler).mockResolvedValue({
+        content: "ok",
+        structuredContent: { action: "created" },
+      });
+    });
+
+    function writeFleetContext(): ToolContext {
+      return makeFleetContext({
+        appConfig: {
+          ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+          snapshotDir: "/tmp/snaps",
+          journalPath: "/tmp/journal.ndjson",
+        } as unknown as AppConfig,
+      });
+    }
+
+    it("snapshots and journals each router for a write tool", async () => {
+      const ctx = writeFleetContext();
+      await bulkTool.handler(
+        { toolName: "manage_route", routerIds: ["r1", "r2"], params: {}, concurrency: 5 },
+        ctx,
+      );
+
+      expect(vi.mocked(takeSnapshot)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(recordAttempt)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(recordOutcome)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(recordOutcome).mock.calls.every((c) => c[0].phase === "success")).toBe(true);
+    });
+
+    it("records a failure outcome when the write tool throws", async () => {
+      vi.mocked(mockWriteTool.handler).mockRejectedValueOnce(new Error("boom"));
+      const ctx = writeFleetContext();
+      await bulkTool.handler(
+        { toolName: "manage_route", routerIds: ["r1"], params: {}, concurrency: 5 },
+        ctx,
+      );
+
+      expect(vi.mocked(recordOutcome)).toHaveBeenCalledWith(
+        expect.objectContaining({ phase: "failure", outcome: "boom" }),
+      );
+    });
+
+    it("does not snapshot or journal a read-only tool", async () => {
+      const ctx = writeFleetContext();
+      await bulkTool.handler(
+        { toolName: "list_interfaces", routerIds: ["r1"], params: {}, concurrency: 5 },
+        ctx,
+      );
+
+      expect(vi.mocked(takeSnapshot)).not.toHaveBeenCalled();
+      expect(vi.mocked(recordAttempt)).not.toHaveBeenCalled();
     });
   });
 

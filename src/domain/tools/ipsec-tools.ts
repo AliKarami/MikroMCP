@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -58,7 +58,7 @@ const listIpsecPeersTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_ipsec_peers" });
+      throw toolError(err, context, "list_ipsec_peers");
     }
   },
 };
@@ -123,7 +123,7 @@ const listIpsecPoliciesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_ipsec_policies" });
+      throw toolError(err, context, "list_ipsec_policies");
     }
   },
 };
@@ -308,8 +308,7 @@ const manageIpsecPeerTool: ToolDefinition = {
         structuredContent: { action: resultAction, name: parsed.name, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_ipsec_peer" });
+      throw toolError(err, context, "manage_ipsec_peer");
     }
   },
 };
@@ -475,8 +474,7 @@ const manageIpsecPolicyTool: ToolDefinition = {
         structuredContent: { action: resultAction, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_ipsec_policy" });
+      throw toolError(err, context, "manage_ipsec_policy");
     }
   },
 };

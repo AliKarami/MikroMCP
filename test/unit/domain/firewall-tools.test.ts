@@ -480,6 +480,82 @@ describe("firewall tools", () => {
       ).rejects.toThrow();
     });
 
+    it("throws CONFLICT when rule with same comment exists but srcAddress differs", async () => {
+      const existingRule = {
+        ".id": "*8",
+        chain: "forward",
+        action: "drop",
+        "src-address": "10.0.0.0/8",
+        comment: "block-net",
+      };
+      const ctx = makeContext([existingRule]);
+      await expect(
+        manageFirewallRuleTool.handler(
+          {
+            routerId: "test-router",
+            action: "add",
+            table: "filter",
+            chain: "forward",
+            ruleAction: "drop",
+            srcAddress: "192.168.0.0/16",
+            comment: "block-net",
+          },
+          ctx,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("throws CONFLICT when rule with same comment exists but protocol differs", async () => {
+      const existingRule = {
+        ".id": "*9",
+        chain: "forward",
+        action: "accept",
+        protocol: "tcp",
+        comment: "allow-proto",
+      };
+      const ctx = makeContext([existingRule]);
+      await expect(
+        manageFirewallRuleTool.handler(
+          {
+            routerId: "test-router",
+            action: "add",
+            table: "filter",
+            chain: "forward",
+            ruleAction: "accept",
+            protocol: "udp",
+            comment: "allow-proto",
+          },
+          ctx,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("returns already_exists when srcAddress and protocol also match", async () => {
+      const existingRule = {
+        ".id": "*10",
+        chain: "forward",
+        action: "drop",
+        protocol: "tcp",
+        "src-address": "10.0.0.0/8",
+        comment: "block-tcp",
+      };
+      const ctx = makeContext([existingRule]);
+      const result = await manageFirewallRuleTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          table: "filter",
+          chain: "forward",
+          ruleAction: "drop",
+          protocol: "tcp",
+          srcAddress: "10.0.0.0/8",
+          comment: "block-tcp",
+        },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    });
+
     it("returns already_exists when all fields including port match", async () => {
       const existingRule = {
         ".id": "*7",

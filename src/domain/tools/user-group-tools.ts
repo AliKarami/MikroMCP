@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -50,7 +50,7 @@ const listUserGroupsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_user_groups" });
+      throw toolError(err, context, "list_user_groups");
     }
   },
 };
@@ -236,8 +236,7 @@ const manageUserGroupTool: ToolDefinition = {
         structuredContent: { action: "removed", name: parsed.name, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_user_group" });
+      throw toolError(err, context, "manage_user_group");
     }
   },
 };

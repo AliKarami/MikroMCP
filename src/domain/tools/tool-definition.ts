@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { enrichError } from "../errors/error-enricher.js";
+import type { MikroMCPError } from "../errors/error-types.js";
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
 import type { RouterConfig } from "../../types.js";
 import type { Identity } from "../../types.js";
@@ -49,4 +51,9 @@ export interface ToolResult {
   content: string;
   structuredContent: Record<string, unknown>;
   isError?: boolean;
+}
+
+/** Enrich a caught error with router/tool context for a handler catch block. */
+export function toolError(err: unknown, context: ToolContext, tool: string): MikroMCPError {
+  return enrichError(err, { routerId: context.routerId, tool });
 }

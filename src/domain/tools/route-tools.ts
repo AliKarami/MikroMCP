@@ -4,8 +4,9 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
+import { paginate } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 import { cidrSchema } from "./cidr.js";
@@ -76,10 +77,7 @@ const listRoutesTool: ToolDefinition = {
         });
       }
 
-      const total = routes.length;
-
-      const paginated = routes.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: paginated, total, hasMore } = paginate(routes, parsed.offset, parsed.limit);
 
       const lines: string[] = [
         `Routes on ${context.routerId}: ${total} total, showing ${paginated.length} (offset ${parsed.offset})`,
@@ -123,7 +121,7 @@ const listRoutesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_routes" });
+      throw toolError(err, context, "list_routes");
     }
   },
 };
@@ -349,8 +347,7 @@ const manageRouteTool: ToolDefinition = {
         },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_route" });
+      throw toolError(err, context, "manage_route");
     }
   },
 };

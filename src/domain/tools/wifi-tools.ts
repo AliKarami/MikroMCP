@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("wifi-tools");
 
@@ -52,9 +54,7 @@ const listWifiTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const total = interfaces.length;
-      const paginated = interfaces.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
 
       const lines = [`WiFi interfaces on ${context.routerId}: ${total} total`];
       for (const iface of paginated) {
@@ -75,7 +75,7 @@ const listWifiTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_wifi_interfaces" });
+      throw toolError(err, context, "list_wifi_interfaces");
     }
   },
 };
@@ -115,9 +115,7 @@ const listWifiClientsTool: ToolDefinition = {
       const filter = parsed.interface ? { interface: parsed.interface } : undefined;
       const allClients = await context.routerClient.get<RouterOSRecord>(path, { filter });
 
-      const total = allClients.length;
-      const clients = allClients.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: clients, total, hasMore } = paginate(allClients, parsed.offset, parsed.limit);
 
       const lines = [`WiFi clients on ${context.routerId}: ${total} total`];
       for (const c of clients) {
@@ -139,7 +137,7 @@ const listWifiClientsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_wifi_clients" });
+      throw toolError(err, context, "list_wifi_clients");
     }
   },
 };
@@ -238,8 +236,7 @@ const manageWifiTool: ToolDefinition = {
         structuredContent: { action: "updated", name: parsed.name, changes: diff },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_wifi_interface" });
+      throw toolError(err, context, "manage_wifi_interface");
     }
   },
 };

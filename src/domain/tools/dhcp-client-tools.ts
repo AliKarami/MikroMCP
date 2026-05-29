@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("dhcp-client-tools");
 
@@ -51,9 +53,7 @@ const listDhcpClientsTool: ToolDefinition = {
         filtered = filtered.filter((c) => c.status === parsed.status);
       }
 
-      const total = filtered.length;
-      const clients = filtered.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: clients, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
       const lines: string[] = [
         `DHCP clients on ${context.routerId}: ${total} total, showing ${clients.length} (offset ${parsed.offset})`,
@@ -79,7 +79,7 @@ const listDhcpClientsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_dhcp_clients" });
+      throw toolError(err, context, "list_dhcp_clients");
     }
   },
 };
@@ -224,8 +224,7 @@ const manageDhcpClientTool: ToolDefinition = {
         structuredContent: { action: resultAction, interface: parsed.interface, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_dhcp_client" });
+      throw toolError(err, context, "manage_dhcp_client");
     }
   },
 };

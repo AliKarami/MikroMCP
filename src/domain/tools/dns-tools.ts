@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
+import { paginate } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -54,9 +55,7 @@ const listDnsTool: ToolDefinition = {
         );
       }
 
-      const total = entries.length;
-      const paginated = entries.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: paginated, total, hasMore } = paginate(entries, parsed.offset, parsed.limit);
 
       const lines = [`DNS entries on ${context.routerId}: ${total} total`];
       for (const entry of paginated) {
@@ -77,7 +76,7 @@ const listDnsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_dns_entries" });
+      throw toolError(err, context, "list_dns_entries");
     }
   },
 };
@@ -224,8 +223,7 @@ const manageDnsTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_dns_entry" });
+      throw toolError(err, context, "manage_dns_entry");
     }
   },
 };
@@ -273,7 +271,7 @@ const getDnsSettingsTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, settings },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "get_dns_settings" });
+      throw toolError(err, context, "get_dns_settings");
     }
   },
 };
@@ -365,7 +363,7 @@ const manageDnsSettingsTool: ToolDefinition = {
         structuredContent: { action: "updated", routerId: context.routerId, diff },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_dns_settings" });
+      throw toolError(err, context, "manage_dns_settings");
     }
   },
 };

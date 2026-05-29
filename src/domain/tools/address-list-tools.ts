@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -49,8 +49,7 @@ const listAddressListTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, entries, total: entries.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_address_list_entries" });
+      throw toolError(err, context, "list_address_list_entries");
     }
   },
 };
@@ -171,8 +170,7 @@ const manageAddressListTool: ToolDefinition = {
         recoverability: { retryable: false, suggestedAction: "Use one of: add, remove." },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_address_list_entry" });
+      throw toolError(err, context, "manage_address_list_entry");
     }
   },
 };

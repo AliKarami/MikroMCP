@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { enrichError } from "../errors/error-enricher.js";
+import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("diagnostic-tools");
 
@@ -83,7 +85,7 @@ const pingTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "ping" });
+      throw toolError(err, context, "ping");
     }
   },
 };
@@ -155,7 +157,7 @@ const tracerouteTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "traceroute" });
+      throw toolError(err, context, "traceroute");
     }
   },
 };
@@ -251,7 +253,7 @@ const torchTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "torch" });
+      throw toolError(err, context, "torch");
     }
   },
 };
@@ -381,8 +383,7 @@ const getLogTool: ToolDefinition = {
         });
       }
 
-      const total = filtered.length;
-      const paginated = filtered.slice(parsed.offset, parsed.offset + parsed.limit);
+      const { items: paginated, total } = paginate(filtered, parsed.offset, parsed.limit);
 
       const lines = [
         `Log on ${context.routerId}: ${total} matching entries, showing ${paginated.length} (offset ${parsed.offset})`,
@@ -403,7 +404,7 @@ const getLogTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "get_log" });
+      throw toolError(err, context, "get_log");
     }
   },
 };

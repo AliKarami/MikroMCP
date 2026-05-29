@@ -4,8 +4,9 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
+import { paginate } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -108,9 +109,7 @@ const listFirewallRulesTool: ToolDefinition = {
         });
       }
 
-      const total = rules.length;
-      const paginated = rules.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: paginated, total, hasMore } = paginate(rules, parsed.offset, parsed.limit);
 
       const lines: string[] = [
         `Firewall ${parsed.table} rules on ${context.routerId}: ${total} total, showing ${paginated.length} (offset ${parsed.offset})`,
@@ -163,8 +162,7 @@ const listFirewallRulesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_firewall_rules" });
+      throw toolError(err, context, "list_firewall_rules");
     }
   },
 };
@@ -246,8 +244,13 @@ const manageFirewallRuleTool: ToolDefinition = {
         if (comment !== undefined) {
           const existing = await findRuleByComment(context, path, comment);
           if (existing) {
+            const wantProtocol =
+              parsed.protocol !== undefined && parsed.protocol !== "all" ? parsed.protocol : "";
             const sameChain = existing.chain === parsed.chain;
             const sameRuleAction = existing.action === parsed.ruleAction;
+            const sameSrcAddress = (existing["src-address"] ?? "") === (parsed.srcAddress ?? "");
+            const sameDstAddress = (existing["dst-address"] ?? "") === (parsed.dstAddress ?? "");
+            const sameProtocol = (existing.protocol ?? "") === wantProtocol;
             const sameSrcPort = (existing["src-port"] ?? "") === (parsed.srcPort ?? "");
             const sameDstPort = (existing["dst-port"] ?? "") === (parsed.dstPort ?? "");
             const sameInInterface = (existing["in-interface"] ?? "") === (parsed.inInterface ?? "");
@@ -257,6 +260,9 @@ const manageFirewallRuleTool: ToolDefinition = {
             if (
               sameChain &&
               sameRuleAction &&
+              sameSrcAddress &&
+              sameDstAddress &&
+              sameProtocol &&
               sameSrcPort &&
               sameDstPort &&
               sameInInterface &&
@@ -276,6 +282,9 @@ const manageFirewallRuleTool: ToolDefinition = {
                 existing: {
                   chain: existing.chain,
                   action: existing.action,
+                  "src-address": existing["src-address"],
+                  "dst-address": existing["dst-address"],
+                  protocol: existing.protocol,
                   "src-port": existing["src-port"],
                   "dst-port": existing["dst-port"],
                   "in-interface": existing["in-interface"],
@@ -284,6 +293,9 @@ const manageFirewallRuleTool: ToolDefinition = {
                 requested: {
                   chain: parsed.chain,
                   action: parsed.ruleAction,
+                  "src-address": parsed.srcAddress,
+                  "dst-address": parsed.dstAddress,
+                  protocol: wantProtocol || undefined,
                   "src-port": parsed.srcPort,
                   "dst-port": parsed.dstPort,
                   "in-interface": parsed.inInterface,
@@ -466,8 +478,7 @@ const manageFirewallRuleTool: ToolDefinition = {
         },
       });
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_firewall_rule" });
+      throw toolError(err, context, "manage_firewall_rule");
     }
   },
 };

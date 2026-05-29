@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { enrichError } from "../errors/error-enricher.js";
-import { MikroMCPError } from "../errors/error-types.js";
+import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("backup-tools");
@@ -56,8 +55,7 @@ const createBackupTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "create_backup" });
+      throw toolError(err, context, "create_backup");
     }
   },
 };
@@ -119,8 +117,7 @@ const exportConfigTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "export_config" });
+      throw toolError(err, context, "export_config");
     }
   },
 };

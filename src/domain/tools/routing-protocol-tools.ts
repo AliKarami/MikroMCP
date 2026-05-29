@@ -1,8 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
-import { MikroMCPError } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("routing-protocol-tools");
@@ -48,8 +47,7 @@ const listBgpPeersTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, sessions, total: sessions.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_bgp_peers" });
+      throw toolError(err, context, "list_bgp_peers");
     }
   },
 };
@@ -92,8 +90,7 @@ const listOspfNeighborsTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, neighbors, total: neighbors.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_ospf_neighbors" });
+      throw toolError(err, context, "list_ospf_neighbors");
     }
   },
 };

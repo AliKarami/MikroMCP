@@ -46,15 +46,23 @@ export class CircuitBreaker {
     this.options = { ...DEFAULTS, ...options };
   }
 
+  /** Effective state, accounting for an elapsed cooldown. Pure — does not mutate. */
   get state(): CircuitState {
-    // If the circuit is open and the cooldown has elapsed, transition to half-open.
-    if (this.currentState === "open") {
-      const elapsed = Date.now() - this.lastFailureTime;
-      if (elapsed >= this.options.cooldownMs) {
-        this.currentState = "half-open";
-      }
+    if (this.currentState === "open" && this.cooldownElapsed()) {
+      return "half-open";
     }
     return this.currentState;
+  }
+
+  private cooldownElapsed(): boolean {
+    return Date.now() - this.lastFailureTime >= this.options.cooldownMs;
+  }
+
+  /** Apply the time-based open→half-open transition. Call before acting on state. */
+  private transitionIfCooldownElapsed(): void {
+    if (this.currentState === "open" && this.cooldownElapsed()) {
+      this.currentState = "half-open";
+    }
   }
 
   /**
@@ -65,7 +73,8 @@ export class CircuitBreaker {
    * - **half-open**: execute as a probe; success closes, failure reopens.
    */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
-    const currentState = this.state; // triggers cooldown check
+    this.transitionIfCooldownElapsed();
+    const currentState = this.currentState;
 
     if (currentState === "open") {
       throw new MikroMCPError({

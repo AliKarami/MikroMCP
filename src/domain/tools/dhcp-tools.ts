@@ -4,10 +4,12 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("dhcp-tools");
 
@@ -105,10 +107,7 @@ const listDhcpLeasesTool: ToolDefinition = {
         });
       }
 
-      const total = leases.length;
-
-      const paginated = leases.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: paginated, total, hasMore } = paginate(leases, parsed.offset, parsed.limit);
 
       const lines: string[] = [
         `DHCP leases on ${context.routerId}: ${total} total, showing ${paginated.length} (offset ${parsed.offset})`,
@@ -141,7 +140,7 @@ const listDhcpLeasesTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_dhcp_leases" });
+      throw toolError(err, context, "list_dhcp_leases");
     }
   },
 };
@@ -261,8 +260,7 @@ const manageDhcpLeaseTool: ToolDefinition = {
         structuredContent: { action: "removed", macAddress: upperMac, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_dhcp_lease" });
+      throw toolError(err, context, "manage_dhcp_lease");
     }
   },
 };

@@ -1,8 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
-import { MikroMCPError } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("interface-list-tools");
@@ -34,8 +33,7 @@ const listInterfaceListsTool: ToolDefinition = {
         structuredContent: { routerId: context.routerId, lists, total: all.length, returned: lists.length },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "list_interface_lists" });
+      throw toolError(err, context, "list_interface_lists");
     }
   },
 };
@@ -115,8 +113,7 @@ const manageInterfaceListTool: ToolDefinition = {
         structuredContent: { action: "removed", name: parsed.name, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_interface_list" });
+      throw toolError(err, context, "manage_interface_list");
     }
   },
 };
@@ -207,8 +204,7 @@ const manageInterfaceListMemberTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_interface_list_member" });
+      throw toolError(err, context, "manage_interface_list_member");
     }
   },
 };

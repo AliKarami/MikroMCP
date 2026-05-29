@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
-import { enrichError } from "../errors/error-enricher.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+
+import { paginate } from "./pagination.js";
 
 const log = createLogger("dhcp-server-tools");
 
@@ -46,9 +48,7 @@ const listDhcpServersTool: ToolDefinition = {
         ? (allServers as Record<string, string>[]).filter((s) => s.interface === parsed.interface)
         : (allServers as Record<string, string>[]);
 
-      const total = filtered.length;
-      const servers = filtered.slice(parsed.offset, parsed.offset + parsed.limit);
-      const hasMore = parsed.offset + parsed.limit < total;
+      const { items: servers, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
       return {
         content: `DHCP servers on ${context.routerId}: ${total} total, showing ${servers.length} (offset ${parsed.offset})`,
@@ -62,7 +62,7 @@ const listDhcpServersTool: ToolDefinition = {
         },
       };
     } catch (err) {
-      throw enrichError(err, { routerId: context.routerId, tool: "list_dhcp_servers" });
+      throw toolError(err, context, "list_dhcp_servers");
     }
   },
 };
@@ -267,8 +267,7 @@ const manageDhcpServerTool: ToolDefinition = {
         structuredContent: { action: resultAction, name: parsed.name, id: existing[".id"] },
       };
     } catch (err) {
-      if (err instanceof MikroMCPError) throw err;
-      throw enrichError(err, { routerId: context.routerId, tool: "manage_dhcp_server" });
+      throw toolError(err, context, "manage_dhcp_server");
     }
   },
 };
