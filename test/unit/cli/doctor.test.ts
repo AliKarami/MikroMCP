@@ -401,6 +401,115 @@ describe("runDoctor", () => {
     });
   });
 
+  describe("Default router check", () => {
+    function setupRouters(routers: ReturnType<typeof makeRouter>[]) {
+      mockExistsSync.mockReturnValue(true);
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => routers }) as unknown as RouterRegistry,
+      );
+      mockGetCredentials.mockReturnValue({ username: "admin", password: "pass" });
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([{ version: "7.14" }]),
+        close: vi.fn(),
+      };
+      MockRouterOSRestClient.mockImplementation(() => mockClient as unknown as RouterOSRestClient);
+      mockCreateConnection.mockReturnValue(makeTcpSocket(true) as unknown as net.Socket);
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockReadFileSync.mockReturnValue(JSON.stringify({ mcpServers: { mikromcp: {} } }));
+    }
+
+    it("passes when MIKROMCP_DEFAULT_ROUTER matches a configured router", async () => {
+      mockLoadAppConfig.mockReturnValue({
+        ...makeAppConfig(),
+        defaultRouter: "core-01",
+      } as ReturnType<typeof loadAppConfig>);
+      setupRouters([makeRouter({ id: "core-01" })]);
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/✅.*Default router: core-01/);
+    });
+
+    it("fails when MIKROMCP_DEFAULT_ROUTER does not match any router", async () => {
+      mockLoadAppConfig.mockReturnValue({
+        ...makeAppConfig(),
+        defaultRouter: "ghost",
+      } as ReturnType<typeof loadAppConfig>);
+      setupRouters([makeRouter({ id: "core-01" })]);
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/❌.*MIKROMCP_DEFAULT_ROUTER="ghost" does not match/);
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("notes the sole router as implicit default when none is set", async () => {
+      mockLoadAppConfig.mockReturnValue(makeAppConfig() as ReturnType<typeof loadAppConfig>);
+      setupRouters([makeRouter({ id: "only-one" })]);
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/✅.*Default router: only-one \(sole configured router/);
+    });
+
+    it("warns when multiple routers exist and no default is set", async () => {
+      mockLoadAppConfig.mockReturnValue(makeAppConfig() as ReturnType<typeof loadAppConfig>);
+      setupRouters([makeRouter({ id: "core-01" }), makeRouter({ id: "core-02", host: "10.0.0.9" })]);
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/⚠️.*No MIKROMCP_DEFAULT_ROUTER set and 2 routers configured/);
+    });
+  });
+
+  describe("Usage skill check", () => {
+    it("reports installed when the skill exists in ~/.claude/skills", async () => {
+      mockLoadAppConfig.mockReturnValue(makeAppConfig() as ReturnType<typeof loadAppConfig>);
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
+      );
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockExistsSync.mockImplementation((p: unknown) =>
+        String(p).includes(".claude/skills/mikromcp/SKILL.md"),
+      );
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/✅.*Usage skill: installed/);
+    });
+
+    it("warns when the skill is not installed", async () => {
+      mockLoadAppConfig.mockReturnValue(makeAppConfig() as ReturnType<typeof loadAppConfig>);
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
+      );
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockExistsSync.mockReturnValue(false);
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/⚠️.*Usage skill not installed/);
+    });
+  });
+
   describe("Update check", () => {
     it("reports up to date when versions match", async () => {
       mockExistsSync.mockReturnValue(false);

@@ -227,6 +227,15 @@ describe("runInit — .env write path", () => {
     expect(content).toContain("ROUTER_HOME_GW_USER=admin");
     expect(content).toContain("ROUTER_HOME_GW_PASS=secret");
   });
+
+  it("writes MIKROMCP_DEFAULT_ROUTER set to the configured router id", async () => {
+    const { runInit } = await import("../../../src/cli/init.js");
+    await runInit();
+
+    const envPath = join(tmpDir, ".mikromcp", ".env");
+    const content = readFileSync(envPath, "utf-8");
+    expect(content).toContain("MIKROMCP_DEFAULT_ROUTER=home-gw");
+  });
 });
 
 describe("runInit — Claude Desktop registration", () => {

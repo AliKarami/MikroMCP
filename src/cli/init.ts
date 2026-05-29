@@ -407,6 +407,10 @@ function writeDotEnv(data: CollectedData): void {
     `MIKROMCP_CONFIG_PATH=${join(data.configDir, "routers.yaml")}`,
     `MIKROMCP_IDENTITIES_PATH=${join(data.configDir, "identities.yaml")}`,
     "",
+    "# ── Default router ───────────────────────────────────────────────────",
+    "# Router used when a tool call omits routerId (handy for single-router setups).",
+    `MIKROMCP_DEFAULT_ROUTER=${data.routerId}`,
+    "",
     "# ── Logging ──────────────────────────────────────────────────────────",
     "# Levels: trace | debug | info | warn | error",
     "MIKROMCP_LOG_LEVEL=info",
@@ -562,5 +566,9 @@ export async function runInit(): Promise<void> {
   console.log(chalk.bold("\nNext steps:"));
   console.log(chalk.dim("  1. Run: mikromcp doctor"));
   console.log(chalk.dim("  2. Restart Claude Desktop to load the MCP server"));
+  console.log(
+    chalk.dim("  3. (Optional) Install the usage skill so your AI assistant drives MikroMCP safely"),
+  );
+  console.log(chalk.dim("     See: docs/wiki/Using-the-Skill.md"));
   console.log();
 }
