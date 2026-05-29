@@ -18,14 +18,12 @@ Each release section covers changes **since the previous release only**.
 - `routerId` is now optional on every router-scoped tool. When omitted, the server resolves it from `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when exactly one exists; otherwise it returns a `MISSING_ROUTER_ID` error listing available routers
 - Slimmed the advertised tool catalog (`tools/list`) by reusing shared schema-field definitions and tightening the longest tool descriptions — roughly 14% fewer tokens per catalog with no change to tool behaviour
 - List tools now return a concise summary in their text `content`; full per-item detail remains in `structuredContent`, avoiding duplicate payloads across both result fields
+- Internal: extracted a shared `paginate()` helper for client-side pagination, a shared `toolError()` handler-error wrapper, and made the circuit breaker `state` getter side-effect-free (the open→half-open transition is now explicit). No user-facing behaviour change.
 
 ### Fixed
 - Audit log redaction now recurses into arrays, so secrets nested in step arrays (e.g. `apply_plan` / `bulk_execute` step params) are stripped instead of leaking
 - `manage_firewall_rule` idempotency now compares `src-address`, `dst-address`, and `protocol` in addition to chain/action/ports — previously rules differing only by address or protocol were treated as identical (returned `already_exists`) instead of raising a `CONFLICT`
 - `bulk_execute` now takes config snapshots and writes journal entries for destructive sub-operations, matching single-router write tools (enables rollback of fleet changes)
-
-### Changed
-- Internal: extracted a shared `paginate()` helper for client-side pagination, a shared `toolError()` handler-error wrapper, and made the circuit breaker `state` getter side-effect-free (the open→half-open transition is now explicit). No user-facing behaviour change.
 
 ---
 
