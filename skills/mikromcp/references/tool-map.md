@@ -89,7 +89,7 @@ Multi-tool patterns:
 ## VPN — OpenVPN
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
-| Get OpenVPN server settings | `get_ovpn_server` | `interface/ovpn-server` | read |
+| Get OpenVPN server settings | `get_ovpn_server` | `interface/ovpn-server/server` | read |
 | Configure OpenVPN server | `manage_ovpn_server` | `interface/ovpn-server/server` | destructive |
 | List OpenVPN clients | `list_ovpn_clients` | `interface/ovpn-client` | read |
 | Add/remove an OpenVPN client | `manage_ovpn_client` | `interface/ovpn-client` | destructive |

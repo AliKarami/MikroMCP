@@ -26,7 +26,7 @@
 Write tools take a config snapshot and write a journal entry before applying.
 - Find the journal ID in the apply result or the server's write journal.
 - Undo with `rollback_change` (`dryRun: true` first to preview the restore plan).
-- Requires `MIKROMCP_DATA_DIR` (defaults to `data/`).
+- Requires `MIKROMCP_DATA_DIR` (defaults to `~/.mikromcp/data`).
 
 ## Circuit breaker & retries
 
