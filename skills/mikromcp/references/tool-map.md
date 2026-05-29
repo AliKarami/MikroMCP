@@ -40,7 +40,7 @@ Multi-tool patterns:
 | List interface lists | `list_interface_lists` | `interface/list` | read |
 | Add/remove an interface list | `manage_interface_list` | `interface/list` | write |
 | Add/remove a member from an interface list | `manage_interface_list_member` | `interface/list/member` | write |
-| List ARP table entries | `list_arp_entries` | `ip/neighbor` (ARP) | read |
+| List ARP table entries | `list_arp_entries` | `ip/arp` | read |
 | List LLDP/CDP neighbors | `list_neighbors` | `ip/neighbor` | read |
 
 ## IP, DNS & Addressing
@@ -75,7 +75,7 @@ Multi-tool patterns:
 | Add/remove a routing rule | `manage_routing_rule` | `routing/rule` | write |
 | List routing tables | `list_routing_tables` | `routing/table` | read |
 | Add/remove a routing table | `manage_routing_table` | `routing/table` | write |
-| List BGP peers | `list_bgp_peers` | `routing/bgp/peer` | read |
+| List BGP peers | `list_bgp_peers` | `routing/bgp/session` | read |
 | List OSPF neighbors | `list_ospf_neighbors` | `routing/ospf/neighbor` | read |
 
 ## VPN — WireGuard
@@ -120,8 +120,8 @@ Multi-tool patterns:
 ## Queues
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
-| List simple queues | `list_queues` | `ip/queue` | read |
-| Add/remove/update a simple queue | `manage_queue` | `ip/queue` | write |
+| List simple queues | `list_queues` | `queue/simple` | read |
+| Add/remove/update a simple queue | `manage_queue` | `queue/simple` | write |
 
 ## Users & Access
 | Intent | Tool | REST path | Class |
