@@ -6,15 +6,18 @@ Every error MikroMCP returns includes a machine-readable `category`, `code`, and
 
 | Category | When it appears |
 |---|---|
-| `VALIDATION` | Invalid input parameters (Zod schema rejection) |
+| `VALIDATION` | Invalid input parameters (Zod schema rejection, or no router could be resolved — `MISSING_ROUTER_ID`) |
 | `NOT_FOUND` | Resource does not exist on the router |
 | `CONFLICT` | Resource exists but with different configuration |
-| `ROUTER_UNREACHABLE` | Network connectivity failure |
-| `ROUTER_AUTH_FAILED` | Bad credentials or insufficient RouterOS policy |
-| `ROUTER_TIMEOUT` | Request timed out |
-| `ROUTER_BUSY` | Circuit breaker is open — router is being protected |
-| `CONFIGURATION` | Missing or invalid server configuration |
-| `MAINTENANCE_WINDOW` | Write tool called outside a declared maintenance window |
+| `PERMISSION_DENIED` | Identity lacks the required role or the call is outside a maintenance window |
+| `APPROVAL_REQUIRED` | Destructive operation requires a two-step confirmation token |
+| `ROUTER_UNREACHABLE` | Network or TLS connectivity failure to the router |
+| `ROUTER_AUTH_FAILED` | Bad credentials or insufficient RouterOS API policy |
+| `ROUTER_TIMEOUT` | Request timed out waiting for a RouterOS response |
+| `ROUTER_ERROR` | RouterOS accepted the connection but rejected the operation |
+| `ROUTER_BUSY` | Circuit breaker is open (`CIRCUIT_OPEN`) — router is being protected after repeated failures |
+| `INTERNAL` | Unexpected server-side error; check server logs |
+| `CONFIGURATION` | Missing or invalid server configuration (routers.yaml, env vars) |
 
 ## Error Response Shape
 
