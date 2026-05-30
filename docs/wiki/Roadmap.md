@@ -109,8 +109,12 @@ Improvements: `list_dhcp_leases` gains `leaseType` filter; `list_dhcp_servers` g
 `get_container_config`, `manage_container_config` — global container settings (registry, RAM, veth).
 `list_container_envs`, `manage_container_env` — container environment variables.
 `list_container_mounts`, `manage_container_mount` — container volume mounts.
-`bandwidth_test` — RouterOS bandwidth test to a remote host (TCP/UDP, configurable duration).
-Additional diagnostic and management tools bringing the total to 117.
+`bandwidth_test`, `fetch_url`, `list_connections` — network diagnostic tools.
+`list_interface_lists`, `manage_interface_list`, `manage_interface_list_member` — interface list management.
+`list_ppp_profiles`, `manage_ppp_profile` — PPP profile management.
+`delete_file` — delete router filesystem files.
+`manage_dns_settings` — write DNS upstream servers, cache TTL, and allow-remote-requests.
+`manage_ipsec_policy`, `manage_wireguard_interface` — IPSec policy and WireGuard interface management.
 
 ---
 
