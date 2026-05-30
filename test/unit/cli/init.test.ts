@@ -79,6 +79,7 @@ function setupRouterOnlyPrompts() {
 
   mockConfirm
     .mockResolvedValueOnce(false)  // tls
+    .mockResolvedValueOnce(true)   // setAsDefault
     .mockResolvedValueOnce(false)  // createIdentity
     .mockResolvedValueOnce(false)  // writeEnv
     .mockResolvedValueOnce(false); // claudeDesktop
@@ -158,6 +159,7 @@ describe("runInit — identity creation", () => {
 
     mockConfirm
       .mockResolvedValueOnce(false)  // tls
+      .mockResolvedValueOnce(true)   // setAsDefault
       .mockResolvedValueOnce(true)   // createIdentity
       .mockResolvedValueOnce(false)  // writeEnv
       .mockResolvedValueOnce(false); // claudeDesktop
@@ -209,6 +211,7 @@ describe("runInit — .env write path", () => {
 
     mockConfirm
       .mockResolvedValueOnce(false)  // tls
+      .mockResolvedValueOnce(true)   // setAsDefault
       .mockResolvedValueOnce(false)  // createIdentity
       .mockResolvedValueOnce(true)   // writeEnv → YES
       .mockResolvedValueOnce(false); // claudeDesktop
@@ -228,13 +231,51 @@ describe("runInit — .env write path", () => {
     expect(content).toContain("ROUTER_HOME_GW_PASS=secret");
   });
 
-  it("writes MIKROMCP_DEFAULT_ROUTER set to the configured router id", async () => {
+  it("writes an active MIKROMCP_DEFAULT_ROUTER when set as default", async () => {
     const { runInit } = await import("../../../src/cli/init.js");
     await runInit();
 
     const envPath = join(tmpDir, ".mikromcp", ".env");
     const content = readFileSync(envPath, "utf-8");
-    expect(content).toContain("MIKROMCP_DEFAULT_ROUTER=home-gw");
+    expect(content).toMatch(/^MIKROMCP_DEFAULT_ROUTER=home-gw$/m);
+  });
+});
+
+describe("runInit — default router opt-out", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpDir = makeTempProject();
+    mockHomedirRef.value = tmpDir;
+
+    mockInput
+      .mockResolvedValueOnce("home-gw")
+      .mockResolvedValueOnce("192.168.88.1")
+      .mockResolvedValueOnce("80")
+      .mockResolvedValueOnce("ROUTER_HOME_GW")
+      .mockResolvedValueOnce("admin")
+      .mockResolvedValueOnce("secret")
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce("7");
+
+    mockConfirm
+      .mockResolvedValueOnce(false)  // tls
+      .mockResolvedValueOnce(false)  // setAsDefault → NO
+      .mockResolvedValueOnce(false)  // createIdentity
+      .mockResolvedValueOnce(true)   // writeEnv → YES
+      .mockResolvedValueOnce(false); // claudeDesktop
+
+    mockSelect.mockResolvedValueOnce("stdio");
+  });
+
+  it("writes MIKROMCP_DEFAULT_ROUTER commented out when not set as default", async () => {
+    const { runInit } = await import("../../../src/cli/init.js");
+    await runInit();
+
+    const content = readFileSync(join(tmpDir, ".mikromcp", ".env"), "utf-8");
+    expect(content).toMatch(/^# MIKROMCP_DEFAULT_ROUTER=home-gw$/m);
+    expect(content).not.toMatch(/^MIKROMCP_DEFAULT_ROUTER=home-gw$/m);
   });
 });
 
@@ -258,6 +299,7 @@ describe("runInit — Claude Desktop registration", () => {
 
     mockConfirm
       .mockResolvedValueOnce(false)  // tls
+      .mockResolvedValueOnce(true)   // setAsDefault
       .mockResolvedValueOnce(false)  // createIdentity
       .mockResolvedValueOnce(false)  // writeEnv
       .mockResolvedValueOnce(true);  // claudeDesktop → YES
@@ -316,6 +358,7 @@ describe("runInit — existing routers.yaml merge", () => {
     mockConfirm
       .mockResolvedValueOnce(true)   // upfront: existing files detected, continue?
       .mockResolvedValueOnce(false)  // tls
+      .mockResolvedValueOnce(true)   // setAsDefault
       .mockResolvedValueOnce(false)  // createIdentity
       .mockResolvedValueOnce(false)  // writeEnv
       .mockResolvedValueOnce(false); // claudeDesktop
@@ -374,6 +417,7 @@ describe("runInit — allowedRouters / allowedToolPatterns mapping", () => {
 
     mockConfirm
       .mockResolvedValueOnce(false)  // tls
+      .mockResolvedValueOnce(true)   // setAsDefault
       .mockResolvedValueOnce(true)   // createIdentity
       .mockResolvedValueOnce(false)  // writeEnv
       .mockResolvedValueOnce(false); // claudeDesktop

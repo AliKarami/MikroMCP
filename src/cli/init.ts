@@ -62,6 +62,7 @@ interface CollectedData {
   transport: string;
   envPath: string;
   configDir: string;
+  setAsDefault: boolean;
   writeEnv: boolean;
   writeRoutersYaml: boolean;
   writeIdentitiesYaml: boolean;
@@ -136,6 +137,7 @@ async function collectRouterInfo(): Promise<
     | "transport"
     | "envPath"
     | "configDir"
+    | "setAsDefault"
     | "writeEnv"
     | "writeRoutersYaml"
     | "writeIdentitiesYaml"
@@ -212,6 +214,13 @@ async function collectRouterInfo(): Promise<
   });
 
   return { routerId, host, port, tlsEnabled, rejectUnauthorized, envPrefix, routerUser, routerPass, tags, rosVersion };
+}
+
+async function collectDefaultRouterPreference(routerId: string): Promise<boolean> {
+  return confirm({
+    message: `Set "${routerId}" as the default router? (tools may then omit routerId)`,
+    default: true,
+  });
 }
 
 async function collectIdentityInfo(): Promise<{
@@ -409,7 +418,9 @@ function writeDotEnv(data: CollectedData): void {
     "",
     "# ── Default router ───────────────────────────────────────────────────",
     "# Router used when a tool call omits routerId (handy for single-router setups).",
-    `MIKROMCP_DEFAULT_ROUTER=${data.routerId}`,
+    data.setAsDefault
+      ? `MIKROMCP_DEFAULT_ROUTER=${data.routerId}`
+      : `# MIKROMCP_DEFAULT_ROUTER=${data.routerId}`,
     "",
     "# ── Logging ──────────────────────────────────────────────────────────",
     "# Levels: trace | debug | info | warn | error",
@@ -496,16 +507,19 @@ export async function runInit(): Promise<void> {
   // Step 1: router config
   const routerInfo = await collectRouterInfo();
 
-  // Step 2: identity
+  // Step 2: default router
+  const setAsDefault = await collectDefaultRouterPreference(routerInfo.routerId);
+
+  // Step 3: identity
   const identityInfo = await collectIdentityInfo();
 
-  // Step 3: transport mode
+  // Step 4: transport mode
   const transport = await collectTransport();
 
-  // Step 4: .env opt-in
+  // Step 5: .env opt-in
   const writeEnv = await collectEnvPreference();
 
-  // Step 5: Claude Desktop
+  // Step 6: Claude Desktop
   const registerDesktop = await collectClaudeDesktopPreference();
 
   // Assemble full data object
@@ -515,6 +529,7 @@ export async function runInit(): Promise<void> {
     transport,
     envPath,
     configDir,
+    setAsDefault,
     writeEnv,
     writeRoutersYaml: true,
     writeIdentitiesYaml: identityInfo.createIdentity,
@@ -541,6 +556,16 @@ export async function runInit(): Promise<void> {
     writeDotEnv(data);
     summary.push(`.env written to ${data.envPath}`);
     console.log(chalk.green(`  ✔  ${data.envPath}`));
+    if (data.setAsDefault) {
+      summary.push(`default router: ${data.routerId}`);
+      console.log(chalk.green(`  ✔  Default router: ${data.routerId} (MIKROMCP_DEFAULT_ROUTER)`));
+    }
+  } else if (data.setAsDefault) {
+    console.log(
+      chalk.yellow(
+        `  ⚠  Default router not persisted — set MIKROMCP_DEFAULT_ROUTER=${data.routerId} in your environment to use it.`,
+      ),
+    );
   }
 
   let desktopRegistered = false;

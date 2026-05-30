@@ -19,7 +19,7 @@ Each release section covers changes **since the previous release only**.
 - `routerId` is now optional on every router-scoped tool. When omitted, the server resolves it from `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when exactly one exists; otherwise it returns a `MISSING_ROUTER_ID` error listing available routers
 - Slimmed the advertised tool catalog (`tools/list`) by reusing shared schema-field definitions and tightening the longest tool descriptions — roughly 14% fewer tokens per catalog with no change to tool behaviour
 - List tools now return a concise summary in their text `content`; full per-item detail remains in `structuredContent`, avoiding duplicate payloads across both result fields
-- `mikromcp init` now writes `MIKROMCP_DEFAULT_ROUTER` (set to the configured router) into `.env` and points to the usage skill in its next-steps
+- `mikromcp init` now prompts whether to set the configured router as the default (`MIKROMCP_DEFAULT_ROUTER`), writes it into `.env` accordingly (active when accepted, commented-out otherwise), shows the choice in the summary, and points to the usage skill in its next-steps
 - `mikromcp doctor` now validates default-router resolution (errors if `MIKROMCP_DEFAULT_ROUTER` names an unknown router, notes the implicit sole-router default, warns when multiple routers have no default) and checks whether the usage skill is installed
 - Internal: extracted a shared `paginate()` helper for client-side pagination, a shared `toolError()` handler-error wrapper, and made the circuit breaker `state` getter side-effect-free (the open→half-open transition is now explicit). No user-facing behaviour change.
 
