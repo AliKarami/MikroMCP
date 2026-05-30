@@ -165,18 +165,6 @@ This document describes what has been built and what is planned. Milestones are 
 
 ---
 
-## ✅ v1.1 — Correctness, Security Hardening & New Orchestration Features
-
-**Goal:** Deliver the correctness fixes, security hardening, and orchestration improvements deferred from v1.0.
-
-- **Correctness:** retry engine now honours `MikroMCPError.recoverability` and retries on HTTP 5xx / timeout / busy; circuit breaker half-open state admits a single recovery probe at a time; `apply_plan` records real per-step duration and runs sub-steps through the per-router circuit breaker
-- **Security hardening:** audit log and write journal redact VPN/crypto secrets (WireGuard private keys, IPSec PSK, SNMP community strings); `MIKROMCP_AUDIT_LOG_PATH` via dotenv now activates the file sink; HTTP rate-limiter sweeps stale windows to bound memory; pooled REST client is evicted on auth failure
-- **Operability:** `GET /healthz` probe endpoint (unauthenticated, not rate-limited); `GET /metrics` Prometheus endpoint (`mikromcp_tool_calls_total`); snapshot retention pruning (`MIKROMCP_SNAPSHOT_RETENTION_DAYS`); async file I/O for snapshots, write journal, and audit log
-- **Orchestration:** fleet-confirmed destructive `bulk_execute` (two-step HMAC flow); expanded snapshot semantic keys so `rollback_change` produces in-place updates for certificates, files, VRRP, DHCP servers, IPSec peers, IP pools, simple queues, netwatch entries, and users; `bulk_execute` fleet operations now produce an audit trail
-- **Config & tooling:** server version derived from `package.json`; `mikromcp init` fixed to write `[]` (allow-all sentinel) instead of `["*"]`; unused `pagination` config block removed
-
----
-
 ## ✅ v1.0 — Production Release
 
 **Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams and accessible to individual users — not adding new router surfaces.
@@ -190,6 +178,18 @@ This document describes what has been built and what is planned. Milestones are 
 - **Release artifact automation in CI/CLAUDE.md** — CI workflow enforces that every release tag triggers: version bump, binary builds, Docker pushes, GitHub Release creation, and wiki sync; `CLAUDE.md` documents the release checklist so future contributors know what to update
 - **Stability policy** — tool schema stability contract and compatibility matrix
 - **Security docs** — least-privilege RouterOS policy templates, threat model, deployment guide
+
+---
+
+## ✅ v1.1 — Correctness, Security Hardening & New Orchestration Features
+
+**Goal:** Deliver the correctness fixes, security hardening, and orchestration improvements deferred from v1.0.
+
+- **Correctness:** retry engine now honours `MikroMCPError.recoverability` and retries on HTTP 5xx / timeout / busy; circuit breaker half-open state admits a single recovery probe at a time; `apply_plan` records real per-step duration and runs sub-steps through the per-router circuit breaker
+- **Security hardening:** audit log and write journal redact VPN/crypto secrets (WireGuard private keys, IPSec PSK, SNMP community strings); `MIKROMCP_AUDIT_LOG_PATH` via dotenv now activates the file sink; HTTP rate-limiter sweeps stale windows to bound memory; pooled REST client is evicted on auth failure
+- **Operability:** `GET /healthz` probe endpoint (unauthenticated, not rate-limited); `GET /metrics` Prometheus endpoint (`mikromcp_tool_calls_total`); snapshot retention pruning (`MIKROMCP_SNAPSHOT_RETENTION_DAYS`); async file I/O for snapshots, write journal, and audit log
+- **Orchestration:** fleet-confirmed destructive `bulk_execute` (two-step HMAC flow); expanded snapshot semantic keys so `rollback_change` produces in-place updates for certificates, files, VRRP, DHCP servers, IPSec peers, IP pools, simple queues, netwatch entries, and users; `bulk_execute` fleet operations now produce an audit trail
+- **Config & tooling:** server version derived from `package.json`; `mikromcp init` fixed to write `[]` (allow-all sentinel) instead of `["*"]`; unused `pagination` config block removed
 
 ---
 
@@ -252,6 +252,44 @@ OpenVPN server: `get_ovpn_server` (read singleton config), `manage_ovpn_server` 
   - `manage_container_mount` — add/remove container mount entries (idempotent by name)
 - **Bandwidth Test:**
   - `bandwidth_test` — run a RouterOS bandwidth test from the router to a remote host and return throughput in both directions (`/tool/bandwidth-test`); read-only hint, configurable duration and protocol (TCP/UDP)
+
+---
+
+## ✅ Post-v1.5 Hardening
+
+After v1.5 shipped, a focused four-phase hardening effort was completed to improve correctness, performance, developer experience, and documentation quality. All four phases are merged into `main`.
+
+### Phase 1 — Code Review Hardening
+
+Bug fixes and refactors surfaced by a thorough code-review pass:
+
+- **Bug fixes:**
+  - Audit log redaction recursion: nested credential objects were not fully scrubbed — fixed with a recursive walk.
+  - Firewall idempotency: address and protocol comparisons used loose equality; hardened to strict string comparison to prevent false conflict reports.
+  - `bulk_execute`: snapshot and journal entries were created even on dry-run paths — now gated correctly.
+- **Refactors:**
+  - Shared `paginate` helper extracted to eliminate copy-paste pagination logic across list tools.
+  - Shared `toolError` helper centralises `enrichError` + re-throw pattern.
+  - Circuit breaker state getter made side-effect-free (no longer resets half-open probe count on read).
+
+### Phase 2 — Token & UX Optimisation
+
+- **Slimmer tool catalog:** schema descriptions trimmed and redundant fields pruned — approximately 14% fewer tokens in the tool manifest.
+- **Optional `routerId` + default-router resolution:** tools no longer require `routerId` when `MIKROMCP_DEFAULT_ROUTER` is set or when exactly one router is configured; `mikromcp init` and `mikromcp doctor` updated to write the env var.
+- **De-duplicated list output:** list tools deduplicate records by `.id` before returning, preventing duplicate entries from REST pagination edge cases.
+
+### Phase 3 — MikroMCP Usage Skill
+
+- `skills/mikromcp/` — a Claude Code skill that guides LLMs in choosing the right MikroMCP tool, composing safe (dry-run → confirm → apply) workflows, and diagnosing common errors.
+- `mikromcp init` and `mikromcp doctor` updated to register the skill automatically.
+- MCP server `instructions` field populated so clients that surface server-level hints present them to the model at connection time.
+
+### Phase 4 — Docs & Wiki Accuracy/Consistency Overhaul
+
+- Full audit of `docs/wiki/` against the actual tool set (117 tools as of v1.5).
+- Stale tool counts, version strings, and parameter tables corrected across Available-Tools.md, Architecture.md, Getting-Started.md, and Roadmap.md.
+- `ROADMAP.md` milestone ordering fixed (v1.0 was listed after v1.1); all milestones through v1.5 marked shipped.
+- Cross-file consistency pass: README, wiki, and CHANGELOG all agree on the current state.
 
 ---
 

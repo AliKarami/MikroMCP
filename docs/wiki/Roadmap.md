@@ -2,7 +2,7 @@
 
 Milestones are intentionally scoped so each one ships working, testable software on its own. See [ROADMAP.md](https://github.com/AliKarami/MikroMCP/blob/main/ROADMAP.md) in the repository for the authoritative version with full milestone details.
 
-v1.0 is released and stable. Future work is tracked in new milestones.
+v1.5 is released and stable. All milestones v0.1 through v1.5 are shipped. A four-phase post-v1.5 hardening effort (code review fixes, token optimisation, usage skill, docs overhaul) is also complete.
 
 ---
 
@@ -104,17 +104,27 @@ Improvements: `list_dhcp_leases` gains `leaseType` filter; `list_dhcp_servers` g
 
 ---
 
-## ✅ v1.5 — Container Depth & Diagnostics
+## ✅ v1.5 — Container Depth & Diagnostics (99 → 117 tools)
 
 `get_container_config`, `manage_container_config` — global container settings (registry, RAM, veth).
 `list_container_envs`, `manage_container_env` — container environment variables.
 `list_container_mounts`, `manage_container_mount` — container volume mounts.
-`bandwidth_test`, `fetch_url`, `list_connections` — network diagnostic tools.
-`list_interface_lists`, `manage_interface_list`, `manage_interface_list_member` — interface list management.
-`list_ppp_profiles`, `manage_ppp_profile` — PPP profile management.
-`delete_file` — delete router filesystem files.
-`manage_dns_settings` — write DNS upstream servers, cache TTL, and allow-remote-requests.
-`manage_ipsec_policy`, `manage_wireguard_interface` — IPSec policy and WireGuard interface management.
+`bandwidth_test` — RouterOS bandwidth test to a remote host (TCP/UDP, configurable duration).
+Additional diagnostic and management tools bringing the total to 117.
+
+---
+
+## ✅ Post-v1.5 Hardening
+
+A focused four-phase effort completed after v1.5, now fully merged:
+
+**Phase 1 — Code Review Hardening:** Three bug fixes (audit redaction recursion, firewall idempotency address/protocol comparison, `bulk_execute` snapshot/journal on dry-run paths) and three refactors (shared `paginate` and `toolError` helpers; side-effect-free circuit breaker state getter).
+
+**Phase 2 — Token & UX Optimisation:** Tool manifest trimmed ~14% in token count; `routerId` made optional when `MIKROMCP_DEFAULT_ROUTER` is set or only one router is configured; list tools deduplicate output by `.id`.
+
+**Phase 3 — MikroMCP Usage Skill:** `skills/mikromcp/` — a Claude Code skill that guides LLMs in tool selection and safe workflows (dry-run → confirm → apply). `mikromcp init` and `mikromcp doctor` register the skill automatically. MCP server `instructions` field populated for clients that surface server hints.
+
+**Phase 4 — Docs & Wiki Accuracy/Consistency Overhaul:** Full audit of all wiki pages against the live tool set (117 tools, v1.5.0). Stale counts and version strings corrected; `ROADMAP.md` milestone ordering fixed; cross-file consistency enforced across README, wiki, and CHANGELOG.
 
 ---
 
