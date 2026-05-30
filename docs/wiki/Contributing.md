@@ -27,7 +27,9 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 2. Define the tool using the `ToolDefinition` interface — see the pattern in `CLAUDE.md` or any existing tool file.
 3. Export it and add it to `allTools` in `src/domain/tools/index.ts`.
 4. Add unit tests in `test/unit/` covering metadata, input schema, and all handler paths.
-5. Document it in `docs/wiki/Available-Tools.md` with a parameter table and example prompt.
+5. Document it in **both** of these files (lockstep tests enforce this — CI fails if either is missing):
+   - `docs/wiki/Available-Tools.md` — add a section with a parameter table and example prompt.
+   - `skills/mikromcp/references/tool-map.md` — add the tool name to the appropriate category row.
 6. Add a line to `CHANGELOG.md` under `[Unreleased] → Added`.
 
 Minimal tool skeleton:
@@ -94,8 +96,9 @@ export const myTools: ToolDefinition[] = [myTool];
 
 ## PR Checklist
 
-- [ ] `npm test` passes (vitest + tsc + eslint)
+- [ ] `npm test` passes (vitest + tsc + eslint + doc-accuracy guards + skill tool-map lockstep)
 - [ ] New tool: `docs/wiki/Available-Tools.md` updated with parameter table and example prompt
+- [ ] New tool: `skills/mikromcp/references/tool-map.md` updated (lockstep test will fail otherwise)
 - [ ] New tool: `CHANGELOG.md` `[Unreleased]` section updated
 - [ ] Write tool: `dryRun` supported
 - [ ] Write tool: idempotency check included
