@@ -476,6 +476,7 @@ Key project paths:
 | v1.3      | ✅ Shipped | PPPoE & OpenVPN: `list/manage_pppoe_client`, `list/manage_ovpn_client`, `get/manage_ovpn_server`         |
 | v1.4      | ✅ Shipped | System administration depth: user groups, firmware upgrade, config backup/export, log rule management, NTP write |
 | v1.5      | ✅ Shipped | Container depth & diagnostics: container config/env/mount tools, `bandwidth_test` (99 → 117 tools)      |
+| v1.6      | ✅ Shipped | Hardening & DX: token-optimized catalog (~14%), optional `routerId` + `MIKROMCP_DEFAULT_ROUTER`, MikroMCP usage skill, MCP `instructions` on initialize, docs/wiki overhaul |
 
 See [ROADMAP.md](ROADMAP.md) for the complete milestone plan.
 
