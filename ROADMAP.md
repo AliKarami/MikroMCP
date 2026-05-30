@@ -255,9 +255,9 @@ OpenVPN server: `get_ovpn_server` (read singleton config), `manage_ovpn_server` 
 
 ---
 
-## ✅ Post-v1.5 Hardening
+## ✅ v1.6.0 — Hardening & Developer Experience
 
-After v1.5 shipped, a focused four-phase hardening effort was completed to improve correctness, performance, developer experience, and documentation quality. All four phases are merged into `main`.
+After v1.5 shipped, a focused four-phase hardening effort was completed to improve correctness, performance, developer experience, and documentation quality — released as v1.6.0.
 
 ### Phase 1 — Code Review Hardening
 
