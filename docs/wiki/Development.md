@@ -18,7 +18,7 @@ npm run lint         # eslint src/
 npm run format       # prettier --write src/ test/
 ```
 
-Run `npm test` before pushing a branch — it runs vitest, tsc, and eslint together.
+Run `npm test` before pushing a branch — it runs vitest, tsc, and eslint together, including the doc-accuracy guards (`test/unit/docs/`) and the skill tool-map lockstep (`test/unit/skill/`).
 
 ---
 
@@ -128,6 +128,14 @@ Test structure for each tool file:
 2. **input schema** — valid input with defaults, rejection of extra fields, out-of-range values
 3. **handler** — happy path, idempotency (`already_exists`/`no_change`), conflict, dry-run, not-found
 
+`npm test` also runs two doc-accuracy guard suites that fail CI when documentation drifts from code:
+
+- `test/unit/docs/available-tools-sync.test.ts` — verifies `docs/wiki/Available-Tools.md` lists every registered tool.
+- `test/unit/docs/tool-count-sync.test.ts` — verifies the tool count in `README.md` and `docs/wiki/Architecture.md` matches the actual count (currently **117**).
+- `test/unit/skill/tool-map-sync.test.ts` — verifies `skills/mikromcp/references/tool-map.md` is in lockstep with the registered tools.
+
+If you add, rename, or remove a tool, you must update `docs/wiki/Available-Tools.md` **and** `skills/mikromcp/references/tool-map.md` in the same PR, or these tests will fail.
+
 ---
 
 ## Debugging with MCP Inspector
@@ -143,6 +151,6 @@ MIKROMCP_CONFIG_PATH=config/routers.yaml \
   npx @modelcontextprotocol/inspector node dist/main.js
 ```
 
-Inspector opens at `http://localhost:5173`. Browse all 77 tools, call them with sample inputs, and inspect raw responses including `structuredContent`.
+Inspector opens at `http://localhost:5173`. Browse all 117 tools, call them with sample inputs, and inspect raw responses including `structuredContent`.
 
 For hot-reload during tool development, replace `node dist/main.js` with `npm run dev`.

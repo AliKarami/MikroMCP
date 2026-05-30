@@ -341,9 +341,10 @@ List network interfaces with optional filtering and pagination.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `type` | string | — | Filter by interface type (e.g. `ether`, `vlan`, `bridge`) |
-| `running` | boolean | — | If `true`, return only running/up interfaces |
-| `macAddress` | string | — | Filter by exact MAC address |
+| `type` | `ether` \| `vlan` \| `bridge` \| `bonding` \| `wireguard` \| `gre` \| `all` | `all` | Filter by interface type |
+| `status` | `up` \| `down` \| `all` | `all` | Filter by running status |
+| `macAddress` | string | — | Filter by exact MAC address (case-insensitive) |
+| `includeCounters` | boolean | `false` | Include traffic counters (tx-byte, rx-byte, etc.) |
 | `limit` | integer | `100` | Results per page (1–500) |
 | `offset` | integer | `0` | Pagination offset |
 
@@ -533,6 +534,7 @@ Add, update, or remove an IP address on an interface.
 | `interface` | string | — | Interface name |
 | `network` | string | — | Network address (auto-calculated if omitted) |
 | `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Whether the address should be disabled |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add 10.0.0.1/24 to ether2 on core-01."
@@ -892,9 +894,10 @@ Add or remove a static route. Plain IP addresses without a prefix are auto-conve
 | `action` | `add` \| `remove` | — | Operation to perform |
 | `dstAddress` | string | — | Destination network in CIDR (e.g. `10.0.0.0/8`); plain IP becomes `/32` |
 | `gateway` | string | — | Next-hop gateway IP |
-| `routingTable` | string | `main` | Routing table name |
-| `distance` | integer | `1` | Administrative distance |
+| `distance` | integer | `1` | Administrative distance (1–255) |
+| `routingTable` | string | — | Routing table name (omit for main table) |
 | `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Whether the route should be disabled |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a static route for 10.10.0.0/16 via 192.168.1.254 on core-01."
@@ -1020,16 +1023,17 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `action` | `add` \| `remove` \| `disable` \| `enable` | — | Operation to perform |
 | `table` | `filter` \| `nat` | `filter` | Firewall table |
 | `chain` | string | — | Chain name (e.g. `input`, `forward`, `output`, `srcnat`) |
-| `comment` | string | — | **Idempotency key** — required for all actions |
+| `comment` | string | — | Comment used as idempotency key |
 | `ruleAction` | string | — | RouterOS action (e.g. `accept`, `drop`, `masquerade`) |
 | `srcAddress` | string | — | Source IP or CIDR |
 | `dstAddress` | string | — | Destination IP or CIDR |
 | `srcPort` | string | — | Source port or range (e.g. `80`, `8000-9000`) |
 | `dstPort` | string | — | Destination port or range |
-| `protocol` | string | — | Protocol (`tcp`, `udp`, `icmp`, etc.) |
+| `protocol` | `tcp` \| `udp` \| `icmp` \| `gre` \| `ospf` \| `all` | — | Protocol to match |
 | `inInterface` | string | — | Incoming interface |
 | `outInterface` | string | — | Outgoing interface |
-| `position` | integer | — | Rule position (0-based); appended if omitted |
+| `disabled` | boolean | `false` | Create/update the rule in disabled state |
+| `placeBefore` | string | — | Place the new rule before this rule ID |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a drop rule for 1.2.3.4 on the input chain of core-01, comment it 'block-attacker'."
@@ -1284,17 +1288,17 @@ List simple queue entries with their targets, limits, and current rates.
 
 ### `manage_queue` — Write · Idempotent
 
-Add, update, or remove a simple queue entry. Idempotent by `name`.
+Add, remove, enable, or disable a simple queue. Idempotent by `name`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `add` \| `remove` \| `update` | — | Operation to perform |
+| `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
 | `name` | string | — | Queue name (idempotency key) |
-| `target` | string | — | Target IP address or CIDR |
+| `target` | string | — | Target IP address or CIDR (required for `add`) |
 | `maxLimit` | string | — | Max rate as `upload/download` (e.g. `10M/10M`) |
+| `limitAt` | string | — | Guaranteed rate as `upload/download` (e.g. `1M/1M`) |
 | `comment` | string | — | Optional comment |
-| `disabled` | boolean | `false` | Create or update the queue in disabled state |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Limit the device at 192.168.1.50 to 10 Mbps on core-01."

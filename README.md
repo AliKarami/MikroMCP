@@ -52,7 +52,7 @@ MikroMCP exists because raw router CLI access is the wrong abstraction for AI ag
 | 🧪 **Diagnostics**         | Router-originated `ping`, `traceroute`, `torch`, log filtering, guarded SSH command execution         |
 | 🛡️ **Change safety**       | Dry-run, idempotent writes, snapshots, write journal, `plan_changes`, `apply_plan`, `rollback_change` |
 | ⚙️ **Production behavior** | Retries for read tools, per-router circuit breakers, correlation IDs, structured logs, audit logs     |
-| 🤖 **AI-agent fit**        | Human-readable responses plus structured JSON content for reasoning, chaining, and automation         |
+| 🤖 **AI-agent fit**        | Human-readable responses plus structured JSON content for reasoning, chaining, and automation; server advertises an `instructions` string on MCP initialize so clients self-configure; optional [`routerId` resolved via `MIKROMCP_DEFAULT_ROUTER`](#configuration-reference) for single-router setups; [usage skill](docs/wiki/Using-the-Skill.md) for safe, guided tool use in Claude Code |
 | 🧩 **MCP compatibility**   | stdio for desktop clients, Streamable HTTP and legacy SSE for remote or service-style clients         |
 
 ---
@@ -265,6 +265,7 @@ All settings can be placed in `~/.mikromcp/.env` or passed as environment variab
 | --------------------------------- | -------------------------------- | ------------------------------------------------------ |
 | `MIKROMCP_TRANSPORT`              | `stdio`                          | `stdio` or `http`                                      |
 | `MIKROMCP_CONFIG_PATH`            | `~/.mikromcp/routers.yaml`       | Router registry path                                   |
+| `MIKROMCP_DEFAULT_ROUTER`         | unset                            | Router ID used when a tool call omits `routerId`; falls back to the sole configured router if only one exists |
 | `MIKROMCP_IDENTITIES_PATH`        | `~/.mikromcp/identities.yaml`    | Identity and bearer-token registry                     |
 | `MIKROMCP_STDIO_IDENTITY`         | built-in superadmin              | Named identity for stdio mode                          |
 | `MIKROMCP_PORT`                   | `3000`                           | HTTP transport port                                    |
@@ -470,6 +471,11 @@ Key project paths:
 | v0.8      | ✅ Shipped | Snapshots, write journal, plan/apply, rollback, maintenance windows                                      |
 | v0.9      | ✅ Shipped | Fleet operations, IPSec, certificates, users, DHCP servers/pools, queues/QoS, VRRP, SNMP/NTP, Netwatch, discovery, ARP, health checks |
 | v1.0      | ✅ Shipped | npm package, standalone binaries, Docker images, `mikromcp init` wizard, `mikromcp doctor`, `~/.mikromcp/` convention |
+| v1.1      | ✅ Shipped | Correctness, security hardening, orchestration: retry/circuit-breaker fixes, audit redaction, Prometheus metrics, fleet-confirmed `bulk_execute` |
+| v1.2      | ✅ Shipped | DHCP & interface completeness: `manage_vlan`, `list/manage_ip_pool`, `manage_dhcp_lease`, DHCP clients, IP services |
+| v1.3      | ✅ Shipped | PPPoE & OpenVPN: `list/manage_pppoe_client`, `list/manage_ovpn_client`, `get/manage_ovpn_server`         |
+| v1.4      | ✅ Shipped | System administration depth: user groups, firmware upgrade, config backup/export, log rule management, NTP write |
+| v1.5      | ✅ Shipped | Container depth & diagnostics: container config/env/mount tools, `bandwidth_test` (99 → 117 tools)      |
 
 See [ROADMAP.md](ROADMAP.md) for the complete milestone plan.
 

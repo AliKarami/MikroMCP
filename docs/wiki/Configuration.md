@@ -59,18 +59,27 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_TRANSPORT` | `stdio` | Transport mode: `stdio` or `http` |
 | `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry YAML |
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId`; falls back to the sole configured router when only one exists |
+| `MIKROMCP_DATA_DIR` | `~/.mikromcp/data` | Base directory for snapshots and the write journal |
 | `MIKROMCP_LOG_LEVEL` | `info` | Log verbosity: `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP listen port (HTTP transport only) |
 | `MIKROMCP_BIND_HOST` | `127.0.0.1` | HTTP bind address (HTTP transport only) |
+| `MIKROMCP_HTTP_MAX_BODY_BYTES` | `1048576` (1 MB) | Maximum request body size for HTTP transport |
+| `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | Request rate limit in requests per minute (HTTP transport) |
 | `MIKROMCP_IDENTITIES_PATH` | `~/.mikromcp/identities.yaml` | Path to identity/token registry (HTTP transport) |
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport; omit for built-in superadmin |
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret for confirmation tokens — **required in HTTP mode** |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | Path for NDJSON audit log file; omit to disable file sink |
 | `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
+| `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000` | Timeout in milliseconds for SSH commands (`run_command`, `torch`, etc.) |
+| `MIKROMCP_SSH_MAX_OUTPUT_BYTES` | `524288` (512 KB) | Maximum output size captured from SSH commands |
 | `MIKROMCP_CMD_ALLOW` | — | Global command allowlist for `run_command` (comma-separated patterns) |
 | `MIKROMCP_CMD_DENY` | — | Global command denylist for `run_command` (comma-separated patterns) |
 | `ROUTER_<PREFIX>_USER` | — | Router username (matches `envPrefix` in YAML) |
 | `ROUTER_<PREFIX>_PASS` | — | Router password (matches `envPrefix` in YAML) |
+
+### Default router resolution
+
+When a tool call omits `routerId`, MikroMCP resolves the target router in two steps: first it checks `MIKROMCP_DEFAULT_ROUTER`; if that is unset it falls back to the sole configured router (when exactly one is defined in `routers.yaml`). If neither condition is met (multiple routers, no default set) the call is rejected with a `VALIDATION` error (`MISSING_ROUTER_ID`) that lists the available routers. `mikromcp init` writes `MIKROMCP_DEFAULT_ROUTER` into `~/.mikromcp/.env` automatically, so single-router setups work without specifying `routerId` in every prompt.
 
 ---
 

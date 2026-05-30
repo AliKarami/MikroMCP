@@ -1,6 +1,6 @@
 # MikroMCP
 
-A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives AI assistants safe, structured access to MikroTik RouterOS devices. 77 typed tools. Dry-run on every write. Idempotency built in.
+A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives AI assistants safe, structured access to MikroTik RouterOS devices. 117 typed tools. Dry-run on every write. Idempotency built in.
 
 ---
 
@@ -19,12 +19,13 @@ A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.i
 |---|---|
 | [Connecting to Claude Desktop](Connecting-to-Claude-Desktop) | Register MikroMCP in Claude Desktop |
 | [Connecting to AI Assistants](Connecting-to-AI-Assistants) | Claude Code, Cursor, Codex, HTTP/Docker/systemd |
+| [Using the Skill](Using-the-Skill) | Install the usage skill so your assistant drives MikroMCP safely |
 
 ## Reference
 
 | Page | What's in it |
 |---|---|
-| [Available Tools](Available-Tools) | All 77 tools — parameters, defaults, example prompts |
+| [Available Tools](Available-Tools) | All 117 tools — parameters, defaults, example prompts |
 | [Architecture](Architecture) | System layers, request pipeline, auth model |
 | [Error Handling](Error-Handling) | Error categories, retry engine, circuit breaker |
 
