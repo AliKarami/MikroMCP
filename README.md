@@ -30,6 +30,10 @@ MikroMCP exists because raw router CLI access is the wrong abstraction for AI ag
 
 ## Quick Start
 
+<p align="center">
+  <img src="docs/assets/quickstart.svg" alt="MikroMCP quick start: npm install -g mikromcp, mikromcp init, then ask Claude Desktop about your router" width="760">
+</p>
+
 ```bash
 npm install -g mikromcp
 mikromcp init     # interactive wizard: configure your router (+ optional Claude Desktop registration)
@@ -134,6 +138,46 @@ AI assistants can use MikroMCP to:
 - Return both operator-friendly summaries and structured JSON for follow-up reasoning.
 - Preview changes before mutation and explain exactly what would happen.
 - Respect tool-level authorization, router scoping, maintenance windows, and confirmation gates.
+
+---
+
+## FAQ
+
+### What is MikroMCP?
+
+MikroMCP is an open-source [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that exposes MikroTik RouterOS as 117 typed, auditable tools — letting AI assistants inspect, diagnose, and safely operate routers in natural language instead of improvising CLI commands.
+
+### MikroMCP vs RouterOS API
+
+The RouterOS REST/API exposes raw endpoints. MikroMCP wraps them in schema-validated, idempotent, dry-run-able tools with RBAC, audit logging, snapshots, and rollback — the safety layer an LLM needs before it touches production gear.
+
+### MikroMCP vs SSH automation
+
+Instead of brittle SSH scripts that screen-scrape CLI output, MikroMCP returns structured, typed results with confirmation gates and per-router circuit breakers. SSH is used only where REST can't reach — `ping`, `traceroute`, `torch`, and guarded `run_command`.
+
+### MikroMCP for Claude Code
+
+MikroMCP speaks MCP over stdio and HTTP/SSE, so Claude Code and Claude Desktop drive RouterOS directly. Pair it with the bundled [usage skill](docs/wiki/Using-the-Skill.md) for safe, guided workflows.
+
+### MikroMCP for Codex
+
+Codex connects to MikroMCP over the standard MCP protocol — see [Connecting to AI Assistants](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-AI-Assistants).
+
+### MikroMCP for Cursor
+
+Cursor connects to MikroMCP as an MCP server (stdio or HTTP) to inspect and manage MikroTik routers without leaving the editor.
+
+### MikroMCP for OpenClaw
+
+Any MCP-compatible client — OpenClaw included — can use MikroMCP; configure it as a stdio or HTTP MCP server.
+
+### RouterOS AI Automation Guide
+
+Start with [Getting Started](https://github.com/AliKarami/MikroMCP/wiki/Getting-Started) to install and connect, then use the [usage skill](docs/wiki/Using-the-Skill.md) and [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools) to automate RouterOS safely with an AI assistant.
+
+### Best MCP Servers for Network Engineers
+
+MikroMCP is purpose-built for MikroTik/RouterOS operations with production-grade safety — dry-run, rollback, audit, and RBAC — making it a strong MCP choice for network engineers adopting AI tooling.
 
 ---
 

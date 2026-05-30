@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="290" viewBox="0 0 760 290" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" role="img" aria-label="MikroMCP quick start: npm install -g mikromcp, mikromcp init, then ask Claude Desktop about your router">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#11151c"/>
+      <stop offset="1" stop-color="#0b0e13"/>
+    </linearGradient>
+  </defs>
+
+  <!-- window -->
+  <rect x="1" y="1" width="758" height="288" rx="12" fill="url(#bg)" stroke="#2a313c" stroke-width="1.5"/>
+
+  <!-- title bar -->
+  <rect x="1.5" y="1.5" width="757" height="42" rx="12" fill="#161b22"/>
+  <rect x="1.5" y="30" width="757" height="14" fill="#161b22"/>
+  <circle cx="26" cy="22" r="6" fill="#ff5f56"/>
+  <circle cx="48" cy="22" r="6" fill="#ffbd2e"/>
+  <circle cx="70" cy="22" r="6" fill="#27c93f"/>
+  <text x="380" y="27" text-anchor="middle" font-size="13" fill="#7d8590">mikromcp — quick start</text>
+  <line x1="1.5" y1="43.5" x2="758.5" y2="43.5" stroke="#2a313c" stroke-width="1"/>
+
+  <!-- body -->
+  <g font-size="16">
+    <!-- line 1 -->
+    <text x="28" y="84"><tspan fill="#3fb950">$ </tspan><tspan fill="#e6edf3">npm install -g </tspan><tspan fill="#ea580c" font-weight="bold">mikromcp</tspan></text>
+
+    <!-- line 2 -->
+    <text x="28" y="116"><tspan fill="#3fb950">$ </tspan><tspan fill="#ea580c" font-weight="bold">mikromcp</tspan><tspan fill="#e6edf3"> init</tspan><tspan fill="#6e7681">          # guided wizard: configure your router</tspan></text>
+
+    <!-- line 3 -->
+    <text x="28" y="148"><tspan fill="#3fb950">✓ </tspan><tspan fill="#adbac7">wrote ~/.mikromcp/  ·  Claude Desktop registered</tspan></text>
+
+    <!-- line 5 -->
+    <text x="28" y="200"><tspan fill="#3fb950">$ </tspan><tspan fill="#6e7681"># then open Claude Desktop and just ask:</tspan></text>
+
+    <!-- line 6 -->
+    <text x="28" y="232"><tspan fill="#7d8590">  </tspan><tspan fill="#a5d6ff">"Show CPU, interfaces &amp; warning logs for core-01"</tspan></text>
+  </g>
+
+  <!-- prompt cursor -->
+  <rect x="28" y="252" width="10" height="18" rx="2" fill="#ea580c" opacity="0.9"/>
+
+  <!-- footer hint -->
+  <text x="732" y="266" text-anchor="end" font-size="12" fill="#4d5560">117 typed tools · dry-run · rollback</text>
+</svg>
