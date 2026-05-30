@@ -2,7 +2,7 @@
 
 Milestones are intentionally scoped so each one ships working, testable software on its own. See [ROADMAP.md](https://github.com/AliKarami/MikroMCP/blob/main/ROADMAP.md) in the repository for the authoritative version with full milestone details.
 
-v1.5 is released and stable. All milestones v0.1 through v1.5 are shipped. A four-phase post-v1.5 hardening effort (code review fixes, token optimisation, usage skill, docs overhaul) is also complete.
+v1.6.0 is released and stable. All milestones v0.1 through v1.6.0 are shipped — including the four-phase post-v1.5 hardening effort (code review fixes, token optimisation, usage skill, docs overhaul) that shipped as v1.6.0.
 
 ---
 
@@ -118,9 +118,9 @@ Improvements: `list_dhcp_leases` gains `leaseType` filter; `list_dhcp_servers` g
 
 ---
 
-## ✅ Post-v1.5 Hardening
+## ✅ v1.6.0 — Hardening & Developer Experience
 
-A focused four-phase effort completed after v1.5, now fully merged:
+A focused four-phase effort completed after v1.5 and released as v1.6.0:
 
 **Phase 1 — Code Review Hardening:** Three bug fixes (audit redaction recursion, firewall idempotency address/protocol comparison, `bulk_execute` snapshot/journal on dry-run paths) and three refactors (shared `paginate` and `toolError` helpers; side-effect-free circuit breaker state getter).
 

@@ -42,7 +42,24 @@ npm install -g mikromcp
 
 After installation, `mikromcp` is available as a global command.
 
-### Option B: Clone from source
+### Option B: Standalone binary (no Node.js)
+
+Download the binary for your platform from the [latest GitHub release](https://github.com/AliKarami/MikroMCP/releases/latest) — Linux (x64/arm64), macOS (x64/arm64), and Windows (x64) are published. Make it executable and run it in place of the `mikromcp` command:
+
+```bash
+chmod +x mikromcp-linux-x64
+./mikromcp-linux-x64 doctor
+```
+
+### Option C: Docker
+
+```bash
+docker pull ghcr.io/alikarami/mikromcp:latest
+```
+
+See [Connecting to AI Assistants](Connecting-to-AI-Assistants#using-docker) for a full Docker run example (HTTP mode, config mounting).
+
+### Option D: Clone from source
 
 ```bash
 git clone https://github.com/AliKarami/MikroMCP.git

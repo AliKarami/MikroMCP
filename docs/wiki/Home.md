@@ -4,6 +4,20 @@ A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.i
 
 ---
 
+## Why it matters
+
+Raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production gear is risky. MikroMCP gives agents a controlled tool surface instead:
+
+| Instead of...                                | MikroMCP gives you...                                                                                          |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Hand-written RouterOS CLI snippets from chat | Typed MCP tools with strict Zod validation                                                                     |
+| Blind config changes                         | Dry-run previews, idempotency checks, snapshots, and rollback tooling                                          |
+| One-off scripts per router                   | A multi-router registry with per-router credentials, tags, TLS, SSH, and maintenance windows                   |
+| Raw network access for every assistant       | RBAC identities, bearer tokens for HTTP mode, tool allowlists, and audit trails                                |
+| Fragile troubleshooting workflows            | Router-originated ping, traceroute, torch, logs, interfaces, DHCP, firewall, routes, WiFi, WireGuard, and more |
+
+---
+
 ## Getting started
 
 | Page | What's in it |
@@ -28,6 +42,7 @@ A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.i
 | [Available Tools](Available-Tools) | All 117 tools — parameters, defaults, example prompts |
 | [Architecture](Architecture) | System layers, request pipeline, auth model |
 | [Error Handling](Error-Handling) | Error categories, retry engine, circuit breaker |
+| [Security](Security) | Threat model, RouterOS/credential/RBAC hardening, audit, vulnerability reporting |
 
 ## Contributing
 
