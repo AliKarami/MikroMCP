@@ -34,12 +34,6 @@ MikroMCP exists because raw router CLI access is the wrong abstraction for AI ag
   <img src="docs/assets/quickstart.svg" alt="MikroMCP quick start: npm install -g mikromcp, mikromcp init, then ask Claude Desktop about your router" width="760">
 </p>
 
-```bash
-npm install -g mikromcp
-mikromcp init     # interactive wizard: configure your router (+ optional Claude Desktop registration)
-# then open Claude Desktop and start asking about your router
-```
-
 That's the whole setup for a single-router stdio deployment. For standalone binaries, Docker, HTTP/SSE mode, the RouterOS API prerequisites, and the full 15-minute walkthrough, see the **[Getting Started guide](https://github.com/AliKarami/MikroMCP/wiki/Getting-Started)**.
 
 ---
