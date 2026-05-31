@@ -1,6 +1,6 @@
 node_modules/
 dist/
-data/
+/data/
 config/routers.yaml
 config/identities.yaml
 *.log
