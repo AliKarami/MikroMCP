@@ -24,6 +24,7 @@ const softwareLd = {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script is:inline>document.documentElement.classList.add("js");</script>
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
@@ -42,5 +43,43 @@ const softwareLd = {
   </head>
   <body>
     <slot />
+    <script is:inline>
+      (function () {
+        var d = document;
+        var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        function showAll() {
+          d.querySelectorAll("[data-reveal]").forEach(function (el) {
+            el.classList.add("in");
+          });
+        }
+        function init() {
+          if (reduce || !("IntersectionObserver" in window)) {
+            showAll();
+            return;
+          }
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (e) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("in");
+                  io.unobserve(e.target);
+                }
+              });
+            },
+            { threshold: 0.1, rootMargin: "0px 0px -5% 0px" },
+          );
+          d.querySelectorAll("[data-reveal]").forEach(function (el) {
+            io.observe(el);
+          });
+          // Safety net: never leave content hidden if the observer misbehaves.
+          setTimeout(showAll, 1500);
+        }
+        if (d.readyState === "loading") {
+          d.addEventListener("DOMContentLoaded", init);
+        } else {
+          init();
+        }
+      })();
+    </script>
   </body>
 </html>
