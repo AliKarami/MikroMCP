@@ -1,0 +1,46 @@
+---
+import "../styles/theme.css";
+import { SITE } from "../data/content.ts";
+interface Props { title?: string; description?: string; }
+const {
+  title = `${SITE.name} — ${SITE.tagline}`,
+  description = "MikroMCP exposes MikroTik RouterOS as a typed, auditable MCP server so Claude, Cursor, Codex, and other AI assistants can inspect, diagnose, and safely operate routers in natural language.",
+} = Astro.props;
+const canonical = new URL(Astro.url.pathname, SITE.domain).href;
+const softwareLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: SITE.name,
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Linux, macOS, Windows",
+  description,
+  url: SITE.domain,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  license: "https://opensource.org/licenses/MIT",
+};
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={`${SITE.domain}/og-image.png`} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={`${SITE.domain}/og-image.png`} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <script type="application/ld+json" set:html={JSON.stringify(softwareLd)} />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
