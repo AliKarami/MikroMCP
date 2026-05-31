@@ -1,0 +1,54 @@
+---
+import { faqs } from "../data/content.ts";
+
+const faqLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((f) => ({
+    "@type": "Question",
+    name: f.q,
+    acceptedAnswer: { "@type": "Answer", text: f.a },
+  })),
+};
+---
+<section class="section faq" id="faq">
+  <div class="container inner">
+    <h2 class="h2 head" data-reveal>Frequently asked questions</h2>
+    <div class="list">
+      {faqs.map((f) => (
+        <details data-reveal>
+          <summary>
+            <span>{f.q}</span>
+            <span class="chev" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </summary>
+          <p>{f.a}</p>
+        </details>
+      ))}
+    </div>
+  </div>
+</section>
+<script type="application/ld+json" set:html={JSON.stringify(faqLd)} />
+
+<style>
+  .inner { max-width: 800px; margin: 0 auto; }
+  .head { text-align: center; margin-bottom: 40px; }
+  .list { display: flex; flex-direction: column; gap: 12px; }
+  details {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; transition: border-color .2s ease;
+  }
+  details[open] { border-color: var(--brand-deep); }
+  details:hover { border-color: var(--brand-deep); }
+  summary {
+    list-style: none; cursor: pointer; padding: 18px 22px; display: flex; align-items: center;
+    justify-content: space-between; gap: 16px; font-weight: 600; font-size: 15.5px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary:focus-visible { outline: 2px solid var(--brand-glow); outline-offset: -2px; border-radius: var(--radius); }
+  .chev { display: inline-flex; color: var(--brand-glow); transition: transform .25s ease; flex: 0 0 auto; }
+  .chev svg { width: 20px; height: 20px; }
+  details[open] .chev { transform: rotate(180deg); }
+  details p { margin: 0; padding: 0 22px 20px; color: var(--text-dim); font-size: 14.5px; line-height: 1.7; }
+</style>

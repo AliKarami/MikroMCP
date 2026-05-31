@@ -1,0 +1,43 @@
+---
+const stats = [
+  { n: "117", l: "typed tools" },
+  { n: "idempotent", l: "writes" },
+  { n: "dry-run", l: "+ rollback" },
+  { n: "RBAC", l: "+ audit" },
+];
+---
+<section class="strip">
+  <div class="container grid">
+    {stats.map((s) => (
+      <div class="stat" data-reveal>
+        <span class="n grad-teal mono">{s.n}</span>
+        <span class="l mono">{s.l}</span>
+      </div>
+    ))}
+  </div>
+</section>
+
+<style>
+  .strip { border-bottom: 1px solid var(--border); background: rgba(20,184,166,.025); }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .stat {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 30px 16px; text-align: center; position: relative;
+  }
+  .stat:not(:last-child)::after {
+    content: ""; position: absolute; right: 0; top: 22%; height: 56%; width: 1px; background: var(--border);
+  }
+  .n { font-size: clamp(22px, 3vw, 30px); font-weight: 500; line-height: 1; }
+  .l { font-size: 12.5px; color: var(--text-dim); letter-spacing: .02em; }
+
+  @media (max-width: 680px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .stat:nth-child(2)::after { display: none; }
+    .stat:nth-child(1), .stat:nth-child(2) { border-bottom: 1px solid var(--border); }
+  }
+  @media (max-width: 380px) {
+    .grid { grid-template-columns: 1fr; }
+    .stat::after { display: none; }
+    .stat:not(:last-child) { border-bottom: 1px solid var(--border); }
+  }
+</style>

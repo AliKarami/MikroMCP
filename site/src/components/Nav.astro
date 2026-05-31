@@ -1,0 +1,98 @@
+---
+import { SITE } from "../data/content.ts";
+---
+<header class="nav" id="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="#top" aria-label={`${SITE.name} home`}>
+      <img src="/assets/MikroMCP-logo-transparent.png" alt="" width="32" height="32" />
+      <span class="wordmark">MikroMCP</span>
+    </a>
+
+    <nav class="links" aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#examples">Tools</a>
+      <a href="#faq">FAQ</a>
+      <a href={SITE.docs} target="_blank" rel="noopener">Docs <span aria-hidden="true">↗</span></a>
+      <a href={SITE.github} target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a>
+      <a class="btn btn-accent" href="#quick-start">Get Started</a>
+    </nav>
+
+    <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="mobile-menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+
+  <nav class="mobile" id="mobile-menu" aria-label="Mobile">
+    <a href="#features">Features</a>
+    <a href="#how">How it works</a>
+    <a href="#examples">Tools</a>
+    <a href="#faq">FAQ</a>
+    <a href={SITE.docs} target="_blank" rel="noopener">Docs ↗</a>
+    <a href={SITE.github} target="_blank" rel="noopener">GitHub ↗</a>
+    <a class="btn btn-accent btn-lg" href="#quick-start">Get Started</a>
+  </nav>
+</header>
+
+<style>
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    transition: background .25s ease, border-color .25s ease, backdrop-filter .25s ease;
+    border-bottom: 1px solid transparent;
+  }
+  .nav.scrolled {
+    background: rgba(11, 14, 17, 0.72);
+    backdrop-filter: saturate(160%) blur(12px);
+    -webkit-backdrop-filter: saturate(160%) blur(12px);
+    border-bottom-color: var(--border);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; }
+  .brand img { display: block; border-radius: 7px; }
+  .wordmark { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
+  .links { display: flex; align-items: center; gap: 26px; }
+  .links a:not(.btn) { font-size: 14px; color: var(--text-dim); font-weight: 500; transition: color .15s ease; }
+  .links a:not(.btn):hover { color: var(--text); }
+  .links a:focus-visible, .mobile a:focus-visible { outline: 2px solid var(--brand-glow); outline-offset: 3px; border-radius: 4px; }
+
+  .hamburger { display: none; flex-direction: column; gap: 5px; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 9px 8px; cursor: pointer; }
+  .hamburger span { width: 20px; height: 2px; background: var(--text); border-radius: 2px; transition: transform .2s ease, opacity .2s ease; }
+  .hamburger[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .hamburger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+  .hamburger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+  .mobile {
+    display: none; flex-direction: column; gap: 4px; padding: 12px 24px 20px;
+    background: rgba(11,14,17,.96); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+  }
+  .mobile.open { display: flex; }
+  .mobile a:not(.btn) { padding: 12px 4px; font-size: 15px; color: var(--text-dim); border-bottom: 1px solid rgba(41,50,57,.5); }
+  .mobile a:not(.btn):hover { color: var(--text); }
+  .mobile .btn { margin-top: 10px; }
+
+  @media (max-width: 880px) {
+    .links { display: none; }
+    .hamburger { display: flex; }
+    .nav { background: rgba(11,14,17,.72); backdrop-filter: blur(12px); border-bottom-color: var(--border); }
+  }
+</style>
+
+<script>
+  const nav = document.getElementById("nav");
+  const onScroll = () => nav?.classList.toggle("scrolled", window.scrollY > 24);
+  onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  const burger = document.getElementById("hamburger");
+  const menu = document.getElementById("mobile-menu");
+  burger?.addEventListener("click", () => {
+    const open = menu?.classList.toggle("open");
+    burger.setAttribute("aria-expanded", String(!!open));
+  });
+  menu?.querySelectorAll("a").forEach((a) =>
+    a.addEventListener("click", () => {
+      menu.classList.remove("open");
+      burger?.setAttribute("aria-expanded", "false");
+    }),
+  );
+</script>

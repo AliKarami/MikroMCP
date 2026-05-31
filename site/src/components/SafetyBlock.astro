@@ -1,0 +1,57 @@
+---
+const caps = [
+  "Dry-run previews", "Idempotent writes", "Config snapshots", "One-call rollback",
+  "Confirmation tokens", "Per-router circuit breakers", "RBAC identities", "Audit logging",
+];
+const check = '<path d="M20 6 9 17l-5-5"/>';
+---
+<section class="section safety">
+  <div class="container inner">
+    <div class="left" data-reveal>
+      <h2 class="h2">Built to touch production safely</h2>
+      <p class="lede">Every write passes through layered guardrails before it reaches the router.</p>
+      <ul class="caps">
+        {caps.map((c) => (
+          <li>
+            <span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" set:html={check} /></span>
+            {c}
+          </li>
+        ))}
+      </ul>
+    </div>
+    <figure class="shot" data-reveal>
+      <img src="/assets/claude-review.png" alt="Claude reviewing a MikroTik router configuration through MikroMCP before applying a change" loading="lazy" />
+      <figcaption class="mono">Claude reviewing a router config before applying changes</figcaption>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .inner { display: grid; grid-template-columns: 1fr 1.1fr; gap: 52px; align-items: center; }
+  .left .lede { margin: 18px 0 26px; }
+  .caps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
+  .caps li { display: flex; align-items: center; gap: 11px; font-size: 14.5px; color: var(--text); }
+  .chk {
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    width: 24px; height: 24px; border-radius: 7px; color: var(--brand-glow);
+    background: rgba(20,184,166,.12); border: 1px solid rgba(20,184,166,.28);
+  }
+  .chk svg { width: 14px; height: 14px; }
+
+  .shot { margin: 0; position: relative; }
+  .shot img {
+    width: 100%; display: block; border-radius: 14px; border: 1px solid var(--border);
+    box-shadow: 0 30px 70px -30px rgba(0,0,0,.8);
+  }
+  .shot::before {
+    content: ""; position: absolute; inset: -1px; border-radius: 15px; z-index: -1;
+    background: linear-gradient(135deg, rgba(45,212,191,.4), transparent 60%);
+    filter: blur(8px); opacity: .6;
+  }
+  figcaption { margin-top: 12px; font-size: 12px; color: var(--text-dim); text-align: center; }
+
+  @media (max-width: 880px) {
+    .inner { grid-template-columns: 1fr; gap: 36px; }
+  }
+  @media (max-width: 480px) { .caps { grid-template-columns: 1fr; } }
+</style>

@@ -1,6 +1,46 @@
 ---
 import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Hero from "../components/Hero.astro";
+import StatStrip from "../components/StatStrip.astro";
+import ProblemBlock from "../components/ProblemBlock.astro";
+import FeatureGrid from "../components/FeatureGrid.astro";
+import HowItWorks from "../components/HowItWorks.astro";
+import ExamplesTabs from "../components/ExamplesTabs.astro";
+import QuickStart from "../components/QuickStart.astro";
+import SafetyBlock from "../components/SafetyBlock.astro";
+import FAQ from "../components/FAQ.astro";
+import CTABand from "../components/CTABand.astro";
+import Footer from "../components/Footer.astro";
 ---
 <Base>
-  <main><h1>MikroMCP</h1></main>
+  <Nav />
+  <main>
+    <Hero />
+    <StatStrip />
+    <ProblemBlock />
+    <FeatureGrid />
+    <HowItWorks />
+    <ExamplesTabs />
+    <QuickStart />
+    <SafetyBlock />
+    <FAQ />
+    <CTABand />
+  </main>
+  <Footer />
 </Base>
+
+<script>
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const els = document.querySelectorAll("[data-reveal]");
+  if (reduce) {
+    els.forEach((el) => el.classList.add("in"));
+  } else {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+    els.forEach((el) => io.observe(el));
+  }
+</script>

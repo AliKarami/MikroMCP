@@ -1,0 +1,70 @@
+---
+interface Line { prompt?: boolean; text: string }
+interface Props { lines: Line[]; animate?: boolean; title?: string }
+const { lines, animate = false, title } = Astro.props;
+
+function cls(l: Line): string {
+  if (l.prompt) return "ln prompt";
+  const t = l.text.trim();
+  if (t.startsWith("✓")) return "ln ok";
+  if (t.startsWith("→")) return "ln call";
+  if (t.startsWith("#")) return "ln comment";
+  return "ln";
+}
+---
+<div class={`term ${animate ? "anim" : ""}`} data-term>
+  <div class="bar">
+    <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+    {title && <span class="title mono">{title}</span>}
+  </div>
+  <pre class="body" aria-label={title ?? "terminal session"}>{lines.map((l, i) => (
+    <div class={cls(l)} style={`--i:${i}`}>{l.prompt ? <span class="sigil" aria-hidden="true">›</span> : null}<span class="txt">{l.text}</span></div>
+  ))}</pre>
+</div>
+
+<style>
+  .term {
+    background: linear-gradient(180deg, #0E1318, #0B0F13);
+    border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,.8), 0 0 0 1px rgba(45,212,191,.05) inset;
+    position: relative;
+  }
+  .term::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 60% at 85% 0%, rgba(20,184,166,.08), transparent 60%);
+  }
+  .bar {
+    display: flex; align-items: center; gap: 8px; padding: 11px 14px;
+    border-bottom: 1px solid var(--border); background: rgba(255,255,255,.015);
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .title { margin-left: 8px; font-size: 12px; color: var(--text-dim); }
+  .body { margin: 0; padding: 18px 18px 20px; font-family: var(--font-mono); font-size: 13.5px; line-height: 1.85; overflow-x: auto; }
+  .ln { white-space: pre-wrap; word-break: break-word; color: #C6D2DC; }
+  .ln.prompt { color: var(--text); font-weight: 500; }
+  .ln.call { color: var(--brand-glow); }
+  .ln.ok { color: #4ade80; }
+  .ln.comment { color: #5d6b76; }
+  .sigil { color: var(--accent); margin-right: 8px; font-weight: 700; }
+
+  .anim .ln { opacity: 0; transform: translateY(6px); }
+  .anim.run .ln { animation: rise .4s ease forwards; animation-delay: calc(var(--i) * 0.42s + 0.1s); }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .anim .ln { opacity: 1 !important; transform: none !important; animation: none !important; }
+  }
+</style>
+
+<script>
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelectorAll(".term.anim").forEach((el) => {
+    if (reduce) { el.classList.add("run"); return; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) { el.classList.add("run"); io.disconnect(); }
+      });
+    }, { threshold: 0.35 });
+    io.observe(el);
+  });
+</script>

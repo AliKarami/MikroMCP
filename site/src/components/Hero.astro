@@ -1,0 +1,97 @@
+---
+import { SITE } from "../data/content.ts";
+import Terminal from "./Terminal.astro";
+
+const lines = [
+  { prompt: true, text: "Show CPU, interfaces & warning logs for core-01" },
+  { text: "→ get_system_status(core-01)" },
+  { text: "→ list_interfaces(core-01)" },
+  { text: "→ get_log(core-01, topics=warning,error)" },
+  { text: "✓ 4 tool calls · validated · audited" },
+];
+---
+<section class="hero" id="top">
+  <div class="grid-bg" aria-hidden="true"></div>
+  <div class="glow" aria-hidden="true"></div>
+  <div class="topo" aria-hidden="true">
+    <svg viewBox="0 0 600 400" preserveAspectRatio="none" width="100%" height="100%">
+      <g stroke="#1c2730" stroke-width="1" fill="none">
+        <path d="M80 320 L220 180 L380 240 L500 90" />
+        <path d="M80 320 L260 300 L380 240" />
+        <path d="M220 180 L300 70 L500 90" />
+      </g>
+      <g fill="#14B8A6">
+        <circle cx="80" cy="320" r="4"><animate attributeName="opacity" values="0.3;1;0.3" dur="3.5s" repeatCount="indefinite"/></circle>
+        <circle cx="220" cy="180" r="4"><animate attributeName="opacity" values="1;0.3;1" dur="4s" repeatCount="indefinite"/></circle>
+        <circle cx="380" cy="240" r="4"><animate attributeName="opacity" values="0.4;1;0.4" dur="3s" repeatCount="indefinite"/></circle>
+        <circle cx="500" cy="90" r="4"><animate attributeName="opacity" values="1;0.4;1" dur="4.5s" repeatCount="indefinite"/></circle>
+        <circle cx="300" cy="70" r="3"/><circle cx="260" cy="300" r="3"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="container inner">
+    <div class="copy">
+      <p class="eyebrow" data-reveal>Model Context Protocol · RouterOS 7.x</p>
+      <h1 data-reveal>AI-native network automation for <span class="grad-teal">MikroTik RouterOS</span></h1>
+      <p class="lede" data-reveal>
+        MikroMCP exposes RouterOS as {SITE.toolCount} typed, auditable tools so Claude, Cursor,
+        Codex, and any MCP client can inspect, diagnose, and safely operate your routers in natural language.
+      </p>
+      <div class="ctas" data-reveal>
+        <a class="btn btn-accent btn-lg" href="#quick-start">Get Started</a>
+        <a class="btn btn-ghost btn-lg" href={SITE.github} target="_blank" rel="noopener">View on GitHub <span aria-hidden="true">↗</span></a>
+      </div>
+      <p class="trust mono" data-reveal>
+        117 typed tools <i>·</i> MIT licensed <i>·</i> RouterOS 7.x <i>·</i> MCP stdio + HTTP
+      </p>
+    </div>
+
+    <div class="term-wrap" data-reveal>
+      <Terminal lines={lines} animate={true} title="claude · core-01" />
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero { position: relative; overflow: hidden; padding: 72px 0 84px; border-bottom: 1px solid var(--border); }
+  .grid-bg {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.045) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: radial-gradient(120% 80% at 50% 0%, #000 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, #000 30%, transparent 75%);
+  }
+  .glow {
+    position: absolute; top: -180px; left: 50%; transform: translateX(-50%);
+    width: 900px; height: 600px; pointer-events: none;
+    background: radial-gradient(circle, rgba(20,184,166,.22), transparent 62%);
+    filter: blur(20px);
+  }
+  .topo { position: absolute; top: 0; right: 0; width: 55%; height: 100%; opacity: .5; pointer-events: none; }
+
+  .inner { position: relative; display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+  .copy { max-width: 600px; }
+  h1 { font-size: clamp(34px, 5.4vw, 58px); margin: 18px 0 0; }
+  .eyebrow { display: inline-block; }
+  .lede { margin: 22px 0 0; max-width: 540px; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; }
+  .trust { margin-top: 28px; font-size: 12.5px; color: var(--text-dim); letter-spacing: .01em; }
+  .trust i { color: var(--brand); font-style: normal; margin: 0 4px; }
+
+  [data-reveal] { transition-delay: calc(var(--d, 0) * 1ms); }
+  .copy [data-reveal]:nth-child(1) { --d: 0; }
+  .copy [data-reveal]:nth-child(2) { --d: 80; }
+  .copy [data-reveal]:nth-child(3) { --d: 160; }
+  .copy [data-reveal]:nth-child(4) { --d: 240; }
+  .copy [data-reveal]:nth-child(5) { --d: 320; }
+
+  @media (max-width: 980px) {
+    .inner { grid-template-columns: 1fr; gap: 40px; }
+    .topo { width: 100%; opacity: .25; }
+    .term-wrap { max-width: 560px; }
+  }
+  @media (max-width: 520px) {
+    .ctas .btn { flex: 1; }
+  }
+</style>

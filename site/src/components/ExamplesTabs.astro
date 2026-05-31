@@ -1,0 +1,84 @@
+---
+import { examples } from "../data/content.ts";
+---
+<section class="section ex" id="examples">
+  <div class="container">
+    <h2 class="h2 head" data-reveal>Real prompts, real operations</h2>
+    <p class="lede sub" data-reveal>Paste these straight into your AI assistant.</p>
+
+    <div class="tabs" data-reveal>
+      <div class="tablist" role="tablist" aria-label="Example prompts">
+        {examples.map((e, i) => (
+          <button class={`tab mono ${i === 0 ? "active" : ""}`} role="tab" id={`ex-tab-${i}`}
+            aria-selected={i === 0 ? "true" : "false"} aria-controls={`ex-panel-${i}`}
+            tabindex={i === 0 ? "0" : "-1"} data-i={i}>{e.label}</button>
+        ))}
+      </div>
+
+      {examples.map((e, i) => (
+        <div class={`panel ${i === 0 ? "active" : ""}`} role="tabpanel" id={`ex-panel-${i}`}
+          aria-labelledby={`ex-tab-${i}`} data-i={i} hidden={i !== 0}>
+          <div class="term">
+            <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title mono">prompt · {e.label}</span></div>
+            <pre class="body mono"><span class="sigil" aria-hidden="true">›</span>{e.prompt}</pre>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .head { margin-bottom: 8px; }
+  .sub { margin: 0 0 32px; }
+  .tablist {
+    display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 18px;
+    scrollbar-width: thin; -webkit-overflow-scrolling: touch;
+  }
+  .tab {
+    flex: 0 0 auto; font-size: 13px; padding: 9px 16px; border-radius: 999px; cursor: pointer;
+    background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
+    transition: color .15s ease, border-color .15s ease, background .15s ease; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); border-color: var(--brand-deep); }
+  .tab.active { color: #04110F; background: linear-gradient(135deg, var(--brand-glow), var(--brand)); border-color: transparent; font-weight: 500; }
+  .tab:focus-visible { outline: 2px solid var(--brand-glow); outline-offset: 2px; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .term { background: linear-gradient(180deg,#0E1318,#0B0F13); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px -30px rgba(0,0,0,.7); }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.015); }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.r { background:#ff5f57;} .dot.y{background:#febc2e;} .dot.g{background:#28c840;}
+  .title { margin-left: 8px; font-size: 12px; color: var(--text-dim); }
+  .body { margin: 0; padding: 22px 20px; font-size: 14px; line-height: 1.85; color: #D4DEE6; white-space: pre-wrap; word-break: break-word; }
+  .sigil { color: var(--accent); margin-right: 10px; font-weight: 700; }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLElement>(".ex .tablist").forEach((list) => {
+    const root = list.closest(".tabs")!;
+    const tabs = Array.from(list.querySelectorAll<HTMLButtonElement>(".tab"));
+    const panels = Array.from(root.querySelectorAll<HTMLElement>(".panel"));
+    const select = (i: number) => {
+      tabs.forEach((t, j) => {
+        const on = j === i;
+        t.classList.toggle("active", on);
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+      });
+      panels.forEach((p, j) => { p.classList.toggle("active", j === i); p.hidden = j !== i; });
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener("click", () => select(i));
+      t.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          const next = (i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
+          select(next); tabs[next].focus();
+        }
+      });
+    });
+  });
+</script>
