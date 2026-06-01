@@ -10,7 +10,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview --port 4322",
-    "test": "node --test \"scripts/**/*.test.mjs\""
+    "test": "node --test scripts/sync-wiki.test.mjs"
   },
   "dependencies": {
     "astro": "^6.4.2",
