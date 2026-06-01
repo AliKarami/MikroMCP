@@ -1,6 +1,7 @@
 ---
+import { SITE } from "../data/content.ts";
 const stats = [
-  { n: "117", l: "typed tools" },
+  { n: String(SITE.toolCount), l: "typed tools" },
   { n: "idempotent", l: "writes" },
   { n: "dry-run", l: "+ rollback" },
   { n: "RBAC", l: "+ audit" },
