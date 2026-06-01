@@ -9,7 +9,7 @@
     "predev": "node scripts/sync-wiki.mjs",
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
+    "preview": "astro preview --port 4322",
     "test": "node --test \"scripts/**/*.test.mjs\""
   },
   "dependencies": {

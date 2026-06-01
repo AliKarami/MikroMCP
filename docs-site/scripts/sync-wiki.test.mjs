@@ -68,3 +68,21 @@ test("rewriteWikiLinks leaves external links untouched", () => {
 test("rewriteWikiLinks leaves unknown targets untouched", () => {
   assert.equal(rewriteWikiLinks("[y](Not-A-Wiki-Page)"), "[y](Not-A-Wiki-Page)");
 });
+
+test("rewriteWikiLinks rewrites .md-style wiki links", () => {
+  assert.equal(
+    rewriteWikiLinks("[gs](Getting-Started.md)"),
+    "[gs](/getting-started/)",
+  );
+});
+
+test("rewriteWikiLinks rewrites .md-style links with anchors", () => {
+  assert.equal(
+    rewriteWikiLinks("[x](Connecting-to-AI-Assistants.md#codex)"),
+    "[x](/connecting-to-ai-assistants/#codex)",
+  );
+});
+
+test("rewriteWikiLinks leaves unknown .md targets untouched", () => {
+  assert.equal(rewriteWikiLinks("[z](Some-File.md)"), "[z](Some-File.md)");
+});

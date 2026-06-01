@@ -54,7 +54,9 @@ function routeForWikiName(name) {
 }
 
 export function rewriteWikiLinks(text) {
-  return text.replace(/\]\(([A-Za-z][A-Za-z0-9-]*)(#[^)]+)?\)/g, (full, name, anchor) => {
+  // Matches ](Name), ](Name#anchor), ](Name.md), ](Name.md#anchor).
+  // The optional .md handles GitHub-wiki-style links that include the extension.
+  return text.replace(/\]\(([A-Za-z][A-Za-z0-9-]*)(?:\.md)?(#[^)]+)?\)/g, (full, name, anchor) => {
     if (!WIKI_NAMES.has(name)) return full;
     const route = routeForWikiName(name);
     if (name === "Home") {
