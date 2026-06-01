@@ -1,0 +1,52 @@
+@font-face { font-family: "Inter"; src: url("/assets/fonts/Inter-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/assets/fonts/Inter-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/assets/fonts/Inter-SemiBold.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/assets/fonts/Inter-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/assets/fonts/JetBrainsMono-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/assets/fonts/JetBrainsMono-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+
+:root {
+  --sl-font: "Inter", system-ui, -apple-system, sans-serif;
+  --sl-font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+:root,
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #0c2e2a;
+  --sl-color-accent: #14b8a6;
+  --sl-color-accent-high: #2dd4bf;
+
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #e6edf3;
+  --sl-color-gray-2: #c4ccd4;
+  --sl-color-gray-3: #9ba8b4;
+  --sl-color-gray-4: #5b6975;
+  --sl-color-gray-5: #293239;
+  --sl-color-gray-6: #13171c;
+  --sl-color-black: #0b0e11;
+
+  --sl-color-bg: #0b0e11;
+  --sl-color-bg-nav: #0b0e11;
+  --sl-color-bg-sidebar: #0d1116;
+  --sl-color-hairline: #293239;
+  --sl-color-text-accent: #2dd4bf;
+}
+
+:root {
+  --mm-accent: #ea580c;
+}
+.sl-link-button.primary,
+a.sl-link-button.primary {
+  background: var(--mm-accent);
+  border-color: var(--mm-accent);
+  color: #fff;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #c7f0ea;
+  --sl-color-accent: #0f766e;
+  --sl-color-accent-high: #0b5a53;
+  --sl-color-text-accent: #0f766e;
+}
+
+h1, h2, h3 { letter-spacing: -0.02em; }
