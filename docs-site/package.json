@@ -1,0 +1,20 @@
+{
+  "name": "mikromcp-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync-wiki.mjs",
+    "prebuild": "node scripts/sync-wiki.mjs",
+    "predev": "node scripts/sync-wiki.mjs",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test": "node --test \"scripts/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "astro": "^6.4.2",
+    "@astrojs/starlight": "^0.39.2",
+    "sharp": "^0.34.0"
+  }
+}
