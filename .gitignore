@@ -9,6 +9,10 @@ config/identities.yaml
 !.env.example
 coverage/
 .DS_Store
+
+# Astro build cache and generated docs content (docs-site/, site/)
+.astro/
+docs-site/src/content/docs/
 .worktrees/
 .claude/worktrees/
 .worktrees/
