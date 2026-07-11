@@ -28,7 +28,9 @@ jobs:
             os: macos-latest
             artifact: mikromcp-macos-arm64
           - target: node22-win-x64
-            os: windows-latest
+            # Pinned to windows-2022: the newer windows-latest image broke ssh2's
+            # native binding (sshcrypto.node) at bundle time. See v1.6.1 release.
+            os: windows-2022
             artifact: mikromcp-win-x64.exe
 
     steps:
