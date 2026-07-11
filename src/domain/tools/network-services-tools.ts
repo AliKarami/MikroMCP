@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -151,7 +152,14 @@ const listNetwatchEntriesTool: ToolDefinition = {
       const entries = filtered.slice(0, parsed.limit);
 
       return {
-        content: `Netwatch entries on ${context.routerId}: ${entries.length} returned (${allEntries.length} total)`,
+        content: listContent(
+          "Netwatch entries",
+          context.routerId,
+          entries,
+          allEntries.length,
+          0,
+          (e) => compactFields(e, ["host", "type", "status", "interval", "disabled", "comment"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           entries,
@@ -397,7 +405,14 @@ const listNeighborsTool: ToolDefinition = {
       const neighbors = filtered.slice(0, parsed.limit);
 
       return {
-        content: `Neighbors on ${context.routerId}: ${neighbors.length} returned (${allNeighbors.length} total)`,
+        content: listContent(
+          "Neighbors",
+          context.routerId,
+          neighbors,
+          allNeighbors.length,
+          0,
+          (n) => compactFields(n, ["interface", "address", "mac-address", "identity", "platform", "board"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           neighbors,
@@ -454,7 +469,14 @@ const listArpEntriesTool: ToolDefinition = {
       const entries = filtered.slice(0, parsed.limit);
 
       return {
-        content: `ARP entries on ${context.routerId}: ${entries.length} returned (${allEntries.length} total)`,
+        content: listContent(
+          "ARP entries",
+          context.routerId,
+          entries,
+          allEntries.length,
+          0,
+          (e) => compactFields(e, ["address", "mac-address", "interface", "status", "complete", "dynamic"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           entries,

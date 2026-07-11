@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
-import { paginate, listSummary } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -53,7 +53,14 @@ const listDnsTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(entries, parsed.offset, parsed.limit);
 
       return {
-        content: listSummary("DNS entries", context.routerId, paginated.length, total, parsed.offset),
+        content: listContent(
+          "DNS entries",
+          context.routerId,
+          paginated,
+          total,
+          parsed.offset,
+          (e) => compactFields(e, ["name", "type", "address", "cname", "ttl", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           entries: paginated,

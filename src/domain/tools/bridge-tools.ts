@@ -6,7 +6,7 @@ import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate, listSummary } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 
 const log = createLogger("bridge-tools");
 
@@ -54,7 +54,14 @@ const listBridgesTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(enriched, parsed.offset, parsed.limit);
 
       return {
-        content: listSummary("Bridges", context.routerId, paginated.length, total, parsed.offset),
+        content: listContent(
+          "Bridges",
+          context.routerId,
+          paginated,
+          total,
+          parsed.offset,
+          (b) => compactFields(b, ["name", "protocol-mode", "vlan-filtering", "mtu", "disabled", "comment"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           bridges: paginated,

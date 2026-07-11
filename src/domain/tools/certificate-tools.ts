@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -55,7 +56,14 @@ const listCertificatesTool: ToolDefinition = {
       const certs = filtered.slice(0, parsed.limit);
 
       return {
-        content: `Certificates on ${context.routerId}: ${certs.length} returned (${allCerts.length} total)`,
+        content: listContent(
+          "Certificates",
+          context.routerId,
+          certs,
+          allCerts.length,
+          0,
+          (c) => compactFields(c, ["name", "common-name", "invalid-after", "expired", "revoked"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           certificates: certs,

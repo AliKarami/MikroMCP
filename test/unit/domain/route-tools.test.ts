@@ -256,11 +256,12 @@ describe("route tools", () => {
       expect(route.gateway).toBe("192.168.1.1");
     });
 
-    it("returns a concise summary in content", async () => {
+    it("returns a header plus itemized rows in content", async () => {
       const ctx = makeContext([sampleRoutes[0]]);
       const result = await listRoutesTool.handler({ routerId: "test-router" }, ctx);
-      expect(result.content).toContain("Routes on test-router");
-      expect(result.content).toContain("structuredContent");
+      expect(result.content).toContain("Routes on test-router: 1-1 of 1.");
+      expect(result.content).toContain("dst-address=10.0.0.0/8");
+      expect(result.content).toContain("gateway=192.168.1.1");
     });
   });
 

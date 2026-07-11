@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -47,7 +48,14 @@ const listVrrpInstancesTool: ToolDefinition = {
       const instances = filtered.slice(0, parsed.limit);
 
       return {
-        content: `VRRP instances on ${context.routerId}: ${instances.length} returned (${allInstances.length} total)`,
+        content: listContent(
+          "VRRP instances",
+          context.routerId,
+          instances,
+          allInstances.length,
+          0,
+          (i) => compactFields(i, ["name", "interface", "vrid", "priority", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           instances,

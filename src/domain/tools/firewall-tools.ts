@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
-import { paginate, listSummary } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -107,12 +107,25 @@ const listFirewallRulesTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(rules, parsed.offset, parsed.limit);
 
       return {
-        content: listSummary(
+        content: listContent(
           `Firewall ${parsed.table} rules`,
           context.routerId,
-          paginated.length,
+          paginated,
           total,
           parsed.offset,
+          (r) =>
+            compactFields(r, [
+              "chain",
+              "action",
+              "protocol",
+              "src-address",
+              "dst-address",
+              "dst-port",
+              "in-interface",
+              "out-interface",
+              "disabled",
+              "comment",
+            ]),
         ),
         structuredContent: {
           routerId: context.routerId,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -30,7 +31,14 @@ const listInterfaceListsTool: ToolDefinition = {
       });
       const lists = (all as RouterOSRecord[]).slice(0, parsed.limit);
       return {
-        content: `Interface lists on ${context.routerId}: ${lists.length} returned`,
+        content: listContent(
+          "Interface lists",
+          context.routerId,
+          lists,
+          all.length,
+          0,
+          (l) => compactFields(l, ["name", "include", "exclude", "comment"]),
+        ),
         structuredContent: { routerId: context.routerId, lists, total: all.length, returned: lists.length },
       };
     } catch (err) {

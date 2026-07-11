@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -43,7 +44,14 @@ const listPackagesTool: ToolDefinition = {
       }
 
       return {
-        content: `Packages on ${context.routerId}: ${packages.length} package(s).`,
+        content: listContent(
+          "Packages",
+          context.routerId,
+          packages as Record<string, string>[],
+          packages.length,
+          0,
+          (p) => compactFields(p, ["name", "version", "disabled", "scheduled"]),
+        ),
         structuredContent: { routerId: context.routerId, packages, total: packages.length },
       };
     } catch (err) {

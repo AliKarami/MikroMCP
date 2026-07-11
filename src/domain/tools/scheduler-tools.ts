@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -44,7 +45,14 @@ const listScheduledJobsTool: ToolDefinition = {
       }
 
       return {
-        content: `Scheduled jobs on ${context.routerId}: ${jobs.length} job(s).`,
+        content: listContent(
+          "Scheduled jobs",
+          context.routerId,
+          jobs as Record<string, string>[],
+          jobs.length,
+          0,
+          (j) => compactFields(j, ["name", "start-time", "interval", "on-event", "disabled"]),
+        ),
         structuredContent: { routerId: context.routerId, jobs, total: jobs.length },
       };
     } catch (err) {

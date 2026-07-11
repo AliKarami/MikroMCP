@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -72,7 +73,24 @@ const listMangleRulesTool: ToolDefinition = {
       }
 
       return {
-        content: `Mangle rules on ${context.routerId}: ${rules.length} rule(s).`,
+        content: listContent(
+          "Mangle rules",
+          context.routerId,
+          rules as Record<string, string>[],
+          rules.length,
+          0,
+          (r) =>
+            compactFields(r, [
+              "chain",
+              "action",
+              "new-packet-mark",
+              "new-connection-mark",
+              "new-routing-mark",
+              "passthrough",
+              "disabled",
+              "comment",
+            ]),
+        ),
         structuredContent: { routerId: context.routerId, rules, total: rules.length },
       };
     } catch (err) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -59,7 +60,14 @@ const listIpServicesTool: ToolDefinition = {
       }
 
       return {
-        content: `IP services on ${context.routerId}: ${filtered.length} returned. Full records in structuredContent.`,
+        content: listContent(
+          "IP services",
+          context.routerId,
+          filtered,
+          filtered.length,
+          0,
+          (s) => compactFields(s, ["name", "port", "address", "certificate", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           services: filtered,

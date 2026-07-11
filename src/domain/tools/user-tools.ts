@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -52,7 +53,14 @@ const listUsersTool: ToolDefinition = {
       const users = filtered.slice(0, parsed.limit);
 
       return {
-        content: `Users on ${context.routerId}: ${users.length} returned (${allUsers.length} total)`,
+        content: listContent(
+          "Users",
+          context.routerId,
+          users,
+          allUsers.length,
+          0,
+          (u) => compactFields(u, ["name", "group", "address", "disabled", "comment"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           users,

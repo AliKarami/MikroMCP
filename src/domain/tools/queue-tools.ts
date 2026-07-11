@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -44,7 +45,14 @@ const listQueuesTool: ToolDefinition = {
       const queues = filtered.slice(0, parsed.limit);
 
       return {
-        content: `Queues on ${context.routerId}: ${queues.length} returned (${allQueues.length} total)`,
+        content: listContent(
+          "Queues",
+          context.routerId,
+          queues,
+          allQueues.length,
+          0,
+          (q) => compactFields(q, ["name", "target", "max-limit", "limit-at", "disabled", "comment"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           queues,

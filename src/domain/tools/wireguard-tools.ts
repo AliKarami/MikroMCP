@@ -6,7 +6,7 @@ import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate, listSummary } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 
 const log = createLogger("wireguard-tools");
 
@@ -40,12 +40,13 @@ const listWgTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
 
       return {
-        content: listSummary(
+        content: listContent(
           "WireGuard interfaces",
           context.routerId,
-          paginated.length,
+          paginated,
           total,
           parsed.offset,
+          (i) => compactFields(i, ["name", "listen-port", "mtu", "running", "disabled", "comment"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -97,7 +98,14 @@ const listPeersTool: ToolDefinition = {
       const { items: peers, total, hasMore } = paginate(allPeers, parsed.offset, parsed.limit);
 
       return {
-        content: listSummary("WireGuard peers", context.routerId, peers.length, total, parsed.offset),
+        content: listContent(
+          "WireGuard peers",
+          context.routerId,
+          peers,
+          total,
+          parsed.offset,
+          (p) => compactFields(p, ["interface", "public-key", "endpoint-address", "allowed-address", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           peers,

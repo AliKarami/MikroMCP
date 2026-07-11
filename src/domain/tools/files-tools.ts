@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -51,7 +52,14 @@ const listFilesTool: ToolDefinition = {
       }
 
       return {
-        content: `Files on ${context.routerId}: ${files.length} file(s).`,
+        content: listContent(
+          "Files",
+          context.routerId,
+          files as Record<string, string>[],
+          files.length,
+          0,
+          (f) => compactFields(f, ["name", "type", "size", "creation-time"]),
+        ),
         structuredContent: { routerId: context.routerId, files, total: files.length },
       };
     } catch (err) {

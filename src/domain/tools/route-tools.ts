@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
-import { paginate, listSummary } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -75,7 +75,14 @@ const listRoutesTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(routes, parsed.offset, parsed.limit);
 
       return {
-        content: listSummary("Routes", context.routerId, paginated.length, total, parsed.offset),
+        content: listContent(
+          "Routes",
+          context.routerId,
+          paginated,
+          total,
+          parsed.offset,
+          (r) => compactFields(r, ["dst-address", "gateway", "distance", "routing-table", "active", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           routes: paginated,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -153,7 +154,14 @@ const listContainerEnvsTool: ToolDefinition = {
         : (all as Record<string, string>[]);
       const envs = filtered.slice(0, parsed.limit);
       return {
-        content: `Container envs on ${context.routerId}: ${envs.length} returned`,
+        content: listContent(
+          "Container envs",
+          context.routerId,
+          envs,
+          all.length,
+          0,
+          (e) => compactFields(e, ["name", "key", "value"]),
+        ),
         structuredContent: { routerId: context.routerId, envs, total: all.length, returned: envs.length },
       };
     } catch (err) {
@@ -313,7 +321,14 @@ const listContainerMountsTool: ToolDefinition = {
         : (all as Record<string, string>[]);
       const mounts = filtered.slice(0, parsed.limit);
       return {
-        content: `Container mounts on ${context.routerId}: ${mounts.length} returned`,
+        content: listContent(
+          "Container mounts",
+          context.routerId,
+          mounts,
+          all.length,
+          0,
+          (m) => compactFields(m, ["name", "src", "dst"]),
+        ),
         structuredContent: { routerId: context.routerId, mounts, total: all.length, returned: mounts.length },
       };
     } catch (err) {
