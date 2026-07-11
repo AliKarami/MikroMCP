@@ -1519,7 +1519,7 @@ Read and filter the system log. Client-side filtering by topic, message prefix, 
 | `offset` | integer | `0` | Pagination offset |
 | `topics` | string[] | — | Include entries whose topics field contains any of these strings (e.g. `["firewall", "dhcp"]`) |
 | `prefix` | string | — | Substring match against log message |
-| `sinceMinutes` | integer | — | Only return entries from the last N minutes (1–1440) |
+| `sinceMinutes` | integer | — | Only return entries from the last N minutes (1–1440), measured against the router's own clock (so it stays correct when the MikroMCP host is in a different timezone) |
 
 **Example prompt:** "Show me firewall log entries from the last 30 minutes on core-01."
 
