@@ -281,10 +281,31 @@ const getLogInputSchema = z
       .min(1)
       .max(1440)
       .optional()
-      .describe("Only return entries from the last N minutes (1–1440)"),
+      .describe(
+        "Only return entries from the last N minutes (1–1440), measured against the router's clock",
+      ),
   })
   .strict();
 
+const MONTHS: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+// Log timestamps are the router's local wall-clock time. Everything here works
+// in that same wall-clock frame (constructed via the local Date constructor and
+// only ever compared against other values built the same way), so the host's own
+// timezone cancels out — provided `now` is also the router's wall-clock time.
 function parseRouterOsTimestamp(ts: string, now: Date): Date | null {
   // RouterOS renders older entries with a full date (e.g. "2026-07-03 04:28:47")
   // once they fall outside today; without this branch such entries are treated as
@@ -309,20 +330,6 @@ function parseRouterOsTimestamp(ts: string, now: Date): Date | null {
     return d;
   }
 
-  const MONTHS: Record<string, number> = {
-    jan: 0,
-    feb: 1,
-    mar: 2,
-    apr: 3,
-    may: 4,
-    jun: 5,
-    jul: 6,
-    aug: 7,
-    sep: 8,
-    oct: 9,
-    nov: 10,
-    dec: 11,
-  };
   const monthDay = /^([a-z]{3})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/i.exec(ts);
   if (monthDay) {
     const month = MONTHS[monthDay[1].toLowerCase()];
@@ -342,11 +349,39 @@ function parseRouterOsTimestamp(ts: string, now: Date): Date | null {
   return null;
 }
 
+// Parse the router's own clock (system/clock `date` + `time`) into a wall-clock
+// Date used as the reference "now" for time-window filtering. Returns null when
+// either field is missing or in an unrecognised format so the caller can fall
+// back to the host clock. RouterOS reports `date` as either "2026-07-11" or the
+// legacy "jul/11/2026" form.
+function parseRouterClock(dateStr: string | undefined, timeStr: string | undefined): Date | null {
+  if (!dateStr || !timeStr) return null;
+  const time = /^(\d{2}):(\d{2}):(\d{2})$/.exec(timeStr);
+  if (!time) return null;
+  const hh = parseInt(time[1], 10);
+  const mm = parseInt(time[2], 10);
+  const ss = parseInt(time[3], 10);
+
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (iso) {
+    return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10), hh, mm, ss);
+  }
+
+  const named = /^([a-z]{3})\/(\d{2})\/(\d{4})$/i.exec(dateStr);
+  if (named) {
+    const month = MONTHS[named[1].toLowerCase()];
+    if (month === undefined) return null;
+    return new Date(parseInt(named[3], 10), month, parseInt(named[2], 10), hh, mm, ss);
+  }
+
+  return null;
+}
+
 const getLogTool: ToolDefinition = {
   name: "get_log",
   title: "Get Log",
   description:
-    "Read and filter the system log from a MikroTik router. Supports filtering by topic, message prefix, and a time window (last N minutes). Entries with unparseable timestamps are included conservatively.",
+    "Read and filter the system log from a MikroTik router. Supports filtering by topic, message prefix, and a time window (last N minutes) measured against the router's own clock. Entries with unparseable timestamps are included conservatively.",
   inputSchema: getLogInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -364,7 +399,25 @@ const getLogTool: ToolDefinition = {
 
     try {
       const allEntries = await context.routerClient.get<Record<string, string>>("log");
-      const now = new Date();
+
+      // Log timestamps are the router's local wall-clock time, so the window must
+      // be measured against the router's clock — not the host's, which may sit in
+      // a different timezone. Fetch it only when a window is actually requested,
+      // and fall back to the host clock if it can't be read or parsed.
+      let now = new Date();
+      if (parsed.sinceMinutes !== undefined) {
+        try {
+          const clockResult =
+            await context.routerClient.get<Record<string, string>>("system/clock");
+          const clock = Array.isArray(clockResult) ? clockResult[0] : clockResult;
+          const routerNow = parseRouterClock(clock?.date, clock?.time);
+          if (routerNow !== null) now = routerNow;
+          else log.warn({ routerId: context.routerId }, "Unparseable router clock; using host clock");
+        } catch {
+          log.warn({ routerId: context.routerId }, "Router clock unavailable; using host clock");
+        }
+      }
+
       const cutoff =
         parsed.sinceMinutes !== undefined
           ? new Date(now.getTime() - parsed.sinceMinutes * 60_000)

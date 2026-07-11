@@ -427,5 +427,56 @@ describe("diagnostic tools", () => {
         "recent event",
       );
     });
+
+    it("filters relative to the router clock, not the server clock", async () => {
+      // Router reports a wall-clock time unrelated to the test machine's real
+      // "now". Entries are timestamped relative to the router clock; the filter
+      // must use the router's time as the reference frame.
+      const clock = [{ date: "2020-01-01", time: "12:00:00", "time-zone-name": "Asia/Tehran" }];
+      const entries = [
+        { ".id": "*1", time: "2020-01-01 11:59:30", topics: "info", message: "recent event" },
+        { ".id": "*2", time: "2020-01-01 09:00:00", topics: "info", message: "old event" },
+      ];
+      const getLogTool = diagnosticTools[3];
+      const ctx = makeContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockImplementation((path: string) =>
+        Promise.resolve(path === "system/clock" ? clock : entries),
+      );
+      const result = await getLogTool.handler({ routerId: "test-router", sinceMinutes: 30 }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.entries as unknown[]).length).toBe(1);
+      expect(((sc.entries as Record<string, unknown>[])[0] as Record<string, string>).message).toBe(
+        "recent event",
+      );
+    });
+
+    it("does not fetch the router clock when sinceMinutes is omitted", async () => {
+      const getLogTool = diagnosticTools[3];
+      const ctx = makeContext();
+      const getMock = ctx.routerClient.get as ReturnType<typeof vi.fn>;
+      getMock.mockResolvedValue([
+        { ".id": "*1", time: "12:00:00", topics: "info", message: "event" },
+      ]);
+      await getLogTool.handler({ routerId: "test-router" }, ctx);
+      expect(getMock).toHaveBeenCalledTimes(1);
+      expect(getMock).not.toHaveBeenCalledWith("system/clock");
+    });
+
+    it("falls back to the server clock when the router clock is unreadable", async () => {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const recentTs = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      const getLogTool = diagnosticTools[3];
+      const ctx = makeContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+        if (path === "system/clock") return Promise.reject(new Error("clock unavailable"));
+        return Promise.resolve([
+          { ".id": "*1", time: recentTs, topics: "info", message: "recent event" },
+        ]);
+      });
+      const result = await getLogTool.handler({ routerId: "test-router", sinceMinutes: 30 }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.entries as unknown[]).length).toBe(1);
+    });
   });
 });
