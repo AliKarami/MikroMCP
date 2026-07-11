@@ -286,6 +286,21 @@ const getLogInputSchema = z
   .strict();
 
 function parseRouterOsTimestamp(ts: string, now: Date): Date | null {
+  // RouterOS renders older entries with a full date (e.g. "2026-07-03 04:28:47")
+  // once they fall outside today; without this branch such entries are treated as
+  // unparseable and kept regardless of sinceMinutes.
+  const isoDateTime = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(ts);
+  if (isoDateTime) {
+    return new Date(
+      parseInt(isoDateTime[1], 10),
+      parseInt(isoDateTime[2], 10) - 1,
+      parseInt(isoDateTime[3], 10),
+      parseInt(isoDateTime[4], 10),
+      parseInt(isoDateTime[5], 10),
+      parseInt(isoDateTime[6], 10),
+    );
+  }
+
   const timeOnly = /^(\d{2}):(\d{2}):(\d{2})$/.exec(ts);
   if (timeOnly) {
     const d = new Date(now);

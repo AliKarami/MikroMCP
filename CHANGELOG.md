@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Fixed
+- `get_log`'s `sinceMinutes` filter now recognises RouterOS full-date timestamps (`YYYY-MM-DD HH:MM:SS`), which routers use for entries older than the current day. Previously these timestamps were unparseable and kept regardless of the time window, so `sinceMinutes` appeared to have no effect on logs spanning multiple days ([#45](https://github.com/AliKarami/MikroMCP/issues/45))
+
 ## [1.6.0] - 2026-05-30
 
 ### Added

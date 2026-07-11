@@ -404,5 +404,28 @@ describe("diagnostic tools", () => {
         "recent event",
       );
     });
+
+    it("filters by sinceMinutes using YYYY-MM-DD HH:MM:SS full-date format", async () => {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      const recentTs = fmt(new Date(now.getTime() - 60_000));
+      const oldTs = fmt(new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000));
+
+      const entries = [
+        { ".id": "*1", time: recentTs, topics: "info", message: "recent event" },
+        { ".id": "*2", time: oldTs, topics: "interface,warning", message: "old event" },
+      ];
+      const getLogTool = diagnosticTools[3];
+      const ctx = makeContext();
+      (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockResolvedValue(entries);
+      const result = await getLogTool.handler({ routerId: "test-router", sinceMinutes: 30 }, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.entries as unknown[]).length).toBe(1);
+      expect(((sc.entries as Record<string, unknown>[])[0] as Record<string, string>).message).toBe(
+        "recent event",
+      );
+    });
   });
 });
