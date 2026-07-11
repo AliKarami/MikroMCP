@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -38,7 +39,14 @@ const listContainersTool: ToolDefinition = {
       });
 
       return {
-        content: `Containers on ${context.routerId}: ${containers.length} container(s).`,
+        content: listContent(
+          "Containers",
+          context.routerId,
+          containers,
+          containers.length,
+          0,
+          (c) => compactFields(c, ["name", "tag", "status", "interface", "root-dir"]),
+        ),
         structuredContent: { routerId: context.routerId, containers, total: containers.length },
       };
     } catch (err) {

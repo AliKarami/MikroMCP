@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -46,7 +47,14 @@ const listAddressListTool: ToolDefinition = {
       });
 
       return {
-        content: `Address list entries on ${context.routerId}: ${entries.length} entry(ies).`,
+        content: listContent(
+          "Address list entries",
+          context.routerId,
+          entries,
+          entries.length,
+          0,
+          (e) => compactFields(e, ["list", "address", "timeout", "dynamic", "disabled", "comment"]),
+        ),
         structuredContent: { routerId: context.routerId, entries, total: entries.length },
       };
     } catch (err) {

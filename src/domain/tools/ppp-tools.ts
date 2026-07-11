@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -32,7 +33,14 @@ const listPppProfilesTool: ToolDefinition = {
         : (all as Record<string, string>[]);
       const profiles = filtered.slice(0, parsed.limit);
       return {
-        content: `PPP profiles on ${context.routerId}: ${profiles.length} returned`,
+        content: listContent(
+          "PPP profiles",
+          context.routerId,
+          profiles,
+          all.length,
+          0,
+          (p) => compactFields(p, ["name", "local-address", "remote-address", "dns-server", "rate-limit"]),
+        ),
         structuredContent: { routerId: context.routerId, profiles, total: all.length, returned: profiles.length },
       };
     } catch (err) {

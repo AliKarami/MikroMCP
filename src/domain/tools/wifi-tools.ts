@@ -6,7 +6,7 @@ import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate, listSummary } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 
 const log = createLogger("wifi-tools");
 
@@ -52,7 +52,14 @@ const listWifiTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
 
       return {
-        content: listSummary("WiFi interfaces", context.routerId, paginated.length, total, parsed.offset),
+        content: listContent(
+          "WiFi interfaces",
+          context.routerId,
+          paginated,
+          total,
+          parsed.offset,
+          (i) => compactFields(i, ["name", "master-interface", "mac-address", "disabled", "comment"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           interfaces: paginated,
@@ -100,7 +107,14 @@ const listWifiClientsTool: ToolDefinition = {
       const { items: clients, total, hasMore } = paginate(allClients, parsed.offset, parsed.limit);
 
       return {
-        content: listSummary("WiFi clients", context.routerId, clients.length, total, parsed.offset),
+        content: listContent(
+          "WiFi clients",
+          context.routerId,
+          clients,
+          total,
+          parsed.offset,
+          (c) => compactFields(c, ["interface", "mac-address", "signal", "tx-rate", "rx-rate", "uptime"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           clients,

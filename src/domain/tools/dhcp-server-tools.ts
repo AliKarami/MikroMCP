@@ -6,7 +6,7 @@ import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 
 const log = createLogger("dhcp-server-tools");
 
@@ -46,7 +46,14 @@ const listDhcpServersTool: ToolDefinition = {
       const { items: servers, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
       return {
-        content: `DHCP servers on ${context.routerId}: ${total} total, showing ${servers.length} (offset ${parsed.offset})`,
+        content: listContent(
+          "DHCP servers",
+          context.routerId,
+          servers,
+          total,
+          parsed.offset,
+          (s) => compactFields(s, ["name", "interface", "address-pool", "lease-time", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           servers,

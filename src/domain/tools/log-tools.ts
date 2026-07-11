@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
+import { listContent, compactFields } from "./pagination.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -60,7 +61,14 @@ const listLogRulesTool: ToolDefinition = {
       const returned = rules.slice(0, parsed.limit);
 
       return {
-        content: `Log rules on ${context.routerId}: ${returned.length} rule(s) (${all.length} total).`,
+        content: listContent(
+          "Log rules",
+          context.routerId,
+          returned,
+          all.length,
+          0,
+          (r) => compactFields(r, ["topics", "action", "prefix", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           rules: returned,
@@ -284,7 +292,14 @@ const listLogActionsTool: ToolDefinition = {
       const returned = actions.slice(0, parsed.limit);
 
       return {
-        content: `Log actions on ${context.routerId}: ${returned.length} action(s) (${all.length} total).`,
+        content: listContent(
+          "Log actions",
+          context.routerId,
+          returned,
+          all.length,
+          0,
+          (a) => compactFields(a, ["name", "target", "type", "remote"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           actions: returned,

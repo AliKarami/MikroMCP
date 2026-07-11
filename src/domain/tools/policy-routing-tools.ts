@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -53,7 +54,14 @@ const listRoutingRulesTool: ToolDefinition = {
       }
 
       return {
-        content: `Routing rules on ${context.routerId}: ${rules.length} rule(s).`,
+        content: listContent(
+          "Routing rules",
+          context.routerId,
+          rules as Record<string, string>[],
+          rules.length,
+          0,
+          (r) => compactFields(r, ["src-address", "dst-address", "action", "table", "interface", "disabled"]),
+        ),
         structuredContent: { routerId: context.routerId, rules, total: rules.length },
       };
     } catch (err) {
@@ -310,7 +318,14 @@ const listRoutingTablesTool: ToolDefinition = {
       });
 
       return {
-        content: `Routing tables on ${context.routerId}: ${tables.length} table(s).`,
+        content: listContent(
+          "Routing tables",
+          context.routerId,
+          tables as Record<string, string>[],
+          tables.length,
+          0,
+          (t) => compactFields(t, ["name", "fib", "disabled"]),
+        ),
         structuredContent: { routerId: context.routerId, tables, total: tables.length },
       };
     } catch (err) {

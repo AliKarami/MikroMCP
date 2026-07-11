@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -44,7 +45,14 @@ const listIpsecPeersTool: ToolDefinition = {
       const peers = filtered.slice(0, parsed.limit);
 
       return {
-        content: `IPSec peers on ${context.routerId}: ${peers.length} returned (${allPeers.length} total)`,
+        content: listContent(
+          "IPSec peers",
+          context.routerId,
+          peers,
+          allPeers.length,
+          0,
+          (p) => compactFields(p, ["name", "address", "profile", "exchange-mode", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           peers,
@@ -103,7 +111,14 @@ const listIpsecPoliciesTool: ToolDefinition = {
       const policies = filtered.slice(0, parsed.limit);
 
       return {
-        content: `IPSec policies on ${context.routerId}: ${policies.length} returned (${allPolicies.length} total)`,
+        content: listContent(
+          "IPSec policies",
+          context.routerId,
+          policies,
+          allPolicies.length,
+          0,
+          (p) => compactFields(p, ["src-address", "dst-address", "protocol", "action", "level", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           policies,

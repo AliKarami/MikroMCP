@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -44,7 +45,14 @@ const listBgpPeersTool: ToolDefinition = {
       }
 
       return {
-        content: `BGP sessions on ${context.routerId}: ${sessions.length} session(s).`,
+        content: listContent(
+          "BGP sessions",
+          context.routerId,
+          sessions as Record<string, string>[],
+          sessions.length,
+          0,
+          (s) => compactFields(s, ["name", "remote.address", "remote.as", "established", "uptime"]),
+        ),
         structuredContent: { routerId: context.routerId, sessions, total: sessions.length },
       };
     } catch (err) {
@@ -87,7 +95,14 @@ const listOspfNeighborsTool: ToolDefinition = {
       }
 
       return {
-        content: `OSPF neighbors on ${context.routerId}: ${neighbors.length} neighbor(s).`,
+        content: listContent(
+          "OSPF neighbors",
+          context.routerId,
+          neighbors as Record<string, string>[],
+          neighbors.length,
+          0,
+          (n) => compactFields(n, ["instance", "router-id", "address", "state", "state-changes"]),
+        ),
         structuredContent: { routerId: context.routerId, neighbors, total: neighbors.length },
       };
     } catch (err) {

@@ -6,7 +6,7 @@ import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 
 const log = createLogger("ip-pool-tools");
 
@@ -47,7 +47,14 @@ const listIpPoolsTool: ToolDefinition = {
       const { items: pools, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
       return {
-        content: `IP pools on ${context.routerId}: ${total} total, showing ${pools.length} (offset ${parsed.offset})`,
+        content: listContent(
+          "IP pools",
+          context.routerId,
+          pools,
+          total,
+          parsed.offset,
+          (p) => compactFields(p, ["name", "ranges", "next-pool"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           pools,

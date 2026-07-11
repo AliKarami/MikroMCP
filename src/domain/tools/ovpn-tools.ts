@@ -6,7 +6,7 @@ import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 
 const log = createLogger("ovpn-tools");
 
@@ -47,7 +47,14 @@ const listOvpnClientsTool: ToolDefinition = {
       const { items: clients, total, hasMore } = paginate(allClients, parsed.offset, parsed.limit);
 
       return {
-        content: `OpenVPN clients on ${context.routerId}: ${total} total, showing ${clients.length} (offset ${parsed.offset})`,
+        content: listContent(
+          "OpenVPN clients",
+          context.routerId,
+          clients,
+          total,
+          parsed.offset,
+          (c) => compactFields(c, ["name", "connect-to", "user", "profile", "disabled"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           clients,

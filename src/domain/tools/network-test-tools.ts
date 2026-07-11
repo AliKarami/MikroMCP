@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { limit, routerId } from "./schema-fields.js";
+import { listContent, compactFields } from "./pagination.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -158,7 +159,21 @@ const listConnectionsTool: ToolDefinition = {
         .filter((c) => (parsed.protocol ? c.protocol === parsed.protocol : true));
       const connections = filtered.slice(0, parsed.limit);
       return {
-        content: `Active connections on ${context.routerId}: ${connections.length} returned (${all.length} total)`,
+        content: listContent(
+          "Active connections",
+          context.routerId,
+          connections,
+          all.length,
+          0,
+          (c) =>
+            compactFields(c, [
+              "protocol",
+              "src-address",
+              "dst-address",
+              "tcp-state",
+              "connection-mark",
+            ]),
+        ),
         structuredContent: { routerId: context.routerId, connections, total: all.length, returned: connections.length },
       };
     } catch (err) {

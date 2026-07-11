@@ -5,7 +5,7 @@ import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
 
-import { paginate, listSummary } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 
 const log = createLogger("interface-tools");
 
@@ -111,7 +111,14 @@ const listInterfacesTool: ToolDefinition = {
       });
 
       return {
-        content: listSummary("Interfaces", context.routerId, results.length, total, parsed.offset),
+        content: listContent(
+          "Interfaces",
+          context.routerId,
+          results,
+          total,
+          parsed.offset,
+          (i) => compactFields(i, ["name", "type", "running", "disabled", "mtu", "comment"]),
+        ),
         structuredContent: {
           routerId: context.routerId,
           interfaces: results,
