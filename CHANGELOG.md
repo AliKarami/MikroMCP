@@ -10,6 +10,8 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-14
+
 ### Added
 - `list_routers` tool — read-only enumeration of the routers configured in `routers.yaml` (id, host, port, TLS status, tags, ROS version, and which is the default), so MCP clients can discover valid `routerId` values and tags for targeting other tools (including `bulk_execute`) without opening the config file. Reflects local config only — no RouterOS API call and no credentials in the response; results are scoped to the caller's `allowedRouters` ([#53](https://github.com/AliKarami/MikroMCP/issues/53))
 
