@@ -87,6 +87,7 @@ const mockWriteTool: ToolDefinition = {
 const fleetTools = createFleetTools([mockReadTool, mockDestructiveTool, mockWriteTool]);
 const healthTool = fleetTools.find((t) => t.name === "check_router_health")!;
 const bulkTool = fleetTools.find((t) => t.name === "bulk_execute")!;
+const listRoutersTool = fleetTools.find((t) => t.name === "list_routers")!;
 
 function makeRouterConfig(id = "test-router"): RouterConfig {
   return {
@@ -145,14 +146,15 @@ function makeFleetContext(overrides: Partial<ToolContext> = {}): ToolContext {
 
 describe("fleet-tools", () => {
   describe("metadata", () => {
-    it("exports 2 tools", () => {
-      expect(fleetTools).toHaveLength(2);
+    it("exports 3 tools", () => {
+      expect(fleetTools).toHaveLength(3);
     });
 
     it("tool names are correct", () => {
       const names = fleetTools.map((t) => t.name);
       expect(names).toContain("check_router_health");
       expect(names).toContain("bulk_execute");
+      expect(names).toContain("list_routers");
     });
 
     it("check_router_health has readOnlyHint: true", () => {
@@ -163,6 +165,118 @@ describe("fleet-tools", () => {
     it("bulk_execute has readOnlyHint: false", () => {
       expect(bulkTool.annotations.readOnlyHint).toBe(false);
       expect(bulkTool.annotations.destructiveHint).toBe(false);
+    });
+
+    it("list_routers is read-only and fleet-scoped", () => {
+      expect(listRoutersTool.annotations.readOnlyHint).toBe(true);
+      expect(listRoutersTool.annotations.destructiveHint).toBe(false);
+      expect(listRoutersTool.skipRouterContext).toBe(true);
+    });
+  });
+
+  describe("list_routers", () => {
+    function taggedRouter(id: string, tags: string[], overrides: Partial<RouterConfig> = {}): RouterConfig {
+      return { ...makeRouterConfig(id), tags, ...overrides };
+    }
+
+    function listCtx(routers: RouterConfig[], over: Partial<ToolContext> = {}): ToolContext {
+      const registry = {
+        listRouters: vi.fn((tags?: string[]) =>
+          !tags || tags.length === 0 ? routers : routers.filter((r) => tags.some((t) => r.tags.includes(t))),
+        ),
+        getRouter: vi.fn(),
+        hasRouter: vi.fn(),
+      };
+      return {
+        ...makeContext(),
+        routerRegistry: registry as unknown as ToolContext["routerRegistry"],
+        ...over,
+      };
+    }
+
+    it("rejects unknown input fields (strict schema)", async () => {
+      const ctx = listCtx([taggedRouter("r1", [])]);
+      await expect(listRoutersTool.handler({ bogus: 1 }, ctx)).rejects.toThrow();
+    });
+
+    it("returns every configured router with the expected fields and no credentials", async () => {
+      const routers = [
+        taggedRouter("edge-1", ["edge", "prod"], { host: "10.0.0.1", port: 8443, rosVersion: "7.15" }),
+        taggedRouter("core-1", ["core"], { tls: { enabled: false, rejectUnauthorized: false } }),
+      ];
+      const ctx = listCtx(routers, { appConfig: { defaultRouter: undefined } as unknown as AppConfig });
+      const result = await listRoutersTool.handler({}, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      const rows = sc.routers as Record<string, unknown>[];
+      expect(sc.total).toBe(2);
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toEqual({
+        id: "edge-1",
+        host: "10.0.0.1",
+        port: 8443,
+        tlsEnabled: true,
+        tags: ["edge", "prod"],
+        rosVersion: "7.15",
+        isDefault: false,
+      });
+      expect(rows[1].tlsEnabled).toBe(false);
+      const serialized = JSON.stringify(sc);
+      expect(serialized).not.toContain("envPrefix");
+      expect(serialized).not.toContain("credentials");
+      expect(serialized).not.toContain("ROUTER_TEST");
+    });
+
+    it("marks the configured default router as isDefault", async () => {
+      const ctx = listCtx([taggedRouter("r1", []), taggedRouter("r2", [])], {
+        appConfig: { defaultRouter: "r2" } as unknown as AppConfig,
+      });
+      const result = await listRoutersTool.handler({}, ctx);
+      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<string, unknown>[];
+      expect(rows.find((r) => r.id === "r1")!.isDefault).toBe(false);
+      expect(rows.find((r) => r.id === "r2")!.isDefault).toBe(true);
+    });
+
+    it("treats the sole router as default when none is configured", async () => {
+      const ctx = listCtx([taggedRouter("only-1", [])], {
+        appConfig: { defaultRouter: undefined } as unknown as AppConfig,
+      });
+      const result = await listRoutersTool.handler({}, ctx);
+      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<string, unknown>[];
+      expect(rows[0].isDefault).toBe(true);
+    });
+
+    it("passes the tags filter through to the registry", async () => {
+      const routers = [taggedRouter("r1", ["edge"]), taggedRouter("r2", ["core"])];
+      const ctx = listCtx(routers, { appConfig: { defaultRouter: undefined } as unknown as AppConfig });
+      const result = await listRoutersTool.handler({ tags: ["edge"] }, ctx);
+      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<string, unknown>[];
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe("r1");
+    });
+
+    it("filters to the identity's allowedRouters (empty = all)", async () => {
+      const routers = [taggedRouter("r1", []), taggedRouter("r2", []), taggedRouter("r3", [])];
+      const ctx = listCtx(routers, {
+        appConfig: { defaultRouter: undefined } as unknown as AppConfig,
+        identity: { id: "scoped", role: "operator" as const, allowedRouters: ["r2"], allowedToolPatterns: [] },
+      });
+      const result = await listRoutersTool.handler({}, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      const rows = sc.routers as Record<string, unknown>[];
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe("r2");
+      expect(sc.total).toBe(1);
+    });
+
+    it("serializes itemized rows into content", async () => {
+      const ctx = listCtx([taggedRouter("edge-1", ["edge"], { host: "10.0.0.1" })], {
+        appConfig: { defaultRouter: "edge-1" } as unknown as AppConfig,
+      });
+      const result = await listRoutersTool.handler({}, ctx);
+      expect(result.content).toContain("Routers: 1-1 of 1.");
+      expect(result.content).toContain("id=edge-1");
+      expect(result.content).toContain("host=10.0.0.1");
+      expect(result.content).toContain("isDefault=true");
     });
   });
 

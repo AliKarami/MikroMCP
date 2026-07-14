@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
+import { compactFields } from "./pagination.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -53,6 +54,73 @@ interface BulkResult {
   error?: string;
   durationMs: number;
 }
+
+const listRoutersInputSchema = z
+  .object({
+    tags: z
+      .array(z.string())
+      .optional()
+      .describe('Only return routers having any of these tags (e.g. ["edge", "prod"])'),
+  })
+  .strict();
+
+const listRoutersTool: ToolDefinition = {
+  name: "list_routers",
+  title: "List Routers",
+  description:
+    "List the routers configured in the registry (routers.yaml): id, host, port, TLS status, tags, ROS version, and which is the default. Read-only reflection of local config — no RouterOS API call, no credentials in the response. Use it to discover valid routerId values and tags for targeting other tools (including bulk_execute).",
+  inputSchema: listRoutersInputSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  skipRouterContext: true,
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = listRoutersInputSchema.parse(params);
+    const { identity, appConfig } = context;
+    const defaultRouter = appConfig.defaultRouter;
+
+    log.info({ tags: parsed.tags, identityId: identity.id }, "Listing routers");
+
+    let routers = context.routerRegistry!.listRouters(parsed.tags);
+
+    // Respect the identity's router scope (empty allowedRouters = all), mirroring checkAuthz,
+    // so a scoped caller can't discover routers it isn't permitted to use.
+    if (identity.allowedRouters.length > 0) {
+      routers = routers.filter((r) => identity.allowedRouters.includes(r.id));
+    }
+
+    // A router is default when explicitly configured, or — when none is set — when it is the
+    // only one. Mirrors the executor's routerId resolution.
+    const soleDefaultId = defaultRouter === undefined && routers.length === 1 ? routers[0].id : undefined;
+    const rows = routers.map((r) => ({
+      id: r.id,
+      host: r.host,
+      port: r.port,
+      tlsEnabled: r.tls.enabled,
+      tags: r.tags,
+      rosVersion: r.rosVersion,
+      isDefault: defaultRouter !== undefined ? r.id === defaultRouter : r.id === soleDefaultId,
+    }));
+
+    const total = rows.length;
+    const header = `Routers: ${total === 0 ? "none" : `1-${total} of ${total}`}.`;
+    const lines = rows.map(
+      (r) =>
+        `  ${compactFields(
+          { ...r, tags: r.tags.join(",") },
+          ["id", "host", "port", "tlsEnabled", "tags", "rosVersion", "isDefault"],
+        )}`,
+    );
+
+    return {
+      content: total === 0 ? header : [header, ...lines].join("\n"),
+      structuredContent: { routers: rows, total, returned: total },
+    };
+  },
+};
 
 export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] {
   const toolMap = new Map(baseTools.map((t) => [t.name, t]));
@@ -389,5 +457,5 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     },
   };
 
-  return [checkRouterHealthTool, bulkExecuteTool];
+  return [checkRouterHealthTool, bulkExecuteTool, listRoutersTool];
 }

@@ -1645,6 +1645,18 @@ Restore the RouterOS section state captured before a previous `apply_plan` run. 
 
 ## Fleet Operations
 
+### `list_routers` — Read
+
+List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `tags` | string[] | — | Only return routers having any of these tags (e.g. `["edge", "prod"]`) |
+
+**Example prompt:** "What routers are configured, and which tags can I use with bulk_execute?"
+
+---
+
 ### `check_router_health` — Read
 
 Probe one or more routers for reachability, REST API availability, SSH availability, and RouterOS version. Returns a per-router health summary.

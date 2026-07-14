@@ -174,6 +174,7 @@ Multi-tool patterns:
 | Roll back a previous change | `rollback_change` | (orchestration) | destructive |
 | Run the same tool against multiple routers | `bulk_execute` | (orchestration) | write |
 | Check health of a router | `check_router_health` | `system/resource` | read |
+| Discover configured routers, tags, and the default | `list_routers` | (local config) | read |
 | Create a config backup/snapshot | `create_backup` | `system/backup/save` | write |
 | Export running config | `export_config` | `system/export` | read |
 

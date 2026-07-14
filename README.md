@@ -17,7 +17,7 @@
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-339933)](package.json)
 [![RouterOS 7.x](https://img.shields.io/badge/RouterOS-7.x-293239)](https://help.mikrotik.com/docs/display/ROS/REST+API)
 [![MCP Server](https://img.shields.io/badge/MCP-server-6f42c1)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/MCP%20tools-117-0f766e)](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)
+[![Tools](https://img.shields.io/badge/MCP%20tools-118-0f766e)](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)
 [![MikroMCP MCP server](https://glama.ai/mcp/servers/AliKarami/MikroMCP/badges/score.svg)](https://glama.ai/mcp/servers/AliKarami/MikroMCP)
 
 MikroMCP exists because raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas, idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC, audit logs, snapshots, and rollback-aware change workflows.
@@ -53,7 +53,7 @@ That's the whole setup for a single-router stdio deployment. For standalone bina
 | 🤖 **AI-agent fit**        | Human-readable responses plus structured JSON content for reasoning, chaining, and automation; server advertises an `instructions` string on MCP initialize so clients self-configure; optional [`routerId` resolved via `MIKROMCP_DEFAULT_ROUTER`](https://github.com/AliKarami/MikroMCP/wiki/Configuration) for single-router setups; [usage skill](docs/wiki/Using-the-Skill.md) for safe, guided tool use in Claude Code |
 | 🧩 **MCP compatibility**   | stdio for desktop clients, Streamable HTTP and legacy SSE for remote or service-style clients         |
 
-**117 typed tools** in total — browse the full catalog with parameters, defaults, and copy-paste example prompts in **[Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)**.
+**118 typed tools** in total — browse the full catalog with parameters, defaults, and copy-paste example prompts in **[Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)**.
 
 ---
 
@@ -139,7 +139,7 @@ AI assistants can use MikroMCP to:
 
 ### What is MikroMCP?
 
-MikroMCP is an open-source [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that exposes MikroTik RouterOS as 117 typed, auditable tools — letting AI assistants inspect, diagnose, and safely operate routers in natural language instead of improvising CLI commands.
+MikroMCP is an open-source [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that exposes MikroTik RouterOS as 118 typed, auditable tools — letting AI assistants inspect, diagnose, and safely operate routers in natural language instead of improvising CLI commands.
 
 ### MikroMCP vs RouterOS API
 
@@ -188,7 +188,7 @@ The README stays intentionally short. Everything below is documented in depth in
 | [Connecting to Claude Desktop](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-Claude-Desktop) | Register MikroMCP in Claude Desktop                      |
 | [Connecting to AI Assistants](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-AI-Assistants) | Claude Code, Cursor, Codex, HTTP/Docker/systemd            |
 | [Using the Skill](docs/wiki/Using-the-Skill.md)                                                        | Install the MikroMCP usage skill so your assistant drives the tools safely |
-| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 117 tools — parameters and example prompts             |
+| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 118 tools — parameters and example prompts             |
 | [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers, request pipeline, auth model                |
 | [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling)                           | Error categories, retry engine, circuit breaker            |
 | [Security](https://github.com/AliKarami/MikroMCP/wiki/Security)                                       | Threat model, hardening checklist, vulnerability reporting |
