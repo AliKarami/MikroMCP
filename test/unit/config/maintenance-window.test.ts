@@ -47,4 +47,38 @@ describe("isWithinMaintenanceWindow", () => {
     const w: MaintenanceWindow = { days: ["Mon"], startTime: "03:00", endTime: "03:00", timezone: "Europe/Helsinki" };
     expect(isWithinMaintenanceWindow([w], MONDAY_03_UTC)).toBe(false);
   });
+
+  describe("overnight windows (startTime > endTime)", () => {
+    // Window starts Tuesday 22:00 UTC and runs to Wednesday 02:00 UTC.
+    const OVERNIGHT: MaintenanceWindow = {
+      days: ["Tue"],
+      startTime: "22:00",
+      endTime: "02:00",
+      timezone: "UTC",
+    };
+    // Tue 2026-05-19 23:00 UTC
+    const TUE_23_UTC = new Date("2026-05-19T23:00:00.000Z");
+    // Wed 2026-05-20 01:00 UTC — spillover from Tuesday's start
+    const WED_01_UTC = new Date("2026-05-20T01:00:00.000Z");
+    // Wed 2026-05-20 03:00 UTC — after the window closed
+    const WED_03_UTC = new Date("2026-05-20T03:00:00.000Z");
+    // Tue 2026-05-19 21:00 UTC — before the window opened
+    const TUE_21_UTC = new Date("2026-05-19T21:00:00.000Z");
+
+    it("matches after start on the listed day", () => {
+      expect(isWithinMaintenanceWindow([OVERNIGHT], TUE_23_UTC)).toBe(true);
+    });
+
+    it("matches after midnight (spillover into the next day)", () => {
+      expect(isWithinMaintenanceWindow([OVERNIGHT], WED_01_UTC)).toBe(true);
+    });
+
+    it("does not match after the window closes", () => {
+      expect(isWithinMaintenanceWindow([OVERNIGHT], WED_03_UTC)).toBe(false);
+    });
+
+    it("does not match before the window opens", () => {
+      expect(isWithinMaintenanceWindow([OVERNIGHT], TUE_21_UTC)).toBe(false);
+    });
+  });
 });
