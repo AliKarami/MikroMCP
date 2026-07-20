@@ -162,7 +162,7 @@ remove(path: string, id: string): Promise<void>
 execute<T>(path: string, data?: Record<string, unknown>): Promise<T>
 ```
 
-RouterOS record fields use kebab-case (`"dst-address"`, `"routing-table"`). The special ID field is `".id"`. Boolean fields come back as the string `"true"` or `"false"`, not JS booleans — always compare with `=== "true"` or `=== true` (some fields vary).
+RouterOS record fields use kebab-case (`"dst-address"`, `"routing-table"`). The special ID field is `".id"`. RouterOS sends everything as strings, but `response-parser.ts` converts records: `"true"`/`"false"` become real JS booleans and numeric strings become numbers (unsafe 64-bit integers stay strings to preserve precision). For boolean-ish fields, **always use `isTrue(value)` from `adapter/response-parser.js`** — it handles parsed booleans, raw `"true"`/`"false"`, and `"yes"`/`"no"`. Never compare a record field with `=== "true"` directly (it silently fails on parsed booleans). Note `RouterOSRecord` values are typed `string | number | boolean`.
 
 ## Code conventions
 

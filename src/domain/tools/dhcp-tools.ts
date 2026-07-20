@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { isTrue } from "../../adapter/response-parser.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -96,7 +97,7 @@ const listDhcpLeasesTool: ToolDefinition = {
       if (parsed.leaseType !== "all") {
         leases = leases.filter((lease) => {
           const rec = lease as Record<string, unknown>;
-          const isDynamic = rec.dynamic === true || rec.dynamic === "true";
+          const isDynamic = isTrue(rec.dynamic);
           if (parsed.leaseType === "dynamic") return isDynamic;
           return !isDynamic; // static
         });
@@ -191,7 +192,7 @@ const manageDhcpLeaseTool: ToolDefinition = {
 
         // Already static — idempotent return
         const existingDynamic = (existing as Record<string, unknown>).dynamic;
-        const isAlreadyStatic = existingDynamic === "false" || existingDynamic === false;
+        const isAlreadyStatic = !isTrue(existingDynamic);
         if (isAlreadyStatic) {
           return {
             content: `Lease for ${upperMac} (${existing.address ?? "unknown"}) is already static. No changes made.`,

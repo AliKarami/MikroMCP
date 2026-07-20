@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { isTrue } from "../../adapter/response-parser.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -26,7 +27,7 @@ const listPppoeClientsInputSchema = z
   .strict();
 
 function isRunning(record: Record<string, unknown>): boolean {
-  return record.running === true || record.running === "true";
+  return isTrue(record.running);
 }
 
 const listPppoeClientsTool: ToolDefinition = {

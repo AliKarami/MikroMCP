@@ -1,5 +1,5 @@
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
-import type { RouterOSRecord, RestorePlan } from "../../types.js";
+import type { RouterOSRecord, RouterOSValue, RestorePlan } from "../../types.js";
 
 export const SEMANTIC_KEYS: Record<string, readonly string[]> = {
   "ip/route": ["dst-address", "gateway", "routing-table"],
@@ -29,10 +29,10 @@ export const SEMANTIC_KEYS: Record<string, readonly string[]> = {
   "user": ["name"],
 };
 
-function normalizeValue(v: string): string {
-  if (v === "true" || v === "yes") return "true";
-  if (v === "false" || v === "no") return "false";
-  return v;
+function normalizeValue(v: RouterOSValue | undefined): string {
+  if (v === true || v === "true" || v === "yes") return "true";
+  if (v === false || v === "false" || v === "no") return "false";
+  return String(v ?? "");
 }
 
 function semanticKey(record: RouterOSRecord, keys: readonly string[]): string {

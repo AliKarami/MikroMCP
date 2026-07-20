@@ -3,7 +3,26 @@ import {
   parseRouterOSValue,
   parseRecord,
   parseRecords,
+  isTrue,
 } from "../../../src/adapter/response-parser.js";
+
+describe("isTrue", () => {
+  it("accepts parsed booleans and raw strings", () => {
+    expect(isTrue(true)).toBe(true);
+    expect(isTrue("true")).toBe(true);
+    expect(isTrue("yes")).toBe(true);
+  });
+
+  it("rejects everything else", () => {
+    expect(isTrue(false)).toBe(false);
+    expect(isTrue("false")).toBe(false);
+    expect(isTrue("no")).toBe(false);
+    expect(isTrue(undefined)).toBe(false);
+    expect(isTrue(null)).toBe(false);
+    expect(isTrue(0)).toBe(false);
+    expect(isTrue("")).toBe(false);
+  });
+});
 
 describe("parseRouterOSValue", () => {
   it("parses 'true' to boolean true", () => {
@@ -24,6 +43,11 @@ describe("parseRouterOSValue", () => {
 
   it("parses decimal numbers", () => {
     expect(parseRouterOSValue("load", "3.14")).toBe(3.14);
+  });
+
+  it("keeps unsafe 64-bit integers as strings to avoid precision loss", () => {
+    expect(parseRouterOSValue("rx-byte", "12345678901234567890")).toBe("12345678901234567890");
+    expect(parseRouterOSValue("rx-byte", "9007199254740993")).toBe("9007199254740993");
   });
 
   it("keeps .id values as strings", () => {

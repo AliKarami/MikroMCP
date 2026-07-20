@@ -10,6 +10,10 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Fixed
+- Boolean record fields (`disabled`, `running`, `dynamic`, `active`, …) are parsed into real JS booleans by the REST client, but several idempotency checks compared them against the string `"true"` — which is always false — so `enable` actions on `manage_scheduled_job`, `manage_firewall_rule`, `manage_mangle_rule`, `manage_routing_rule`/`manage_routing_table`, `manage_package`, and the `manage_ip_address` add idempotency check silently reported "no change" without applying anything. All boolean-field comparisons now go through a shared `isTrue()` helper. `RouterOSRecord` values are now typed `string | number | boolean` to reflect the parser's output.
+- Numeric parsing kept 64-bit RouterOS counters (e.g. `rx-byte` above 2^53) as JS numbers, silently losing precision. Unsafe integers now stay strings.
+
 ## [1.7.0] - 2026-07-14
 
 ### Added

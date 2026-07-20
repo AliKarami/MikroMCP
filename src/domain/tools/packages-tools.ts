@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { isTrue } from "../../adapter/response-parser.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -113,7 +114,7 @@ const managePackageTool: ToolDefinition = {
       }
 
       const wantDisabled = parsed.action === "disable";
-      const isDisabled = pkg.disabled === "true";
+      const isDisabled = isTrue(pkg.disabled);
       const id = pkg[".id"];
 
       if (isDisabled === wantDisabled) {
