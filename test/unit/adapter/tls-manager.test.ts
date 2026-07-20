@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildAgentOptions } from "../../../src/adapter/tls-manager.js";
+import type { buildConnector } from "undici";
+import { buildAgentOptions, makePinnedConnector } from "../../../src/adapter/tls-manager.js";
 
 describe("buildAgentOptions", () => {
   it("returns empty options when TLS is disabled", () => {
@@ -7,51 +8,75 @@ describe("buildAgentOptions", () => {
     expect(opts).toEqual({});
   });
 
-  it("sets rejectUnauthorized from TLS config", () => {
+  it("sets rejectUnauthorized from TLS config when no fingerprint is pinned", () => {
     const opts = buildAgentOptions({ enabled: true, rejectUnauthorized: false });
     expect((opts.connect as Record<string, unknown>).rejectUnauthorized).toBe(false);
   });
 
-  it("does not set checkServerIdentity when fingerprint is absent", () => {
-    const opts = buildAgentOptions({ enabled: true, rejectUnauthorized: true });
-    expect((opts.connect as Record<string, unknown>).checkServerIdentity).toBeUndefined();
-  });
-
-  it("sets checkServerIdentity when fingerprint is provided", () => {
+  it("uses a connector function (not a plain options object) when a fingerprint is pinned", () => {
     const opts = buildAgentOptions({
       enabled: true,
-      rejectUnauthorized: true,
+      rejectUnauthorized: false,
       fingerprint: "aabbccddeeff",
     });
-    expect((opts.connect as Record<string, unknown>).checkServerIdentity).toBeTypeOf("function");
+    expect(typeof opts.connect).toBe("function");
+  });
+});
+
+function fakeSocket(fp: string) {
+  return {
+    destroyed: false,
+    destroy() {
+      this.destroyed = true;
+    },
+    getPeerCertificate: () => ({ fingerprint256: fp }),
+  };
+}
+
+describe("makePinnedConnector", () => {
+  it("rejects and destroys the socket on fingerprint mismatch", async () => {
+    const sock = fakeSocket("AA:BB:CC");
+    const inner = ((_o: unknown, cb: (e: Error | null, s: unknown) => void) =>
+      cb(null, sock)) as unknown as buildConnector.connector;
+    const pinned = makePinnedConnector(inner, "dd:ee:ff");
+
+    await new Promise<void>((resolve) => {
+      pinned({} as never, (err, s) => {
+        expect(err?.message).toMatch(/fingerprint mismatch/i);
+        expect(s).toBeNull();
+        expect(sock.destroyed).toBe(true);
+        resolve();
+      });
+    });
   });
 
-  it("checkServerIdentity returns undefined when fingerprint matches (colon-separated ok)", () => {
-    const opts = buildAgentOptions({
-      enabled: true,
-      rejectUnauthorized: true,
-      fingerprint: "aabbccddeeff",
-    });
-    const check = (opts.connect as Record<string, unknown>).checkServerIdentity as (
-      host: string,
-      cert: { fingerprint256: string },
-    ) => Error | undefined;
+  it("passes the socket through on fingerprint match (colon-insensitive)", async () => {
+    const sock = fakeSocket("AA:BB:CC");
+    const inner = ((_o: unknown, cb: (e: Error | null, s: unknown) => void) =>
+      cb(null, sock)) as unknown as buildConnector.connector;
+    const pinned = makePinnedConnector(inner, "aabbcc");
 
-    // cert.fingerprint256 uses colon notation; our code strips colons before comparing
-    expect(check("router.local", { fingerprint256: "AA:BB:CC:DD:EE:FF" })).toBeUndefined();
+    await new Promise<void>((resolve) => {
+      pinned({} as never, (err, s) => {
+        expect(err).toBeNull();
+        expect(s).toBe(sock);
+        expect(sock.destroyed).toBe(false);
+        resolve();
+      });
+    });
   });
 
-  it("checkServerIdentity returns Error when fingerprint does not match", () => {
-    const opts = buildAgentOptions({
-      enabled: true,
-      rejectUnauthorized: true,
-      fingerprint: "aabbccddeeff",
-    });
-    const check = (opts.connect as Record<string, unknown>).checkServerIdentity as (
-      host: string,
-      cert: { fingerprint256: string },
-    ) => Error | undefined;
+  it("propagates a connection error from the inner connector", async () => {
+    const inner = ((_o: unknown, cb: (e: Error | null, s: unknown) => void) =>
+      cb(new Error("boom"), null)) as unknown as buildConnector.connector;
+    const pinned = makePinnedConnector(inner, "aabbcc");
 
-    expect(check("router.local", { fingerprint256: "11:22:33:44:55:66" })).toBeInstanceOf(Error);
+    await new Promise<void>((resolve) => {
+      pinned({} as never, (err, s) => {
+        expect(err?.message).toBe("boom");
+        expect(s).toBeNull();
+        resolve();
+      });
+    });
   });
 });

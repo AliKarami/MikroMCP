@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Security
+- TLS certificate fingerprint pinning (`tls.fingerprint` in `routers.yaml`) was a silent no-op: it was enforced via `tls.checkServerIdentity`, which Node ignores when `rejectUnauthorized` is false — exactly the self-signed setup the docs recommend pinning for. Pinning is now enforced in the connection layer (post-handshake `fingerprint256` check that destroys the socket on mismatch), so it holds regardless of `rejectUnauthorized`.
+
 ### Fixed
 - Boolean record fields (`disabled`, `running`, `dynamic`, `active`, …) are parsed into real JS booleans by the REST client, but several idempotency checks compared them against the string `"true"` — which is always false — so `enable` actions on `manage_scheduled_job`, `manage_firewall_rule`, `manage_mangle_rule`, `manage_routing_rule`/`manage_routing_table`, `manage_package`, and the `manage_ip_address` add idempotency check silently reported "no change" without applying anything. All boolean-field comparisons now go through a shared `isTrue()` helper. `RouterOSRecord` values are now typed `string | number | boolean` to reflect the parser's output.
 - Numeric parsing kept 64-bit RouterOS counters (e.g. `rx-byte` above 2^53) as JS numbers, silently losing precision. Unsafe integers now stay strings.
