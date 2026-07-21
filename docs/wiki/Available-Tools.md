@@ -1696,6 +1696,8 @@ Destructive tools (those with `destructiveHint: true`) require `MIKROMCP_CONFIRM
 
 Tokens expire after 5 minutes and are single-use. If the router set or params change between calls, the token is rejected.
 
+Each per-router call runs through the same safety layers as a direct call: authorization, maintenance-window enforcement (destructive tools are blocked per-router outside a configured window and reported as that router's error), the per-router circuit breaker, and automatic retry for read-only inner tools. A failure or blocked window on one router does not stop the others — results are aggregated with per-router status.
+
 **Example prompt (non-destructive):** "Run `list_interfaces` on all routers tagged 'branch' and summarize the results."
 
 **Example prompt (destructive):** "Reboot all routers with tag 'maintenance-window'. First call `bulk_execute` with `toolName: reboot` to get a confirmation token, then re-submit with that token."

@@ -18,6 +18,7 @@ import { recordToolCall } from "../observability/metrics.js";
 import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { ToolContext, ToolDefinition } from "../domain/tools/tool-definition.js";
 import type { RouterRegistry } from "../config/router-registry.js";
+import type { RouterConfig } from "../types.js";
 import type { ConnectionPool } from "../adapter/connection-pool.js";
 import type { AppConfig } from "../config/app-config.js";
 import type { IdentityRegistry } from "../config/identity-registry.js";
@@ -79,6 +80,50 @@ export interface ToolExecutorDeps {
   circuitBreakers: Map<string, CircuitBreaker>;
   config: AppConfig;
   identityRegistry: IdentityRegistry;
+}
+
+/** Get the per-router circuit breaker, creating and registering it on first use. */
+export function getOrCreateBreaker(
+  circuitBreakers: Map<string, CircuitBreaker>,
+  routerId: string,
+  config: AppConfig,
+): CircuitBreaker {
+  let cb = circuitBreakers.get(routerId);
+  if (!cb) {
+    cb = new CircuitBreaker(routerId, {
+      failureThreshold: config.circuitBreaker.failureThreshold,
+      cooldownMs: config.circuitBreaker.cooldownMs,
+    });
+    circuitBreakers.set(routerId, cb);
+  }
+  return cb;
+}
+
+/**
+ * Throw OUTSIDE_MAINTENANCE_WINDOW when a destructive tool is invoked outside a
+ * router's configured maintenance windows. No-op for non-destructive tools or
+ * routers without windows.
+ */
+export function assertMaintenanceWindow(
+  isDestructive: boolean,
+  routerConfig: RouterConfig,
+  routerId: string,
+): void {
+  if (!isDestructive) return;
+  const windows = routerConfig.maintenanceWindows;
+  if (windows && windows.length > 0 && !isWithinMaintenanceWindow(windows, new Date())) {
+    throw new MikroMCPError({
+      category: ErrorCategory.PERMISSION_DENIED,
+      code: "OUTSIDE_MAINTENANCE_WINDOW",
+      message: `Router "${routerId}" has maintenance windows configured. Destructive operations are only permitted during scheduled windows.`,
+      details: { maintenanceWindows: windows },
+      recoverability: {
+        retryable: true,
+        suggestedAction:
+          "Wait for a scheduled maintenance window, or remove maintenanceWindows from routers.yaml to allow unrestricted access.",
+      },
+    });
+  }
 }
 
 /**
@@ -143,21 +188,7 @@ export async function executeToolCall(
 
       const routerConfig = registry.getRouter(routerId);
 
-      if (tool.annotations.destructiveHint) {
-        const windows = routerConfig.maintenanceWindows;
-        if (windows && windows.length > 0 && !isWithinMaintenanceWindow(windows, new Date())) {
-          throw new MikroMCPError({
-            category: ErrorCategory.PERMISSION_DENIED,
-            code: "OUTSIDE_MAINTENANCE_WINDOW",
-            message: `Router "${routerId}" has maintenance windows configured. Destructive operations are only permitted during scheduled windows.`,
-            details: { maintenanceWindows: windows },
-            recoverability: {
-              retryable: true,
-              suggestedAction: "Wait for a scheduled maintenance window, or remove maintenanceWindows from routers.yaml to allow unrestricted access.",
-            },
-          });
-        }
-      }
+      assertMaintenanceWindow(tool.annotations.destructiveHint, routerConfig, routerId);
 
       if (tool.annotations.destructiveHint && config.confirmationSecret) {
         await checkConfirmation(tool.name, routerId, args, identity, config.confirmationSecret);
@@ -187,15 +218,7 @@ export async function executeToolCall(
         registry,
       });
 
-      let cb = circuitBreakers.get(routerId);
-      if (!cb) {
-        cb = new CircuitBreaker(routerId, {
-          failureThreshold: config.circuitBreaker.failureThreshold,
-          cooldownMs: config.circuitBreaker.cooldownMs,
-        });
-        circuitBreakers.set(routerId, cb);
-      }
-
+      const cb = getOrCreateBreaker(circuitBreakers, routerId, config);
       toolContext.circuitBreaker = cb;
 
       const { confirmationToken: _ct, ...handlerArgs } = args;
