@@ -1640,6 +1640,8 @@ Restore the RouterOS section state captured before a previous `apply_plan` run. 
 **Example prompt:** "Roll back the last change on core-01 — something broke after the firewall update."
 
 > **Diffing behaviour:** rollback identifies which records to update, create, or remove by matching snapshot records to current records using a per-RouterOS-path semantic key (e.g. `name` for most named resources, `host` for netwatch entries). For singleton settings resources without a natural identity field — notably `system/clock` — no semantic key is defined and rollback falls back to whole-record signature matching, which may reapply a changed record as a delete-then-create rather than an in-place update.
+>
+> **Safety limits:** snapshots store only restorable configuration — dynamic (router-generated) records are excluded and runtime/counter fields (`bytes`, `packets`, `dynamic`, `rx-byte`, uptime, …) are stripped, so counters never cause spurious diffs and are never written back. For order-sensitive paths (`ip/firewall/filter`, `ip/firewall/nat`, `ip/firewall/mangle`, `routing/rule`) the restore re-creates removed entries at the **end** of the list — rule **order is not restored**, and the plan returns a warning to review ordering manually. Deleted **users are never recreated** (passwords are not stored in snapshots; recreation would produce a password-less login) — the plan warns instead. Warnings appear in both the dry-run and applied result.
 
 ---
 

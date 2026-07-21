@@ -122,6 +122,7 @@ export interface RestorePlan {
   toCreate: RouterOSRecord[];
   toRemove: string[];
   toUpdate: Array<{ currentId: string; data: Record<string, string> }>;
+  warnings: string[];
 }
 
 export interface AuditEvent {
