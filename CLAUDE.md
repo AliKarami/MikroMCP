@@ -218,13 +218,13 @@ Two transports:
 | Variable | Default | Notes |
 |---|---|---|
 | `MIKROMCP_TRANSPORT` | `stdio` | `stdio` or `http` |
-| `MIKROMCP_CONFIG_PATH` | `config/routers.yaml` | Path to router registry |
+| `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry |
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId` (falls back to the sole router if only one is configured) |
 | `MIKROMCP_LOG_LEVEL` | `info` | `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP transport only |
-| `MIKROMCP_IDENTITIES_PATH` | `config/identities.yaml` | Path to identity/token registry |
+| `MIKROMCP_IDENTITIES_PATH` | `~/.mikromcp/identities.yaml` | Path to identity/token registry |
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport (omit for built-in superadmin) |
-| `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret for confirmation tokens (**required** in HTTP mode) |
+| `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret for confirmation tokens (**required** in HTTP mode when identities with role `readonly` or `operator` are configured) |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | NDJSON audit log file path (omit to disable file sink) |
 | `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
 | `ROUTER_<PREFIX>_USER` | — | Per-router credential (matches `envPrefix` in YAML) |
