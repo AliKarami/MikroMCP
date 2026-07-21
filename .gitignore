@@ -16,3 +16,6 @@ docs-site/src/content/docs/
 .worktrees/
 .claude/worktrees/
 .worktrees/
+
+# Local dev-server preview config
+.claude/launch.json

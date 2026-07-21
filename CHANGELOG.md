@@ -10,6 +10,8 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-07-21
+
 ### Security
 - HTTP transport hardening: `GET /metrics` now requires a bearer token when any identities are configured (was fully unauthenticated); 401 responses carry a `WWW-Authenticate: Bearer` header; Streamable HTTP sessions are bound to the identity that created them (a token can no longer drive another identity's session) and idle sessions are evicted after 30 minutes (previously the session map grew unbounded); token lookups are cached by `sha256(token)` so bcrypt runs once per token instead of on every request; and non-integer numeric env vars (`MIKROMCP_PORT`, body/rate/ssh/retention) now fail fast with a clear configuration error instead of silently becoming `NaN`.
 - `allowedToolPatterns` in `identities.yaml` used prefix-only matching: it took the text before the first `*`, so a pattern like `*_wifi` had an empty prefix and silently allowed **every** tool. Matching now uses a proper anchored glob, so leading/mid-string wildcards (`*_wifi`, `manage_*_rule`) behave correctly.
