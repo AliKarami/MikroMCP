@@ -43,6 +43,8 @@ export interface ToolContext {
   connectionPool?: ConnectionPool;
   /** Per-router circuit breaker — set for router-context calls; used by apply_plan to gate sub-steps. */
   circuitBreaker?: CircuitBreaker;
+  /** Registry of per-router circuit breakers — set for fleet tools so bulk_execute can gate each router. */
+  circuitBreakers?: Map<string, CircuitBreaker>;
   /** Server-wide configuration. Use this instead of reading process.env in tool handlers. */
   appConfig: AppConfig;
 }

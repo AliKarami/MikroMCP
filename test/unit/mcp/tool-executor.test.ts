@@ -186,4 +186,21 @@ describe("executeToolCall", () => {
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain("fleet-ok");
   });
+
+  it("skipRouterContext — touching routerClient raises a typed error, not a TypeError", async () => {
+    const tool = makeReadTool(
+      async (_params, context) => {
+        // A fleet tool that mistakenly reaches for a router-scoped capability.
+        await context.routerClient.get("system/resource");
+        return { content: "unreachable", structuredContent: {} };
+      },
+      { skipRouterContext: true },
+    );
+
+    const result = await executeToolCall(tool, {}, makeDeps());
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("not available in a fleet-tool context");
+    expect((result.structuredContent as { code?: string }).code).toBe("FLEET_CONTEXT_UNAVAILABLE");
+  });
 });

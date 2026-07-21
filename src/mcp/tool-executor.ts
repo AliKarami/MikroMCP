@@ -72,6 +72,27 @@ export interface ToolExecutorDeps {
   identityRegistry: IdentityRegistry;
 }
 
+/**
+ * Placeholder for router-scoped capabilities that a fleet tool
+ * (`skipRouterContext`) does not have. Accessing any member throws a clear
+ * typed error instead of the `TypeError` a `null` cast would produce.
+ */
+function fleetUnavailable<T extends object>(what: string): T {
+  return new Proxy({} as T, {
+    get() {
+      throw new MikroMCPError({
+        category: ErrorCategory.INTERNAL,
+        code: "FLEET_CONTEXT_UNAVAILABLE",
+        message: `${what} is not available in a fleet-tool context (skipRouterContext). Target a specific router instead.`,
+        recoverability: {
+          retryable: false,
+          suggestedAction: "Use a router-scoped tool, or pass a routerId to operate on one router.",
+        },
+      });
+    },
+  });
+}
+
 export async function executeToolCall(
   tool: ToolDefinition,
   args: Record<string, unknown>,
@@ -89,15 +110,16 @@ export async function executeToolCall(
 
       if (tool.skipRouterContext) {
         const fleetContext: ToolContext = {
-          routerClient: null as unknown as ToolContext["routerClient"],
+          routerClient: fleetUnavailable<ToolContext["routerClient"]>("routerClient"),
           routerId: "",
           correlationId,
-          routerConfig: null as unknown as ToolContext["routerConfig"],
-          sshClient: null as unknown as ToolContext["sshClient"],
-          ftpClient: null as unknown as ToolContext["ftpClient"],
+          routerConfig: fleetUnavailable<ToolContext["routerConfig"]>("routerConfig"),
+          sshClient: fleetUnavailable<ToolContext["sshClient"]>("sshClient"),
+          ftpClient: fleetUnavailable<ToolContext["ftpClient"]>("ftpClient"),
           identity,
           routerRegistry: registry,
           connectionPool: pool,
+          circuitBreakers,
           appConfig: config,
         };
         const fleetResult = await tool.handler(args, fleetContext);
