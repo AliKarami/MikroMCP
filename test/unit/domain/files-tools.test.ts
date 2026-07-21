@@ -170,6 +170,23 @@ describe("files tools", () => {
         getFileContentTool.handler({ routerId: "test-router", name: "missing.rsc" }, ctx),
       ).rejects.toMatchObject({ code: "FILE_NOT_FOUND" });
     });
+
+    it("caps oversized file content and flags truncation", async () => {
+      const big = "x".repeat(70000);
+      const ctx = makeContext({
+        get: vi.fn().mockResolvedValue([{ ".id": "*1", name: "big.txt", type: "file" }]),
+        getOne: vi.fn().mockResolvedValue({ ".id": "*1", name: "big.txt", contents: big }),
+      });
+      const result = await getFileContentTool.handler(
+        { routerId: "test-router", name: "big.txt" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.truncated).toBe(true);
+      expect(sc.totalLength).toBe(70000);
+      expect((sc.contents as string).length).toBeLessThan(70000);
+      expect(result.content).toContain("[TRUNCATED at 65536 chars");
+    });
   });
 
   describe("upload_file handler", () => {

@@ -10,6 +10,7 @@ import { createLogger } from "../../observability/logger.js";
 const log = createLogger("files-tools");
 
 const FILE_PATH = "file";
+const CONTENT_CAP = 65536;
 
 const listFilesInputSchema = z
   .object({
@@ -116,11 +117,21 @@ const getFileContentTool: ToolDefinition = {
 
       const id = file[".id"];
       const full = await context.routerClient.getOne<Record<string, string>>(FILE_PATH, id);
-      const contents = full.contents ?? "";
+      const rawContents = full.contents ?? "";
+      const truncated = rawContents.length > CONTENT_CAP;
+      const contents = truncated
+        ? `${rawContents.slice(0, CONTENT_CAP)}\n[TRUNCATED at ${CONTENT_CAP} chars — file is ${rawContents.length} chars]`
+        : rawContents;
 
       return {
         content: `Contents of "${parsed.name}" on ${context.routerId}:\n${contents}`,
-        structuredContent: { routerId: context.routerId, name: parsed.name, contents },
+        structuredContent: {
+          routerId: context.routerId,
+          name: parsed.name,
+          contents,
+          truncated,
+          totalLength: rawContents.length,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "get_file_content");

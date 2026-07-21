@@ -150,6 +150,14 @@ const listConnectionsTool: ToolDefinition = {
     log.info({ routerId: context.routerId }, "Listing connections");
     try {
       const all = await context.routerClient.get<RouterOSRecord>("ip/firewall/connection", {
+        proplist: [
+          "protocol",
+          "src-address",
+          "dst-address",
+          "tcp-state",
+          "connection-mark",
+          "timeout",
+        ],
         limit: undefined,
         offset: undefined,
       });

@@ -270,7 +270,7 @@ List files on a MikroTik router filesystem. Supports filtering by name and type.
 
 ### `get_file_content` — Read
 
-Read a text file's contents from a MikroTik router. Only suitable for text files — binary files will return garbled content.
+Read a text file's contents from a MikroTik router. Only suitable for text files — binary files will return garbled content. Content is capped at 65536 characters; larger files are truncated with a marker and `structuredContent.truncated: true` (plus `totalLength`).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
