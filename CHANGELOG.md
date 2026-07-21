@@ -11,6 +11,7 @@ Each release section covers changes **since the previous release only**.
 ## [Unreleased]
 
 ### Security
+- `allowedToolPatterns` in `identities.yaml` used prefix-only matching: it took the text before the first `*`, so a pattern like `*_wifi` had an empty prefix and silently allowed **every** tool. Matching now uses a proper anchored glob, so leading/mid-string wildcards (`*_wifi`, `manage_*_rule`) behave correctly.
 - `run_command`'s deny-list guard was trivially bypassable: it matched patterns against the raw command string, so ROS7 slash-path syntax (`/system/reboot`), whitespace/case variation, command chaining (`:put 1; /system reboot`), and `:execute`/`:parse` indirection all slipped past. The guard now normalizes each command (path and space separators treated equally) and checks every `;`/newline-separated segment; `:execute`/`:parse` are denied by default. Documented explicitly as best-effort defense-in-depth, not an authorization boundary.
 - TLS certificate fingerprint pinning (`tls.fingerprint` in `routers.yaml`) was a silent no-op: it was enforced via `tls.checkServerIdentity`, which Node ignores when `rejectUnauthorized` is false — exactly the self-signed setup the docs recommend pinning for. Pinning is now enforced in the connection layer (post-handshake `fingerprint256` check that destroys the socket on mismatch), so it holds regardless of `rejectUnauthorized`.
 

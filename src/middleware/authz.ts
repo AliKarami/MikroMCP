@@ -1,10 +1,9 @@
 import type { Identity } from "../types.js";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
+import { globMatch } from "../util/glob.js";
 
 function matchesPattern(name: string, pattern: string): boolean {
-  if (!pattern.includes("*")) return name === pattern;
-  const prefix = pattern.slice(0, pattern.indexOf("*"));
-  return name.startsWith(prefix);
+  return globMatch(pattern, name);
 }
 
 export function checkAuthz(identity: Identity, toolName: string, routerId: string): void {

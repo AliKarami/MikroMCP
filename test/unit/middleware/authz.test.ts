@@ -61,6 +61,20 @@ describe("checkAuthz — tool pattern check", () => {
     expect(() => checkAuthz(identity, "manage_firewall_rule", "edge-01")).not.toThrow();
   });
 
+  it("honors a wildcard in the middle of the pattern", () => {
+    const identity = makeIdentity({ allowedToolPatterns: ["manage_*_rule"] });
+    expect(() => checkAuthz(identity, "manage_firewall_rule", "edge-01")).not.toThrow();
+    expect(() => checkAuthz(identity, "manage_user", "edge-01")).toThrow(MikroMCPError);
+  });
+
+  it("does not treat a leading-wildcard suffix pattern as allow-all", () => {
+    // Old prefix-only matcher took the text before the first '*' — here the
+    // empty prefix — and allowed everything. A real glob must anchor the tail.
+    const identity = makeIdentity({ allowedToolPatterns: ["*_wifi"] });
+    expect(() => checkAuthz(identity, "manage_wifi", "edge-01")).not.toThrow();
+    expect(() => checkAuthz(identity, "manage_user", "edge-01")).toThrow(MikroMCPError);
+  });
+
   it("throws PERMISSION_DENIED with TOOL_NOT_ALLOWED when no pattern matches", () => {
     const identity = makeIdentity({ allowedToolPatterns: ["list_*", "ping"] });
     let thrown: unknown;
