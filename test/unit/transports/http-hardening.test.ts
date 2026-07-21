@@ -112,6 +112,77 @@ function getRequest(port: number, path: string): Promise<{ status: number; body:
   });
 }
 
+function getWithHeaders(
+  port: number,
+  path: string,
+  headers: Record<string, string>,
+): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = http.get({ host: "127.0.0.1", port, path, headers }, (res) => {
+      let body = "";
+      res.on("data", (chunk: Buffer) => {
+        body += chunk.toString();
+      });
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }));
+    });
+    req.on("error", reject);
+  });
+}
+
+describe("connectHttp — /metrics authentication", () => {
+  async function withServer(
+    registry: IdentityRegistry,
+    fn: (port: number) => Promise<void>,
+  ): Promise<void> {
+    const server = await connectHttp(
+      vi.fn(() => ({}) as unknown as McpServer),
+      { port: 0, bindHost: "127.0.0.1", maxBodyBytes: 1024 * 1024, rateLimitRpm: 100 },
+      registry,
+    );
+    const { port } = server.address() as import("node:net").AddressInfo;
+    try {
+      await fn(port);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
+
+  it("serves /metrics unauthenticated when no identities are configured", async () => {
+    const registry = {
+      getIdentities: vi.fn().mockReturnValue([]),
+      findIdentityByToken: vi.fn(),
+    } as unknown as IdentityRegistry;
+    await withServer(registry, async (port) => {
+      const res = await getRequest(port, "/metrics");
+      expect(res.status).toBe(200);
+    });
+  });
+
+  it("requires a token for /metrics when identities are configured (401 + WWW-Authenticate)", async () => {
+    const registry = {
+      getIdentities: vi.fn().mockReturnValue([{ id: "op", role: "operator", allowedRouters: [], allowedToolPatterns: [] }]),
+      findIdentityByToken: vi.fn().mockResolvedValue(null),
+    } as unknown as IdentityRegistry;
+    await withServer(registry, async (port) => {
+      const res = await getWithHeaders(port, "/metrics", {});
+      expect(res.status).toBe(401);
+      expect(res.headers["www-authenticate"]).toBe("Bearer");
+    });
+  });
+
+  it("serves /metrics with a valid token when identities are configured", async () => {
+    const identity = { id: "op", role: "operator", allowedRouters: [], allowedToolPatterns: [] };
+    const registry = {
+      getIdentities: vi.fn().mockReturnValue([identity]),
+      findIdentityByToken: vi.fn().mockResolvedValue(identity),
+    } as unknown as IdentityRegistry;
+    await withServer(registry, async (port) => {
+      const res = await getWithHeaders(port, "/metrics", { Authorization: "Bearer tok" });
+      expect(res.status).toBe(200);
+    });
+  });
+});
+
 describe("connectHttp — /healthz endpoint", () => {
   it("returns 200 {status:'ok'} without Authorization and bypasses the rate limiter", async () => {
     const mockMakeServer = vi.fn(() => ({}) as unknown as McpServer);

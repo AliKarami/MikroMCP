@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -114,5 +114,32 @@ identities:
 `);
     const registry = new IdentityRegistry(path);
     expect(registry.getIdentities()).toHaveLength(2);
+  });
+
+  it("caches token lookups so bcrypt.compare runs only once per token", async () => {
+    const raw = "cache-me-token";
+    const hash = await hashToken(raw);
+    const path = tempYaml(`
+identities:
+  ci-pipeline:
+    token: "${hash}"
+    role: operator
+    allowedRouters: []
+    allowedToolPatterns: []
+`);
+    const registry = new IdentityRegistry(path);
+    const spy = vi.spyOn(bcrypt, "compare");
+    spy.mockClear();
+
+    const first = await registry.findIdentityByToken(raw);
+    const compareCallsAfterFirst = spy.mock.calls.length;
+    const second = await registry.findIdentityByToken(raw);
+
+    expect(first?.id).toBe("ci-pipeline");
+    expect(second?.id).toBe("ci-pipeline");
+    expect(compareCallsAfterFirst).toBeGreaterThanOrEqual(1);
+    // Second lookup must be served from cache — no further bcrypt.compare calls.
+    expect(spy.mock.calls.length).toBe(compareCallsAfterFirst);
+    spy.mockRestore();
   });
 });
