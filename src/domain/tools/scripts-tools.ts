@@ -86,7 +86,7 @@ const manageScriptTool: ToolDefinition = {
   inputSchema: manageScriptInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
@@ -254,7 +254,7 @@ const runScriptTool: ToolDefinition = {
   inputSchema: runScriptInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
     openWorldHint: false,
   },

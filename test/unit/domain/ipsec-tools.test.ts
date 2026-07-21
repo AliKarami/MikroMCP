@@ -79,7 +79,7 @@ describe("manage_ipsec_policy", () => {
   describe("metadata", () => {
     it("exists in ipsecTools", () => expect(managePolicyTool).toBeDefined());
     it("is not readOnly", () => expect(managePolicyTool.annotations.readOnlyHint).toBe(false));
-    it("is not destructive", () => expect(managePolicyTool.annotations.destructiveHint).toBe(false));
+    it("is destructive (can sever VPN connectivity)", () => expect(managePolicyTool.annotations.destructiveHint).toBe(true));
   });
 
   describe("input schema", () => {

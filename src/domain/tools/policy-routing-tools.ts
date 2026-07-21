@@ -120,7 +120,7 @@ const manageRoutingRuleTool: ToolDefinition = {
   inputSchema: manageRoutingRuleInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
@@ -353,7 +353,7 @@ const manageRoutingTableTool: ToolDefinition = {
   inputSchema: manageRoutingTableInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

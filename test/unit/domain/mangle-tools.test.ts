@@ -71,7 +71,7 @@ describe("mangle tools", () => {
 
     it("manage_mangle_rule has correct annotations", () => {
       expect(manageMangleRuleTool.annotations.readOnlyHint).toBe(false);
-      expect(manageMangleRuleTool.annotations.destructiveHint).toBe(false);
+      expect(manageMangleRuleTool.annotations.destructiveHint).toBe(true);
       expect(manageMangleRuleTool.annotations.idempotentHint).toBe(true);
     });
   });

@@ -81,8 +81,9 @@ const exportConfigTool: ToolDefinition = {
   description:
     "Export the router configuration as a RouterOS script. When no file is specified, returns the script text inline. When a file is specified, saves it as <file>.rsc on the router's filesystem. Supports compact mode to show only non-default values.",
   inputSchema: exportConfigInputSchema,
+  // Not read-only: with a `file` argument it writes a file on the router.
   annotations: {
-    readOnlyHint: true,
+    readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: false,

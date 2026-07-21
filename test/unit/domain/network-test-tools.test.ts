@@ -38,15 +38,20 @@ describe("networkTestTools", () => {
       expect(fetchUrlTool.name).toBe("fetch_url");
       expect(listConnectionsTool.name).toBe("list_connections");
     });
-    it("all tools are readOnly", () => {
+    it("bandwidth_test and list_connections are read-only; fetch_url is not (side effects)", () => {
       expect(bandwidthTestTool.annotations.readOnlyHint).toBe(true);
-      expect(fetchUrlTool.annotations.readOnlyHint).toBe(true);
+      expect(fetchUrlTool.annotations.readOnlyHint).toBe(false);
       expect(listConnectionsTool.annotations.readOnlyHint).toBe(true);
     });
     it("none are destructive", () => {
       expect(bandwidthTestTool.annotations.destructiveHint).toBe(false);
       expect(fetchUrlTool.annotations.destructiveHint).toBe(false);
       expect(listConnectionsTool.annotations.destructiveHint).toBe(false);
+    });
+    it("bandwidth_test and fetch_url are openWorld; bandwidth_test opts out of retry", () => {
+      expect(bandwidthTestTool.annotations.openWorldHint).toBe(true);
+      expect(fetchUrlTool.annotations.openWorldHint).toBe(true);
+      expect(bandwidthTestTool.retryable).toBe(false);
     });
     it("bandwidth_test and fetch_url are not idempotent", () => {
       expect(bandwidthTestTool.annotations.idempotentHint).toBe(false);

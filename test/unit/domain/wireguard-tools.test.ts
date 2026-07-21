@@ -62,7 +62,7 @@ describe("manage_wireguard_interface", () => {
   describe("metadata", () => {
     it("exists in wireguardTools", () => expect(manageWgIfaceTool).toBeDefined());
     it("is not readOnly", () => expect(manageWgIfaceTool.annotations.readOnlyHint).toBe(false));
-    it("is not destructive", () => expect(manageWgIfaceTool.annotations.destructiveHint).toBe(false));
+    it("is destructive (can sever VPN connectivity)", () => expect(manageWgIfaceTool.annotations.destructiveHint).toBe(true));
   });
 
   describe("input schema", () => {

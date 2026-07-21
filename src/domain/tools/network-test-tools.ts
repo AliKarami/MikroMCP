@@ -19,7 +19,7 @@ const bandwidthTestInputSchema = z
     address: z.string().describe("Remote host running RouterOS btest server"),
     protocol: z.enum(["tcp", "udp"]).default("tcp").describe("Test protocol"),
     direction: z.enum(["send", "receive", "both"]).default("both").describe("Test direction"),
-    duration: z.number().int().min(1).max(30).default(5).describe("Test duration in seconds (max 30)"),
+    duration: z.number().int().min(1).max(20).default(5).describe("Test duration in seconds (max 20)"),
   })
   .strict();
 
@@ -27,9 +27,12 @@ const bandwidthTestTool: ToolDefinition = {
   name: "bandwidth_test",
   title: "Bandwidth Test",
   description:
-    "Run a RouterOS bandwidth test from the router to a remote host running a RouterOS btest server. Returns TX and RX throughput in Mbps. Duration capped at 30 seconds.",
+    "Run a RouterOS bandwidth test from the router to a remote host running a RouterOS btest server. Returns TX and RX throughput in Mbps. Duration capped at 20 seconds. Saturates the link — not auto-retried.",
   inputSchema: bandwidthTestInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  // Reaches an external host and saturates the link; a silent retry would
+  // double the load, so opt out of auto-retry.
+  retryable: false,
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = bandwidthTestInputSchema.parse(params);
     log.info({ routerId: context.routerId, address: parsed.address }, "Running bandwidth test");
@@ -83,9 +86,11 @@ const fetchUrlTool: ToolDefinition = {
   name: "fetch_url",
   title: "Fetch URL",
   description:
-    "Send an HTTP/HTTPS request from the router using /tool/fetch. Response body is returned inline (capped at 64 KB with [TRUNCATED] marker). Use outputFile to save to router filesystem instead.",
+    "Send an HTTP/HTTPS request from the router using /tool/fetch. Response body is returned inline (capped at 64 KB with [TRUNCATED] marker). Use outputFile to save to router filesystem instead. Not read-only: POSTs have side effects and outputFile writes to the router.",
   inputSchema: fetchUrlInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  // Not read-only: a POST has external side effects and outputFile writes a
+  // file on the router. openWorld: reaches arbitrary external hosts.
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = fetchUrlInputSchema.parse(params);
     log.info({ routerId: context.routerId, url: parsed.url, method: parsed.method }, "Fetching URL");

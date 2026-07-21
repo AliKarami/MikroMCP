@@ -225,6 +225,34 @@ describe("executeToolCall", () => {
     expect(rec?.suggestedAction).not.toMatch(/may already have been applied/i);
   });
 
+  it("retries a retryable read tool but not one with retryable:false", async () => {
+    const retryableErr = () =>
+      new MikroMCPError({
+        category: ErrorCategory.ROUTER_TIMEOUT,
+        code: "TIMEOUT",
+        message: "slow",
+        recoverability: { retryable: true, suggestedAction: "retry" },
+      });
+
+    // Default read tool (retryable undefined) with maxRetries=1 → 2 calls.
+    const retried = vi.fn().mockRejectedValue(retryableErr());
+    const depsRetry = makeDeps();
+    (depsRetry.config as { retry: { maxRetries: number } }).retry.maxRetries = 1;
+    await executeToolCall(makeReadTool(retried), { routerId: "r1" }, depsRetry);
+    expect(retried).toHaveBeenCalledTimes(2);
+
+    // Same, but retryable:false → exactly 1 call.
+    const once = vi.fn().mockRejectedValue(retryableErr());
+    const depsNoRetry = makeDeps();
+    (depsNoRetry.config as { retry: { maxRetries: number } }).retry.maxRetries = 1;
+    await executeToolCall(
+      makeReadTool(once, { retryable: false }),
+      { routerId: "r1" },
+      depsNoRetry,
+    );
+    expect(once).toHaveBeenCalledTimes(1);
+  });
+
   it("skipRouterContext — touching routerClient raises a typed error, not a TypeError", async () => {
     const tool = makeReadTool(
       async (_params, context) => {

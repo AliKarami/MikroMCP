@@ -251,12 +251,9 @@ export async function executeToolCall(
 
       const runHandler = () => tool.handler(handlerArgs, toolContext);
 
+      const shouldRetry = tool.annotations.readOnlyHint && tool.retryable !== false;
       const executeHandler = () =>
-        cb!.execute(
-          tool.annotations.readOnlyHint
-            ? () => withRetry(runHandler, config.retry)
-            : runHandler,
-        );
+        cb.execute(shouldRetry ? () => withRetry(runHandler, config.retry) : runHandler);
 
       const result = await executeHandler();
 

@@ -63,7 +63,7 @@ const manageInterfaceListTool: ToolDefinition = {
   description:
     "Add or remove an interface list. Idempotent by name. Removing a list that has members is blocked by RouterOS — the error is surfaced as-is.",
   inputSchema: manageInterfaceListInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageInterfaceListInputSchema.parse(params);
     log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing interface list");
@@ -144,7 +144,7 @@ const manageInterfaceListMemberTool: ToolDefinition = {
   description:
     "Add or remove an interface from an interface list. Idempotent by list+interface composite key. add returns already_exists if the membership exists. remove returns not_found gracefully.",
   inputSchema: manageInterfaceListMemberInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageInterfaceListMemberInputSchema.parse(params);
     log.info(

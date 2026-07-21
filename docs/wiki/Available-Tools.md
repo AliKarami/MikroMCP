@@ -97,7 +97,7 @@ List installed RouterOS packages with version and enabled status.
 
 ---
 
-### `manage_package` — Write · Idempotent
+### `manage_package` — Write · Destructive · Idempotent
 
 Enable or disable a RouterOS package. Changes take effect only after a router reboot — use `reboot` to apply. No-op if already in the target state.
 
@@ -157,7 +157,7 @@ Create a binary RouterOS configuration backup file on the router filesystem. Opt
 
 ---
 
-### `export_config` — Read
+### `export_config` — Write
 
 Export the running RouterOS configuration as a RouterOS script (equivalent to `/export`). Returns the full config text inline, or saves to a router file.
 
@@ -186,7 +186,7 @@ List RouterOS scripts with optional name filter.
 
 ---
 
-### `manage_script` — Write · Idempotent
+### `manage_script` — Write · Destructive · Idempotent
 
 Add, update, or remove a RouterOS script. `add` throws `CONFLICT` if a script with the same name already exists; `update` throws `NOT_FOUND` if it does not.
 
@@ -204,7 +204,7 @@ Add, update, or remove a RouterOS script. `add` throws `CONFLICT` if a script wi
 
 ---
 
-### `run_script` — Write
+### `run_script` — Write · Destructive
 
 Execute a named RouterOS script. Fire-and-forget — the script runs asynchronously and output is written to the router system log. Use `get_log` after calling this tool to see results.
 
@@ -312,7 +312,7 @@ List RouterOS containers with image, status, and resource usage.
 
 ---
 
-### `manage_container` — Write · Idempotent
+### `manage_container` — Write · Destructive · Idempotent
 
 Create, start, stop, or remove a RouterOS container. Idempotent by `name`.
 
@@ -454,7 +454,7 @@ List currently connected WiFi stations with signal strength and transfer rates.
 
 ---
 
-### `manage_wifi_interface` — Write · Idempotent
+### `manage_wifi_interface` — Write · Destructive · Idempotent
 
 Enable, disable, or change SSID on a WiFi interface. Returns `no_change` if already in the requested state. At least one of `disabled` or `ssid` must be provided.
 
@@ -627,7 +627,7 @@ List DHCP server instances with their interface, address pool, and enabled statu
 
 ---
 
-### `manage_dhcp_server` — Write · Idempotent
+### `manage_dhcp_server` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable a DHCP server instance. Idempotent by `name`.
 
@@ -920,7 +920,7 @@ List policy routing rules in evaluation order. Supports filtering by table and d
 
 ---
 
-### `manage_routing_rule` — Write · Idempotent
+### `manage_routing_rule` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable a policy routing rule. Idempotent by the composite key `srcAddress + dstAddress + interface + table`. At least one of `srcAddress`, `dstAddress`, or `interface` is required on `add`.
 
@@ -951,7 +951,7 @@ List custom routing tables.
 
 ---
 
-### `manage_routing_table` — Write · Idempotent
+### `manage_routing_table` — Write · Destructive · Idempotent
 
 Create or remove a custom routing table. Idempotent by `name`.
 
@@ -1057,7 +1057,7 @@ List firewall mangle rules in evaluation order. Supports filtering by chain, act
 
 ---
 
-### `manage_mangle_rule` — Write · Idempotent
+### `manage_mangle_rule` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable a mangle rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with different chain or match config.
 
@@ -1102,7 +1102,7 @@ List firewall address list entries. Supports filtering by list name and address.
 
 ---
 
-### `manage_address_list_entry` — Write · Idempotent
+### `manage_address_list_entry` — Write · Destructive · Idempotent
 
 Add or remove a firewall address list entry. Idempotent by list name + address.
 
@@ -1217,7 +1217,7 @@ List RouterOS user accounts with group membership and last-login info.
 
 ---
 
-### `manage_user` — Write · Idempotent
+### `manage_user` — Write · Destructive · Idempotent
 
 Add, remove, enable, disable, or change the password of a RouterOS user account. Idempotent by `name`.
 
@@ -1253,7 +1253,7 @@ List local user groups on a MikroTik router with their policy bitmask.
 
 ---
 
-### `manage_user_group` — Write
+### `manage_user_group` — Write · Destructive
 
 Add, update, or remove a RouterOS user group. Idempotent by name. `update` changes the policy string; returns `no_change` if unchanged.
 
@@ -1321,7 +1321,7 @@ List VRRP instances with their virtual IP, priority, and master/backup state.
 
 ---
 
-### `manage_vrrp_instance` — Write · Idempotent
+### `manage_vrrp_instance` — Write · Destructive · Idempotent
 
 Add, update, or remove a VRRP instance. Idempotent by `name`.
 
@@ -1706,7 +1706,7 @@ Each per-router call runs through the same safety layers as a direct call: autho
 
 ## DNS Settings
 
-### `manage_dns_settings` — Write · Idempotent
+### `manage_dns_settings` — Write · Destructive · Idempotent
 
 Update DNS resolver settings. Idempotent — returns `no_change` if nothing differs.
 
@@ -1742,7 +1742,7 @@ Delete a file from the router filesystem by name. Idempotent — returns `not_fo
 
 ## IPSec Policies
 
-### `manage_ipsec_policy` — Write · Idempotent
+### `manage_ipsec_policy` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable an IPSec policy. Idempotent by composite key `srcAddress`+`dstAddress`+`tunnel`.
 
@@ -1765,7 +1765,7 @@ Add, remove, enable, or disable an IPSec policy. Idempotent by composite key `sr
 
 ## WireGuard Interfaces
 
-### `manage_wireguard_interface` — Write · Idempotent
+### `manage_wireguard_interface` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable a WireGuard interface. Idempotent by name. RouterOS generates the private key on create — it is never passed in. The public key is returned after creation.
 
@@ -1879,7 +1879,7 @@ Add or remove a container volume mount. Idempotent by `name`. `add` returns `alr
 
 ### `bandwidth_test` — Read
 
-Run a RouterOS bandwidth test from the router to a remote host running a RouterOS btest server. Returns TX/RX throughput in Mbps.
+Run a RouterOS bandwidth test from the router to a remote host running a RouterOS btest server. Returns TX/RX throughput in Mbps. Saturates the link and is not auto-retried.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1887,13 +1887,13 @@ Run a RouterOS bandwidth test from the router to a remote host running a RouterO
 | `address` | string | — | Remote host running RouterOS btest server |
 | `protocol` | `tcp`\|`udp` | `tcp` | Test protocol |
 | `direction` | `send`\|`receive`\|`both` | `both` | Test direction |
-| `duration` | int (1–30) | `5` | Test duration in seconds |
+| `duration` | int (1–20) | `5` | Test duration in seconds |
 
 **Example prompt:** "Run a bandwidth test from router home-gw to 192.168.99.2 for 10 seconds"
 
 ---
 
-### `fetch_url` — Read
+### `fetch_url` — Write
 
 Send an HTTP/HTTPS GET or POST request from the router. Response body returned inline (capped at 64 KB). Use `outputFile` to save to the router filesystem instead.
 
@@ -1940,7 +1940,7 @@ List all interface lists defined on the router.
 
 ---
 
-### `manage_interface_list` — Write · Idempotent
+### `manage_interface_list` — Write · Destructive · Idempotent
 
 Add or remove an interface list. Idempotent by name. Removing a list that has members is blocked by RouterOS.
 
@@ -1956,7 +1956,7 @@ Add or remove an interface list. Idempotent by name. Removing a list that has me
 
 ---
 
-### `manage_interface_list_member` — Write · Idempotent
+### `manage_interface_list_member` — Write · Destructive · Idempotent
 
 Add or remove an interface from an interface list. Idempotent by `list`+`interface` composite key.
 

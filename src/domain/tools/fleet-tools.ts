@@ -390,10 +390,10 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           routerContext.circuitBreaker = cb;
           const runOnce = () =>
             targetTool.handler(toolParams as Record<string, unknown>, routerContext);
+          const shouldRetry =
+            targetTool.annotations.readOnlyHint && targetTool.retryable !== false;
           const result = await cb.execute(
-            targetTool.annotations.readOnlyHint
-              ? () => withRetry(runOnce, context.appConfig.retry)
-              : runOnce,
+            shouldRetry ? () => withRetry(runOnce, context.appConfig.retry) : runOnce,
           );
           const elapsed = Date.now() - start;
           if (journalId) {

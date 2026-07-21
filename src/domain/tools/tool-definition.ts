@@ -26,6 +26,13 @@ export interface ToolDefinition {
   inputSchema: z.ZodType;
   outputSchema?: z.ZodType;
   annotations: ToolAnnotations;
+  /**
+   * When false, a read-only tool is NOT auto-retried by the executor. Use for
+   * read tools whose call has side effects or cost that make a silent retry
+   * undesirable (e.g. an external HTTP request or a timed saturation test).
+   * Defaults to true (retry enabled) for read tools.
+   */
+  retryable?: boolean;
   snapshotPaths?: string[];
   /** When true, tool-registry skips per-router setup (routerId, circuit breaker, client). Use for fleet tools that manage their own router contexts. */
   skipRouterContext?: boolean;
