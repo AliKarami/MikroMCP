@@ -6,6 +6,7 @@ import type { RouterConfig } from "../../types.js";
 import type { Identity } from "../../types.js";
 import type { SshClient } from "../../adapter/ssh-client.js";
 import type { FtpClient } from "../../adapter/ftp-client.js";
+import type { SftpClient } from "../../adapter/sftp-client.js";
 import type { RouterRegistry } from "../../config/router-registry.js";
 import type { ConnectionPool } from "../../adapter/connection-pool.js";
 import type { CircuitBreaker } from "../../adapter/circuit-breaker.js";
@@ -38,6 +39,7 @@ export interface ToolContext {
   routerConfig: RouterConfig;
   sshClient: SshClient;
   ftpClient: FtpClient;
+  sftpClient: SftpClient;
   identity: Identity;
   routerRegistry?: RouterRegistry;
   connectionPool?: ConnectionPool;

@@ -13,6 +13,7 @@ vi.mock("../../../src/domain/snapshot/write-journal.js", () => ({
 vi.mock("../../../src/adapter/adapter-factory.js", () => ({
   createSshClient: vi.fn().mockReturnValue({}),
   createFtpClient: vi.fn().mockReturnValue({}),
+  createSftpClient: vi.fn().mockReturnValue({}),
 }));
 
 function makeReadTool(

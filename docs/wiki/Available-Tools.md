@@ -283,16 +283,16 @@ Read a text file's contents from a MikroTik router. Only suitable for text files
 
 ### `upload_file` — Write
 
-Upload a text file to a MikroTik router over FTP. Overwrites if the file already exists.
+Upload a text file to a MikroTik router. Overwrites if the file already exists. Prefers **SFTP** (encrypted, over SSH) and falls back to plaintext **FTP** only if SFTP is unavailable; the result's `structuredContent.transport` reports which was used.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `name` | string | — | Target filename on the router (e.g. `flash/my-script.rsc`) |
 | `content` | string | — | File content to upload (text only) |
-| `dryRun` | boolean | `false` | Validate FTP connectivity without writing the file |
+| `dryRun` | boolean | `false` | Validate connectivity (SFTP, then FTP) without writing the file |
 
-**Requires `ftp` policy** on the RouterOS user group.
+**Requires `ssh` policy** (recommended, for SFTP) or `ftp` policy on the RouterOS user group.
 
 **Example prompt:** "Upload this RouterOS script to core-01 as flash/my-script.rsc."
 

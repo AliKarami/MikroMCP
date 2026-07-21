@@ -17,6 +17,7 @@ Each release section covers changes **since the previous release only**.
 - TLS certificate fingerprint pinning (`tls.fingerprint` in `routers.yaml`) was a silent no-op: it was enforced via `tls.checkServerIdentity`, which Node ignores when `rejectUnauthorized` is false — exactly the self-signed setup the docs recommend pinning for. Pinning is now enforced in the connection layer (post-handshake `fingerprint256` check that destroys the socket on mismatch), so it holds regardless of `rejectUnauthorized`.
 
 ### Changed
+- `upload_file` now prefers SFTP (encrypted, over the existing SSH channel) and only falls back to plaintext FTP when SFTP is unavailable, avoiding sending router credentials and file contents in the clear. The result reports which transport was used; the FTP path is labeled as plaintext.
 - Confirmation tokens (single-tool and fleet `bulk_execute`) are now self-verifying HMACs: validity is recomputed from the current call and secret rather than looked up in an in-memory pending map, so a token issued before a server restart still verifies afterward and the HMAC secret is actually load-bearing. Single-use replay protection is kept via an in-memory cache (single-instance; multi-instance replay within the TTL is a documented limitation).
 
 ### Fixed

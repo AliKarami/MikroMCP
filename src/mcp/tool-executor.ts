@@ -170,6 +170,7 @@ export async function executeToolCall(
           routerConfig: fleetUnavailable<ToolContext["routerConfig"]>("routerConfig"),
           sshClient: fleetUnavailable<ToolContext["sshClient"]>("sshClient"),
           ftpClient: fleetUnavailable<ToolContext["ftpClient"]>("ftpClient"),
+          sftpClient: fleetUnavailable<ToolContext["sftpClient"]>("sftpClient"),
           identity,
           routerRegistry: registry,
           connectionPool: pool,

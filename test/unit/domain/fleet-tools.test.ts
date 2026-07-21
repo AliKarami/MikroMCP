@@ -21,6 +21,7 @@ vi.mock("../../../src/observability/audit-log.js", async (orig) => {
 vi.mock("../../../src/adapter/adapter-factory.js", () => ({
   createSshClient: vi.fn().mockReturnValue({}),
   createFtpClient: vi.fn().mockReturnValue({}),
+  createSftpClient: vi.fn().mockReturnValue({}),
 }));
 
 vi.mock("../../../src/config/secrets.js", () => ({
