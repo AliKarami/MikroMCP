@@ -69,6 +69,19 @@ describe("readBody", () => {
     const req = makeRequestStream("not-json");
     await expect(readBody(req, 1024 * 1024)).rejects.toThrow(SyntaxError);
   });
+
+  it("decodes a multi-byte character split across chunk boundaries", async () => {
+    // JSON string containing U+2026 (…, 3 bytes) split so the character
+    // straddles two chunks. A naive per-chunk toString() yields U+FFFD.
+    const payload = Buffer.from('{"msg":"a…b"}', "utf-8");
+    const cut = payload.indexOf(0xe2) + 1; // mid-character
+    const req = Readable.from([
+      payload.subarray(0, cut),
+      payload.subarray(cut),
+    ]) as unknown as IncomingMessage;
+    const result = await readBody(req, 1024 * 1024);
+    expect(result).toEqual({ msg: "a…b" });
+  });
 });
 
 describe("createRateLimiter — window eviction", () => {

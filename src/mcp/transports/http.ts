@@ -57,7 +57,7 @@ export function createRateLimiter(rpm: number): RateLimiter {
 
 export async function readBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    let data = "";
+    const chunks: Buffer[] = [];
     let size = 0;
     let settled = false;
 
@@ -74,12 +74,15 @@ export async function readBody(req: IncomingMessage, maxBytes: number): Promise<
         fail(new BodyTooLargeError());
         return;
       }
-      data += chunk.toString();
+      chunks.push(chunk);
     });
 
     req.on("end", () => {
       if (settled) return;
       settled = true;
+      // Decode once over the concatenated bytes so multi-byte UTF-8 characters
+      // split across chunk boundaries are not corrupted into U+FFFD.
+      const data = Buffer.concat(chunks).toString("utf-8");
       if (!data) {
         resolve(undefined);
         return;

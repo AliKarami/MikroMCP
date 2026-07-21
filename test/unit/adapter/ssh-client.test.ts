@@ -139,10 +139,41 @@ describe("SshClient", () => {
       const promise = client.execute("hanging command");
       await new Promise((r) => setImmediate(r));
       // No close emitted — let the 20ms timeout fire naturally
-      await promise;
+      await expect(promise).rejects.toMatchObject({ code: "ETIMEDOUT" });
 
       expect(stream.close).toHaveBeenCalled();
     }, 1000);
+
+    it("rejects with ETIMEDOUT instead of returning partial output on timeout", async () => {
+      const { stream } = buildMocks();
+      const client = new SshClient(routerConfig, credentials, { commandTimeoutMs: 20 });
+
+      const promise = client.execute("hanging command");
+      await new Promise((r) => setImmediate(r));
+      stream.emit("data", Buffer.from("partial output before hang"));
+      // Timeout fires; the mock's close() then emits "close".
+      await expect(promise).rejects.toMatchObject({
+        code: "ETIMEDOUT",
+        message: expect.stringContaining("timed out"),
+      });
+    }, 1000);
+  });
+
+  describe("utf-8 decoding", () => {
+    it("decodes a multi-byte character split across stream chunks", async () => {
+      const { stream } = buildMocks();
+      const client = new SshClient(routerConfig, credentials);
+
+      const promise = client.execute("test command");
+      await new Promise((r) => setImmediate(r));
+      const full = Buffer.from("a…b", "utf-8"); // U+2026 is 3 bytes
+      const cut = full.indexOf(0xe2) + 1;
+      stream.emit("data", full.subarray(0, cut));
+      stream.emit("data", full.subarray(cut));
+      stream.emit("close");
+
+      expect(await promise).toBe("a…b");
+    });
   });
 
   describe("SSH fingerprint pinning", () => {
