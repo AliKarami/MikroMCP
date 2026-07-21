@@ -24,6 +24,15 @@ import type { IdentityRegistry } from "../config/identity-registry.js";
 
 const log = createLogger("tool-executor");
 
+/** Error categories where a write's outcome on the router is ambiguous (it may have applied). */
+const AMBIGUOUS_WRITE_CATEGORIES = new Set<ErrorCategory>([
+  ErrorCategory.ROUTER_TIMEOUT,
+  ErrorCategory.ROUTER_UNREACHABLE,
+]);
+
+const VERIFY_STATE_PREFIX =
+  "The write may already have been applied — verify router state before retrying. ";
+
 /**
  * Resolve the target router id for a tool call. Precedence:
  *   1. Explicit `routerId` argument (must be a known router).
@@ -256,6 +265,17 @@ export async function executeToolCall(
       return formatToolResult(result);
     } catch (err) {
       const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: tool.name });
+
+      // A write that timed out or lost the connection may already have been
+      // applied on the router — retrying blindly can double-apply. Tell the
+      // caller to verify state first.
+      if (
+        !tool.annotations.readOnlyHint &&
+        AMBIGUOUS_WRITE_CATEGORIES.has(error.category) &&
+        !error.recoverability.suggestedAction.startsWith(VERIFY_STATE_PREFIX)
+      ) {
+        error.recoverability.suggestedAction = `${VERIFY_STATE_PREFIX}${error.recoverability.suggestedAction}`;
+      }
 
       if (error.category === ErrorCategory.ROUTER_AUTH_FAILED) {
         const failedRouterId = args.routerId as string | undefined;

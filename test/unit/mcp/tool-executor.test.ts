@@ -187,6 +187,43 @@ describe("executeToolCall", () => {
     expect(result.content[0].text).toContain("fleet-ok");
   });
 
+  it("prepends a verify-state hint when a write times out", async () => {
+    const tool = makeReadTool(
+      async () => {
+        throw new MikroMCPError({
+          category: ErrorCategory.ROUTER_TIMEOUT,
+          code: "TIMEOUT",
+          message: "router did not respond",
+          recoverability: { retryable: true, suggestedAction: "Retry later." },
+        });
+      },
+      { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
+    );
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
+
+    expect(result.isError).toBe(true);
+    const rec = (result.structuredContent as { recoverability?: { suggestedAction?: string } })
+      .recoverability;
+    expect(rec?.suggestedAction).toMatch(/may already have been applied/i);
+  });
+
+  it("does NOT add the verify-state hint for a read tool timeout", async () => {
+    const tool = makeReadTool(async () => {
+      throw new MikroMCPError({
+        category: ErrorCategory.ROUTER_TIMEOUT,
+        code: "TIMEOUT",
+        message: "router did not respond",
+        recoverability: { retryable: true, suggestedAction: "Retry later." },
+      });
+    });
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
+    const rec = (result.structuredContent as { recoverability?: { suggestedAction?: string } })
+      .recoverability;
+    expect(rec?.suggestedAction).not.toMatch(/may already have been applied/i);
+  });
+
   it("skipRouterContext — touching routerClient raises a typed error, not a TypeError", async () => {
     const tool = makeReadTool(
       async (_params, context) => {
