@@ -103,6 +103,30 @@ describe("confirmation middleware", () => {
     );
   });
 
+  it("token stays valid across a module reload (self-verifying, survives restart)", async () => {
+    const mod1 = await import("../../../src/middleware/confirmation.js");
+    const identity = makeIdentity("operator");
+    const params = { routerId: "edge-01", action: "remove" };
+    let token = "";
+    try {
+      await mod1.checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET);
+    } catch (err) {
+      token = ((err as { details: Record<string, unknown> }).details).confirmationToken as string;
+    }
+    // Simulate a process restart: fresh module instance, empty replay cache.
+    vi.resetModules();
+    const mod2 = await import("../../../src/middleware/confirmation.js");
+    await expect(
+      mod2.checkConfirmation(
+        "manage_firewall_rule",
+        "edge-01",
+        { ...params, confirmationToken: token },
+        identity,
+        SECRET,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it("readonly identity also requires confirmation", async () => {
     const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
     const identity = makeIdentity("readonly");
