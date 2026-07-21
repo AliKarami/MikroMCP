@@ -1,7 +1,0 @@
-{
-  "version": "0.0.1",
-  "configurations": [
-    { "name": "mikromcp-site", "runtimeExecutable": "npm", "runtimeArgs": ["run", "preview"], "cwd": "site", "port": 4321 },
-    { "name": "mikromcp-docs", "runtimeExecutable": "npm", "runtimeArgs": ["run", "preview"], "cwd": "docs-site", "port": 4322 }
-  ]
-}
