@@ -10,6 +10,7 @@ import { createLogger } from "../../observability/logger.js";
 const log = createLogger("files-tools");
 
 const FILE_PATH = "file";
+const CONTENT_CAP = 65536;
 
 const listFilesInputSchema = z
   .object({
@@ -116,11 +117,21 @@ const getFileContentTool: ToolDefinition = {
 
       const id = file[".id"];
       const full = await context.routerClient.getOne<Record<string, string>>(FILE_PATH, id);
-      const contents = full.contents ?? "";
+      const rawContents = full.contents ?? "";
+      const truncated = rawContents.length > CONTENT_CAP;
+      const contents = truncated
+        ? `${rawContents.slice(0, CONTENT_CAP)}\n[TRUNCATED at ${CONTENT_CAP} chars — file is ${rawContents.length} chars]`
+        : rawContents;
 
       return {
         content: `Contents of "${parsed.name}" on ${context.routerId}:\n${contents}`,
-        structuredContent: { routerId: context.routerId, name: parsed.name, contents },
+        structuredContent: {
+          routerId: context.routerId,
+          name: parsed.name,
+          contents,
+          truncated,
+          totalLength: rawContents.length,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "get_file_content");
@@ -144,7 +155,7 @@ const uploadFileTool: ToolDefinition = {
   name: "upload_file",
   title: "Upload File",
   description:
-    "Upload a text file to a router via FTP using the router's credentials, overwriting any existing file of the same name. Requires FTP permission on the router user (see config/routers.example.yaml). Dry-run tests FTP connectivity only.",
+    "Upload a text file to a router, overwriting any existing file of the same name. Prefers SFTP (encrypted, over SSH) and falls back to plaintext FTP if SFTP is unavailable. Requires SSH (or FTP) access for the router user. Dry-run tests connectivity only.",
   inputSchema: uploadFileInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -157,33 +168,54 @@ const uploadFileTool: ToolDefinition = {
     const parsed = uploadFileInputSchema.parse(params);
     log.info({ routerId: context.routerId, name: parsed.name }, "Uploading file");
 
+    const ftpPlaintextNote =
+      " (via FTP, plaintext — enable SSH on the router for encrypted transfer)";
+
     try {
       if (parsed.dryRun) {
-        await context.ftpClient.connect();
-        return {
-          content: `Dry run: FTP connectivity to ${context.routerId} verified. Would upload "${parsed.name}".`,
-          structuredContent: { action: "dry_run", name: parsed.name, routerId: context.routerId },
-        };
+        try {
+          await context.sftpClient.upload(`${parsed.name}.mikromcp-probe`, "");
+          return {
+            content: `Dry run: SFTP connectivity to ${context.routerId} verified. Would upload "${parsed.name}".`,
+            structuredContent: { action: "dry_run", transport: "sftp", name: parsed.name, routerId: context.routerId },
+          };
+        } catch (sftpErr) {
+          log.warn({ err: sftpErr, routerId: context.routerId }, "SFTP dry-run probe failed — falling back to FTP");
+          await context.ftpClient.connect();
+          return {
+            content: `Dry run: FTP connectivity to ${context.routerId} verified${ftpPlaintextNote}. Would upload "${parsed.name}".`,
+            structuredContent: { action: "dry_run", transport: "ftp", name: parsed.name, routerId: context.routerId },
+          };
+        }
       }
 
-      await context.ftpClient.upload(parsed.name, parsed.content);
-      log.info({ name: parsed.name }, "File uploaded via FTP");
-
-      return {
-        content: `Uploaded "${parsed.name}" to ${context.routerId}.`,
-        structuredContent: { action: "uploaded", name: parsed.name, routerId: context.routerId },
-      };
+      try {
+        await context.sftpClient.upload(parsed.name, parsed.content);
+        log.info({ name: parsed.name }, "File uploaded via SFTP");
+        return {
+          content: `Uploaded "${parsed.name}" to ${context.routerId} via SFTP.`,
+          structuredContent: { action: "uploaded", transport: "sftp", name: parsed.name, routerId: context.routerId },
+        };
+      } catch (sftpErr) {
+        log.warn({ err: sftpErr, routerId: context.routerId }, "SFTP upload failed — falling back to FTP");
+        await context.ftpClient.upload(parsed.name, parsed.content);
+        log.info({ name: parsed.name }, "File uploaded via FTP");
+        return {
+          content: `Uploaded "${parsed.name}" to ${context.routerId}${ftpPlaintextNote}.`,
+          structuredContent: { action: "uploaded", transport: "ftp", name: parsed.name, routerId: context.routerId },
+        };
+      }
     } catch (err) {
       if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ECONNREFUSED") {
         throw new MikroMCPError({
           category: ErrorCategory.CONFIGURATION,
-          code: "FTP_SERVICE_UNAVAILABLE",
-          message: `FTP service is not running on ${context.routerConfig.host}:21. Enable it on the router and ensure the user has the 'ftp' policy.`,
-          details: { host: context.routerConfig.host, port: 21, routerId: context.routerId },
+          code: "FILE_TRANSFER_UNAVAILABLE",
+          message: `Neither SFTP (SSH) nor FTP is reachable on ${context.routerConfig.host}. Enable SSH (recommended) or FTP on the router.`,
+          details: { host: context.routerConfig.host, routerId: context.routerId },
           recoverability: {
             retryable: false,
             suggestedAction:
-              "Run on the router: /ip service enable ftp  — then add 'ftp' to the user group policy: /user group set <group> policy=...,ftp,...",
+              "Enable SSH: /ip service enable ssh and ensure the user has the 'ssh'/'ftp' policy. FTP fallback needs: /ip service enable ftp plus the 'ftp' policy.",
           },
         });
       }

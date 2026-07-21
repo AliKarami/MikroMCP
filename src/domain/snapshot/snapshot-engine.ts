@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { nanoid } from "nanoid";
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
 import type { SnapshotMeta, RouterOSRecord } from "../../types.js";
+import { normalizeForDiff } from "./diff-engine.js";
 
 function pathToSlug(rosPath: string): string {
   return rosPath.replace(/\//g, "-");
@@ -26,7 +27,9 @@ export async function takeSnapshot(
   path: string,
   snapshotDir: string,
 ): Promise<SnapshotMeta> {
-  const records = await client.get<RouterOSRecord>(path, {});
+  // Store the normalized form (dynamic records dropped, runtime fields stripped)
+  // so the snapshot contains only restorable configuration.
+  const records = normalizeForDiff(await client.get<RouterOSRecord>(path, {}));
   const id = `${timestampPrefix()}-${pathToSlug(path)}-${nanoid(6)}`;
   const dir = join(snapshotDir, routerId);
   const filePath = join(dir, `${id}.json`);

@@ -1,5 +1,62 @@
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
-import type { RouterOSRecord, RestorePlan } from "../../types.js";
+import type { RouterOSRecord, RouterOSValue, RestorePlan } from "../../types.js";
+import { isTrue } from "../../adapter/response-parser.js";
+
+/**
+ * Volatile/read-only fields that RouterOS reports but that are not part of a
+ * record's configuration. They must be dropped before diffing (otherwise every
+ * snapshot looks "changed") and must never be written back on restore (RouterOS
+ * rejects them). `.id` is intentionally NOT here — it is needed to address
+ * records for update/remove.
+ */
+export const RUNTIME_FIELDS: ReadonlySet<string> = new Set([
+  "bytes",
+  "packets",
+  "dynamic",
+  "invalid",
+  "dead",
+  "expired",
+  "active",
+  "running",
+  "about",
+  ".about",
+  ".nextid",
+  "creation-time",
+  "last-logged-in",
+  "last-link-up-time",
+  "last-link-down-time",
+  "link-downs",
+  "rx-byte",
+  "tx-byte",
+  "rx-packet",
+  "tx-packet",
+  "uptime",
+]);
+
+/** Paths where record ORDER is semantically significant and cannot be restored via create/update. */
+export const ORDER_SENSITIVE_PATHS: ReadonlySet<string> = new Set([
+  "ip/firewall/filter",
+  "ip/firewall/nat",
+  "ip/firewall/mangle",
+  "routing/rule",
+]);
+
+/**
+ * Drop dynamic (router-generated) records and strip runtime fields so the diff
+ * compares only restorable configuration.
+ */
+export function normalizeForDiff(records: RouterOSRecord[]): RouterOSRecord[] {
+  const out: RouterOSRecord[] = [];
+  for (const r of records) {
+    if (isTrue(r.dynamic)) continue;
+    const clean: Record<string, RouterOSValue> = {};
+    for (const [k, v] of Object.entries(r)) {
+      if (!RUNTIME_FIELDS.has(k)) clean[k] = v;
+    }
+    out.push(clean as RouterOSRecord);
+  }
+  return out;
+}
 
 export const SEMANTIC_KEYS: Record<string, readonly string[]> = {
   "ip/route": ["dst-address", "gateway", "routing-table"],
@@ -29,10 +86,10 @@ export const SEMANTIC_KEYS: Record<string, readonly string[]> = {
   "user": ["name"],
 };
 
-function normalizeValue(v: string): string {
-  if (v === "true" || v === "yes") return "true";
-  if (v === "false" || v === "no") return "false";
-  return v;
+function normalizeValue(v: RouterOSValue | undefined): string {
+  if (v === true || v === "true" || v === "yes") return "true";
+  if (v === false || v === "false" || v === "no") return "false";
+  return String(v ?? "");
 }
 
 function semanticKey(record: RouterOSRecord, keys: readonly string[]): string {
@@ -54,22 +111,64 @@ function recordsAreEqual(a: RouterOSRecord, b: RouterOSRecord): boolean {
   return keysA.every((k) => normalizeValue(a[k]) === normalizeValue(b[k] ?? ""));
 }
 
+function hasDuplicateKeys(records: RouterOSRecord[], keys: readonly string[]): boolean {
+  const seen = new Set<string>();
+  for (const r of records) {
+    const k = semanticKey(r, keys);
+    if (seen.has(k)) return true;
+    seen.add(k);
+  }
+  return false;
+}
+
+/**
+ * Deleting users cannot be safely undone: passwords are not present in REST
+ * reads, so recreating a removed user would produce a password-less login. Drop
+ * such creations and warn instead.
+ */
+function applyUserRestriction(path: string, plan: RestorePlan): RestorePlan {
+  if (path === "user" && plan.toCreate.length > 0) {
+    plan.warnings.push(
+      `Refusing to recreate ${plan.toCreate.length} deleted user(s): passwords are not stored in snapshots and recreation would produce password-less logins. Recreate manually with manage_user.`,
+    );
+    plan.toCreate = [];
+  }
+  return plan;
+}
+
 export function computeRestorePlan(
   path: string,
-  before: RouterOSRecord[],
-  current: RouterOSRecord[],
+  beforeRaw: RouterOSRecord[],
+  currentRaw: RouterOSRecord[],
 ): RestorePlan {
-  const keys = SEMANTIC_KEYS[path];
+  const before = normalizeForDiff(beforeRaw);
+  const current = normalizeForDiff(currentRaw);
 
-  if (!keys) {
+  const warnings: string[] = [];
+  if (ORDER_SENSITIVE_PATHS.has(path)) {
+    warnings.push(
+      `Restored entries for ${path} are re-created at the end of the list — rule ORDER is not restored. Review ordering manually after rollback.`,
+    );
+  }
+
+  const keys = SEMANTIC_KEYS[path];
+  // Fall back to full-record signature matching when a path has no semantic key
+  // or when the chosen keys are not unique within a side (e.g. multiple
+  // uncommented firewall rules collapsing to the same key), which would
+  // otherwise drop all-but-one and schedule the rest for deletion.
+  const canUseKeys =
+    keys !== undefined && !hasDuplicateKeys(before, keys) && !hasDuplicateKeys(current, keys);
+
+  if (!canUseKeys) {
     const beforeSigs = new Set(before.map(recordSignature));
     const currentSigs = new Set(current.map(recordSignature));
-    return {
+    return applyUserRestriction(path, {
       path,
       toCreate: before.filter((r) => !currentSigs.has(recordSignature(r))),
       toRemove: current.filter((r) => !beforeSigs.has(recordSignature(r))).map((r) => r[".id"]),
       toUpdate: [],
-    };
+      warnings,
+    });
   }
 
   const currentByKey = new Map(current.map((r) => [semanticKey(r, keys), r]));
@@ -92,7 +191,7 @@ export function computeRestorePlan(
     .filter((r) => !beforeByKey.has(semanticKey(r, keys)))
     .map((r) => r[".id"]);
 
-  return { path, toCreate, toRemove, toUpdate };
+  return applyUserRestriction(path, { path, toCreate, toRemove, toUpdate, warnings });
 }
 
 export async function applyRestorePlan(

@@ -21,6 +21,7 @@ vi.mock("../../../src/observability/audit-log.js", async (orig) => {
 vi.mock("../../../src/adapter/adapter-factory.js", () => ({
   createSshClient: vi.fn().mockReturnValue({}),
   createFtpClient: vi.fn().mockReturnValue({}),
+  createSftpClient: vi.fn().mockReturnValue({}),
 }));
 
 vi.mock("../../../src/config/secrets.js", () => ({
@@ -89,14 +90,14 @@ const healthTool = fleetTools.find((t) => t.name === "check_router_health")!;
 const bulkTool = fleetTools.find((t) => t.name === "bulk_execute")!;
 const listRoutersTool = fleetTools.find((t) => t.name === "list_routers")!;
 
-function makeRouterConfig(id = "test-router"): RouterConfig {
+function makeRouterConfig(id = "test-router", tags: string[] = []): RouterConfig {
   return {
     id,
     host: "192.168.1.1",
     port: 443,
     tls: { enabled: true, rejectUnauthorized: false },
     credentials: { source: "env", envPrefix: "ROUTER_TEST" },
-    tags: [],
+    tags,
     rosVersion: "7",
   };
 }
@@ -119,7 +120,12 @@ function makeContext(overrides: Partial<ToolContext> = {}): ToolContext {
       create: vi.fn().mockResolvedValue({ ".id": "*1" }),
       remove: vi.fn().mockResolvedValue(undefined),
     } as unknown as RouterOSRestClient,
-    appConfig: { ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 } } as unknown as AppConfig,
+    appConfig: {
+      ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+      circuitBreaker: { failureThreshold: 5, cooldownMs: 30_000 },
+      retry: { maxRetries: 0, baseDelayMs: 0, maxDelayMs: 0 },
+    } as unknown as AppConfig,
+    circuitBreakers: new Map(),
     ...overrides,
   };
 }
@@ -430,8 +436,8 @@ describe("fleet-tools", () => {
       const mockRegistry = {
         getRouter: vi.fn(),
         listRouters: vi.fn().mockReturnValue([
-          makeRouterConfig("r1"),
-          makeRouterConfig("r2"),
+          makeRouterConfig("r1", ["edge"]),
+          makeRouterConfig("r2", ["edge"]),
         ]),
         hasRouter: vi.fn(),
       };
@@ -455,7 +461,38 @@ describe("fleet-tools", () => {
         succeeded: 2,
         failed: 0,
       });
-      expect(mockRegistry.listRouters).toHaveBeenCalledWith(["edge"]);
+      // ALL-tag targeting filters in the tool, so listRouters is called with no args.
+      expect(mockRegistry.listRouters).toHaveBeenCalledWith();
+    });
+
+    it("targets only routers carrying ALL requested tags", async () => {
+      const mockRegistry = {
+        getRouter: vi.fn(),
+        listRouters: vi.fn().mockReturnValue([
+          makeRouterConfig("r1", ["edge", "prod"]),
+          makeRouterConfig("r2", ["edge"]),
+          makeRouterConfig("r3", ["prod"]),
+        ]),
+        hasRouter: vi.fn(),
+      };
+      const mockPool = {
+        getClient: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue([]),
+        } as unknown as RouterOSRestClient),
+      };
+      const ctx = makeContext({
+        routerRegistry: mockRegistry as unknown as ToolContext["routerRegistry"],
+        connectionPool: mockPool as unknown as ToolContext["connectionPool"],
+      });
+
+      const result = await bulkTool.handler(
+        { toolName: "list_interfaces", tags: ["edge", "prod"], params: {}, concurrency: 5 },
+        ctx,
+      );
+
+      // Only r1 has both edge and prod.
+      expect(result.structuredContent).toMatchObject({ totalRouters: 1, succeeded: 1 });
+      expect((result.structuredContent as { results: Array<{ routerId: string }> }).results[0].routerId).toBe("r1");
     });
 
     it("unknown routerIds appear as status:error in results", async () => {
@@ -644,6 +681,8 @@ describe("fleet-tools", () => {
           ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
           snapshotDir: "/tmp/snaps",
           journalPath: "/tmp/journal.ndjson",
+          circuitBreaker: { failureThreshold: 5, cooldownMs: 30_000 },
+          retry: { maxRetries: 0, baseDelayMs: 0, maxDelayMs: 0 },
         } as unknown as AppConfig,
       });
     }
@@ -684,6 +723,48 @@ describe("fleet-tools", () => {
       expect(vi.mocked(takeSnapshot)).not.toHaveBeenCalled();
       expect(vi.mocked(recordAttempt)).not.toHaveBeenCalled();
     });
+
+    it("blocks a destructive fan-out to a router outside its maintenance window", async () => {
+      vi.mocked(mockDestructiveTool.handler).mockResolvedValue({ content: "ok", structuredContent: {} });
+      // A window closed at the current instant (only open Mondays 03:00-04:00 UTC).
+      const gatedRouter = {
+        ...makeRouterConfig("r1"),
+        maintenanceWindows: [
+          { days: ["Mon"], startTime: "03:00", endTime: "04:00", timezone: "UTC" },
+        ],
+      } as unknown as RouterConfig;
+      const mockRegistry = {
+        getRouter: vi.fn().mockReturnValue(gatedRouter),
+        listRouters: vi.fn().mockReturnValue([gatedRouter]),
+        hasRouter: vi.fn().mockReturnValue(true),
+      };
+      const ctx = makeFleetContext({
+        routerRegistry: mockRegistry as unknown as ToolContext["routerRegistry"],
+        appConfig: {
+          ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+          circuitBreaker: { failureThreshold: 5, cooldownMs: 30_000 },
+          retry: { maxRetries: 0, baseDelayMs: 0, maxDelayMs: 0 },
+          confirmationSecret: "fleet-secret",
+        } as unknown as AppConfig,
+      });
+
+      // Two-step: first call yields the fleet confirmation token.
+      let token = "";
+      try {
+        await bulkTool.handler({ toolName: "reboot", routerIds: ["r1"], params: {} }, ctx);
+      } catch (err) {
+        token = (err as { details: Record<string, unknown> }).details.confirmationToken as string;
+      }
+      const result = await bulkTool.handler(
+        { toolName: "reboot", routerIds: ["r1"], params: {}, confirmationToken: token },
+        ctx,
+      );
+
+      const sc = result.structuredContent as { failed: number; results: Array<{ status: string; error?: string }> };
+      expect(sc.failed).toBe(1);
+      expect(sc.results[0].status).toBe("error");
+      expect(sc.results[0].error).toMatch(/maintenance/i);
+    });
   });
 
   describe("handler — bulk_execute destructive confirmation", () => {
@@ -692,6 +773,8 @@ describe("fleet-tools", () => {
         appConfig: {
           ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
           confirmationSecret: secret,
+          circuitBreaker: { failureThreshold: 5, cooldownMs: 30_000 },
+          retry: { maxRetries: 0, baseDelayMs: 0, maxDelayMs: 0 },
         } as unknown as AppConfig,
       });
     }

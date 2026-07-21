@@ -73,9 +73,11 @@ export interface MikroMCPErrorData {
 }
 
 // RouterOS adapter types
+export type RouterOSValue = string | number | boolean;
+
 export interface RouterOSRecord {
   ".id": string;
-  [key: string]: string;
+  [key: string]: RouterOSValue;
 }
 
 export interface QueryOptions {
@@ -120,6 +122,7 @@ export interface RestorePlan {
   toCreate: RouterOSRecord[];
   toRemove: string[];
   toUpdate: Array<{ currentId: string; data: Record<string, string> }>;
+  warnings: string[];
 }
 
 export interface AuditEvent {

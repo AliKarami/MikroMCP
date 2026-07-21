@@ -38,9 +38,30 @@ export interface AppConfig {
 
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 
 function mikromcpDir(): string {
   return join(homedir(), ".mikromcp");
+}
+
+/** Parse an integer env var, throwing a CONFIGURATION error on a non-numeric value. */
+function intEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value)) {
+    throw new MikroMCPError({
+      category: ErrorCategory.CONFIGURATION,
+      code: "INVALID_ENV_INT",
+      message: `Environment variable ${name} must be an integer, got "${raw}".`,
+      details: { variable: name, value: raw },
+      recoverability: {
+        retryable: false,
+        suggestedAction: `Set ${name} to an integer, or unset it to use the default (${fallback}).`,
+      },
+    });
+  }
+  return value;
 }
 
 export function loadAppConfig(): AppConfig {
@@ -49,7 +70,7 @@ export function loadAppConfig(): AppConfig {
 
   return {
     transport: env.MIKROMCP_TRANSPORT === "http" ? "http" : "stdio",
-    port: parseInt(env.MIKROMCP_PORT ?? "3000", 10),
+    port: intEnv("MIKROMCP_PORT", 3000),
     bindHost: env.MIKROMCP_BIND_HOST ?? "127.0.0.1",
     logLevel: env.MIKROMCP_LOG_LEVEL ?? "info",
     configPath: env.MIKROMCP_CONFIG_PATH ?? join(mikromcpDir(), "routers.yaml"),
@@ -70,12 +91,12 @@ export function loadAppConfig(): AppConfig {
     confirmationSecret: env.MIKROMCP_CONFIRMATION_SECRET || undefined,
     auditLogPath: env.MIKROMCP_AUDIT_LOG_PATH || undefined,
     http: {
-      maxBodyBytes: parseInt(env.MIKROMCP_HTTP_MAX_BODY_BYTES ?? String(1024 * 1024), 10),
-      rateLimitRpm: parseInt(env.MIKROMCP_HTTP_RATE_LIMIT_RPM ?? "60", 10),
+      maxBodyBytes: intEnv("MIKROMCP_HTTP_MAX_BODY_BYTES", 1024 * 1024),
+      rateLimitRpm: intEnv("MIKROMCP_HTTP_RATE_LIMIT_RPM", 60),
     },
     ssh: {
-      commandTimeoutMs: parseInt(env.MIKROMCP_SSH_COMMAND_TIMEOUT_MS ?? "30000", 10),
-      maxOutputBytes: parseInt(env.MIKROMCP_SSH_MAX_OUTPUT_BYTES ?? String(512 * 1024), 10),
+      commandTimeoutMs: intEnv("MIKROMCP_SSH_COMMAND_TIMEOUT_MS", 30000),
+      maxOutputBytes: intEnv("MIKROMCP_SSH_MAX_OUTPUT_BYTES", 512 * 1024),
     },
     retry: {
       maxRetries: 3,
@@ -87,7 +108,7 @@ export function loadAppConfig(): AppConfig {
       cooldownMs: 30_000,
     },
     retention: {
-      snapshotMaxAgeDays: parseInt(env.MIKROMCP_SNAPSHOT_RETENTION_DAYS ?? "30", 10),
+      snapshotMaxAgeDays: intEnv("MIKROMCP_SNAPSHOT_RETENTION_DAYS", 30),
     },
   };
 }

@@ -122,12 +122,54 @@ describe("computeRestorePlan", () => {
     expect(plan.toCreate).toHaveLength(0);
     expect(plan.toRemove).toHaveLength(0);
   });
+
+  describe("hardening", () => {
+    it("ignores records that differ only in runtime fields (bytes/packets)", () => {
+      const before: RouterOSRecord = { ".id": "*1", comment: "web", action: "accept", bytes: "10", packets: "1" };
+      const current: RouterOSRecord = { ".id": "*1", comment: "web", action: "accept", bytes: "9999", packets: "42" };
+      const plan = computeRestorePlan("ip/firewall/filter", [before], [current]);
+      expect(plan.toCreate).toHaveLength(0);
+      expect(plan.toRemove).toHaveLength(0);
+      expect(plan.toUpdate).toHaveLength(0);
+    });
+
+    it("ignores dynamic records on both sides", () => {
+      const before: RouterOSRecord = { ".id": "*1", "dst-address": "10.0.0.0/8", gateway: "1.1.1.1", "routing-table": "main", dynamic: true };
+      const current: RouterOSRecord = { ".id": "*2", "dst-address": "10.0.0.0/8", gateway: "1.1.1.1", "routing-table": "main", dynamic: true };
+      const plan = computeRestorePlan("ip/route", [before], [current]);
+      expect(plan.toCreate).toHaveLength(0);
+      expect(plan.toRemove).toHaveLength(0);
+      expect(plan.toUpdate).toHaveLength(0);
+    });
+
+    it("does not drop uncommented firewall rules that collide on the semantic key", () => {
+      // Two uncommented rules → both semantic key "" → must fall back to
+      // signature diff instead of Map-collapsing to one.
+      const ruleA: RouterOSRecord = { ".id": "*1", chain: "input", action: "accept", protocol: "tcp" };
+      const ruleB: RouterOSRecord = { ".id": "*2", chain: "input", action: "drop", protocol: "udp" };
+      const plan = computeRestorePlan("ip/firewall/filter", [ruleA, ruleB], [ruleA, ruleB]);
+      expect(plan.toRemove).toHaveLength(0);
+      expect(plan.toCreate).toHaveLength(0);
+    });
+
+    it("warns that order is not restored for order-sensitive paths", () => {
+      const plan = computeRestorePlan("ip/firewall/filter", [], []);
+      expect(plan.warnings.join(" ")).toMatch(/order/i);
+    });
+
+    it("never recreates deleted users; warns instead", () => {
+      const before: RouterOSRecord = { ".id": "*1", name: "admin2", group: "full" };
+      const plan = computeRestorePlan("user", [before], []);
+      expect(plan.toCreate).toHaveLength(0);
+      expect(plan.warnings.join(" ")).toMatch(/password/i);
+    });
+  });
 });
 
 describe("applyRestorePlan", () => {
   it("calls create for toCreate records (strips .id)", async () => {
     const client = { create: vi.fn().mockResolvedValue({ ".id": "*99" }), remove: vi.fn(), update: vi.fn() } as unknown as RouterOSRestClient;
-    const plan = { path: "ip/route", toCreate: [ROUTE_A], toRemove: [], toUpdate: [] };
+    const plan = { path: "ip/route", toCreate: [ROUTE_A], toRemove: [], toUpdate: [], warnings: [] };
     await applyRestorePlan(plan, client);
     expect(client.create).toHaveBeenCalledWith("ip/route", {
       "dst-address": "10.0.0.0/8",
@@ -139,14 +181,14 @@ describe("applyRestorePlan", () => {
 
   it("calls remove for toRemove ids", async () => {
     const client = { create: vi.fn(), remove: vi.fn().mockResolvedValue(undefined), update: vi.fn() } as unknown as RouterOSRestClient;
-    const plan = { path: "ip/route", toCreate: [], toRemove: ["*2"], toUpdate: [] };
+    const plan = { path: "ip/route", toCreate: [], toRemove: ["*2"], toUpdate: [], warnings: [] };
     await applyRestorePlan(plan, client);
     expect(client.remove).toHaveBeenCalledWith("ip/route", "*2");
   });
 
   it("calls update for toUpdate entries", async () => {
     const client = { create: vi.fn(), remove: vi.fn(), update: vi.fn().mockResolvedValue(undefined) } as unknown as RouterOSRestClient;
-    const plan = { path: "ip/route", toCreate: [], toRemove: [], toUpdate: [{ currentId: "*1", data: { "distance": "1" } }] };
+    const plan = { path: "ip/route", toCreate: [], toRemove: [], toUpdate: [{ currentId: "*1", data: { "distance": "1" } }], warnings: [] };
     await applyRestorePlan(plan, client);
     expect(client.update).toHaveBeenCalledWith("ip/route", "*1", { "distance": "1" });
   });

@@ -11,6 +11,15 @@ import { renderPrometheus } from "../../observability/metrics.js";
 
 const log = createLogger("transport-http");
 
+/** Idle timeout after which a Streamable HTTP session is closed and evicted. */
+const SESSION_TTL_MS = 30 * 60_000;
+
+interface StreamableSession {
+  transport: StreamableHTTPServerTransport;
+  identityId: string;
+  lastSeenMs: number;
+}
+
 export class BodyTooLargeError extends Error {
   constructor() {
     super("Request body exceeds maximum allowed size");
@@ -57,7 +66,7 @@ export function createRateLimiter(rpm: number): RateLimiter {
 
 export async function readBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    let data = "";
+    const chunks: Buffer[] = [];
     let size = 0;
     let settled = false;
 
@@ -74,12 +83,15 @@ export async function readBody(req: IncomingMessage, maxBytes: number): Promise<
         fail(new BodyTooLargeError());
         return;
       }
-      data += chunk.toString();
+      chunks.push(chunk);
     });
 
     req.on("end", () => {
       if (settled) return;
       settled = true;
+      // Decode once over the concatenated bytes so multi-byte UTF-8 characters
+      // split across chunk boundaries are not corrupted into U+FFFD.
+      const data = Buffer.concat(chunks).toString("utf-8");
       if (!data) {
         resolve(undefined);
         return;
@@ -112,8 +124,20 @@ export async function connectHttp(
   const sweepTimer = setInterval(() => checkRateLimit.sweep(), 60_000);
   sweepTimer.unref();
 
-  const streamableSessions = new Map<string, StreamableHTTPServerTransport>();
+  const streamableSessions = new Map<string, StreamableSession>();
   const sseTransports = new Map<string, SSEServerTransport>();
+
+  const sessionSweep = setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of streamableSessions) {
+      if (now - session.lastSeenMs > SESSION_TTL_MS) {
+        streamableSessions.delete(id);
+        session.transport.close();
+        log.info({ sessionId: id }, "Streamable HTTP session expired (idle TTL)");
+      }
+    }
+  }, 60_000);
+  sessionSweep.unref();
 
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const ip = req.socket.remoteAddress ?? "unknown";
@@ -128,6 +152,23 @@ export async function connectHttp(
     }
 
     if (pathname === "/metrics") {
+      // Authenticate the scrape endpoint when any identities are configured, so
+      // internal metrics are not exposed unauthenticated.
+      if (identityRegistry.getIdentities().length > 0) {
+        try {
+          await authenticateHttp(req, identityRegistry);
+        } catch (err) {
+          if (err instanceof MikroMCPError) {
+            res.writeHead(401, {
+              "Content-Type": "application/json",
+              "WWW-Authenticate": "Bearer",
+            });
+            res.end(JSON.stringify({ error: err.message, code: err.code }));
+            return;
+          }
+          throw err;
+        }
+      }
       res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
       res.end(renderPrometheus());
       return;
@@ -147,15 +188,19 @@ export async function connectHttp(
           identity = await authenticateHttp(req, identityRegistry);
         } catch (err) {
           if (err instanceof MikroMCPError) {
-            res.writeHead(401, { "Content-Type": "application/json" });
+            res.writeHead(401, {
+              "Content-Type": "application/json",
+              "WWW-Authenticate": "Bearer",
+            });
             res.end(JSON.stringify({ error: err.message, code: err.code }));
             return;
           }
           throw err;
         }
 
-        await withIdentity(identity, async () => {
-          await handleMcpRequest(pathname, req, res, url, port, maxBodyBytes, makeServer, streamableSessions, sseTransports);
+        const boundIdentity = identity;
+        await withIdentity(boundIdentity, async () => {
+          await handleMcpRequest(pathname, req, res, url, port, maxBodyBytes, makeServer, streamableSessions, sseTransports, boundIdentity.id);
         });
         return;
       }
@@ -186,7 +231,10 @@ export async function connectHttp(
     }
   });
 
-  httpServer.on("close", () => clearInterval(sweepTimer));
+  httpServer.on("close", () => {
+    clearInterval(sweepTimer);
+    clearInterval(sessionSweep);
+  });
 
   await new Promise<void>((resolve, reject) => {
     httpServer.listen(port, bindHost, () => {
@@ -210,12 +258,26 @@ async function handleMcpRequest(
   port: number,
   maxBodyBytes: number,
   makeServer: () => McpServer,
-  streamableSessions: Map<string, StreamableHTTPServerTransport>,
+  streamableSessions: Map<string, StreamableSession>,
   sseTransports: Map<string, SSEServerTransport>,
+  identityId: string,
 ): Promise<void> {
   if (pathname === "/mcp") {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    let transport = sessionId ? streamableSessions.get(sessionId) : undefined;
+    let session = sessionId ? streamableSessions.get(sessionId) : undefined;
+
+    if (session) {
+      // Bind a session to the identity that created it — a token cannot drive
+      // another identity's session.
+      if (session.identityId !== identityId) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Session belongs to a different identity." }));
+        return;
+      }
+      session.lastSeenMs = Date.now();
+    }
+
+    let transport = session?.transport;
 
     if (!transport) {
       if (sessionId) {
@@ -227,8 +289,8 @@ async function handleMcpRequest(
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
-          streamableSessions.set(id, transport!);
-          log.info({ sessionId: id }, "Streamable HTTP session created");
+          streamableSessions.set(id, { transport: transport!, identityId, lastSeenMs: Date.now() });
+          log.info({ sessionId: id, identityId }, "Streamable HTTP session created");
         },
       });
       transport.onclose = () => {

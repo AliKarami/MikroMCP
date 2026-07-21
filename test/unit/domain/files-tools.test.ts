@@ -25,6 +25,7 @@ function makeContext(
     getOne?: ReturnType<typeof vi.fn>;
     ftpUpload?: ReturnType<typeof vi.fn>;
     ftpConnect?: ReturnType<typeof vi.fn>;
+    sftpUpload?: ReturnType<typeof vi.fn>;
   } = {},
 ): ToolContext {
   return {
@@ -37,6 +38,9 @@ function makeContext(
       upload: overrides.ftpUpload ?? vi.fn().mockResolvedValue(undefined),
       connect: overrides.ftpConnect ?? vi.fn().mockResolvedValue(undefined),
     } as unknown as FtpClient,
+    sftpClient: {
+      upload: overrides.sftpUpload ?? vi.fn().mockResolvedValue(undefined),
+    } as unknown as ToolContext["sftpClient"],
     routerClient: {
       get: overrides.get ?? vi.fn().mockResolvedValue([]),
       getOne: overrides.getOne ?? vi.fn().mockResolvedValue({}),
@@ -170,41 +174,76 @@ describe("files tools", () => {
         getFileContentTool.handler({ routerId: "test-router", name: "missing.rsc" }, ctx),
       ).rejects.toMatchObject({ code: "FILE_NOT_FOUND" });
     });
+
+    it("caps oversized file content and flags truncation", async () => {
+      const big = "x".repeat(70000);
+      const ctx = makeContext({
+        get: vi.fn().mockResolvedValue([{ ".id": "*1", name: "big.txt", type: "file" }]),
+        getOne: vi.fn().mockResolvedValue({ ".id": "*1", name: "big.txt", contents: big }),
+      });
+      const result = await getFileContentTool.handler(
+        { routerId: "test-router", name: "big.txt" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.truncated).toBe(true);
+      expect(sc.totalLength).toBe(70000);
+      expect((sc.contents as string).length).toBeLessThan(70000);
+      expect(result.content).toContain("[TRUNCATED at 65536 chars");
+    });
   });
 
   describe("upload_file handler", () => {
-    it("calls ftpClient.upload with correct args", async () => {
+    it("uploads via SFTP by default", async () => {
+      const sftpUpload = vi.fn().mockResolvedValue(undefined);
       const ftpUpload = vi.fn().mockResolvedValue(undefined);
-      const ctx = makeContext({ ftpUpload });
-      await uploadFileTool.handler(
+      const ctx = makeContext({ sftpUpload, ftpUpload });
+      const result = await uploadFileTool.handler(
+        { routerId: "test-router", name: "test.rsc", content: ":log info" },
+        ctx,
+      );
+      expect(sftpUpload).toHaveBeenCalledWith("test.rsc", ":log info");
+      expect(ftpUpload).not.toHaveBeenCalled();
+      expect((result.structuredContent as Record<string, unknown>).transport).toBe("sftp");
+    });
+
+    it("falls back to FTP (plaintext) when SFTP fails", async () => {
+      const sftpUpload = vi.fn().mockRejectedValue(new Error("no ssh"));
+      const ftpUpload = vi.fn().mockResolvedValue(undefined);
+      const ctx = makeContext({ sftpUpload, ftpUpload });
+      const result = await uploadFileTool.handler(
         { routerId: "test-router", name: "test.rsc", content: ":log info" },
         ctx,
       );
       expect(ftpUpload).toHaveBeenCalledWith("test.rsc", ":log info");
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.transport).toBe("ftp");
+      expect(result.content).toMatch(/plaintext/i);
     });
 
-    it("calls ftpClient.connect but not ftpClient.upload on dry-run", async () => {
+    it("probes SFTP on dry-run without uploading real content", async () => {
+      const sftpUpload = vi.fn().mockResolvedValue(undefined);
       const ftpUpload = vi.fn().mockResolvedValue(undefined);
-      const ftpConnect = vi.fn().mockResolvedValue(undefined);
-      const ctx = makeContext({ ftpUpload, ftpConnect });
+      const ctx = makeContext({ sftpUpload, ftpUpload });
       const result = await uploadFileTool.handler(
         { routerId: "test-router", name: "test.rsc", content: ":log info", dryRun: true },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
-      expect(ftpConnect).toHaveBeenCalled();
+      expect((result.structuredContent as Record<string, unknown>).transport).toBe("sftp");
       expect(ftpUpload).not.toHaveBeenCalled();
     });
 
-    it("throws FTP_SERVICE_UNAVAILABLE when FTP port is refused", async () => {
+    it("throws FILE_TRANSFER_UNAVAILABLE when neither SFTP nor FTP is reachable", async () => {
       const connRefused = Object.assign(new Error("connect ECONNREFUSED 192.168.1.1:21"), {
         code: "ECONNREFUSED",
       });
-      const ftpUpload = vi.fn().mockRejectedValueOnce(connRefused);
-      const ctx = makeContext({ ftpUpload });
+      const sftpUpload = vi.fn().mockRejectedValue(new Error("no ssh"));
+      const ftpUpload = vi.fn().mockRejectedValue(connRefused);
+      const ctx = makeContext({ sftpUpload, ftpUpload });
       await expect(
         uploadFileTool.handler({ routerId: "test-router", name: "test.rsc", content: "x" }, ctx),
-      ).rejects.toMatchObject({ code: "FTP_SERVICE_UNAVAILABLE" });
+      ).rejects.toMatchObject({ code: "FILE_TRANSFER_UNAVAILABLE" });
     });
   });
 });

@@ -45,8 +45,8 @@ describe("userTools", () => {
 
     it("manage_user is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
 
-    it("manage_user is not destructive", () =>
-      expect(manageTool.annotations.destructiveHint).toBe(false));
+    it("manage_user is destructive (authentication surface)", () =>
+      expect(manageTool.annotations.destructiveHint).toBe(true));
   });
 
   describe("input schema — list_users", () => {

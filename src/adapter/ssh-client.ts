@@ -26,11 +26,19 @@ export class SshClient {
 
     return new Promise((resolve, reject) => {
       const conn = new Client();
-      let output = "";
+      const chunks: Buffer[] = [];
       let outputSize = 0;
       let truncated = false;
+      let timedOut = false;
       let settled = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
+
+      // Decode the accumulated bytes once so multi-byte UTF-8 characters split
+      // across stream chunks are not corrupted into U+FFFD.
+      const decodeOutput = (): string => {
+        const text = Buffer.concat(chunks).toString("utf-8");
+        return truncated ? text + "\n[OUTPUT TRUNCATED]" : text;
+      };
 
       const cleanup = (err?: Error) => {
         if (settled) return;
@@ -40,7 +48,7 @@ export class SshClient {
         if (err) {
           reject(err);
         } else {
-          resolve(truncated ? output + "\n[OUTPUT TRUNCATED]" : output);
+          resolve(decodeOutput());
         }
       };
 
@@ -52,6 +60,7 @@ export class SshClient {
           }
 
           timer = setTimeout(() => {
+            timedOut = true;
             stream.close();
           }, timeoutMs);
 
@@ -59,19 +68,29 @@ export class SshClient {
             if (truncated) return;
             const remaining = maxOutputBytes - outputSize;
             if (data.length >= remaining) {
-              output += data.slice(0, remaining).toString();
+              chunks.push(data.subarray(0, remaining));
               outputSize = maxOutputBytes;
               truncated = true;
               stream.close();
               return;
             }
-            output += data.toString();
+            chunks.push(data);
             outputSize += data.length;
           };
 
           stream.on("data", appendOutput);
           stream.stderr.on("data", appendOutput);
-          stream.on("close", () => cleanup());
+          stream.on("close", () => {
+            if (timedOut) {
+              const err = new Error(
+                `SSH command timed out after ${timeoutMs}ms (${outputSize} bytes of partial output discarded)`,
+              ) as NodeJS.ErrnoException;
+              err.code = "ETIMEDOUT";
+              cleanup(err);
+            } else {
+              cleanup();
+            }
+          });
         });
       });
 

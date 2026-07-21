@@ -133,7 +133,7 @@ flowchart TD
 | **stdio** (default) | `mikromcp serve` (no env needed) | Local: Claude Desktop, Claude Code, Cursor — the assistant spawns MikroMCP as a child process |
 | **HTTP** | `MIKROMCP_TRANSPORT=http mikromcp serve` | Remote / shared: Docker, systemd, multiple clients connecting to one instance |
 
-HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) on `MIKROMCP_PORT` (default 3000). Every request must carry `Authorization: Bearer <token>`.
+HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) on `MIKROMCP_PORT` (default 3000). Every request must carry `Authorization: Bearer <token>`. Streamable HTTP sessions are bound to the identity that created them (a token cannot drive another identity's session) and are evicted after 30 minutes idle. `GET /healthz` is unauthenticated; `GET /metrics` (Prometheus) requires a bearer token whenever any identities are configured.
 
 ## Safety Guarantees
 

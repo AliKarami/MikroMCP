@@ -42,7 +42,7 @@ describe("backupTools", () => {
     });
     it("create_backup is not readOnly", () => expect(createBackupTool.annotations.readOnlyHint).toBe(false));
     it("create_backup is not destructive", () => expect(createBackupTool.annotations.destructiveHint).toBe(false));
-    it("export_config is readOnly", () => expect(exportConfigTool.annotations.readOnlyHint).toBe(true));
+    it("export_config is not read-only (writes a file with `file` arg)", () => expect(exportConfigTool.annotations.readOnlyHint).toBe(false));
   });
 
   describe("input schema — create_backup", () => {

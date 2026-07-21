@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { isTrue } from "../../adapter/response-parser.js";
 import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -91,8 +92,8 @@ const manageIpAddressTool: ToolDefinition = {
       // -----------------------------------------------------------------------
       if (parsed.action === "add") {
         if (existing) {
-          const rec = existing as Record<string, string>;
-          const sameDisabled = (rec.disabled === "true") === parsed.disabled;
+          const rec = existing as Record<string, unknown>;
+          const sameDisabled = isTrue(rec.disabled) === parsed.disabled;
           const sameComment = (rec.comment ?? "") === (comment ?? "");
           const sameNetwork = !parsed.network || rec.network === parsed.network;
 

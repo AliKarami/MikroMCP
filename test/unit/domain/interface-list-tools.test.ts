@@ -49,9 +49,9 @@ describe("interfaceListTools", () => {
       expect(manageListTool.annotations.readOnlyHint).toBe(false);
       expect(manageMemberTool.annotations.readOnlyHint).toBe(false);
     });
-    it("none are destructive", () => {
-      expect(manageListTool.annotations.destructiveHint).toBe(false);
-      expect(manageMemberTool.annotations.destructiveHint).toBe(false);
+    it("management tools are destructive (interface lists gate firewall rules)", () => {
+      expect(manageListTool.annotations.destructiveHint).toBe(true);
+      expect(manageMemberTool.annotations.destructiveHint).toBe(true);
     });
     it("all tools are idempotent", () => {
       expect(listListsTool.annotations.idempotentHint).toBe(true);

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { isTrue } from "../../adapter/response-parser.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -249,7 +250,7 @@ const manageScheduledJobTool: ToolDefinition = {
         }
 
         const id = existing[".id"];
-        const isDisabled = existing.disabled === "true";
+        const isDisabled = isTrue(existing.disabled);
 
         if (isDisabled === wantDisabled) {
           return {

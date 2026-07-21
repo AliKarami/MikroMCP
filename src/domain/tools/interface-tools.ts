@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { isTrue } from "../../adapter/response-parser.js";
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -87,7 +88,7 @@ const listInterfacesTool: ToolDefinition = {
       if (parsed.status !== "all") {
         interfaces = interfaces.filter((iface) => {
           const running = (iface as Record<string, unknown>).running;
-          const isUp = running === true || running === "true";
+          const isUp = isTrue(running);
           if (parsed.status === "up") return isUp;
           if (parsed.status === "down") return !isUp;
           return true;
@@ -99,8 +100,8 @@ const listInterfacesTool: ToolDefinition = {
       // Strip counters if not requested and add computed status field
       const results = paginated.map((iface) => {
         const rec = iface as Record<string, unknown>;
-        const isRunning = rec.running === true || rec.running === "true";
-        const isDisabled = rec.disabled === true || rec.disabled === "true";
+        const isRunning = isTrue(rec.running);
+        const isDisabled = isTrue(rec.disabled);
         const enriched: Record<string, unknown> = { status: isDisabled ? "disabled" : isRunning ? "up" : "down" };
         for (const [key, value] of Object.entries(rec)) {
           if (parsed.includeCounters || !COUNTER_PROPS.includes(key)) {

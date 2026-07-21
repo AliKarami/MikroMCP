@@ -1,14 +1,11 @@
-import { createHmac, createHash } from "node:crypto";
+import { createHmac, createHash, timingSafeEqual } from "node:crypto";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 
-interface PendingFleetConfirmation {
-  expiresAt: Date;
-  fingerprint: string;
-}
-
-const pending = new Map<string, PendingFleetConfirmation>();
+// Replay protection only (single-instance) — see confirmation.ts for the
+// multi-instance limitation.
+const usedTokens = new Map<string, number>();
 
 export interface FleetConfirmationArgs {
   toolName: string;
@@ -29,25 +26,51 @@ function fingerprint(args: FleetConfirmationArgs): string {
   return createHash("sha256").update(payload).digest("hex");
 }
 
-function evictExpired(): void {
-  const now = new Date();
-  for (const [token, entry] of pending) {
-    if (entry.expiresAt <= now) pending.delete(token);
+function sign(fp: string, expiresAtMs: number, secret: string): string {
+  const mac = createHmac("sha256", secret).update(`${fp}|${expiresAtMs}`).digest("hex");
+  return `${expiresAtMs}.${mac}`;
+}
+
+function tokensEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf-8");
+  const bufB = Buffer.from(b, "utf-8");
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+function sweepUsed(now: number): void {
+  for (const [token, expiresAtMs] of usedTokens) {
+    if (expiresAtMs <= now) usedTokens.delete(token);
   }
+}
+
+/** Test helper — clear the replay cache. */
+export function _resetForTests(): void {
+  usedTokens.clear();
 }
 
 /**
  * Two-step confirmation for fleet-wide destructive operations.
- * First call (no token) throws APPROVAL_REQUIRED carrying a token.
+ * First call (no token) throws APPROVAL_REQUIRED carrying a self-verifying token.
  * Second call with the matching token for the identical fleet/params returns void.
  */
 export function checkFleetConfirmation(args: FleetConfirmationArgs, secret: string): void {
-  evictExpired();
+  const now = Date.now();
+  sweepUsed(now);
   const fp = fingerprint(args);
 
   if (args.submittedToken) {
-    const entry = pending.get(args.submittedToken);
-    if (!entry || entry.expiresAt <= new Date() || entry.fingerprint !== fp) {
+    const token = args.submittedToken;
+    const dot = token.indexOf(".");
+    const expiresAtMs = dot > 0 ? Number(token.slice(0, dot)) : NaN;
+    const expected = Number.isFinite(expiresAtMs) ? sign(fp, expiresAtMs, secret) : "";
+
+    if (
+      !Number.isFinite(expiresAtMs) ||
+      expiresAtMs <= now ||
+      usedTokens.has(token) ||
+      !tokensEqual(token, expected)
+    ) {
       throw new MikroMCPError({
         category: ErrorCategory.PERMISSION_DENIED,
         code: "FLEET_CONFIRMATION_MISMATCH",
@@ -59,15 +82,12 @@ export function checkFleetConfirmation(args: FleetConfirmationArgs, secret: stri
         },
       });
     }
-    pending.delete(args.submittedToken);
+    usedTokens.set(token, expiresAtMs);
     return;
   }
 
-  const expiresAt = new Date(Date.now() + CONFIRMATION_TTL_MS);
-  const token = createHmac("sha256", secret)
-    .update(`${fp}:${expiresAt.toISOString()}`)
-    .digest("hex");
-  pending.set(token, { expiresAt, fingerprint: fp });
+  const expiresAtMs = now + CONFIRMATION_TTL_MS;
+  const token = sign(fp, expiresAtMs, secret);
 
   throw new MikroMCPError({
     category: ErrorCategory.APPROVAL_REQUIRED,
@@ -75,7 +95,7 @@ export function checkFleetConfirmation(args: FleetConfirmationArgs, secret: stri
     message: `This will run destructive tool "${args.toolName}" across ${args.routerIds.length} router(s). Re-submit with confirmationToken to proceed.`,
     details: {
       confirmationToken: token,
-      expiresAt: expiresAt.toISOString(),
+      expiresAt: new Date(expiresAtMs).toISOString(),
       routerCount: args.routerIds.length,
     },
     recoverability: {

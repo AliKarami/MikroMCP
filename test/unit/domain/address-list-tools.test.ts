@@ -60,7 +60,7 @@ describe("address list tools", () => {
 
     it("manage_address_list_entry has correct annotations", () => {
       expect(manageAddressListTool.annotations.readOnlyHint).toBe(false);
-      expect(manageAddressListTool.annotations.destructiveHint).toBe(false);
+      expect(manageAddressListTool.annotations.destructiveHint).toBe(true);
       expect(manageAddressListTool.annotations.idempotentHint).toBe(true);
     });
   });

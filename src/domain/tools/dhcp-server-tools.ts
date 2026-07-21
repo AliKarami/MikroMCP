@@ -90,7 +90,7 @@ const manageDhcpServerTool: ToolDefinition = {
   inputSchema: manageDhcpServerInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

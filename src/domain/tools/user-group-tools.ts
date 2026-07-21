@@ -77,7 +77,7 @@ const manageUserGroupTool: ToolDefinition = {
   inputSchema: manageUserGroupInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

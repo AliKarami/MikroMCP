@@ -260,7 +260,7 @@ const manageWgIfaceTool: ToolDefinition = {
   inputSchema: manageWgIfaceInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

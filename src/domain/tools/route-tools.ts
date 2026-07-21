@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { isTrue } from "../../adapter/response-parser.js";
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { paginate, listContent, compactFields } from "./pagination.js";
@@ -61,14 +62,14 @@ const listRoutesTool: ToolDefinition = {
       if (parsed.activeOnly) {
         routes = routes.filter((route) => {
           const rec = route as Record<string, unknown>;
-          return rec.active === true || rec.active === "true";
+          return isTrue(rec.active);
         });
       }
 
       if (parsed.staticOnly) {
         routes = routes.filter((route) => {
           const rec = route as Record<string, unknown>;
-          return rec.dynamic !== true && rec.dynamic !== "true";
+          return !isTrue(rec.dynamic);
         });
       }
 
@@ -187,7 +188,7 @@ const manageRouteTool: ToolDefinition = {
         if (existing) {
           const rec = existing as Record<string, unknown>;
           const existingDistance = rec.distance ?? "1";
-          const existingDisabled = rec.disabled === "true" || rec.disabled === true;
+          const existingDisabled = isTrue(rec.disabled);
           const sameDistance = existingDistance === String(parsed.distance);
           const sameDisabled = existingDisabled === parsed.disabled;
 

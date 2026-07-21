@@ -284,11 +284,13 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         (sum, p) => sum + p.toCreate.length + p.toRemove.length + p.toUpdate.length,
         0,
       );
+      const warnings = restorePlans.flatMap((p) => p.warnings);
+      const warningSuffix = warnings.length > 0 ? `\nWarnings:\n${warnings.map((w) => `  - ${w}`).join("\n")}` : "";
 
       if (parsed.dryRun) {
         return {
-          content: `Rollback dry run for journal entry "${parsed.journalId}": ${totalOps} operation(s) would be applied across ${restorePlans.length} path(s).`,
-          structuredContent: { action: "dry_run", journalId: parsed.journalId, restorePlans },
+          content: `Rollback dry run for journal entry "${parsed.journalId}": ${totalOps} operation(s) would be applied across ${restorePlans.length} path(s).${warningSuffix}`,
+          structuredContent: { action: "dry_run", journalId: parsed.journalId, restorePlans, warnings },
         };
       }
 
@@ -297,8 +299,8 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
       }
 
       return {
-        content: `Rolled back journal entry "${parsed.journalId}": ${totalOps} operation(s) applied across ${restorePlans.length} path(s).`,
-        structuredContent: { action: "rolled_back", journalId: parsed.journalId, restorePlans },
+        content: `Rolled back journal entry "${parsed.journalId}": ${totalOps} operation(s) applied across ${restorePlans.length} path(s).${warningSuffix}`,
+        structuredContent: { action: "rolled_back", journalId: parsed.journalId, restorePlans, warnings },
       };
     },
   };

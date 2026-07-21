@@ -256,5 +256,22 @@ describe("scheduler tools", () => {
         manageJobTool.handler({ routerId: "test-router", action: "enable", name: "missing" }, ctx),
       ).rejects.toMatchObject({ code: "JOB_NOT_FOUND" });
     });
+
+    // Regression: the REST client parses records, so disabled arrives as a real
+    // boolean (not the string "true"). Enabling a disabled job must update it,
+    // not short-circuit to no_change.
+    it("enables a job whose parsed disabled field is boolean true", async () => {
+      const update = vi.fn().mockResolvedValue(undefined);
+      const ctx = makeContext({
+        get: vi.fn().mockResolvedValue([{ ".id": "*1", name: "j", disabled: true }]),
+        update,
+      });
+      const result = await manageJobTool.handler(
+        { routerId: "test-router", action: "enable", name: "j" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
+      expect(update).toHaveBeenCalledWith("system/scheduler", "*1", { disabled: "false" });
+    });
   });
 });

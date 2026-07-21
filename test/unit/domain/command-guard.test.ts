@@ -127,4 +127,44 @@ describe("checkCommand", () => {
     );
     expect(() => checkCommand("/ip/service/set disabled=yes", policy)).toThrow(MikroMCPError);
   });
+
+  describe("bypass resistance", () => {
+    const policy = () => resolveCommandPolicy(makeRouterConfig(), [], []);
+
+    it.each([
+      ["ROS7 slash-path syntax", "/system/reboot"],
+      ["space instead of leading slash", "system reboot"],
+      ["extra whitespace", "/system   reboot"],
+      ["mixed case", "/SyStEm ReBoOt"],
+      ["command chaining with ;", ":put 1; /system reboot"],
+      ["newline chaining", ":put 1\n/system reboot"],
+      [":execute indirection", ':execute "/system reboot"'],
+      ["slash-path user add", "/user/add name=x password=y group=full"],
+    ])("denies %s", (_label, cmd) => {
+      expect(() => checkCommand(cmd, policy())).toThrow(MikroMCPError);
+    });
+
+    it("still allows a legitimate read command", () => {
+      expect(() => checkCommand("/interface/print", policy())).not.toThrow();
+      expect(() => checkCommand("/ip address print", policy())).not.toThrow();
+    });
+
+    it("checks every chained segment against the allow list", () => {
+      const p = resolveCommandPolicy(makeRouterConfig({ cmdAllow: ["/ip/*"] }), [], []);
+      // First segment allowed, second is not — must be rejected.
+      expect(() => checkCommand("/ip/address/print; /system/identity/print", p)).toThrow(
+        MikroMCPError,
+      );
+      expect(() => checkCommand("/ip/address/print; /ip/route/print", p)).not.toThrow();
+    });
+  });
+});
+
+describe("normalizeCommand", () => {
+  it("folds equivalent spellings to the same canonical form", async () => {
+    const { normalizeCommand } = await import("../../../src/domain/tools/command-guard.js");
+    expect(normalizeCommand("/system/reboot")).toBe("system reboot");
+    expect(normalizeCommand("/system reboot")).toBe("system reboot");
+    expect(normalizeCommand("  /system   reboot  ")).toBe("system reboot");
+  });
 });

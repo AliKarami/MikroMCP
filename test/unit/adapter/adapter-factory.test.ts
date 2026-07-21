@@ -4,9 +4,10 @@ vi.mock("../../../src/config/secrets.js", () => ({
   getCredentials: vi.fn().mockReturnValue({ username: "admin", password: "secret" }),
 }));
 
-import { createSshClient, createFtpClient } from "../../../src/adapter/adapter-factory.js";
+import { createSshClient, createFtpClient, createSftpClient } from "../../../src/adapter/adapter-factory.js";
 import { SshClient } from "../../../src/adapter/ssh-client.js";
 import { FtpClient } from "../../../src/adapter/ftp-client.js";
+import { SftpClient } from "../../../src/adapter/sftp-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 
 function makeRouterConfig(): RouterConfig {
@@ -35,5 +36,12 @@ describe("createFtpClient", () => {
   it("returns a FtpClient instance", () => {
     const client = createFtpClient(makeRouterConfig());
     expect(client).toBeInstanceOf(FtpClient);
+  });
+});
+
+describe("createSftpClient", () => {
+  it("returns a SftpClient instance", () => {
+    const client = createSftpClient(makeRouterConfig());
+    expect(client).toBeInstanceOf(SftpClient);
   });
 });

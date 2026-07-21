@@ -153,7 +153,7 @@ describe("manage_dns_settings", () => {
   describe("metadata", () => {
     it("exists in dnsTools", () => expect(manageDnsSettingsTool).toBeDefined());
     it("is not readOnly", () => expect(manageDnsSettingsTool.annotations.readOnlyHint).toBe(false));
-    it("is not destructive", () => expect(manageDnsSettingsTool.annotations.destructiveHint).toBe(false));
+    it("is destructive (DNS changes can break resolution)", () => expect(manageDnsSettingsTool.annotations.destructiveHint).toBe(true));
     it("is idempotent", () => expect(manageDnsSettingsTool.annotations.idempotentHint).toBe(true));
   });
 

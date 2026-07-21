@@ -64,6 +64,11 @@ describe("loadAppConfig", () => {
       process.env.MIKROMCP_SSH_MAX_OUTPUT_BYTES = "131072";
       expect(loadAppConfig().ssh.maxOutputBytes).toBe(131_072);
     });
+
+    it("throws a CONFIGURATION error for a non-integer numeric env var", () => {
+      process.env.MIKROMCP_HTTP_RATE_LIMIT_RPM = "not-a-number";
+      expect(() => loadAppConfig()).toThrow(/must be an integer/);
+    });
   });
 
   describe("v0.7 auth/audit env vars", () => {

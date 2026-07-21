@@ -148,7 +148,7 @@ const manageWifiTool: ToolDefinition = {
   inputSchema: manageWifiInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

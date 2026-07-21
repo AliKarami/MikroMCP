@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { isTrue } from "../../adapter/response-parser.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -54,7 +55,7 @@ const listIpServicesTool: ToolDefinition = {
 
       if (parsed.enabled !== undefined) {
         filtered = filtered.filter((s) => {
-          const isDisabled = s.disabled === true || s.disabled === "true";
+          const isDisabled = isTrue(s.disabled);
           return parsed.enabled ? !isDisabled : isDisabled;
         });
       }
@@ -133,7 +134,7 @@ const manageIpServiceTool: ToolDefinition = {
       }
 
       // Already in desired state — idempotent no-op
-      const isCurrentlyDisabled = (existing as Record<string, unknown>).disabled === "true" || (existing as Record<string, unknown>).disabled === true;
+      const isCurrentlyDisabled = isTrue((existing as Record<string, unknown>).disabled);
       const wouldBeDisabled = parsed.action === "disable";
       if (isCurrentlyDisabled === wouldBeDisabled) {
         const alreadyState = parsed.action === "disable" ? "disabled" : "enabled";

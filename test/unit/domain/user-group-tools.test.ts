@@ -41,7 +41,7 @@ describe("userGroupTools", () => {
     });
     it("list_user_groups is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
     it("manage_user_group is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
-    it("manage_user_group is not destructive", () => expect(manageTool.annotations.destructiveHint).toBe(false));
+    it("manage_user_group is destructive (authorization surface)", () => expect(manageTool.annotations.destructiveHint).toBe(true));
   });
 
   describe("input schema — list_user_groups", () => {

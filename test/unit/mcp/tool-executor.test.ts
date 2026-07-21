@@ -13,6 +13,7 @@ vi.mock("../../../src/domain/snapshot/write-journal.js", () => ({
 vi.mock("../../../src/adapter/adapter-factory.js", () => ({
   createSshClient: vi.fn().mockReturnValue({}),
   createFtpClient: vi.fn().mockReturnValue({}),
+  createSftpClient: vi.fn().mockReturnValue({}),
 }));
 
 function makeReadTool(
@@ -185,5 +186,87 @@ describe("executeToolCall", () => {
     expect(handlerRan).toBe(true);
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain("fleet-ok");
+  });
+
+  it("prepends a verify-state hint when a write times out", async () => {
+    const tool = makeReadTool(
+      async () => {
+        throw new MikroMCPError({
+          category: ErrorCategory.ROUTER_TIMEOUT,
+          code: "TIMEOUT",
+          message: "router did not respond",
+          recoverability: { retryable: true, suggestedAction: "Retry later." },
+        });
+      },
+      { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
+    );
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
+
+    expect(result.isError).toBe(true);
+    const rec = (result.structuredContent as { recoverability?: { suggestedAction?: string } })
+      .recoverability;
+    expect(rec?.suggestedAction).toMatch(/may already have been applied/i);
+  });
+
+  it("does NOT add the verify-state hint for a read tool timeout", async () => {
+    const tool = makeReadTool(async () => {
+      throw new MikroMCPError({
+        category: ErrorCategory.ROUTER_TIMEOUT,
+        code: "TIMEOUT",
+        message: "router did not respond",
+        recoverability: { retryable: true, suggestedAction: "Retry later." },
+      });
+    });
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
+    const rec = (result.structuredContent as { recoverability?: { suggestedAction?: string } })
+      .recoverability;
+    expect(rec?.suggestedAction).not.toMatch(/may already have been applied/i);
+  });
+
+  it("retries a retryable read tool but not one with retryable:false", async () => {
+    const retryableErr = () =>
+      new MikroMCPError({
+        category: ErrorCategory.ROUTER_TIMEOUT,
+        code: "TIMEOUT",
+        message: "slow",
+        recoverability: { retryable: true, suggestedAction: "retry" },
+      });
+
+    // Default read tool (retryable undefined) with maxRetries=1 → 2 calls.
+    const retried = vi.fn().mockRejectedValue(retryableErr());
+    const depsRetry = makeDeps();
+    (depsRetry.config as { retry: { maxRetries: number } }).retry.maxRetries = 1;
+    await executeToolCall(makeReadTool(retried), { routerId: "r1" }, depsRetry);
+    expect(retried).toHaveBeenCalledTimes(2);
+
+    // Same, but retryable:false → exactly 1 call.
+    const once = vi.fn().mockRejectedValue(retryableErr());
+    const depsNoRetry = makeDeps();
+    (depsNoRetry.config as { retry: { maxRetries: number } }).retry.maxRetries = 1;
+    await executeToolCall(
+      makeReadTool(once, { retryable: false }),
+      { routerId: "r1" },
+      depsNoRetry,
+    );
+    expect(once).toHaveBeenCalledTimes(1);
+  });
+
+  it("skipRouterContext — touching routerClient raises a typed error, not a TypeError", async () => {
+    const tool = makeReadTool(
+      async (_params, context) => {
+        // A fleet tool that mistakenly reaches for a router-scoped capability.
+        await context.routerClient.get("system/resource");
+        return { content: "unreachable", structuredContent: {} };
+      },
+      { skipRouterContext: true },
+    );
+
+    const result = await executeToolCall(tool, {}, makeDeps());
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("not available in a fleet-tool context");
+    expect((result.structuredContent as { code?: string }).code).toBe("FLEET_CONTEXT_UNAVAILABLE");
   });
 });

@@ -8,6 +8,8 @@ import { createLogger } from "../../observability/logger.js";
 import { auditLog } from "../../observability/audit-log.js";
 import { checkAuthz } from "../../middleware/authz.js";
 import { buildRouterToolContext } from "../../mcp/tool-context.js";
+import { getOrCreateBreaker, assertMaintenanceWindow } from "../../mcp/tool-executor.js";
+import { withRetry } from "../../adapter/retry-engine.js";
 import { checkFleetConfirmation } from "../../middleware/fleet-confirmation.js";
 import { takeSnapshot } from "../snapshot/snapshot-engine.js";
 import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
@@ -273,7 +275,12 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         }
         routers = resolved;
       } else {
-        routers = context.routerRegistry!.listRouters(parsed.tags!);
+        // ALL-tag targeting (schema documents "ALL of these tags"): a router must
+        // carry every requested tag. listRouters() matches ANY tag, so filter here.
+        const tags = parsed.tags!;
+        routers = context.routerRegistry!
+          .listRouters()
+          .filter((r) => tags.every((t) => r.tags.includes(t)));
       }
 
       if (targetTool.annotations.destructiveHint) {
@@ -336,6 +343,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         let journalId: string | undefined;
         try {
           checkAuthz(context.identity, parsed.toolName, router.id);
+          assertMaintenanceWindow(targetTool.annotations.destructiveHint, router, router.id);
           const routerContext = buildRouterToolContext({
             routerConfig: router,
             correlationId: context.correlationId,
@@ -378,9 +386,14 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             });
           }
 
-          const result = await targetTool.handler(
-            toolParams as Record<string, unknown>,
-            routerContext,
+          const cb = getOrCreateBreaker(context.circuitBreakers!, router.id, context.appConfig);
+          routerContext.circuitBreaker = cb;
+          const runOnce = () =>
+            targetTool.handler(toolParams as Record<string, unknown>, routerContext);
+          const shouldRetry =
+            targetTool.annotations.readOnlyHint && targetTool.retryable !== false;
+          const result = await cb.execute(
+            shouldRetry ? () => withRetry(runOnce, context.appConfig.retry) : runOnce,
           );
           const elapsed = Date.now() - start;
           if (journalId) {
