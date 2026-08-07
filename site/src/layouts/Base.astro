@@ -4,7 +4,7 @@ import { SITE } from "../data/content.ts";
 interface Props { title?: string; description?: string; }
 const {
   title = `${SITE.name} — ${SITE.tagline}`,
-  description = "MikroMCP exposes MikroTik RouterOS as a typed, auditable MCP server so Claude, Cursor, Codex, and other AI assistants can inspect, diagnose, and safely operate routers in natural language.",
+  description = "Connect Claude, ChatGPT, Cursor and Codex to MikroTik RouterOS using the Model Context Protocol. Open-source MCP server with 117 typed, auditable tools.",
 } = Astro.props;
 const canonical = new URL(Astro.url.pathname, SITE.domain).href;
 const softwareLd = {

@@ -1,6 +1,6 @@
 # MikroMCP — Full Reference for LLMs
 
-> AI-native network automation for MikroTik RouterOS. MikroMCP is an open-source Model Context Protocol (MCP) server that exposes RouterOS as 117 typed, auditable tools, so AI assistants like Claude, Cursor, and Codex can inspect, diagnose, and safely operate MikroTik routers in natural language instead of improvising CLI commands.
+> Open source MikroTik MCP server for RouterOS. Connect Claude, ChatGPT, Cursor and Codex to MikroTik RouterOS using the Model Context Protocol. MikroMCP is an open-source Model Context Protocol (MCP) server that exposes RouterOS as 117 typed, auditable tools, so AI assistants like Claude, Cursor, and Codex can inspect, diagnose, and safely operate MikroTik routers in natural language instead of improvising CLI commands.
 
 ## What MikroMCP is
 

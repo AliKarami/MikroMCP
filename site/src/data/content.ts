@@ -1,7 +1,7 @@
 export const SITE = {
   name: "MikroMCP",
   domain: "https://mikromcp.com",
-  tagline: "AI-native network automation for MikroTik RouterOS",
+  tagline: "Open Source MikroTik MCP Server for RouterOS",
   github: "https://github.com/AliKarami/MikroMCP",
   docs: "https://docs.mikromcp.com",
   toolCount: 117,
