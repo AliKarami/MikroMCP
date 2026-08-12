@@ -7,16 +7,47 @@ const {
   description = "Connect Claude, ChatGPT, Cursor and Codex to MikroTik RouterOS using the Model Context Protocol. Open-source MCP server with 117 typed, auditable tools.",
 } = Astro.props;
 const canonical = new URL(Astro.url.pathname, SITE.domain).href;
-const softwareLd = {
+const ogImage = `${SITE.domain}/og-image.png`;
+
+// One @graph rather than several standalone blocks, so the entities can reference
+// each other by @id instead of being parsed as unrelated islands.
+const graphLd = {
   "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: SITE.name,
-  applicationCategory: "DeveloperApplication",
-  operatingSystem: "Linux, macOS, Windows",
-  description,
-  url: SITE.domain,
-  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  license: "https://opensource.org/licenses/MIT",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${SITE.domain}/#website`,
+      url: `${SITE.domain}/`,
+      name: SITE.name,
+      description,
+      publisher: { "@id": `${SITE.domain}/#organization` },
+      inLanguage: "en",
+    },
+    {
+      "@type": "Organization",
+      "@id": `${SITE.domain}/#organization`,
+      name: SITE.name,
+      url: `${SITE.domain}/`,
+      logo: `${SITE.domain}/favicon.png`,
+      sameAs: [SITE.github],
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${SITE.domain}/#software`,
+      name: SITE.name,
+      applicationCategory: "DeveloperApplication",
+      applicationSubCategory: "Model Context Protocol server",
+      operatingSystem: "Linux, macOS, Windows",
+      description,
+      url: SITE.domain,
+      downloadUrl: SITE.github,
+      softwareHelp: SITE.docs,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      license: "https://opensource.org/licenses/MIT",
+      isAccessibleForFree: true,
+      publisher: { "@id": `${SITE.domain}/#organization` },
+    },
+  ],
 };
 ---
 <!doctype html>
@@ -28,18 +59,28 @@ const softwareLd = {
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="icon" href="/favicon.png" type="image/png" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="387x387" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0b0f0e" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={`${SITE.domain}/og-image.png`} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={`${SITE.name} — ${SITE.tagline}`} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={`${SITE.domain}/og-image.png`} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={`${SITE.name} — ${SITE.tagline}`} />
     <link rel="sitemap" href="/sitemap-index.xml" />
-    <script type="application/ld+json" set:html={JSON.stringify(softwareLd)} />
+    <script type="application/ld+json" set:html={JSON.stringify(graphLd)} />
   </head>
   <body>
     <slot />

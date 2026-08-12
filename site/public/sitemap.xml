@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Alias for crawlers and tools that probe the conventional /sitemap.xml path.
+  The generated index at /sitemap-index.xml is the canonical one referenced by robots.txt.
+-->
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>https://mikromcp.com/sitemap-0.xml</loc>
+  </sitemap>
+</sitemapindex>
