@@ -347,9 +347,7 @@ const writeBlobSchema = z
 function resolveField(epKey: string, key: string): Field | undefined {
   const ep = SWOS_SCHEMA[epKey];
   if (!ep) return undefined;
-  return ep.fields.find(
-    (field) => field.name === key || Object.values(field.keys).includes(key),
-  );
+  return ep.fields.find((field) => field.name === key || Object.values(field.keys).includes(key));
 }
 
 /**
@@ -426,12 +424,7 @@ function coerceScalar(field: Field, value: unknown, existing: unknown): unknown 
  * length prevents a short array from silently truncating the port list of a
  * whole-blob write.
  */
-function assertShapeMatches(
-  perPort: boolean,
-  key: string,
-  next: unknown,
-  existing: unknown,
-): void {
+function assertShapeMatches(perPort: boolean, key: string, next: unknown, existing: unknown): void {
   if (existing === undefined) return;
 
   if (Array.isArray(next) && Array.isArray(existing)) {

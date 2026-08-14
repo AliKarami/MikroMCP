@@ -71,7 +71,10 @@ function buildDigestHeader(
   const ha2 = md5(`${method}:${path}`);
   const nc = nonceCount.toString(16).padStart(8, "0");
   const cnonce = randomBytes(8).toString("hex");
-  const qop = challenge.qop?.split(",").map((s) => s.trim()).find((s) => s === "auth");
+  const qop = challenge.qop
+    ?.split(",")
+    .map((s) => s.trim())
+    .find((s) => s === "auth");
 
   const response = qop
     ? md5(`${ha1}:${challenge.nonce}:${nc}:${cnonce}:${qop}:${ha2}`)

@@ -6,11 +6,7 @@ import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import { snapshotPathsFor } from "../../../src/domain/tools/tool-definition.js";
 import type { SwosClient } from "../../../src/adapter/swos-client.js";
 import type { RouterConfig } from "../../../src/types.js";
-import {
-  decodeEndpoint,
-  dumpBlob,
-  parseWireBlob,
-} from "../../../src/adapter/swos-protocol.js";
+import { decodeEndpoint, dumpBlob, parseWireBlob } from "../../../src/adapter/swos-protocol.js";
 
 const FIXTURES = join(import.meta.dirname, "../../fixtures/swos");
 const blob = (name: string) => readFileSync(join(FIXTURES, name), "utf8").trim();
@@ -135,7 +131,9 @@ describe("swosTools", () => {
   describe("list_swos_endpoints", () => {
     it("lists every endpoint with its decoded field names", async () => {
       const result = await listTool.handler({ routerId: "switch-01" }, makeContext());
-      const sc = result.structuredContent as { endpoints: { endpoint: string; fields: string[] }[] };
+      const sc = result.structuredContent as {
+        endpoints: { endpoint: string; fields: string[] }[];
+      };
       expect(sc.endpoints.map((e) => e.endpoint)).toContain("poe.b");
       expect(sc.endpoints.find((e) => e.endpoint === "poe.b")?.fields).toContain("out");
     });
@@ -143,7 +141,10 @@ describe("swosTools", () => {
 
   describe("get_swos_status", () => {
     it("summarises identity, ports, PoE and SFP", async () => {
-      const result = await statusTool.handler({ routerId: "switch-01" }, makeContext(makeSwosClient()));
+      const result = await statusTool.handler(
+        { routerId: "switch-01" },
+        makeContext(makeSwosClient()),
+      );
       expect(result.content).toContain("Model: CSS610-8P-2S+");
       expect(result.content).toContain("p1_uplink-a: up");
       expect(result.content).toContain("PoE:");
@@ -163,10 +164,7 @@ describe("swosTools", () => {
 
     it("fetches only the requested sections", async () => {
       const swos = makeSwosClient();
-      await statusTool.handler(
-        { routerId: "switch-01", include: ["sys.b"] },
-        makeContext(swos),
-      );
+      await statusTool.handler({ routerId: "switch-01", include: ["sys.b"] }, makeContext(swos));
       expect(swos.client.get).toHaveBeenCalledTimes(1);
       expect(swos.client.get).toHaveBeenCalledWith("sys.b");
     });
@@ -202,9 +200,9 @@ describe("swosTools", () => {
     });
 
     it("throws PLATFORM_MISMATCH when the router is not a SwOS device", async () => {
-      await expect(
-        writeTool.handler(params({ out: "off" }), makeContext()),
-      ).rejects.toMatchObject({ code: "PLATFORM_MISMATCH" });
+      await expect(writeTool.handler(params({ out: "off" }), makeContext())).rejects.toMatchObject({
+        code: "PLATFORM_MISMATCH",
+      });
     });
 
     it("defaults to a dry run and does not write", async () => {
@@ -328,9 +326,9 @@ describe("swosTools", () => {
       out[0] = "off";
       const result = await writeTool.handler(params({ out }, { dryRun: false }), makeContext(swos));
       expect((result.structuredContent as Record<string, unknown>).action).toBe("written");
-      expect((decodeEndpoint("poe.b", swos.written[0].body) as Record<string, unknown>).out).toEqual(
-        out,
-      );
+      expect(
+        (decodeEndpoint("poe.b", swos.written[0].body) as Record<string, unknown>).out,
+      ).toEqual(out);
     });
 
     it.each([
@@ -348,8 +346,10 @@ describe("swosTools", () => {
     it("reports the firmware as verified for the device the schema was built from", async () => {
       const swos = makeSwosClient();
       const result = await writeTool.handler(params({ priority: 3 }), makeContext(swos));
-      const compat = (result.structuredContent as Record<string, unknown>)
-        .compatibility as Record<string, unknown>;
+      const compat = (result.structuredContent as Record<string, unknown>).compatibility as Record<
+        string,
+        unknown
+      >;
       expect(compat).toMatchObject({ model: "CSS610-8P-2S+", version: "2.21", verified: true });
       expect(result.content).not.toContain("⚠️");
     });
@@ -361,8 +361,10 @@ describe("swosTools", () => {
       );
       const swos = makeSwosClient({ "sys.b": sys });
       const result = await writeTool.handler(params({ priority: 3 }), makeContext(swos));
-      const compat = (result.structuredContent as Record<string, unknown>)
-        .compatibility as Record<string, unknown>;
+      const compat = (result.structuredContent as Record<string, unknown>).compatibility as Record<
+        string,
+        unknown
+      >;
       expect(compat).toMatchObject({ version: "9.99", verified: false });
       expect(result.content).toContain("⚠️  Firmware");
     });
@@ -378,8 +380,10 @@ describe("swosTools", () => {
     it("names wire keys the schema does not map", async () => {
       const swos = makeSwosClient({ "poe.b": `${blob("poe.b").slice(0, -1)},i99:0x01}` });
       const result = await writeTool.handler(params({ priority: 3 }), makeContext(swos));
-      const compat = (result.structuredContent as Record<string, unknown>)
-        .compatibility as Record<string, unknown>;
+      const compat = (result.structuredContent as Record<string, unknown>).compatibility as Record<
+        string,
+        unknown
+      >;
       expect(compat.unmappedKeys).toEqual(["i99"]);
       expect(result.content).toContain("re-sent unchanged: i99");
     });
@@ -387,8 +391,9 @@ describe("swosTools", () => {
     it("does not offer record-list endpoints as write targets", () => {
       // A field merge cannot express "edit row 3" — writing vlan.b this way
       // would replace the table, not edit it.
-      const endpoints = (writeTool.inputSchema as unknown as { shape: Record<string, { options?: string[] }> })
-        .shape.endpoint.options;
+      const endpoints = (
+        writeTool.inputSchema as unknown as { shape: Record<string, { options?: string[] }> }
+      ).shape.endpoint.options;
       expect(endpoints).not.toContain("vlan.b");
       expect(endpoints).not.toContain("acl.b");
       expect(endpoints).toContain("poe.b");

@@ -88,7 +88,11 @@ function startMock(): { server: Server; state: MockState; url: () => string } {
     res.end();
   });
 
-  return { server, state, url: () => `http://127.0.0.1:${(server.address() as { port: number }).port}` };
+  return {
+    server,
+    state,
+    url: () => `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+  };
 }
 
 describe("SwosClient", () => {
@@ -111,7 +115,11 @@ describe("SwosClient", () => {
     mock.state.store.set("link.b", linkBlob);
     const decoded = (await client.get("link.b")) as { name: string[] };
     expect(decoded.name[0]).toBe("p1_uplink-a");
-    expect(mock.state.requests.at(-1)).toMatchObject({ path: "link.b", method: "GET", authOk: true });
+    expect(mock.state.requests.at(-1)).toMatchObject({
+      path: "link.b",
+      method: "GET",
+      authOk: true,
+    });
   });
 
   it("reuses the digest nonce across requests (single 401 per session)", async () => {

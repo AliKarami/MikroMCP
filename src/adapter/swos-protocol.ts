@@ -101,10 +101,7 @@ export function isWireHex(value: unknown): value is string {
 }
 
 function quoteBrokenJson(text: string): string {
-  return text
-    .replace(KEY_QUOTE, '$1"$2"')
-    .replace(/'/g, '"')
-    .replace(HEX_QUOTE, '"$1"');
+  return text.replace(KEY_QUOTE, '$1"$2"').replace(/'/g, '"').replace(HEX_QUOTE, '"$1"');
 }
 
 function normalize(value: unknown): unknown {
@@ -239,7 +236,10 @@ const LINK: Endpoint = {
     f("enabled", { swos: "en", swos_lite: "i01" }, Kind.BOOL),
     f("auto_neg", { swos: "an", swos_lite: "i02" }, Kind.BOOL),
     f("manual_duplex", { swos: "dpxc", swos_lite: "i03" }, Kind.BOOL),
-    f("manual_speed", { swos: "spd", swos_lite: "i05" }, Kind.OPTION, { options: SPEED, perPort: true }),
+    f("manual_speed", { swos: "spd", swos_lite: "i05" }, Kind.OPTION, {
+      options: SPEED,
+      perPort: true,
+    }),
     f("link", { swos: "lnk", swos_lite: "i06" }, Kind.BOOL),
     f("duplex", { swos: "dpx", swos_lite: "i07" }, Kind.BOOL),
     f("speed", { swos: "spdc", swos_lite: "i08" }, Kind.OPTION, { options: SPEED, perPort: true }),
@@ -428,15 +428,23 @@ const FWD: Endpoint = {
   path: "fwd.b",
   fields: [
     ...Array.from({ length: 10 }, (_, i) =>
-      f(`isolation_p${i + 1}`, { swos_lite: `i${(i + 1).toString(16).padStart(2, "0")}` }, Kind.BOOL, {
-        note: "forwarding/isolation mask; bit n cleared",
-      }),
+      f(
+        `isolation_p${i + 1}`,
+        { swos_lite: `i${(i + 1).toString(16).padStart(2, "0")}` },
+        Kind.BOOL,
+        {
+          note: "forwarding/isolation mask; bit n cleared",
+        },
+      ),
     ),
     f("port_lock", { swos_lite: "i10" }, Kind.BOOL, {
       perPort: true,
       note: "port lock (disable learning)",
     }),
-    f("lock_on_first", { swos_lite: "i11" }, Kind.BOOL, { perPort: true, note: "lock on first learned MAC" }),
+    f("lock_on_first", { swos_lite: "i11" }, Kind.BOOL, {
+      perPort: true,
+      note: "lock on first learned MAC",
+    }),
     f("mirror_ingress", { swos_lite: "i12" }, Kind.BOOL, { perPort: true }),
     f("mirror_egress", { swos_lite: "i13" }, Kind.BOOL, { perPort: true }),
     f("mirror_to", { swos_lite: "i14" }, Kind.BOOL, {
@@ -445,15 +453,24 @@ const FWD: Endpoint = {
     }),
     f("vlan_mode", { swos_lite: "i15" }, Kind.OPTION, { options: VLAN_MODE, perPort: true }),
     f("vlan_recv_mode", { swos_lite: "i17" }, Kind.OPTION, { options: VLAN_RECV, perPort: true }),
-    f("default_vid", { swos_lite: "i18" }, Kind.INT, { perPort: true, note: "default VLAN id per port" }),
+    f("default_vid", { swos_lite: "i18" }, Kind.INT, {
+      perPort: true,
+      note: "default VLAN id per port",
+    }),
     f("force_vid", { swos_lite: "i19" }, Kind.BOOL, { perPort: true, note: "force VLAN id" }),
     f("storm_rate", { swos_lite: "i1a" }, Kind.INT, {
       perPort: true,
       scale: 1e5,
       note: "storm limit (fraction of link)",
     }),
-    f("limit_unknown_ucast", { swos_lite: "i1b" }, Kind.BOOL, { perPort: true, note: "limit unknown unicast" }),
-    f("flood_unknown_mcast", { swos_lite: "i1c" }, Kind.BOOL, { perPort: true, note: "flood unknown multicast" }),
+    f("limit_unknown_ucast", { swos_lite: "i1b" }, Kind.BOOL, {
+      perPort: true,
+      note: "limit unknown unicast",
+    }),
+    f("flood_unknown_mcast", { swos_lite: "i1c" }, Kind.BOOL, {
+      perPort: true,
+      note: "flood unknown multicast",
+    }),
     f("ingress_rate", { swos_lite: "i1d" }, Kind.INT, {
       perPort: true,
       scale: 1e5,
@@ -702,7 +719,12 @@ export function firmwareSupport(model: unknown, version: unknown): FirmwareSuppo
     };
   }
   if (VERIFIED_FIRMWARE.some((entry) => entry.model === m && entry.version === v)) {
-    return { model: m, version: v, verified: true, note: `${m} ${v} — schema verified on this firmware.` };
+    return {
+      model: m,
+      version: v,
+      verified: true,
+      note: `${m} ${v} — schema verified on this firmware.`,
+    };
   }
 
   const sameModel = VERIFIED_FIRMWARE.filter((entry) => entry.model === m).map((e) => e.version);
@@ -849,9 +871,7 @@ function decodeRecords(ep: Endpoint, data: unknown[]): unknown[] {
       knownKeys.add(key);
       row[fieldDef.name] = decodeScalar(fieldDef, itemObj[key], 0);
     }
-    row["_raw"] = Object.fromEntries(
-      Object.entries(itemObj).filter(([k]) => !knownKeys.has(k)),
-    );
+    row["_raw"] = Object.fromEntries(Object.entries(itemObj).filter(([k]) => !knownKeys.has(k)));
     return row;
   });
 }
@@ -863,7 +883,12 @@ function decodeGenericPerPort(data: Record<string, unknown>): Record<string, unk
   const scalars: Record<string, unknown> = {};
 
   for (const [k, v] of Object.entries(data)) {
-    if (Array.isArray(v) && v.length === portCount && !Array.isArray(v[0]) && typeof v[0] !== "object") {
+    if (
+      Array.isArray(v) &&
+      v.length === portCount &&
+      !Array.isArray(v[0]) &&
+      typeof v[0] !== "object"
+    ) {
       for (let n = 0; n < portCount; n++) {
         const port = ports[String(n + 1)] as Record<string, unknown>;
         port[k] = v[n];

@@ -132,7 +132,18 @@ describe("SwOS codec", () => {
 
   it("decodes poe.b per-port state into the PoE state enum", () => {
     const poe = decodeEndpoint("poe.b", captures["poe.b"]) as Record<string, unknown>;
-    expect(poe.out).toEqual(["off", "off", "auto", "auto", "auto", "auto", "auto", "off", "auto", "auto"]);
+    expect(poe.out).toEqual([
+      "off",
+      "off",
+      "auto",
+      "auto",
+      "auto",
+      "auto",
+      "auto",
+      "off",
+      "auto",
+      "auto",
+    ]);
     expect(poe.state).toEqual([
       "disabled",
       "disabled",
@@ -168,7 +179,10 @@ describe("SwOS codec", () => {
 
   it("decodes both stats.b captures with identical shape", () => {
     const first = decodeEndpoint("!stats.b", captures["!stats.b"]) as Record<string, unknown>;
-    const second = decodeEndpoint("!stats.b", captures["!stats.b.sample2"]) as Record<string, unknown>;
+    const second = decodeEndpoint("!stats.b", captures["!stats.b.sample2"]) as Record<
+      string,
+      unknown
+    >;
     expect(Object.keys(second)).toEqual(Object.keys(first));
     for (const port of ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]) {
       expect(second[port]).toBeDefined();
@@ -178,7 +192,10 @@ describe("SwOS codec", () => {
   it("stats.b counters increase monotonically between captures", () => {
     // sample2 is the earlier capture; !stats.b was taken seconds later and
     // every per-port counter has grown (counters never decrease).
-    const first = decodeEndpoint("!stats.b", captures["!stats.b.sample2"]) as Record<string, unknown>;
+    const first = decodeEndpoint("!stats.b", captures["!stats.b.sample2"]) as Record<
+      string,
+      unknown
+    >;
     const second = decodeEndpoint("!stats.b", captures["!stats.b"]) as Record<string, unknown>;
     for (const port of ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]) {
       const a = first[port] as Record<string, unknown>;
