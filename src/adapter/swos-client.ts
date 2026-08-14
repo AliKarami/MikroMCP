@@ -117,13 +117,15 @@ export class SwosClient {
   private readonly host: string;
   private readonly port: number;
   private readonly credentials: Credentials;
+  private readonly requestTimeoutMs: number;
   private challenge?: DigestChallenge;
   private nonceCount = 0;
 
-  constructor(host: string, port: number, credentials: Credentials) {
+  constructor(host: string, port: number, credentials: Credentials, requestTimeoutMs = REQUEST_TIMEOUT_MS) {
     this.host = host;
     this.port = port;
     this.credentials = credentials;
+    this.requestTimeoutMs = requestTimeoutMs;
   }
 
   // ---------- raw transport ----------
@@ -162,8 +164,35 @@ export class SwosClient {
         },
       );
       req.on("error", reject);
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`SwOS request to ${path} timed out after ${REQUEST_TIMEOUT_MS}ms`));
+      req.setTimeout(this.requestTimeoutMs, () => {
+        // A timeout is ambiguous by design here: the CSS610 firmware applies
+        // POSTed .b blobs without sending a response (verified: no answer even
+        // after 70s), so a write that "timed out" may actually have landed.
+        // Classify as ROUTER_TIMEOUT so the caller's ambiguous-write handling
+        // ("verify state before retrying") applies instead of INTERNAL, and
+        // never suggest a longer timeout for writes — the firmware won't
+        // answer regardless.
+        const isWrite = method === "POST";
+        req.destroy(
+          new MikroMCPError({
+            category: ErrorCategory.ROUTER_TIMEOUT,
+            code: "SWOS_REQUEST_TIMEOUT",
+            message: `SwOS ${method} request to ${path} timed out after ${this.requestTimeoutMs}ms${
+              isWrite ? " — the write may still have been applied" : ""
+            }`,
+            recoverability: isWrite
+              ? {
+                  retryable: false,
+                  suggestedAction:
+                    "SwOS firmware does not acknowledge writes, so a longer timeout will not help.",
+                }
+              : {
+                  retryable: true,
+                  retryAfterMs: 3000,
+                  suggestedAction: "The switch did not respond in time — retry the read.",
+                },
+          }),
+        );
       });
       if (body !== undefined) req.write(body);
       req.end();

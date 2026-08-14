@@ -38,6 +38,7 @@ Each release section covers changes **since the previous release only**.
 
 ### Fixed
 - SwOS writes are transported over `node:http` with a lenient parser: the CSS610 firmware terminates the status line of a POST response with a bare LF (`HTTP/1.0 200 OK\n`) instead of CRLF, which a strict parser rejects — reporting a write that had actually been applied as a failure. Verified against a CSS610-8P-2S+ on firmware 2.21.
+- A SwOS request that gets no response (the CSS610 firmware applies a POSTed `.b` blob without ever answering, and a longer wait does not help) is now classified as `ROUTER_TIMEOUT` with code `SWOS_REQUEST_TIMEOUT` instead of a generic internal error. For writes this triggers the existing ambiguous-outcome handling — the caller is told the change may already have been applied and to verify switch state before retrying, and the write is explicitly not retryable. Read timeouts stay retryable. The client timeout is now injectable for tests.
 ## [1.8.0] - 2026-07-21
 
 ### Security

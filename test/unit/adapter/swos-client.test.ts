@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { SwosClient } from "../../../src/adapter/swos-client.js";
 import { HttpError } from "../../../src/adapter/rest-client.js";
 import { parseBlob } from "../../../src/adapter/swos-protocol.js";
+import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 const REALM = "SwOS";
 const USER = "admin";
@@ -210,6 +211,53 @@ describe("SwosClient", () => {
 
     stubborn.close();
     alwaysChallenging.close();
+  });
+
+  it("classifies an unanswered POST as an ambiguous ROUTER_TIMEOUT (write may have applied)", async () => {
+    // Real CSS610 firmware accepts a .b POST and never sends a response — the
+    // write lands, the client just never hears back. It must surface as a
+    // ROUTER_TIMEOUT MikroMCPError (so the caller's "verify state before
+    // retrying" handling fires), not as a generic internal error.
+    const silent = createServer();
+    silent.on("connection", (socket) => {
+      socket.once("data", () => {
+        // swallow the request and never answer
+      });
+    });
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    const { port } = silent.address() as { port: number };
+    const client2 = new SwosClient("127.0.0.1", port, { username: USER, password: PASS }, 200);
+
+    const err = await client2.postRaw("link.b", "{i01:0x03ff}").catch((e) => e);
+    expect(err).toBeInstanceOf(MikroMCPError);
+    expect(err.category).toBe(ErrorCategory.ROUTER_TIMEOUT);
+    expect(err.code).toBe("SWOS_REQUEST_TIMEOUT");
+    expect(err.message).toContain("may still have been applied");
+    expect(err.recoverability.retryable).toBe(false);
+    expect(err.recoverability.suggestedAction).toContain("does not acknowledge writes");
+
+    client2.close();
+    silent.close();
+  });
+
+  it("classifies an unanswered GET as a retryable ROUTER_TIMEOUT", async () => {
+    const silent = createServer();
+    silent.on("connection", (socket) => {
+      socket.once("data", () => {
+        // never answer
+      });
+    });
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    const { port } = silent.address() as { port: number };
+    const client2 = new SwosClient("127.0.0.1", port, { username: USER, password: PASS }, 200);
+
+    const err = await client2.getRaw("link.b").catch((e) => e);
+    expect(err).toBeInstanceOf(MikroMCPError);
+    expect(err.category).toBe(ErrorCategory.ROUTER_TIMEOUT);
+    expect(err.recoverability.retryable).toBe(true);
+
+    client2.close();
+    silent.close();
   });
 });
 
