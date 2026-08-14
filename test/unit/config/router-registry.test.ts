@@ -154,4 +154,108 @@ routers:
 `);
     expect(() => new RouterRegistry(path)).toThrow();
   });
+
+  it("loads a swos router without tls or rosVersion, defaulting deviceType", () => {
+    const path = tempYaml(`
+routers:
+  switch:
+    host: 192.168.88.2
+    port: 80
+    deviceType: swos
+    credentials:
+      source: env
+      envPrefix: SWITCH_CORE
+    tags: ["access"]
+`);
+    const registry = new RouterRegistry(path);
+    const router = registry.getRouter("switch");
+    expect(router.deviceType).toBe("swos");
+    expect(router.rosVersion).toBe("swos");
+    expect(router.tls.enabled).toBe(false);
+  });
+
+  it("normalises the swos-lite alias to the canonical swos platform", () => {
+    // Both firmware editions speak the same API, so the tool gating must not
+    // depend on which spelling the operator used.
+    const path = tempYaml(`
+routers:
+  switch:
+    host: 192.168.88.2
+    port: 80
+    deviceType: swos-lite
+    credentials:
+      source: env
+      envPrefix: SWITCH_CORE
+`);
+    expect(new RouterRegistry(path).getRouter("switch").deviceType).toBe("swos");
+  });
+
+  it("defaults deviceType to routeros for existing configs", () => {
+    const registry = new RouterRegistry(tempYaml(VALID_CONFIG));
+    expect(registry.getRouter("home").deviceType).toBe("routeros");
+    expect(registry.getRouter("home").rosVersion).toBe("7");
+  });
+
+  it("rejects an unknown deviceType", () => {
+    const path = tempYaml(`
+routers:
+  weird:
+    host: 192.168.1.1
+    port: 80
+    deviceType: banana
+    credentials:
+      source: env
+      envPrefix: ROUTER_WEIRD
+`);
+    expect(() => new RouterRegistry(path)).toThrow(/deviceType/i);
+  });
+
+  it("still requires tls on RouterOS routers", () => {
+    // Silently defaulting to tls.enabled=false would downgrade the router to
+    // plaintext HTTP and send credentials in the clear.
+    const path = tempYaml(`
+routers:
+  home:
+    host: 192.168.1.1
+    port: 443
+    credentials:
+      source: env
+      envPrefix: ROUTER_HOME
+    rosVersion: "7"
+`);
+    expect(() => new RouterRegistry(path)).toThrow(/tls is required/);
+  });
+
+  it("still requires rosVersion on RouterOS routers", () => {
+    const path = tempYaml(`
+routers:
+  home:
+    host: 192.168.1.1
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: true
+    credentials:
+      source: env
+      envPrefix: ROUTER_HOME
+`);
+    expect(() => new RouterRegistry(path)).toThrow(/rosVersion is required/);
+  });
+
+  it("rejects tls.enabled on a swos switch", () => {
+    const path = tempYaml(`
+routers:
+  switch:
+    host: 192.168.88.2
+    port: 443
+    deviceType: swos
+    tls:
+      enabled: true
+      rejectUnauthorized: true
+    credentials:
+      source: env
+      envPrefix: SWITCH_CORE
+`);
+    expect(() => new RouterRegistry(path)).toThrow(/plain HTTP only/);
+  });
 });

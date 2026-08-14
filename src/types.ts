@@ -9,11 +9,17 @@ export interface MaintenanceWindow {
   timezone: string;
 }
 
+// Device platform: RouterOS (default) or MikroTik switch firmware. "swos"
+// covers both SwOS and SwOS Lite — one wire protocol, and the key dialect is
+// detected per field from the device's own response.
+export type DeviceType = "routeros" | "swos";
+
 // Router configuration
 export interface RouterConfig {
   id: string;
   host: string;
   port: number;
+  deviceType?: DeviceType;
   tls: {
     enabled: boolean;
     rejectUnauthorized: boolean;

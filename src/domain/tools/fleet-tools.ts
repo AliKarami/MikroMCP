@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { compactFields } from "./pagination.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
@@ -8,13 +9,26 @@ import { createLogger } from "../../observability/logger.js";
 import { auditLog } from "../../observability/audit-log.js";
 import { checkAuthz } from "../../middleware/authz.js";
 import { buildRouterToolContext } from "../../mcp/tool-context.js";
-import { getOrCreateBreaker, assertMaintenanceWindow } from "../../mcp/tool-executor.js";
+import {
+  getOrCreateBreaker,
+  assertMaintenanceWindow,
+  assertPlatformMatch,
+} from "../../mcp/tool-executor.js";
 import { withRetry } from "../../adapter/retry-engine.js";
 import { checkFleetConfirmation } from "../../middleware/fleet-confirmation.js";
 import { takeSnapshot } from "../snapshot/snapshot-engine.js";
 import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 
 const log = createLogger("fleet-tools");
+
+/** Map a decoded SwOS `sys.b` blob onto the subset of system/resource fields health reports. */
+function swosResourceRecord(sys: unknown): Record<string, string> {
+  const decoded = (sys ?? {}) as Record<string, unknown>;
+  return {
+    version: String(decoded.version ?? ""),
+    uptime: `${String(decoded.uptime ?? 0)}s`,
+  };
+}
 
 const checkHealthInputSchema = z
   .object({
@@ -101,6 +115,7 @@ const listRoutersTool: ToolDefinition = {
       id: r.id,
       host: r.host,
       port: r.port,
+      deviceType: r.deviceType ?? "routeros",
       tlsEnabled: r.tls.enabled,
       tags: r.tags,
       rosVersion: r.rosVersion,
@@ -113,7 +128,7 @@ const listRoutersTool: ToolDefinition = {
       (r) =>
         `  ${compactFields(
           { ...r, tags: r.tags.join(",") },
-          ["id", "host", "port", "tlsEnabled", "tags", "rosVersion", "isDefault"],
+          ["id", "host", "port", "deviceType", "tlsEnabled", "tags", "rosVersion", "isDefault"],
         )}`,
     );
 
@@ -131,7 +146,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     name: "check_router_health",
     title: "Check Router Health",
     description:
-      "Probe a router by fetching system/resource. Returns health status, ROS version, uptime, CPU load, and memory info. Unlike other tools, this never throws — unreachable routers are reported as healthy=false.",
+      "Probe a device: RouterOS routers via system/resource, SwOS switches via sys.b. Returns health status, firmware version, uptime, and (RouterOS only) CPU load and memory info. Unlike other tools, this never throws — unreachable devices are reported as healthy=false.",
     inputSchema: checkHealthInputSchema,
     annotations: {
       readOnlyHint: true,
@@ -139,14 +154,16 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       idempotentHint: true,
       openWorldHint: false,
     },
+    platform: "any",
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       checkHealthInputSchema.parse(params);
       log.info({ routerId: context.routerId }, "Checking router health");
       const startMs = Date.now();
 
       try {
-        const resources = await context.routerClient.get<RouterOSRecord>("system/resource");
-        const resource = resources[0];
+        const resource = context.swosClient
+          ? swosResourceRecord(await context.swosClient.get("sys.b"))
+          : (await context.routerClient.get<RouterOSRecord>("system/resource"))[0];
         const latencyMs = Date.now() - startMs;
 
         const result = {
@@ -343,6 +360,9 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         let journalId: string | undefined;
         try {
           checkAuthz(context.identity, parsed.toolName, router.id);
+          // Authz first, so an unauthorized caller cannot learn a router's
+          // device type from the platform error.
+          assertPlatformMatch(targetTool, router);
           assertMaintenanceWindow(targetTool.annotations.destructiveHint, router, router.id);
           const routerContext = buildRouterToolContext({
             routerConfig: router,
@@ -355,11 +375,11 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           const toolParams = { ...parsed.params, routerId: router.id };
 
           const snapshotIds: string[] = [];
-          if (isWrite && targetTool.snapshotPaths && targetTool.snapshotPaths.length > 0) {
-            for (const path of targetTool.snapshotPaths) {
+          if (isWrite) {
+            for (const path of snapshotPathsFor(targetTool, toolParams as Record<string, unknown>)) {
               try {
                 const meta = await takeSnapshot(
-                  routerContext.routerClient,
+                  routerContext.deviceClient,
                   router.id,
                   path,
                   snapshotDir,

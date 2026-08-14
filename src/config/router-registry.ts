@@ -1,15 +1,30 @@
 import { readFileSync, existsSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
-import type { RouterConfig } from "../types.js";
+import type { DeviceType, RouterConfig } from "../types.js";
 import { createLogger } from "../observability/logger.js";
 
 const log = createLogger("router-registry");
+
+/**
+ * Accepted `deviceType` spellings mapped to the canonical platform. Switches
+ * running full SwOS and SwOS Lite speak the same API, so both resolve to
+ * "swos"; "swos-lite" stays accepted because it names a real firmware edition
+ * and is the spelling most users will reach for.
+ */
+const DEVICE_TYPE_ALIASES: Record<string, DeviceType> = {
+  routeros: "routeros",
+  swos: "swos",
+  "swos-lite": "swos",
+};
 
 const RouterConfigSchema = z
   .object({
     host: z.string().min(1, "host is required"),
     port: z.number().int().min(1).max(65535),
+    deviceType: z
+      .enum(Object.keys(DEVICE_TYPE_ALIASES) as [string, ...string[]])
+      .optional(),
     tls: z
       .object({
         enabled: z.boolean(),
@@ -17,7 +32,8 @@ const RouterConfigSchema = z
         ca: z.string().optional(),
         fingerprint: z.string().optional(),
       })
-      .strict(),
+      .strict()
+      .optional(),
     credentials: z
       .object({
         source: z.enum(["env", "vault"]),
@@ -26,7 +42,7 @@ const RouterConfigSchema = z
       })
       .strict(),
     tags: z.array(z.string()).default([]),
-    rosVersion: z.string().min(1),
+    rosVersion: z.string().min(1).optional(),
     sshPort: z.number().int().min(1).max(65535).optional(),
     sshFingerprint: z.string().optional(),
     cmdAllow: z.array(z.string()).optional(),
@@ -44,7 +60,42 @@ const RouterConfigSchema = z
       )
       .optional(),
   })
-  .strict();
+  .strict()
+  // `tls` and `rosVersion` are only optional for SwOS switches, which have
+  // neither (plain HTTP, no RouterOS version). Keeping them mandatory for
+  // RouterOS prevents a missing/mistyped block from silently downgrading a
+  // router to unencrypted HTTP or guessing the wrong REST paths.
+  .superRefine((config, ctx) => {
+    if (deviceTypeOf(config.deviceType) === "routeros") {
+      if (!config.tls) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["tls"],
+          message: "tls is required for RouterOS devices",
+        });
+      }
+      if (!config.rosVersion) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["rosVersion"],
+          message: "rosVersion is required for RouterOS devices",
+        });
+      }
+      return;
+    }
+    if (config.tls?.enabled) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tls", "enabled"],
+        message: "SwOS devices speak plain HTTP only; tls.enabled must be false",
+      });
+    }
+  });
+
+/** Resolve a configured `deviceType` spelling to its canonical platform. */
+function deviceTypeOf(configured: string | undefined): DeviceType {
+  return configured ? DEVICE_TYPE_ALIASES[configured] : "routeros";
+}
 
 const ConfigFileSchema = z
   .object({
@@ -75,7 +126,16 @@ export class RouterRegistry {
     }
 
     for (const [id, config] of Object.entries(result.data.routers)) {
-      const routerConfig = { ...config, id } as RouterConfig;
+      const deviceType = deviceTypeOf(config.deviceType);
+      // The schema guarantees tls and rosVersion for RouterOS devices, so these
+      // fallbacks only ever apply to SwOS switches: plain HTTP, no ROS version.
+      const routerConfig: RouterConfig = {
+        ...config,
+        id,
+        deviceType,
+        tls: config.tls ?? { enabled: false, rejectUnauthorized: true },
+        rosVersion: config.rosVersion ?? "swos",
+      };
       if (routerConfig.tls.enabled && !routerConfig.tls.rejectUnauthorized) {
         log.warn(
           { routerId: id },

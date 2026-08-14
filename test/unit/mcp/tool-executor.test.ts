@@ -269,4 +269,61 @@ describe("executeToolCall", () => {
     expect(result.content[0].text).toContain("not available in a fleet-tool context");
     expect((result.structuredContent as { code?: string }).code).toBe("FLEET_CONTEXT_UNAVAILABLE");
   });
+
+  it("platform gate — swos tool refused on a RouterOS router", async () => {
+    const tool = makeReadTool(
+      async () => ({ content: "never", structuredContent: {} }),
+      { platform: "swos" },
+    );
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
+
+    expect(result.isError).toBe(true);
+    const sc = result.structuredContent as { code?: string };
+    expect(sc?.code).toBe("PLATFORM_MISMATCH");
+    expect(result.content[0].text).toContain("swos");
+  });
+
+  it("platform gate — RouterOS tool refused on a swos router", async () => {
+    const tool = makeReadTool(async () => ({ content: "never", structuredContent: {} }));
+    const deps = makeDeps();
+    const swosRouter = {
+      id: "r1",
+      host: "h",
+      port: 80,
+      deviceType: "swos",
+      tls: { enabled: false, rejectUnauthorized: false },
+      credentials: { source: "env" as const, envPrefix: "ROUTER_R1" },
+      tags: [],
+      rosVersion: "swos",
+    };
+    (deps.registry.getRouter as ReturnType<typeof vi.fn>).mockReturnValue(swosRouter);
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+    expect(result.isError).toBe(true);
+    expect((result.structuredContent as { code?: string }).code).toBe("PLATFORM_MISMATCH");
+  });
+
+  it("platform gate — matching platforms pass through to the handler", async () => {
+    const handler = vi.fn(async () => ({ content: "ok", structuredContent: {} }));
+    const tool = makeReadTool(handler, { platform: "swos" });
+    const deps = makeDeps();
+    const swosRouter = {
+      id: "r1",
+      host: "h",
+      port: 80,
+      deviceType: "swos",
+      tls: { enabled: false, rejectUnauthorized: false },
+      credentials: { source: "env" as const, envPrefix: "ROUTER_R1" },
+      tags: [],
+      rosVersion: "swos",
+    };
+    (deps.registry.getRouter as ReturnType<typeof vi.fn>).mockReturnValue(swosRouter);
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+    expect(result.isError).toBeFalsy();
+    expect(handler).toHaveBeenCalledOnce();
+  });
 });

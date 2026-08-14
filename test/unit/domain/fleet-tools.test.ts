@@ -220,6 +220,7 @@ describe("fleet-tools", () => {
         id: "edge-1",
         host: "10.0.0.1",
         port: 8443,
+        deviceType: "routeros",
         tlsEnabled: true,
         tags: ["edge", "prod"],
         rosVersion: "7.15",
