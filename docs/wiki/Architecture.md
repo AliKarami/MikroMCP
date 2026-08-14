@@ -16,17 +16,18 @@ flowchart LR
     end
 
     subgraph Core["MikroMCP server"]
-        Registry["Tool registry\n118 typed tools"]
+        Registry["Tool registry\n122 typed tools"]
         Schemas["Zod schemas\nstrict validation"]
         Auth["Identity, RBAC\nconfirmation gate"]
         Safety["Retry, circuit breaker\naudit, snapshots, journal"]
         Format["Human text + structured JSON"]
     end
 
-    subgraph Adapters["Router adapters"]
+    subgraph Adapters["Device adapters"]
         Rest["RouterOS REST\nHTTPS"]
         Ssh["SSH adapter\ndiagnostics and guarded commands"]
         Ftp["FTP adapter\nfile uploads"]
+        Swos["SwOS '.b' API\nHTTP digest"]
     end
 
     subgraph Routers["MikroTik RouterOS 7.x fleet"]
@@ -117,11 +118,13 @@ flowchart TD
 |---|---|---|
 | Entry point | `src/main.ts` | Loads config, selects transport, starts server |
 | Tool registry | `src/mcp/tool-registry.ts` | Registers tools; injects circuit breaker, retry, correlation ID, credentials |
-| All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**118 typed tools**) |
+| All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**122 typed tools**) |
 | REST client | `src/adapter/rest-client.ts` | `get`, `getOne`, `create`, `update`, `remove`, `execute` over HTTPS |
 | SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping`, `/tool/traceroute`, `/tool/torch`, and `run_command` |
 | FTP adapter | `src/adapter/ftp-client.ts` | Uploads files via `upload_file` |
-| Snapshot engine | `src/domain/snapshot/snapshot-engine.ts` | Captures RouterOS section state before writes |
+| SwOS client | `src/adapter/swos-client.ts` | SwOS / SwOS Lite `.b` API over HTTP digest auth (`deviceType: "swos"`) |
+| SwOS protocol | `src/adapter/swos-protocol.ts` | Endpoint schemas and the "broken JSON" wire codec |
+| Snapshot engine | `src/domain/snapshot/snapshot-engine.ts` | Captures RouterOS section state (or the raw SwOS blob) before writes |
 | Write journal | `src/domain/snapshot/write-journal.ts` | Append-only record of writes with rollback metadata |
 | Auth middleware | `src/mcp/authz.ts` | Enforces RBAC at call time |
 | Router registry | `src/config/router-registry.ts` | Loads and validates `config/routers.yaml` |

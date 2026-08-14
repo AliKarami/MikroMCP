@@ -1,6 +1,6 @@
 # Available Tools
 
-All 118 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `config/routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 122 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `config/routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -2007,3 +2007,68 @@ Add, update, or remove a PPP profile. Idempotent by name. `update` returns `no_c
 | `dryRun` | boolean | `false` | Preview changes without applying |
 
 **Example prompt:** "Create a PPP profile named broadband with rate limit 10M/10M and session timeout 24h on router isp-edge"
+
+---
+
+## SwOS
+
+> **Experimental.** These tools run only against devices configured with `deviceType: "swos"` in `routers.yaml` (MikroTik SwOS or SwOS Lite firmware, e.g. CSS326, CSS610-8P-2S+). They speak the reverse-engineered `.b` HTTP API with digest auth — no RouterOS REST. RouterOS tools aimed at a switch fail with `PLATFORM_MISMATCH`, and vice versa. The schema is pinned to a CSS610-8P-2S+ on SwOS Lite 2.21; other models decode on a best-effort basis, with unrecognised keys preserved under `_raw`, and every write reports whether the switch's firmware is one the schema was verified against.
+
+### `list_swos_endpoints` — Read
+
+List the `.b` endpoints supported by this server with their decoded field names. Schema introspection only — no device call.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+
+**Example prompt:** "Which SwOS endpoints does the server know for the access switch?"
+
+---
+
+### `get_swos_status` — Read
+
+Retrieve status from a SwOS switch: identity, model, firmware, uptime, per-port link state/speed/duplex, PoE mode/state/power, and SFP modules. The firmware line states whether the decode schema has been verified against that release.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+| `include` | `link.b`\|`sys.b`\|`poe.b`\|`sfp.b`[] | all four | Which status endpoints to fetch |
+
+**Example prompt:** "What's the status of the core switch — port links, PoE, and SFP modules?"
+
+---
+
+### `get_swos_endpoint` — Read
+
+Fetch and decode a single SwOS `.b` endpoint (`link.b`, `sys.b`, `poe.b`, `lacp.b`, `rstp.b`, `snmp.b`, `fwd.b`, `vlan.b`, `!stats.b`, `sfp.b`, `host.b`, `acl.b`, ...) as structured data. Unknown keys are preserved under `_raw`. Long decodes are truncated in the text response only — `structuredContent` always carries the full result.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+| `endpoint` | enum | — | `.b` endpoint to fetch (see `list_swos_endpoints`) |
+
+**Example prompt:** "Show me the RSTP state of the switch — roles and root path costs."
+
+---
+
+### `write_swos_blob` — Write · Destructive · Idempotent
+
+Mutate a SwOS `.b` endpoint. The full blob is read, the given fields are merged in, and the entire blob is written back (the firmware only accepts whole-blob writes). Untouched fields are re-sent byte-for-byte.
+
+`dryRun` defaults to `true` — always preview first. Before a real write the pre-write blob is snapshotted, so the call can be undone with `rollback_change` using its journal ID. When every requested value already matches, the tool returns `no_change` and writes nothing.
+
+Values are given by decoded field name (from `list_swos_endpoints`) or by a raw wire key already present in the blob; anything else — including a schema field this device's firmware does not send — is rejected rather than injected. Option fields take the enum name (e.g. `auto` for PoE out mode). A per-port field given a single value applies it to **every** port — the firmware has no per-port addressing here, so partial-port changes require passing an array covering every port. Per-port bitmasks (`enabled`, `flow_rx`, …) are one number, not a list of flags.
+
+Device-generated tables (`!stats.b`, `!dhost.b`, `!igmp.b`, `!aclstats.b`) are read-only and cannot be targeted, and neither can record lists (`vlan.b`, `host.b`, `acl.b`) — a field merge cannot express "edit row 3", and writing one would replace the table rather than edit it.
+
+Every result — dry run and real write — carries a `compatibility` verdict comparing the switch's model and firmware against the set the schema was validated on, plus any wire keys the schema does not map. It warns; it does not block. See [Configuration → Firmware compatibility](Configuration).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+| `endpoint` | enum | — | `.b` endpoint to write (writable ones only) |
+| `fields` | object | — | Values by decoded field name (or raw wire key) |
+| `dryRun` | boolean | `true` | Preview the resulting blob without writing |
+
+**Example prompt:** "Preview setting PoE out mode to auto on all ports of the access switch, then apply it."
