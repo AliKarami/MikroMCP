@@ -1,7 +1,12 @@
 ---
 import { SITE } from "../data/content.ts";
+import Shapes from "./Shapes.astro";
 ---
 <section class="cta">
+  <div class="field" aria-hidden="true"></div>
+  <div class="mesh" aria-hidden="true"><Shapes name="mesh" /></div>
+  <div class="fan" aria-hidden="true"><Shapes name="fan" /></div>
+
   <div class="container inner" data-reveal>
     <h2 class="h2">Bring AI to your MikroTik fleet</h2>
     <p class="lede">Install in a minute, dry-run everything, keep the audit trail.</p>
@@ -13,9 +18,23 @@ import { SITE } from "../data/content.ts";
 </section>
 
 <style>
-  .cta { position: relative; padding: 84px 0; border-top: 1px solid var(--border); text-align: center; }
+  .cta { position: relative; overflow: hidden; padding: 104px 0 110px; text-align: center; border-top: 1px solid var(--border); }
+  .field {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(75% 120% at 20% 100%, rgba(45,212,191,.20), transparent 58%),
+      radial-gradient(80% 130% at 82% 0%, rgba(139,92,246,.34), transparent 60%),
+      linear-gradient(190deg, #0B1338 0%, #11225A 55%, #0C1740 100%);
+  }
+  .mesh { position: absolute; inset: 0; opacity: .2; pointer-events: none; }
+  .fan {
+    position: absolute; left: -210px; bottom: -250px; width: 520px; aspect-ratio: 520 / 460;
+    opacity: .38; transform: rotate(180deg); pointer-events: none;
+  }
   .inner { position: relative; }
-  .h2 { margin-bottom: 12px; }
-  .lede { margin: 0 auto 28px; max-width: 460px; }
-  .btns { display: inline-flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .h2 { margin-bottom: 14px; }
+  .lede { margin: 0 auto 32px; max-width: 470px; color: #C4CEE4; }
+  .btns { display: inline-flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+
+  @media (max-width: 820px) { .fan { display: none; } }
 </style>

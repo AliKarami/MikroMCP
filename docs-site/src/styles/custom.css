@@ -8,51 +8,58 @@
 :root {
   --sl-font: "Inter", system-ui, -apple-system, sans-serif;
   --sl-font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* The landing page ramp, mirrored from site/src/styles/theme.css. */
+  --mm-c1: #2DD4BF;
+  --mm-c2: #22A7E0;
+  --mm-c3: #4F6BF6;
+  --mm-c4: #8B5CF6;
+  --mm-grad: linear-gradient(115deg, var(--mm-c1) 0%, var(--mm-c2) 34%, var(--mm-c3) 68%, var(--mm-c4) 100%);
 }
 
-/* Mirrors site/src/styles/theme.css so docs.mikromcp.com and mikromcp.com read as one product. */
 :root,
 :root[data-theme="dark"] {
-  --sl-color-accent-low: #0b2b28;
-  --sl-color-accent: #0e7c71;
-  --sl-color-accent-high: #4fc3b4;
+  --sl-color-accent-low: #131C42;
+  --sl-color-accent: #3A62E8;
+  --sl-color-accent-high: #7FD5E8;
 
   --sl-color-white: #ffffff;
-  --sl-color-gray-1: #e7ecf1;
-  --sl-color-gray-2: #c0c9d2;
-  --sl-color-gray-3: #939fac;
-  --sl-color-gray-4: #63707d;
-  --sl-color-gray-5: #1b222a;
-  --sl-color-gray-6: #101419;
-  --sl-color-black: #0a0c0f;
+  --sl-color-gray-1: #EDF1F7;
+  --sl-color-gray-2: #C6CFDE;
+  --sl-color-gray-3: #A3AEC4;
+  --sl-color-gray-4: #6C7893;
+  --sl-color-gray-5: #212940;
+  --sl-color-gray-6: #0F1320;
+  --sl-color-black: #07090F;
 
-  --sl-color-bg: #0a0c0f;
-  --sl-color-bg-nav: #0a0c0f;
-  --sl-color-bg-sidebar: #080a0d;
-  --sl-color-hairline: #1b222a;
-  --sl-color-hairline-shade: #1b222a;
-  --sl-color-text-accent: #4fc3b4;
+  --sl-color-bg: #07090F;
+  --sl-color-bg-nav: #07090F;
+  --sl-color-bg-sidebar: #05070C;
+  --sl-color-hairline: #212940;
+  --sl-color-hairline-shade: #212940;
+  --sl-color-text-accent: #7FD5E8;
 }
 
 :root[data-theme="light"] {
-  --sl-color-accent-low: #cdeae5;
-  --sl-color-accent: #0e7c71;
-  --sl-color-accent-high: #0a5952;
-  --sl-color-text-accent: #0e7c71;
+  --sl-color-accent-low: #DCE4FB;
+  --sl-color-accent: #3049C8;
+  --sl-color-accent-high: #1F2F92;
+  --sl-color-text-accent: #3049C8;
 }
 
-/* Neutral, high-contrast primary action — matches the landing page button. */
-.sl-link-button.primary,
-a.sl-link-button.primary {
-  background: #e9eef3;
-  border-color: #e9eef3;
-  color: #0a0c0f;
+/* Gradient rule under the header, so the docs read as the same product as the landing page. */
+.header {
+  position: relative;
 }
-:root[data-theme="light"] .sl-link-button.primary,
-:root[data-theme="light"] a.sl-link-button.primary {
-  background: #0e7c71;
-  border-color: #0e7c71;
-  color: #ffffff;
+.header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--mm-grad);
+  opacity: .85;
 }
 
 /* Match the landing page wordmark, which is plain text rather than the accent colour. */
@@ -62,4 +69,18 @@ a.site-title {
   letter-spacing: -0.02em;
 }
 
-h1, h2, h3 { letter-spacing: -0.022em; }
+.sl-link-button.primary,
+a.sl-link-button.primary {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #07090F;
+  border-radius: 999px;
+}
+:root[data-theme="light"] .sl-link-button.primary,
+:root[data-theme="light"] a.sl-link-button.primary {
+  background: #3049C8;
+  border-color: #3049C8;
+  color: #ffffff;
+}
+
+h1, h2, h3 { letter-spacing: -0.025em; }

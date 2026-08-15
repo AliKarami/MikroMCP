@@ -3,6 +3,7 @@ import { examples } from "../data/content.ts";
 ---
 <section class="section ex" id="examples">
   <div class="container">
+    <p class="eyebrow" data-reveal>Examples</p>
     <h2 class="h2 head" data-reveal>Real prompts, real operations</h2>
     <p class="lede sub" data-reveal>Paste these straight into your AI assistant.</p>
 
@@ -29,25 +30,25 @@ import { examples } from "../data/content.ts";
 </section>
 
 <style>
-  .head { margin-bottom: 8px; }
+  .head { margin: 14px 0 8px; }
   .sub { margin: 0 0 32px; }
   .tablist {
     display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 18px;
     scrollbar-width: thin; -webkit-overflow-scrolling: touch;
   }
   .tab {
-    flex: 0 0 auto; font-size: 12.5px; padding: 8px 14px; border-radius: 7px; cursor: pointer;
+    flex: 0 0 auto; font-size: 12.5px; padding: 9px 16px; border-radius: 999px; cursor: pointer;
     background: transparent; border: 1px solid var(--border); color: var(--text-dim);
     transition: color .15s ease, border-color .15s ease, background .15s ease; white-space: nowrap;
   }
-  .tab:hover { color: var(--text); border-color: var(--border-strong); }
-  .tab.active { color: var(--brand-ink); background: rgba(20,184,166,.08); border-color: rgba(20,184,166,.35); font-weight: 500; }
-  .tab:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
+  .tab:hover { color: var(--text); border-color: var(--border-strong); background: rgba(255,255,255,.04); }
+  .tab.active { color: #fff; background: var(--grad-brand); border-color: transparent; font-weight: 600; }
+  .tab:focus-visible { outline: 2px solid var(--c2); outline-offset: 2px; }
 
   .panel { display: none; }
   .panel.active { display: block; }
 
-  .term { background: var(--bg-sunken); border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; box-shadow: 0 20px 50px -34px rgba(0,0,0,.9); }
+  .term { background: linear-gradient(180deg,#0C1120,#070A12); border: 1px solid var(--border-strong); border-radius: 16px; overflow: hidden; box-shadow: 0 34px 80px -40px rgba(0,0,0,.95); }
   .bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.02); }
   .dot { width: 9px; height: 9px; border-radius: 50%; opacity: .8; }
   .dot.r { background:#d9584f;} .dot.y{background:#d8a530;} .dot.g{background:#3f9e50;}

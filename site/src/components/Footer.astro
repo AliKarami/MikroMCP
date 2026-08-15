@@ -53,7 +53,11 @@ const cols = [
 </footer>
 
 <style>
-  .footer { border-top: 1px solid var(--border); padding: 60px 0 36px; background: var(--bg-sunken); }
+  .footer { position: relative; padding: 60px 0 36px; background: var(--bg-sunken); }
+  .footer::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--grad-brand); opacity: .8;
+  }
   .cols { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 36px; }
   .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
   .brand img { border-radius: 7px; }
@@ -62,14 +66,17 @@ const cols = [
   .col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .col a { font-size: 14px; color: var(--text-dim); transition: color .15s ease; }
   .col a:hover { color: var(--text); }
-  .col a:focus-visible, .meta a:focus-visible, .brand:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 3px; border-radius: 4px; }
+  .col a:focus-visible, .meta a:focus-visible, .brand:focus-visible { outline: 2px solid var(--c2); outline-offset: 3px; border-radius: 4px; }
 
   .bottom { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
   .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--text-dim); }
   .meta a { color: var(--text-dim); }
   .meta a:hover { color: var(--text); }
-  .ver { color: var(--brand-ink); }
-  .ver:hover { color: var(--brand-ink); text-decoration: underline; }
+  .ver {
+    color: var(--text); background: rgba(255,255,255,.05);
+    border: 1px solid var(--border-strong); border-radius: 999px; padding: 3px 11px; font-size: 12px;
+  }
+  .ver:hover { border-color: rgba(255,255,255,.32); }
   .sep { color: var(--border-strong); }
   .copy { margin: 0; font-size: 13px; color: var(--text-dim); }
 

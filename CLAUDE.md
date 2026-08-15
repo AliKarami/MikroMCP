@@ -295,6 +295,13 @@ Two sites ship from this repo, and **both are part of the same PR as the code ch
 
 **docs.mikromcp.com is generated, not hand-written.** Its pages come from `docs/wiki/*.md` via `docs-site/scripts/sync-wiki.mjs`, which runs automatically on `predev`/`prebuild`. Edit `docs/wiki/` and never `docs-site/src/content/docs/` — that directory is overwritten on every build. A new wiki page also needs an entry in `WIKI_ORDER` in `sync-wiki.mjs`.
 
+**Visual system.** Everything derives from a four-stop cool ramp defined in `site/src/styles/theme.css` — `--c1` teal `#2DD4BF` → `--c2` cyan → `--c3` blue → `--c4` violet `#8B5CF6`, exposed as `--grad-brand`. Rules of thumb when adding to the page:
+
+- Reach for a token (`--c1`…`--c4`, `--grad-brand`, `.grad-text`, `.panel`, `.panel-field`) rather than a new hex value. `docs-site/src/styles/custom.css` mirrors the ramp; change both together.
+- Colour arrives as **bounded fields** — a full-bleed section background or a large rounded panel — not as a blurred glow floating behind text.
+- Illustration is inline SVG in `site/src/components/Shapes.astro` (`fan`, `mesh`, `pipe`), never an image asset. Astro's scoped styles do not reach inside a child component, so a figure must be wrapped in a host-owned positioned element: `<div class="fan"><Shapes name="fan" /></div>`. The svg itself is sized by the global `.shape-svg` rule.
+- Page rhythm alternates: colour field → plain ground → panel. Two colour fields in a row flattens the effect.
+
 **mikromcp.com has a single source of truth for product facts:** `site/src/data/content.ts`. Tool count, version, feature list, example prompts and FAQ all live there, and `site/src/pages/llms.txt.ts` and `llms-full.txt.ts` generate the LLM-facing text files from it. Never hardcode a tool count or version in a component.
 
 | What changed | Site updates required |

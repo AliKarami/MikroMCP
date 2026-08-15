@@ -5,7 +5,7 @@ import { stats } from "../data/content.ts";
   <div class="container grid">
     {stats.map((s) => (
       <div class="stat" data-reveal>
-        <span class="n mono">{s.n}</span>
+        <span class="n grad-text mono">{s.n}</span>
         <span class="l mono">{s.l}</span>
       </div>
     ))}
@@ -13,17 +13,17 @@ import { stats } from "../data/content.ts";
 </section>
 
 <style>
-  .strip { border-bottom: 1px solid var(--border); }
+  .strip { border-bottom: 1px solid var(--border); background: var(--bg-sunken); }
   .grid { display: grid; grid-template-columns: repeat(4, 1fr); }
   .stat {
-    display: flex; flex-direction: column; align-items: center; gap: 5px;
-    padding: 26px 16px; text-align: center; position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    padding: 34px 16px; text-align: center; position: relative;
   }
   .stat:not(:last-child)::after {
-    content: ""; position: absolute; right: 0; top: 26%; height: 48%; width: 1px; background: var(--border);
+    content: ""; position: absolute; right: 0; top: 24%; height: 52%; width: 1px; background: var(--border);
   }
-  .n { font-size: clamp(15px, 1.5vw, 17px); font-weight: 500; line-height: 1.3; color: var(--text); }
-  .l { font-size: 11.5px; color: var(--text-mute); letter-spacing: .04em; }
+  .n { font-size: clamp(19px, 2.1vw, 26px); font-weight: 500; line-height: 1.25; }
+  .l { font-size: 11.5px; color: var(--text-mute); letter-spacing: .06em; text-transform: uppercase; }
 
   @media (max-width: 680px) {
     .grid { grid-template-columns: repeat(2, 1fr); }
