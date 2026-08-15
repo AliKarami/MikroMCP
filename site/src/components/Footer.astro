@@ -1,14 +1,13 @@
 ---
 import { SITE } from "../data/content.ts";
-const wiki = "https://github.com/AliKarami/MikroMCP/wiki";
 const cols = [
   { h: "Product", links: [
     { t: "Features", u: "#features" }, { t: "How it works", u: "#how" },
     { t: "Tools", u: "#examples" }, { t: "Quick start", u: "#quick-start" },
   ] },
   { h: "Docs", links: [
-    { t: "Getting Started", u: `${wiki}/Getting-Started` }, { t: "Available Tools", u: `${wiki}/Available-Tools` },
-    { t: "Architecture", u: `${wiki}/Architecture` }, { t: "Security", u: `${wiki}/Security` },
+    { t: "Getting Started", u: `${SITE.docs}/getting-started/` }, { t: "Available Tools", u: `${SITE.docs}/available-tools/` },
+    { t: "Architecture", u: `${SITE.docs}/architecture/` }, { t: "Security", u: `${SITE.docs}/security/` },
   ] },
   { h: "Project", links: [
     { t: "GitHub", u: SITE.github }, { t: "Changelog", u: `${SITE.github}/blob/main/CHANGELOG.md` },
@@ -40,7 +39,7 @@ const cols = [
 
     <div class="bottom">
       <div class="meta">
-        <span class="mono ver">v1.6.0</span>
+        <a class="mono ver" href={`${SITE.github}/releases/tag/v${SITE.version}`} target="_blank" rel="noopener">v{SITE.version}</a>
         <span class="sep">·</span>
         <span>MIT licensed</span>
         <span class="sep">·</span>
@@ -54,23 +53,24 @@ const cols = [
 </footer>
 
 <style>
-  .footer { border-top: 1px solid var(--border); padding: 64px 0 40px; background: #0A0D10; }
+  .footer { border-top: 1px solid var(--border); padding: 60px 0 36px; background: var(--bg-sunken); }
   .cols { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 36px; }
   .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
   .brand img { border-radius: 7px; }
   .tag { margin: 14px 0 0; color: var(--text-dim); font-size: 13.5px; max-width: 240px; line-height: 1.6; }
-  .col h3 { font-size: 12px; color: var(--brand-glow); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 14px; font-weight: 500; }
+  .col h3 { font-size: 11.5px; color: var(--text-mute); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 14px; font-weight: 500; }
   .col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .col a { font-size: 14px; color: var(--text-dim); transition: color .15s ease; }
   .col a:hover { color: var(--text); }
-  .col a:focus-visible, .meta a:focus-visible, .brand:focus-visible { outline: 2px solid var(--brand-glow); outline-offset: 3px; border-radius: 4px; }
+  .col a:focus-visible, .meta a:focus-visible, .brand:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 3px; border-radius: 4px; }
 
   .bottom { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
   .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--text-dim); }
   .meta a { color: var(--text-dim); }
-  .meta a:hover { color: var(--brand-glow); }
-  .ver { color: var(--brand-glow); }
-  .sep { color: var(--border); }
+  .meta a:hover { color: var(--text); }
+  .ver { color: var(--brand-ink); }
+  .ver:hover { color: var(--brand-ink); text-decoration: underline; }
+  .sep { color: var(--border-strong); }
   .copy { margin: 0; font-size: 13px; color: var(--text-dim); }
 
   @media (max-width: 760px) { .cols { grid-template-columns: 1fr 1fr; gap: 32px; } .lead { grid-column: 1 / -1; } }

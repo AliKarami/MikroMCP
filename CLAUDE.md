@@ -282,6 +282,38 @@ Documentation is updated in the **same PR** that ships the change — never as a
 | New CLI command or install path | `docs/wiki/Getting-Started.md` |
 | Bug fix shipped | `CHANGELOG.md` (`[Unreleased]` → Fixed) only; no wiki update needed unless user-facing behaviour changes |
 | Milestone completed | `ROADMAP.md` (flip `🔜` → `✅`), `docs/wiki/Roadmap.md` (mirror status), `README.md` (roadmap note) |
+| Anything user-facing | The two websites — see [Keeping the websites in sync](#keeping-the-websites-in-sync) below |
+
+### Keeping the websites in sync
+
+Two sites ship from this repo, and **both are part of the same PR as the code change** — never a follow-up:
+
+| Site | Source | Deployed to |
+|---|---|---|
+| Landing page | `site/` (Astro) | https://mikromcp.com |
+| Documentation | `docs-site/` (Astro + Starlight) | https://docs.mikromcp.com |
+
+**docs.mikromcp.com is generated, not hand-written.** Its pages come from `docs/wiki/*.md` via `docs-site/scripts/sync-wiki.mjs`, which runs automatically on `predev`/`prebuild`. Edit `docs/wiki/` and never `docs-site/src/content/docs/` — that directory is overwritten on every build. A new wiki page also needs an entry in `WIKI_ORDER` in `sync-wiki.mjs`.
+
+**mikromcp.com has a single source of truth for product facts:** `site/src/data/content.ts`. Tool count, version, feature list, example prompts and FAQ all live there, and `site/src/pages/llms.txt.ts` and `llms-full.txt.ts` generate the LLM-facing text files from it. Never hardcode a tool count or version in a component.
+
+| What changed | Site updates required |
+|---|---|
+| Tool added/removed | `site/src/data/content.ts` → `toolCount` (the lockstep test `test/unit/docs/tool-count-sync.test.ts` fails until every listed file agrees) |
+| New capability worth advertising | `site/src/data/content.ts` → `features`, and an `examples` entry if there is a prompt a user would paste |
+| Version bumped | Nothing by hand — `npm version` runs `scripts/sync-version.mjs`, which regenerates both `src/version.ts` and `site/src/data/version.ts`. `test/unit/docs/site-version-sync.test.ts` catches it if the script was bypassed |
+| Wiki page added/edited/renamed | `docs/wiki/*.md`, plus `WIKI_ORDER` in `docs-site/scripts/sync-wiki.mjs` for a new page |
+| Install path or CLI flow changed | `site/src/components/QuickStart.astro`, `docs/wiki/Getting-Started.md` |
+| Milestone shipped | `ROADMAP.md` **and** `docs/wiki/Roadmap.md` — the docs site publishes the wiki copy, so a roadmap that stops at an old version is publicly visible |
+
+Before pushing, build both so a template or link error is caught locally:
+
+```bash
+npm --prefix site run build
+npm --prefix docs-site run build
+```
+
+Roadmap files are deliberately excluded from `tool-count-sync.test.ts`: their counts are historical statements about past releases ("99 → 117 tools") and must not be rewritten to the current count.
 
 ### CHANGELOG discipline
 
@@ -363,15 +395,18 @@ Example entry:
 Run when merging a release PR into `main`:
 
 1. Move all items from `[Unreleased]` in `CHANGELOG.md` to a new `## [X.Y.Z] - YYYY-MM-DD` section.
-2. `npm version <major|minor|patch>` — bumps `package.json` + `package-lock.json`. (`npm version` auto-runs `scripts/sync-version.mjs`, which regenerates `src/version.ts`.)
+2. `npm version <major|minor|patch>` — bumps `package.json` + `package-lock.json`. (`npm version` auto-runs `scripts/sync-version.mjs`, which regenerates `src/version.ts` **and** `site/src/data/version.ts`, so the mikromcp.com footer follows the release.)
 3. Update README version badge: `version-v<X.Y.Z>`.
 4. Update `server.json` — change BOTH the top-level `"version"` field AND `packages[0].version` to `"X.Y.Z"`.
-5. Flip `🔜` → `✅` in `ROADMAP.md` and `docs/wiki/Roadmap.md`.
-6. Update `docs/wiki/Available-Tools.md` for any new/changed tools.
-7. Commit on the release branch: `chore: bump version to X.Y.Z`.
-8. Open PR, squash-merge into `main`.
-9. `git tag vX.Y.Z && git push origin vX.Y.Z`
-10. CI `release.yml` auto-runs: builds binaries, pushes Docker images, creates GitHub Release (uses the release section from `CHANGELOG.md` as release notes).
+5. Add the release to `ROADMAP.md` and mirror it in `docs/wiki/Roadmap.md` (flip `🔜` → `✅`, or add a section for a release that had no planned milestone). docs.mikromcp.com publishes the wiki copy.
+6. Update `docs/wiki/Available-Tools.md` for any new/changed tools, and `site/src/data/content.ts` (`toolCount`, `features`, `examples`) for anything worth advertising on the landing page.
+7. `npm test` — the lockstep tests fail if any doc, wiki page, or site file still states the old tool count or version.
+8. Build both sites: `npm --prefix site run build && npm --prefix docs-site run build`.
+9. Commit on the release branch: `chore: bump version to X.Y.Z`.
+10. Open PR, squash-merge into `main`.
+11. `git tag vX.Y.Z && git push origin vX.Y.Z`
+12. CI `release.yml` auto-runs: builds binaries, pushes Docker images, creates GitHub Release (uses the release section from `CHANGELOG.md` as release notes).
+13. Deploy the two sites (see `site/DEPLOY.md` and `docs-site/DEPLOY.md`).
 
 ## What not to do
 

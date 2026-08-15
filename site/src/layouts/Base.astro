@@ -4,7 +4,7 @@ import { SITE } from "../data/content.ts";
 interface Props { title?: string; description?: string; }
 const {
   title = `${SITE.name} — ${SITE.tagline}`,
-  description = "Connect Claude, ChatGPT, Cursor and Codex to MikroTik RouterOS using the Model Context Protocol. Open-source MCP server with 117 typed, auditable tools.",
+  description = `Connect Claude, ChatGPT, Cursor and Codex to MikroTik RouterOS using the Model Context Protocol. Open-source MCP server with ${SITE.toolCount} typed, auditable tools.`,
 } = Astro.props;
 const canonical = new URL(Astro.url.pathname, SITE.domain).href;
 const ogImage = `${SITE.domain}/og-image.png`;
@@ -37,6 +37,7 @@ const graphLd = {
       name: SITE.name,
       applicationCategory: "DeveloperApplication",
       applicationSubCategory: "Model Context Protocol server",
+      softwareVersion: SITE.version,
       operatingSystem: "Linux, macOS, Windows",
       description,
       url: SITE.domain,
@@ -63,7 +64,7 @@ const graphLd = {
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.png" type="image/png" sizes="387x387" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="theme-color" content="#0b0f0e" />
+    <meta name="theme-color" content="#0A0C0F" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={SITE.name} />
     <meta property="og:locale" content="en_US" />

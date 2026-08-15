@@ -10,6 +10,17 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Changed
+- mikromcp.com restyled: single accent colour (teal, from the logo) used for identity, links and active states rather than as large fills; the orange call-to-action, gradient headline text, radial glow blobs, dot-grid background, animated topology graphic, and coloured button/card glows are gone, replaced by a neutral high-contrast primary button, hairline surfaces and a tighter type scale.
+- mikromcp.com and docs.mikromcp.com now share one palette, so the landing page and docs read as one product.
+- Landing page product facts (tool count, version, features, example prompts, FAQ) now come from a single source, `site/src/data/content.ts`; `/llms.txt` and `/llms-full.txt` are generated from it instead of being hand-maintained static files. Site documentation links point at docs.mikromcp.com rather than the GitHub wiki.
+- `scripts/sync-version.mjs` also regenerates `site/src/data/version.ts`, so the version in the site footer follows `npm version` instead of being edited by hand (it had been stuck at v1.6.0 since the v1.6 release).
+
+### Fixed
+- Stale tool count (117) corrected to 118 across the landing page, `/llms.txt`, `/llms-full.txt`, and the wiki pages published to docs.mikromcp.com (`Available-Tools`, `Connecting-to-AI-Assistants`, `Development`, `Getting-Started`, `RouterOS-API-Setup`).
+- `ROADMAP.md` and `docs/wiki/Roadmap.md` stopped at v1.6.0; v1.7 and v1.8 are now documented, so the published roadmap reflects shipped releases.
+- `test/unit/docs/tool-count-sync.test.ts` now also covers the landing page and the wiki pages that state a current tool count; a new `site-version-sync.test.ts` checks the site footer version and README badge against `package.json`.
+
 ## [1.8.0] - 2026-07-21
 
 ### Security

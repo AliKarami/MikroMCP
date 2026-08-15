@@ -159,7 +159,7 @@ curl -sk https://10.0.0.1/rest/system/resource \
 
 ## Step 5b — Install the Usage Skill (recommended)
 
-The MikroMCP usage skill teaches your AI assistant how to use all 117 tools safely — dry-run before write, rollback patterns, fleet operations, and more. Install it once in Claude Code:
+The MikroMCP usage skill teaches your AI assistant how to use all 118 tools safely — dry-run before write, rollback patterns, fleet operations, and more. Install it once in Claude Code:
 
 ```bash
 /mikromcp

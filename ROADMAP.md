@@ -293,6 +293,46 @@ Bug fixes and refactors surfaced by a thorough code-review pass:
 
 ---
 
+## ✅ v1.7 — Router Discovery (117 → 118 tools)
+
+**Goal:** Let an MCP client discover which routers it may target without reading the config file.
+
+- `list_routers` — read-only enumeration of the routers configured in `routers.yaml`: id, host, port, TLS status, tags, RouterOS version, and which one is the default. Clients use it to resolve valid `routerId` values and the tags `bulk_execute` targets. Reflects local config only — no RouterOS API call, no credentials in the response — and results are scoped to the caller's `allowedRouters`.
+
+---
+
+## ✅ v1.8 — Security & Correctness Hardening
+
+**Goal:** Close the gaps found in a full security review of the HTTP transport, the guard rails, and the change-safety subsystem. No new tools.
+
+### Transport & authentication
+
+- `GET /metrics` requires a bearer token whenever identities are configured (previously unauthenticated); 401s carry `WWW-Authenticate: Bearer`.
+- Streamable HTTP sessions are bound to the identity that created them, so a token can no longer drive another identity's session; idle sessions are evicted after 30 minutes instead of growing unbounded.
+- Token lookups are cached by `sha256(token)` so bcrypt runs once per token rather than per request.
+- Non-integer numeric env vars (`MIKROMCP_PORT`, body/rate/ssh/retention) fail fast with a configuration error instead of silently becoming `NaN`.
+
+### Guard rails
+
+- `allowedToolPatterns` matches with an anchored glob. The previous prefix-only match meant a pattern like `*_wifi` had an empty prefix and silently allowed every tool.
+- The `run_command` deny-list normalises path and space separators and checks every `;`/newline-separated segment; `:execute` and `:parse` are denied by default. Documented as best-effort defense-in-depth, not an authorization boundary.
+- TLS certificate fingerprint pinning is enforced in the connection layer (post-handshake `fingerprint256` check), so it holds regardless of `rejectUnauthorized` — previously it was a silent no-op on exactly the self-signed setups the docs recommend pinning for.
+
+### Change safety
+
+- Confirmation tokens (single-tool and fleet) are self-verifying HMACs recomputed from the current call and secret, so a token issued before a restart still verifies afterwards. Single-use replay protection is kept in an in-memory cache.
+- Snapshots store only restorable configuration: dynamic router-generated records are excluded and runtime/counter fields are stripped, so counters no longer produce spurious diffs and read-only fields are never written back mid-restore.
+- Order-sensitive paths (firewall filter/nat/mangle, routing rules) warn that rule order is not restored; deleted users are never recreated, since passwords are not in snapshots.
+
+### Correctness
+
+- Tool risk annotations audited against a written rubric — 18 `manage_*` tools promoted to `destructiveHint: true`; `fetch_url`, `export_config` and `bandwidth_test` corrected.
+- `bulk_execute` tag targeting matches routers carrying **all** requested tags (it previously matched any, over-targeting destructive fan-outs) and runs through the full per-router safety stack.
+- Boolean record fields compared through a shared `isTrue()` helper — several `enable` actions previously reported "no change" without applying anything.
+- 64-bit RouterOS counters above 2^53 stay strings instead of silently losing precision.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
