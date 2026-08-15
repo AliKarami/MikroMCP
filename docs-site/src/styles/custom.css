@@ -10,43 +10,56 @@
   --sl-font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
+/* Mirrors site/src/styles/theme.css so docs.mikromcp.com and mikromcp.com read as one product. */
 :root,
 :root[data-theme="dark"] {
-  --sl-color-accent-low: #0c2e2a;
-  --sl-color-accent: #14b8a6;
-  --sl-color-accent-high: #2dd4bf;
+  --sl-color-accent-low: #0b2b28;
+  --sl-color-accent: #0e7c71;
+  --sl-color-accent-high: #4fc3b4;
 
   --sl-color-white: #ffffff;
-  --sl-color-gray-1: #e6edf3;
-  --sl-color-gray-2: #c4ccd4;
-  --sl-color-gray-3: #9ba8b4;
-  --sl-color-gray-4: #5b6975;
-  --sl-color-gray-5: #293239;
-  --sl-color-gray-6: #13171c;
-  --sl-color-black: #0b0e11;
+  --sl-color-gray-1: #e7ecf1;
+  --sl-color-gray-2: #c0c9d2;
+  --sl-color-gray-3: #939fac;
+  --sl-color-gray-4: #63707d;
+  --sl-color-gray-5: #1b222a;
+  --sl-color-gray-6: #101419;
+  --sl-color-black: #0a0c0f;
 
-  --sl-color-bg: #0b0e11;
-  --sl-color-bg-nav: #0b0e11;
-  --sl-color-bg-sidebar: #0d1116;
-  --sl-color-hairline: #293239;
-  --sl-color-text-accent: #2dd4bf;
-}
-
-:root {
-  --mm-accent: #ea580c;
-}
-.sl-link-button.primary,
-a.sl-link-button.primary {
-  background: var(--mm-accent);
-  border-color: var(--mm-accent);
-  color: #fff;
+  --sl-color-bg: #0a0c0f;
+  --sl-color-bg-nav: #0a0c0f;
+  --sl-color-bg-sidebar: #080a0d;
+  --sl-color-hairline: #1b222a;
+  --sl-color-hairline-shade: #1b222a;
+  --sl-color-text-accent: #4fc3b4;
 }
 
 :root[data-theme="light"] {
-  --sl-color-accent-low: #c7f0ea;
-  --sl-color-accent: #0f766e;
-  --sl-color-accent-high: #0b5a53;
-  --sl-color-text-accent: #0f766e;
+  --sl-color-accent-low: #cdeae5;
+  --sl-color-accent: #0e7c71;
+  --sl-color-accent-high: #0a5952;
+  --sl-color-text-accent: #0e7c71;
 }
 
-h1, h2, h3 { letter-spacing: -0.02em; }
+/* Neutral, high-contrast primary action — matches the landing page button. */
+.sl-link-button.primary,
+a.sl-link-button.primary {
+  background: #e9eef3;
+  border-color: #e9eef3;
+  color: #0a0c0f;
+}
+:root[data-theme="light"] .sl-link-button.primary,
+:root[data-theme="light"] a.sl-link-button.primary {
+  background: #0e7c71;
+  border-color: #0e7c71;
+  color: #ffffff;
+}
+
+/* Match the landing page wordmark, which is plain text rather than the accent colour. */
+.site-title,
+a.site-title {
+  color: var(--sl-color-white);
+  letter-spacing: -0.02em;
+}
+
+h1, h2, h3 { letter-spacing: -0.022em; }

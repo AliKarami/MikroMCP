@@ -132,6 +132,26 @@ A focused four-phase effort completed after v1.5 and released as v1.6.0:
 
 ---
 
+## ✅ v1.7 — Router Discovery (117 → 118 tools)
+
+`list_routers` — read-only enumeration of the routers configured in `routers.yaml` (id, host, port, TLS status, tags, ROS version, and which is the default), so MCP clients can discover valid `routerId` values and tags for `bulk_execute` targeting without opening the config file. Reflects local config only: no RouterOS API call, no credentials in the response, and results are scoped to the caller's `allowedRouters`.
+
+---
+
+## ✅ v1.8 — Security & Correctness Hardening
+
+No new tools. A security and correctness release covering the HTTP transport, the guard rails, and the change-safety subsystem.
+
+**Transport & auth:** `GET /metrics` requires a bearer token when identities are configured; Streamable HTTP sessions are bound to the identity that created them and idle sessions are evicted; token lookups are cached by hash so bcrypt runs once per token; non-integer numeric env vars fail fast instead of becoming `NaN`.
+
+**Guard rails:** `allowedToolPatterns` now uses an anchored glob (leading and mid-string wildcards previously matched everything); the `run_command` deny-list normalises path/space syntax and checks every `;`-separated segment, with `:execute`/`:parse` denied by default; TLS fingerprint pinning is enforced in the connection layer so it holds even with `rejectUnauthorized: false`.
+
+**Change safety:** confirmation tokens are self-verifying HMACs that survive a restart; snapshots store only restorable configuration (dynamic records and runtime counters stripped) so rollback no longer writes back read-only fields; order-sensitive paths warn that rule order is not restored.
+
+**Correctness:** tool risk annotations audited against a written rubric; `bulk_execute` tag targeting matches routers carrying **all** requested tags and runs through the full per-router safety stack; boolean record fields compared via a shared `isTrue()` helper; 64-bit counters keep precision.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

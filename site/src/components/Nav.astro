@@ -15,7 +15,7 @@ import { SITE } from "../data/content.ts";
       <a href="#faq">FAQ</a>
       <a href={SITE.docs} target="_blank" rel="noopener">Docs <span aria-hidden="true">↗</span></a>
       <a href={SITE.github} target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a>
-      <a class="btn btn-accent" href="#quick-start">Get Started</a>
+      <a class="btn btn-primary" href="#quick-start">Get Started</a>
     </nav>
 
     <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="mobile-menu">
@@ -30,7 +30,7 @@ import { SITE } from "../data/content.ts";
     <a href="#faq">FAQ</a>
     <a href={SITE.docs} target="_blank" rel="noopener">Docs ↗</a>
     <a href={SITE.github} target="_blank" rel="noopener">GitHub ↗</a>
-    <a class="btn btn-accent btn-lg" href="#quick-start">Get Started</a>
+    <a class="btn btn-primary btn-lg" href="#quick-start">Get Started</a>
   </nav>
 </header>
 
@@ -41,7 +41,7 @@ import { SITE } from "../data/content.ts";
     border-bottom: 1px solid transparent;
   }
   .nav.scrolled {
-    background: rgba(11, 14, 17, 0.72);
+    background: rgba(10, 12, 15, 0.78);
     backdrop-filter: saturate(160%) blur(12px);
     -webkit-backdrop-filter: saturate(160%) blur(12px);
     border-bottom-color: var(--border);
@@ -53,7 +53,7 @@ import { SITE } from "../data/content.ts";
   .links { display: flex; align-items: center; gap: 26px; }
   .links a:not(.btn) { font-size: 14px; color: var(--text-dim); font-weight: 500; transition: color .15s ease; }
   .links a:not(.btn):hover { color: var(--text); }
-  .links a:focus-visible, .mobile a:focus-visible { outline: 2px solid var(--brand-glow); outline-offset: 3px; border-radius: 4px; }
+  .links a:focus-visible, .mobile a:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 3px; border-radius: 4px; }
 
   .hamburger { display: none; flex-direction: column; gap: 5px; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 9px 8px; cursor: pointer; }
   .hamburger span { width: 20px; height: 2px; background: var(--text); border-radius: 2px; transition: transform .2s ease, opacity .2s ease; }
@@ -63,7 +63,7 @@ import { SITE } from "../data/content.ts";
 
   .mobile {
     display: none; flex-direction: column; gap: 4px; padding: 12px 24px 20px;
-    background: rgba(11,14,17,.96); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+    background: rgba(10,12,15,.97); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
   }
   .mobile.open { display: flex; }
   .mobile a:not(.btn) { padding: 12px 4px; font-size: 15px; color: var(--text-dim); border-bottom: 1px solid rgba(41,50,57,.5); }
@@ -73,7 +73,7 @@ import { SITE } from "../data/content.ts";
   @media (max-width: 880px) {
     .links { display: none; }
     .hamburger { display: flex; }
-    .nav { background: rgba(11,14,17,.72); backdrop-filter: blur(12px); border-bottom-color: var(--border); }
+    .nav { background: rgba(10,12,15,.78); backdrop-filter: blur(12px); border-bottom-color: var(--border); }
   }
 </style>
 

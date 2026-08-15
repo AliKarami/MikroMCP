@@ -11,6 +11,7 @@ const icons: Record<string, string> = {
   shield: '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
   puzzle: '<path d="M10 3h4v3a2 2 0 0 0 4 0V3h3v18H4V3h3v3a2 2 0 0 0 4 0z"/>',
+  layers: '<polygon points="12 3 21 8 12 13 3 8 12 3"/><polyline points="3 13 12 18 21 13"/>',
 };
 ---
 <section class="section" id="features">
@@ -31,25 +32,21 @@ const icons: Record<string, string> = {
 </section>
 
 <style>
-  .head { max-width: 620px; margin-bottom: 44px; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .head { max-width: 620px; margin-bottom: 40px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .card {
-    background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 26px 24px; transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    background: var(--bg); padding: 26px 24px; transition: background .18s ease;
     position: relative;
   }
-  .card:hover {
-    transform: translateY(-3px); border-color: var(--brand);
-    box-shadow: 0 18px 40px -22px rgba(20,184,166,.5), 0 0 0 1px rgba(20,184,166,.2);
-  }
+  .card:hover { background: var(--bg-elev); }
   .ico {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 42px; height: 42px; border-radius: 10px; color: var(--brand-glow);
-    background: rgba(20,184,166,.1); border: 1px solid rgba(20,184,166,.22); margin-bottom: 16px;
+    width: 34px; height: 34px; border-radius: 8px; color: var(--brand-ink);
+    background: rgba(255,255,255,.03); border: 1px solid var(--border-strong); margin-bottom: 16px;
   }
-  .ico svg { width: 22px; height: 22px; }
-  .card h3 { font-size: 17px; margin-bottom: 8px; }
-  .card p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.6; }
+  .ico svg { width: 18px; height: 18px; }
+  .card h3 { font-size: 16px; margin-bottom: 8px; }
+  .card p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.65; }
 
   @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }

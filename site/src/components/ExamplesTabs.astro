@@ -36,24 +36,24 @@ import { examples } from "../data/content.ts";
     scrollbar-width: thin; -webkit-overflow-scrolling: touch;
   }
   .tab {
-    flex: 0 0 auto; font-size: 13px; padding: 9px 16px; border-radius: 999px; cursor: pointer;
-    background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
+    flex: 0 0 auto; font-size: 12.5px; padding: 8px 14px; border-radius: 7px; cursor: pointer;
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
     transition: color .15s ease, border-color .15s ease, background .15s ease; white-space: nowrap;
   }
-  .tab:hover { color: var(--text); border-color: var(--brand-deep); }
-  .tab.active { color: #04110F; background: linear-gradient(135deg, var(--brand-glow), var(--brand)); border-color: transparent; font-weight: 500; }
-  .tab:focus-visible { outline: 2px solid var(--brand-glow); outline-offset: 2px; }
+  .tab:hover { color: var(--text); border-color: var(--border-strong); }
+  .tab.active { color: var(--brand-ink); background: rgba(20,184,166,.08); border-color: rgba(20,184,166,.35); font-weight: 500; }
+  .tab:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
 
   .panel { display: none; }
   .panel.active { display: block; }
 
-  .term { background: linear-gradient(180deg,#0E1318,#0B0F13); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px -30px rgba(0,0,0,.7); }
-  .bar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.015); }
-  .dot { width: 11px; height: 11px; border-radius: 50%; }
-  .dot.r { background:#ff5f57;} .dot.y{background:#febc2e;} .dot.g{background:#28c840;}
-  .title { margin-left: 8px; font-size: 12px; color: var(--text-dim); }
-  .body { margin: 0; padding: 22px 20px; font-size: 14px; line-height: 1.85; color: #D4DEE6; white-space: pre-wrap; word-break: break-word; }
-  .sigil { color: var(--accent); margin-right: 10px; font-weight: 700; }
+  .term { background: var(--bg-sunken); border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; box-shadow: 0 20px 50px -34px rgba(0,0,0,.9); }
+  .bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.02); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; opacity: .8; }
+  .dot.r { background:#d9584f;} .dot.y{background:#d8a530;} .dot.g{background:#3f9e50;}
+  .title { margin-left: 8px; font-size: 11.5px; color: var(--text-mute); }
+  .body { margin: 0; padding: 22px 20px; font-size: 13.5px; line-height: 1.85; color: #C3CFDA; white-space: pre-wrap; word-break: break-word; }
+  .sigil { color: var(--text-mute); margin-right: 10px; }
 </style>
 
 <script>

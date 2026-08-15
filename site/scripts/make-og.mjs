@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -8,15 +9,19 @@ const root = resolve(__dirname, "..");
 const W = 1200;
 const H = 630;
 
-// Brand tokens (mirrors theme.css)
-const BG = "#0B0E11";
-const BRAND = "#14B8A6";
-const BRAND_GLOW = "#2DD4BF";
-const BRAND_DEEP = "#0F766E";
-const ACCENT = "#EA580C";
-const TEXT = "#E6EDF3";
-const DIM = "#9BA8B4";
-const BORDER = "#293239";
+// Brand tokens (mirrors src/styles/theme.css)
+const BG = "#0A0C0F";
+const BRAND_INK = "#4FC3B4";
+const TEXT = "#E7ECF1";
+const DIM = "#939FAC";
+const MUTE = "#7A8794";
+const BORDER = "#1B222A";
+const BORDER_STRONG = "#2A333D";
+
+// Read the tool count from the single source of truth rather than restating it here.
+const content = readFileSync(resolve(root, "src/data/content.ts"), "utf-8");
+const toolCount = content.match(/toolCount:\s*(\d+)/)?.[1];
+if (!toolCount) throw new Error("could not read toolCount from src/data/content.ts");
 
 const logoPath = resolve(root, "public/assets/MikroMCP-logo-square.png");
 const logo = await sharp(logoPath).resize(150, 150).png().toBuffer();
@@ -25,60 +30,49 @@ const logoB64 = `data:image/png;base64,${logo.toString("base64")}`;
 const svg = `
 <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <radialGradient id="glow" cx="32%" cy="30%" r="60%">
-      <stop offset="0%" stop-color="${BRAND_DEEP}" stop-opacity="0.30"/>
-      <stop offset="55%" stop-color="${BRAND_DEEP}" stop-opacity="0.06"/>
+    <radialGradient id="wash" cx="24%" cy="8%" r="70%">
+      <stop offset="0%" stop-color="#14B8A6" stop-opacity="0.10"/>
       <stop offset="100%" stop-color="${BG}" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="0.4">
-      <stop offset="0%" stop-color="${BRAND_GLOW}"/>
-      <stop offset="55%" stop-color="${BRAND}"/>
-      <stop offset="100%" stop-color="${BRAND_DEEP}"/>
-    </linearGradient>
-    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
-      <circle cx="1.5" cy="1.5" r="1.5" fill="#16323a" fill-opacity="0.5"/>
-    </pattern>
   </defs>
 
   <rect width="${W}" height="${H}" fill="${BG}"/>
-  <rect width="${W}" height="${H}" fill="url(#dots)"/>
-  <rect width="${W}" height="${H}" fill="url(#glow)"/>
+  <rect width="${W}" height="${H}" fill="url(#wash)"/>
 
-  <!-- topology accent lines -->
-  <g stroke="${BORDER}" stroke-width="1.5" opacity="0.7" fill="none">
-    <path d="M 760 470 L 880 250 L 1040 300 L 1120 150"/>
-    <path d="M 880 250 L 980 430"/>
-  </g>
-  <g fill="${BRAND}">
-    <circle cx="760" cy="470" r="5"/>
-    <circle cx="880" cy="250" r="6"/>
-    <circle cx="1040" cy="300" r="5"/>
-    <circle cx="1120" cy="150" r="6"/>
-    <circle cx="980" cy="430" r="5"/>
-  </g>
+  <!-- terminal card -->
+  <rect x="700" y="196" width="440" height="238" rx="10" fill="#070910" stroke="${BORDER_STRONG}"/>
+  <line x1="700" y1="238" x2="1140" y2="238" stroke="${BORDER}"/>
+  <circle cx="722" cy="217" r="4.5" fill="#d9584f"/>
+  <circle cx="738" cy="217" r="4.5" fill="#d8a530"/>
+  <circle cx="754" cy="217" r="4.5" fill="#3f9e50"/>
+  <text x="776" y="222" font-family="'JetBrains Mono', monospace" font-size="14" fill="${MUTE}">claude · core-01</text>
+  <text x="722" y="278" font-family="'JetBrains Mono', monospace" font-size="15" fill="${TEXT}">› Show CPU &amp; warning logs for core-01</text>
+  <text x="722" y="312" font-family="'JetBrains Mono', monospace" font-size="15" fill="${BRAND_INK}">→ get_system_status(core-01)</text>
+  <text x="722" y="342" font-family="'JetBrains Mono', monospace" font-size="15" fill="${BRAND_INK}">→ list_interfaces(core-01)</text>
+  <text x="722" y="372" font-family="'JetBrains Mono', monospace" font-size="15" fill="${BRAND_INK}">→ get_log(core-01, topics=warning)</text>
+  <text x="722" y="404" font-family="'JetBrains Mono', monospace" font-size="15" fill="#6FB98A">✓ 3 tool calls · validated · audited</text>
 
   <!-- logo + wordmark -->
-  <image href="${logoB64}" x="80" y="78" width="86" height="86"/>
-  <text x="184" y="138" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700" fill="${TEXT}">MikroMCP</text>
+  <image href="${logoB64}" x="80" y="72" width="72" height="72"/>
+  <text x="170" y="122" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700" fill="${TEXT}">MikroMCP</text>
 
   <!-- eyebrow -->
-  <text x="82" y="250" font-family="'JetBrains Mono', monospace" font-size="22" letter-spacing="2" fill="${BRAND_GLOW}">MODEL CONTEXT PROTOCOL · ROUTEROS 7.X</text>
+  <text x="82" y="236" font-family="'JetBrains Mono', monospace" font-size="18" letter-spacing="2.4" fill="${DIM}">MODEL CONTEXT PROTOCOL · ROUTEROS 7.X</text>
 
   <!-- headline -->
-  <text x="80" y="330" font-family="Inter, Arial, sans-serif" font-size="66" font-weight="700" fill="${TEXT}">AI-native network</text>
-  <text x="80" y="404" font-family="Inter, Arial, sans-serif" font-size="66" font-weight="700" fill="${TEXT}">automation for</text>
-  <text x="80" y="478" font-family="Inter, Arial, sans-serif" font-size="66" font-weight="700" fill="url(#teal)">MikroTik RouterOS</text>
+  <text x="80" y="312" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="700" fill="${TEXT}">Open Source</text>
+  <text x="80" y="378" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="700" fill="${BRAND_INK}">MikroTik MCP Server</text>
+  <text x="80" y="444" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="700" fill="${TEXT}">for RouterOS</text>
 
   <!-- subline -->
-  <text x="82" y="540" font-family="Inter, Arial, sans-serif" font-size="26" fill="${DIM}">Expose RouterOS as 117 typed, auditable MCP tools.</text>
+  <text x="82" y="500" font-family="Inter, Arial, sans-serif" font-size="24" fill="${DIM}">Expose RouterOS as ${toolCount} typed, auditable MCP tools.</text>
 
-  <!-- trust chips -->
-  <text x="82" y="585" font-family="'JetBrains Mono', monospace" font-size="19" fill="${DIM}">117 tools  ·  MIT  ·  dry-run + rollback  ·  RBAC + audit</text>
-
-  <!-- accent underline bar -->
-  <rect x="82" y="497" width="430" height="4" rx="2" fill="${ACCENT}"/>
+  <!-- footer rule + facts -->
+  <line x1="80" y1="540" x2="1120" y2="540" stroke="${BORDER}"/>
+  <text x="82" y="576" font-family="'JetBrains Mono', monospace" font-size="17" fill="${MUTE}">${toolCount} tools  ·  MIT  ·  dry-run + rollback  ·  RBAC + audit</text>
+  <text x="1118" y="576" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="17" fill="${MUTE}">mikromcp.com</text>
 </svg>
 `;
 
 await sharp(Buffer.from(svg)).png().toFile(resolve(root, "public/og-image.png"));
-console.log("Wrote public/og-image.png (1200x630)");
+console.log(`Wrote public/og-image.png (${W}x${H}, ${toolCount} tools)`);
