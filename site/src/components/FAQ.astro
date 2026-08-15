@@ -13,6 +13,7 @@ const faqLd = {
 ---
 <section class="section faq" id="faq">
   <div class="container inner">
+    <p class="eyebrow eb" data-reveal>FAQ</p>
     <h2 class="h2 head" data-reveal>Frequently asked questions</h2>
     <div class="list">
       {faqs.map((f) => (
@@ -33,22 +34,23 @@ const faqLd = {
 
 <style>
   .inner { max-width: 800px; margin: 0 auto; }
-  .head { text-align: center; margin-bottom: 40px; }
+  .eb { display: flex; justify-content: center; }
+  .head { text-align: center; margin: 14px 0 40px; }
   .list { display: flex; flex-direction: column; gap: 12px; }
   details {
     background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius);
     overflow: hidden; transition: border-color .2s ease;
   }
-  details[open] { border-color: var(--border-strong); }
+  details[open] { border-color: var(--border-strong); background: var(--bg-panel); }
   details:hover { border-color: var(--border-strong); }
   summary {
     list-style: none; cursor: pointer; padding: 17px 20px; display: flex; align-items: center;
     justify-content: space-between; gap: 16px; font-weight: 600; font-size: 15px;
   }
   summary::-webkit-details-marker { display: none; }
-  summary:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: -2px; border-radius: var(--radius); }
+  summary:focus-visible { outline: 2px solid var(--c2); outline-offset: -2px; border-radius: var(--radius); }
   .chev { display: inline-flex; color: var(--text-mute); transition: transform .25s ease; flex: 0 0 auto; }
   .chev svg { width: 18px; height: 18px; }
-  details[open] .chev { transform: rotate(180deg); color: var(--brand-ink); }
+  details[open] .chev { transform: rotate(180deg); color: var(--c2); }
   details p { margin: 0; padding: 0 20px 20px; color: var(--text-dim); font-size: 14.5px; line-height: 1.7; }
 </style>

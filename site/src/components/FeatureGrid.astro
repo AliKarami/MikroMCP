@@ -10,18 +10,32 @@ const icons: Record<string, string> = {
   activity: '<polyline points="3 12 8 12 11 20 14 4 17 12 21 12"/>',
   shield: '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
-  puzzle: '<path d="M10 3h4v3a2 2 0 0 0 4 0V3h3v18H4V3h3v3a2 2 0 0 0 4 0z"/>',
   layers: '<polygon points="12 3 21 8 12 13 3 8 12 3"/><polyline points="3 13 12 18 21 13"/>',
 };
+
+// Each tile samples a different span of the ramp, so the grid reads as one family
+// rather than nine identical chips.
+const tiles = [
+  ["#2DD4BF", "#1FB6C9"],
+  ["#22C3D6", "#22A7E0"],
+  ["#22A7E0", "#3387EC"],
+  ["#3387EC", "#4F6BF6"],
+  ["#4F6BF6", "#6360F8"],
+  ["#6360F8", "#7A5EF7"],
+  ["#7A5EF7", "#8B5CF6"],
+  ["#2DD4BF", "#4F6BF6"],
+  ["#4F6BF6", "#8B5CF6"],
+];
 ---
 <section class="section" id="features">
   <div class="container">
+    <p class="eyebrow" data-reveal>Coverage</p>
     <h2 class="h2 head" data-reveal>Everything you need to operate RouterOS with AI</h2>
     <div class="grid">
-      {features.map((f) => (
-        <article class="card" data-reveal>
+      {features.map((f, i) => (
+        <article class="card" data-reveal style={`--g1:${tiles[i % tiles.length][0]}; --g2:${tiles[i % tiles.length][1]}`}>
           <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" set:html={icons[f.icon]} />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" set:html={icons[f.icon]} />
           </span>
           <h3>{f.title}</h3>
           <p>{f.body}</p>
@@ -32,21 +46,35 @@ const icons: Record<string, string> = {
 </section>
 
 <style>
-  .head { max-width: 620px; margin-bottom: 40px; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .head { max-width: 640px; margin: 14px 0 42px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .card {
-    background: var(--bg); padding: 26px 24px; transition: background .18s ease;
-    position: relative;
+    position: relative; padding: 28px 26px 30px; border-radius: var(--radius);
+    background: var(--bg-elev); border: 1px solid var(--border);
+    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+    overflow: hidden;
   }
-  .card:hover { background: var(--bg-elev); }
+  /* A soft wash in the card's own ramp colours, revealed on hover. */
+  .card::before {
+    content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity .25s ease;
+    background: radial-gradient(120% 110% at 100% 0%, color-mix(in srgb, var(--g2) 22%, transparent), transparent 62%);
+  }
+  .card:hover {
+    transform: translateY(-4px); border-color: var(--border-strong);
+    background: var(--bg-panel);
+    box-shadow: 0 24px 50px -30px rgba(0,0,0,.9);
+  }
+  .card:hover::before { opacity: 1; }
+
   .ico {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 34px; height: 34px; border-radius: 8px; color: var(--brand-ink);
-    background: rgba(255,255,255,.03); border: 1px solid var(--border-strong); margin-bottom: 16px;
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 46px; height: 46px; border-radius: 13px; color: #fff; margin-bottom: 18px;
+    background: linear-gradient(135deg, var(--g1), var(--g2));
+    box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--g2) 85%, transparent);
   }
-  .ico svg { width: 18px; height: 18px; }
-  .card h3 { font-size: 16px; margin-bottom: 8px; }
-  .card p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.65; }
+  .ico svg { width: 23px; height: 23px; }
+  .card h3 { position: relative; font-size: 17px; margin-bottom: 9px; }
+  .card p { position: relative; margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.65; }
 
   @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }

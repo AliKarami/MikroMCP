@@ -1,26 +1,35 @@
 ---
+import Shapes from "./Shapes.astro";
 ---
 <section class="section problem">
-  <div class="container inner" data-reveal>
-    <h2 class="h2">Raw CLI is the wrong abstraction for AI agents</h2>
-    <p class="lede">
-      RouterOS is powerful, but asking an LLM to improvise shell commands against production
-      network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas,
-      idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC,
-      audit logs, snapshots, and rollback-aware change workflows.
-    </p>
-    <p class="pull mono">
-      MikroMCP turns MikroTik RouterOS into a production-minded MCP control plane.
-    </p>
+  <div class="container">
+    <div class="panel-field wrap" data-reveal>
+      <div class="mesh" aria-hidden="true"><Shapes name="mesh" /></div>
+      <div class="inner">
+        <h2 class="h2">Raw CLI is the wrong abstraction for AI agents</h2>
+        <p class="lede">
+          RouterOS is powerful, but asking an LLM to improvise shell commands against production
+          network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas,
+          idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC,
+          audit logs, snapshots, and rollback-aware change workflows.
+        </p>
+        <p class="pull mono">
+          MikroMCP turns MikroTik RouterOS into a production-minded MCP control plane.
+        </p>
+      </div>
+    </div>
   </div>
 </section>
 
 <style>
-  .problem { text-align: center; }
-  .inner { max-width: 740px; margin: 0 auto; }
-  .lede { margin: 20px auto 0; }
+  .wrap { padding: 68px 40px 60px; text-align: center; }
+  .mesh { position: absolute; inset: 0; opacity: .16; pointer-events: none; }
+  .inner { position: relative; max-width: 720px; margin: 0 auto; }
+  .lede { margin: 22px auto 0; }
   .pull {
-    margin: 32px auto 0; max-width: 620px; font-size: 13.5px; line-height: 1.7;
-    color: var(--brand-ink); padding: 14px 0 0; border-top: 1px solid var(--border);
+    margin: 30px auto 0; display: inline-block; font-size: 13.5px; line-height: 1.7;
+    color: var(--text); padding: 12px 22px; border-radius: 999px;
+    background: rgba(255,255,255,.05); border: 1px solid var(--border-strong);
   }
+  @media (max-width: 620px) { .wrap { padding: 44px 22px 42px; } }
 </style>

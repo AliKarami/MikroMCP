@@ -11,10 +11,11 @@ Each release section covers changes **since the previous release only**.
 ## [Unreleased]
 
 ### Changed
-- mikromcp.com restyled: single accent colour (teal, from the logo) used for identity, links and active states rather than as large fills; the orange call-to-action, gradient headline text, radial glow blobs, dot-grid background, animated topology graphic, and coloured button/card glows are gone, replaced by a neutral high-contrast primary button, hairline surfaces and a tighter type scale.
-- mikromcp.com and docs.mikromcp.com now share one palette, so the landing page and docs read as one product.
+- mikromcp.com rebuilt around a cool brand ramp — teal `#2DD4BF` → cyan → blue → violet `#8B5CF6`, anchored on the logo teal. The page is now structured as alternating zones: full-bleed gradient colour fields for the hero and closing call to action, large rounded gradient panels for the problem statement and request pipeline, and plain ground between them. Geometric motifs (a fan of rounded squares, a node/edge mesh, radiating arcs) are authored as inline SVG in `site/src/components/Shapes.astro` rather than shipped as image assets, so they stay crisp and theme-aware. Feature tiles each sample a different span of the ramp; buttons are pills with a solid-white primary that holds up on a colour field. The orange accent is gone.
+- mikromcp.com and docs.mikromcp.com share the ramp, and the docs header carries the same gradient rule, so the two read as one product.
 - Landing page product facts (tool count, version, features, example prompts, FAQ) now come from a single source, `site/src/data/content.ts`; `/llms.txt` and `/llms-full.txt` are generated from it instead of being hand-maintained static files. Site documentation links point at docs.mikromcp.com rather than the GitHub wiki.
 - `scripts/sync-version.mjs` also regenerates `site/src/data/version.ts`, so the version in the site footer follows `npm version` instead of being edited by hand (it had been stuck at v1.6.0 since the v1.6 release).
+- The Open Graph share image is regenerated from the ramp and reads its tool count from `site/src/data/content.ts`, so it cannot state a different number from the page.
 
 ### Fixed
 - Stale tool count (117) corrected to 118 across the landing page, `/llms.txt`, `/llms-full.txt`, and the wiki pages published to docs.mikromcp.com (`Available-Tools`, `Connecting-to-AI-Assistants`, `Development`, `Getting-Started`, `RouterOS-API-Setup`).

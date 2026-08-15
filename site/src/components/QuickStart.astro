@@ -8,8 +8,17 @@ const tabs = [
 ];
 ---
 <section class="section qs" id="quick-start">
-  <div class="container">
-    <h2 class="h2 head" data-reveal>Up and running in minutes</h2>
+  <div class="container split">
+    <div class="lead">
+      <p class="eyebrow" data-reveal>Install</p>
+      <h2 class="h2 head" data-reveal>Up and running in minutes</h2>
+      <p class="note" data-reveal>
+        <code class="mono">mikromcp init</code> runs a guided wizard, then open your AI assistant and just ask.
+      </p>
+      <p class="docs" data-reveal>
+        <a href={`${SITE.docs}/getting-started/`} target="_blank" rel="noopener">Full Getting Started guide →</a>
+      </p>
+    </div>
 
     <div class="tabs" data-reveal>
       <div class="tablist" role="tablist" aria-label="Install methods">
@@ -33,31 +42,32 @@ const tabs = [
       ))}
     </div>
 
-    <p class="note" data-reveal>
-      <code class="mono">mikromcp init</code> runs a guided wizard, then open your AI assistant and just ask.
-    </p>
-    <p class="docs" data-reveal>
-      <a href={`${SITE.docs}/getting-started/`} target="_blank" rel="noopener">Full Getting Started guide →</a>
-    </p>
   </div>
 </section>
 
 <style>
-  .qs { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg-elev); }
-  .head { margin-bottom: 32px; }
-  .tabs { max-width: 720px; }
+  .qs { position: relative; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); overflow: hidden;
+    background:
+      radial-gradient(70% 120% at 8% 0%, rgba(45,212,191,.13), transparent 58%),
+      radial-gradient(70% 120% at 92% 100%, rgba(139,92,246,.18), transparent 58%),
+      var(--bg-elev); }
+  .qs > .container { position: relative; }
+  .head { margin: 14px 0 22px; }
+  .split { display: grid; grid-template-columns: 0.85fr 1fr; gap: 56px; align-items: center; }
+  .lead { max-width: 420px; }
+  .tabs { min-width: 0; }
   .tablist { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; }
   .tab {
-    flex: 0 0 auto; font-size: 12.5px; padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    flex: 0 0 auto; font-size: 12.5px; padding: 9px 18px; border-radius: 999px; cursor: pointer;
     background: transparent; border: 1px solid var(--border-strong); color: var(--text-dim);
     transition: color .15s ease, border-color .15s ease, background .15s ease; white-space: nowrap;
   }
   .tab:hover { color: var(--text); border-color: #3B4551; }
-  .tab.active { color: var(--brand-ink); background: rgba(20,184,166,.08); border-color: rgba(20,184,166,.35); font-weight: 500; }
-  .tab:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
+  .tab.active { color: #fff; background: var(--grad-brand); border-color: transparent; font-weight: 600; }
+  .tab:focus-visible { outline: 2px solid var(--c2); outline-offset: 2px; }
 
   .panel { display: none; } .panel.active { display: block; }
-  .code { position: relative; background: var(--bg-sunken); border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; }
+  .code { position: relative; background: linear-gradient(180deg,#0C1120,#070A12); border: 1px solid var(--border-strong); border-radius: 16px; overflow: hidden; }
   .code pre { margin: 0; padding: 20px 22px; font-size: 13px; line-height: 1.95; overflow-x: auto; }
   .cl { color: #C3CFDA; white-space: pre; }
   .cl.comment { color: var(--text-mute); }
@@ -68,14 +78,19 @@ const tabs = [
     border: 1px solid var(--border-strong); color: var(--text-dim); transition: color .15s ease, border-color .15s ease;
   }
   .copy:hover { color: var(--text); border-color: #3B4551; }
-  .copy.done { color: var(--brand-ink); border-color: rgba(20,184,166,.4); }
-  .copy:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
+  .copy.done { color: var(--c1); border-color: rgba(45,212,191,.45); }
+  .copy:focus-visible { outline: 2px solid var(--c2); outline-offset: 2px; }
 
-  .note { margin: 24px 0 4px; color: var(--text-dim); font-size: 14.5px; }
-  .note code { color: var(--brand-ink); background: rgba(20,184,166,.08); padding: 2px 7px; border-radius: 5px; font-size: 12.5px; }
-  .docs a { color: var(--brand-ink); font-weight: 500; font-size: 14px; }
+  .note { margin: 0 0 12px; color: var(--text-dim); font-size: 14.5px; }
+  .note code { color: var(--c1); background: rgba(45,212,191,.1); border: 1px solid rgba(45,212,191,.24); padding: 2px 8px; border-radius: 6px; font-size: 12.5px; }
+  .docs a { color: #7FD5E8; font-weight: 500; font-size: 14px; }
   .docs a:hover { text-decoration: underline; }
-  .docs a:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 3px; border-radius: 4px; }
+  .docs a:focus-visible { outline: 2px solid var(--c2); outline-offset: 3px; border-radius: 4px; }
+
+  @media (max-width: 900px) {
+    .split { grid-template-columns: 1fr; gap: 32px; }
+    .lead { max-width: none; }
+  }
 </style>
 
 <script>
