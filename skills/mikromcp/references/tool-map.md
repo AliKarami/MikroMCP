@@ -219,3 +219,23 @@ Multi-tool patterns:
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | Add/remove/enable/disable a VLAN interface | `manage_vlan` | `interface/vlan` | destructive |
+
+## SwOS
+SwOS / SwOS Lite switches (`deviceType: "swos"`) have no RouterOS REST — they
+speak the `.b` HTTP API. The `REST path` column shows the `.b` endpoint instead.
+Check `list_routers` (`deviceType` column) before picking a tool: a RouterOS
+tool aimed at a switch fails with `PLATFORM_MISMATCH`, and vice versa.
+
+| Intent | Tool | .b endpoint | Class |
+|---|---|---|---|
+| List supported `.b` endpoints and fields | `list_swos_endpoints` | (schema) | read |
+| Status overview: links, PoE, SFP, identity | `get_swos_status` | `link.b`, `sys.b`, `poe.b`, `sfp.b` | read |
+| Read one endpoint decoded | `get_swos_endpoint` | any `.b` endpoint | read |
+| Mutate one endpoint (whole-blob write) | `write_swos_blob` | any writable `.b` endpoint | destructive |
+
+`write_swos_blob` defaults to `dryRun: true`, snapshots the pre-write blob, and
+is undoable via `rollback_change`. A per-port field given one value applies it to
+every port; per-port bitmasks take one number, not a list of flags. `!`-prefixed
+endpoints (device-generated) and record lists (`vlan.b`, `host.b`, `acl.b`) are
+not writable. Results carry a `compatibility` verdict: an unverified firmware is
+a warning, not a block — read the dry-run diff before applying.

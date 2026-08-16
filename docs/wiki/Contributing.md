@@ -89,6 +89,7 @@ export const myTools: ToolDefinition[] = [myTool];
 - **Always use `.strict()`** on Zod schemas — reject extra fields.
 - **Enrich errors** — use `enrichError()` in every catch block; throw `MikroMCPError` directly for domain errors (`NOT_FOUND`, `CONFLICT`, `VALIDATION`).
 - **No retry/circuit-breaker logic in handlers** — that is handled by `tool-registry.ts`.
+- **Declare `platform`** if the tool does not target RouterOS — `"swos"` for SwOS switch tools, `"any"` for tools that branch on the device themselves. The default is `"routeros"`, and the executor refuses a tool aimed at the wrong platform.
 - **ESM imports with `.js` extensions** — `from "../../adapter/rest-client.js"` even for `.ts` source.
 - Run `npm run format && npm run lint` before pushing.
 
@@ -102,5 +103,5 @@ export const myTools: ToolDefinition[] = [myTool];
 - [ ] New tool: `CHANGELOG.md` `[Unreleased]` section updated
 - [ ] Write tool: `dryRun` supported
 - [ ] Write tool: idempotency check included
-- [ ] Write tool: `snapshotPaths` set if the tool modifies a RouterOS path that should be rollback-able
+- [ ] Write tool: `snapshotPaths` set if the tool modifies a path that should be rollback-able (a `string[]`, or a function of the params when the target is an argument)
 - [ ] PR title follows Conventional Commits format

@@ -10,7 +10,19 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- **SwOS support (experimental).** Devices can now be declared with `deviceType: "swos"` in `routers.yaml` — MikroTik switch firmware, both SwOS and SwOS Lite (e.g. CSS326, CSS610-8P-2S+); `"swos-lite"` is accepted as an alias. These speak the `.b` HTTP API with digest auth instead of the RouterOS REST API, and the field-naming dialect is detected per field from the device's own response. MikroTik does not document that API: the schema is reverse-engineered and pinned to a CSS610-8P-2S+ on SwOS Lite 2.21, so other models decode best-effort (unrecognised keys are preserved under `_raw`) and writes should be dry-run first.
+- `list_swos_endpoints` tool — lists the supported `.b` endpoints and their decoded field names (schema introspection, no device call)
+- `get_swos_status` tool — identity, model, firmware, uptime, per-port link/speed/duplex, PoE mode/state/power, and SFP modules
+- `get_swos_endpoint` tool — fetches and decodes any single `.b` endpoint; unknown keys are preserved under `_raw`
+- `write_swos_blob` tool — merges fields into a `.b` endpoint and writes the whole blob back (the only write the firmware accepts). Defaults to `dryRun: true`, snapshots the pre-write blob, and is undoable via `rollback_change`. Untouched fields are re-sent byte-for-byte, and a field the device did not send is refused rather than injected, so a firmware that renames or drops a key fails loudly instead of writing junk.
+- Firmware compatibility reporting for SwOS. `get_swos_status` and `write_swos_blob` compare the switch's model and firmware against the set the schema was validated on and report the verdict in `structuredContent.compatibility`; writes also name any wire keys the schema does not map. It warns rather than blocks — a version allow-list cannot be kept current for hardware the project has never seen, and the structural checks (a removed or renamed field is refused, an added one is preserved verbatim) already cover the drift that can be detected without one.
+- Tools declare a `platform`; the executor and `bulk_execute` refuse to run a RouterOS tool against a switch and vice versa (`PLATFORM_MISMATCH`).
+
 ### Changed
+- `check_router_health` now works on SwOS switches (reports firmware and uptime from `sys.b`); `list_routers` reports each device's `deviceType`.
+- `rollback_change` restores SwOS writes by re-POSTing the exact pre-write blob.
+- `snapshotPaths` accepts a function of the call's arguments, for tools whose write target is a parameter rather than a fixed path.
 - mikromcp.com rebuilt around a cool brand ramp — teal `#2DD4BF` → cyan → blue → violet `#8B5CF6`, anchored on the logo teal. The page is now structured as alternating zones: full-bleed gradient colour fields for the hero and closing call to action, large rounded gradient panels for the problem statement and request pipeline, and plain ground between them. Geometric motifs (a fan of rounded squares, a node/edge mesh, radiating arcs) are authored as inline SVG in `site/src/components/Shapes.astro` rather than shipped as image assets, so they stay crisp and theme-aware. Feature tiles each sample a different span of the ramp; buttons are pills with a solid-white primary that holds up on a colour field. The orange accent is gone.
 - mikromcp.com and docs.mikromcp.com share the ramp, and the docs header carries the same gradient rule, so the two read as one product.
 - Landing page product facts (tool count, version, features, example prompts, FAQ) now come from a single source, `site/src/data/content.ts`; `/llms.txt` and `/llms-full.txt` are generated from it instead of being hand-maintained static files. Site documentation links point at docs.mikromcp.com rather than the GitHub wiki.
@@ -18,7 +30,9 @@ Each release section covers changes **since the previous release only**.
 - The Open Graph share image is regenerated from the ramp and reads its tool count from `site/src/data/content.ts`, so it cannot state a different number from the page.
 
 ### Fixed
-- Stale tool count (117) corrected to 118 across the landing page, `/llms.txt`, `/llms-full.txt`, and the wiki pages published to docs.mikromcp.com (`Available-Tools`, `Connecting-to-AI-Assistants`, `Development`, `Getting-Started`, `RouterOS-API-Setup`).
+- SwOS writes are transported over `node:http` with a lenient parser: the CSS610 firmware terminates the status line of a POST response with a bare LF (`HTTP/1.0 200 OK\n`) instead of CRLF, which a strict parser rejects — reporting a write that had actually been applied as a failure. Verified against a CSS610-8P-2S+ on firmware 2.21. Note that this leniency is scoped to the SwOS client only: RouterOS connections still use a strict parser.
+- A SwOS request that gets no response (the CSS610 firmware applies a POSTed `.b` blob without ever answering, and a longer wait does not help) is now classified as `ROUTER_TIMEOUT` with code `SWOS_REQUEST_TIMEOUT` instead of a generic internal error. For writes this triggers the existing ambiguous-outcome handling — the caller is told the change may already have been applied and to verify switch state before retrying, and the write is explicitly not retryable. Read timeouts stay retryable. The client timeout is now injectable for tests.
+- Stale tool count corrected across the landing page, `/llms.txt`, `/llms-full.txt`, and the wiki pages published to docs.mikromcp.com (`Available-Tools`, `Connecting-to-AI-Assistants`, `Development`, `Getting-Started`, `RouterOS-API-Setup`) — the site had been stuck at 117.
 - `ROADMAP.md` and `docs/wiki/Roadmap.md` stopped at v1.6.0; v1.7 and v1.8 are now documented, so the published roadmap reflects shipped releases.
 - `test/unit/docs/tool-count-sync.test.ts` now also covers the landing page and the wiki pages that state a current tool count; a new `site-version-sync.test.ts` checks the site footer version and README badge against `package.json`.
 

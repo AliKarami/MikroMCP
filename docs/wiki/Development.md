@@ -131,7 +131,7 @@ Test structure for each tool file:
 `npm test` also runs two doc-accuracy guard suites that fail CI when documentation drifts from code:
 
 - `test/unit/docs/available-tools-sync.test.ts` — verifies `docs/wiki/Available-Tools.md` lists every registered tool.
-- `test/unit/docs/tool-count-sync.test.ts` — verifies the tool count in `README.md` and `docs/wiki/Architecture.md` matches the actual count (currently **118 tools**).
+- `test/unit/docs/tool-count-sync.test.ts` — verifies the tool count in `README.md` and `docs/wiki/Architecture.md` matches the actual count (currently **122 tools**).
 - `test/unit/skill/tool-map-sync.test.ts` — verifies `skills/mikromcp/references/tool-map.md` is in lockstep with the registered tools.
 
 If you add, rename, or remove a tool, you must update `docs/wiki/Available-Tools.md` **and** `skills/mikromcp/references/tool-map.md` in the same PR, or these tests will fail.
@@ -151,6 +151,6 @@ MIKROMCP_CONFIG_PATH=config/routers.yaml \
   npx @modelcontextprotocol/inspector node dist/main.js
 ```
 
-Inspector opens at `http://localhost:5173`. Browse all 118 tools, call them with sample inputs, and inspect raw responses including `structuredContent`.
+Inspector opens at `http://localhost:5173`. Browse all 122 tools, call them with sample inputs, and inspect raw responses including `structuredContent`.
 
 For hot-reload during tool development, replace `node dist/main.js` with `npm run dev`.

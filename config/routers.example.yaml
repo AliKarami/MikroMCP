@@ -26,6 +26,25 @@
 #     - "/ip/route/print*"
 #     - "/interface/print*"
 #     - "/ip/address/print*"
+#
+# SwOS switches (MikroTik SwOS and SwOS Lite, e.g. CSS326, CSS610-8P-2S+)
+# ─────────────────────────────────────────────────────────────────
+# Set deviceType: "swos" for switches that speak the ".b" HTTP API (digest
+# auth, plain HTTP). One type covers both firmware editions — the field-naming
+# dialect is detected from the device's own response. "swos-lite" is accepted
+# as an alias. RouterOS tools are refused on these devices and the swos_* tools
+# are refused on RouterOS devices.
+#
+# tls and rosVersion are omitted here — the firmware speaks plain HTTP only, so
+# tls.enabled: true is rejected. Both stay REQUIRED for RouterOS devices below.
+#   switch-01:
+#     host: "10.0.0.2"
+#     port: 80                    # SwOS uses plain HTTP on port 80
+#     deviceType: "swos"
+#     credentials:
+#       source: "env"
+#       envPrefix: "SWITCH_CORE01" # -> SWITCH_CORE01_USER, SWITCH_CORE01_PASS
+#     tags: ["access", "layer2"]
 
 routers:
   core-01:

@@ -25,6 +25,7 @@ routers:
     port: 80
     tls:
       enabled: false              # plaintext — lab/local only
+      rejectUnauthorized: true
     credentials:
       source: "env"
       envPrefix: "ROUTER_EDGE01"
@@ -33,6 +34,56 @@ routers:
 ```
 
 **`rejectUnauthorized: false`** accepts self-signed certificates. Combine with `fingerprint` to pin the exact certificate and prevent MITM attacks.
+
+`tls` and `rosVersion` are **required** for RouterOS devices. They are deliberately not optional: a missing `tls` block would silently downgrade the router to plaintext HTTP and send credentials in the clear, and a missing `rosVersion` would make MikroMCP guess REST paths that differ between releases.
+
+---
+
+## SwOS switches
+
+> **Experimental.** MikroTik does not document the `.b` API; MikroMCP's schema was reverse-engineered from a **CSS610-8P-2S+ on SwOS Lite 2.21** (the device's own `engine.js` plus live captures). Reads degrade gracefully on other models — unrecognised keys simply surface under `_raw`. Writes are model- and firmware-specific: preview with `dryRun` and keep the `rollback_change` journal ID before applying one to hardware this has not been tested on.
+
+MikroTik switches running **SwOS** or **SwOS Lite** (CSS326, CSS610 and friends) have no RouterOS REST API. They expose a `.b` HTTP API with digest auth instead. Declare them with `deviceType: "swos"`:
+
+```yaml
+routers:
+  switch-01:
+    host: "10.0.0.2"
+    port: 80                      # SwOS serves plain HTTP on port 80
+    deviceType: "swos"            # "swos-lite" is accepted as an alias
+    credentials:
+      source: "env"
+      envPrefix: "SWITCH_CORE01"  # reads SWITCH_CORE01_USER + SWITCH_CORE01_PASS
+    tags: ["access", "layer2"]
+```
+
+- One device type covers both firmware editions: SwOS and SwOS Lite speak the same API and differ only in how they name fields, which is detected per field from the device's own response. `deviceType: "swos-lite"` is accepted and normalised to `swos`.
+- `tls` and `rosVersion` are omitted — the firmware speaks plain HTTP only, and setting `tls.enabled: true` is rejected at config load.
+- Only the `swos_*` tools (plus `check_router_health`, `list_routers` and `rollback_change`) run against these devices. Any RouterOS tool aimed at a switch fails with `PLATFORM_MISMATCH`, and vice versa — including `plan_changes` and `apply_plan`, which are RouterOS-only. Preview a SwOS write with `write_swos_blob`'s `dryRun` (its default) instead.
+- Credentials are never sent in the clear — digest auth hashes them — but the payload itself is unencrypted, and the digest is MD5. Keep switch management on a trusted VLAN.
+- Writes are whole-blob: the endpoint is read, the requested fields are merged in, and everything else is re-sent byte-for-byte. Fields the device did not send are refused rather than injected, so a firmware that renames or drops a key fails loudly instead of writing junk.
+- Every write and preview reports a **firmware compatibility** verdict — see below.
+
+### Firmware compatibility
+
+Because the API is undocumented, a firmware update can change it. MikroMCP handles the three kinds of drift differently:
+
+| Drift | Behaviour |
+|---|---|
+| Field **removed or renamed** | The write is **refused** (`SWOS_UNKNOWN_FIELD`) — the key is not in the blob the device sent, so it cannot be written. |
+| Field **added** | Preserved byte-for-byte across writes, listed under `_raw` on reads, and named in the write result as an unmapped key. |
+| Field **meaning changed** under the same key | Cannot be detected structurally. This is what the version check is for. |
+
+`get_swos_status` and `write_swos_blob` compare the switch's model and firmware against the set the schema was validated on, and report the verdict in `structuredContent.compatibility`:
+
+```
+⚠️  Firmware: CSS610-8P-2S+ runs 2.24; the schema was verified on 2.21.
+    Field meanings may have changed — review the diff before applying.
+```
+
+This **warns, it does not block**: an allow-list of firmware versions cannot be kept current for hardware the project has never seen, and refusing everything unverified would make the feature useless on exactly the devices that need it. Treat an unverified verdict as a reason to read the dry-run diff rather than skim it. If a capture from another model or firmware has been diffed against the schema, add it to `VERIFIED_FIRMWARE` in `src/adapter/swos-protocol.ts`.
+
+See [Available Tools](Available-Tools) for the SwOS tool reference.
 
 ---
 

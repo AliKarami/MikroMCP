@@ -42,6 +42,7 @@ import { logTools } from "./log-tools.js";
 import { networkTestTools } from "./network-test-tools.js";
 import { containerConfigTools } from "./container-config-tools.js";
 import { interfaceListTools } from "./interface-list-tools.js";
+import { swosTools } from "./swos-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -87,6 +88,7 @@ const baseTools: ToolDefinition[] = [
   ...networkTestTools,
   ...containerConfigTools,
   ...interfaceListTools,
+  ...swosTools,
 ];
 
 export const allTools: ToolDefinition[] = [

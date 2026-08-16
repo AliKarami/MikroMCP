@@ -17,6 +17,7 @@ import { createLogger } from "../observability/logger.js";
 import { recordToolCall } from "../observability/metrics.js";
 import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { ToolContext, ToolDefinition } from "../domain/tools/tool-definition.js";
+import { snapshotPathsFor, unavailableCapability } from "../domain/tools/tool-definition.js";
 import type { RouterRegistry } from "../config/router-registry.js";
 import type { RouterConfig } from "../types.js";
 import type { ConnectionPool } from "../adapter/connection-pool.js";
@@ -132,17 +133,34 @@ export function assertMaintenanceWindow(
  * typed error instead of the `TypeError` a `null` cast would produce.
  */
 function fleetUnavailable<T extends object>(what: string): T {
-  return new Proxy({} as T, {
-    get() {
-      throw new MikroMCPError({
-        category: ErrorCategory.INTERNAL,
-        code: "FLEET_CONTEXT_UNAVAILABLE",
-        message: `${what} is not available in a fleet-tool context (skipRouterContext). Target a specific router instead.`,
-        recoverability: {
-          retryable: false,
-          suggestedAction: "Use a router-scoped tool, or pass a routerId to operate on one router.",
-        },
-      });
+  return unavailableCapability<T>(
+    "FLEET_CONTEXT_UNAVAILABLE",
+    `${what} is not available in a fleet-tool context (skipRouterContext). Target a specific router instead.`,
+    "Use a router-scoped tool, or pass a routerId to operate on one router.",
+  );
+}
+
+/**
+ * Refuse to run a tool against a device it does not speak to: RouterOS REST and
+ * the SwOS ".b" API are entirely different wire protocols. Tools declaring
+ * `platform: "any"` handle both themselves and are always allowed.
+ */
+export function assertPlatformMatch(tool: ToolDefinition, routerConfig: RouterConfig): void {
+  const toolPlatform = tool.platform ?? "routeros";
+  const devicePlatform = routerConfig.deviceType ?? "routeros";
+  if (toolPlatform === "any" || toolPlatform === devicePlatform) return;
+
+  throw new MikroMCPError({
+    category: ErrorCategory.VALIDATION,
+    code: "PLATFORM_MISMATCH",
+    message: `Tool "${tool.name}" runs on ${toolPlatform} devices, but router "${routerConfig.id}" is a ${devicePlatform} device.`,
+    details: { toolPlatform, devicePlatform },
+    recoverability: {
+      retryable: false,
+      suggestedAction:
+        toolPlatform === "swos"
+          ? "Target a SwOS switch instead — check list_routers for the deviceType of each device."
+          : "Target a RouterOS device instead — check list_routers for the deviceType of each device.",
     },
   });
 }
@@ -165,6 +183,7 @@ export async function executeToolCall(
       if (tool.skipRouterContext) {
         const fleetContext: ToolContext = {
           routerClient: fleetUnavailable<ToolContext["routerClient"]>("routerClient"),
+          deviceClient: fleetUnavailable<ToolContext["deviceClient"]>("deviceClient"),
           routerId: "",
           correlationId,
           routerConfig: fleetUnavailable<ToolContext["routerConfig"]>("routerConfig"),
@@ -188,6 +207,8 @@ export async function executeToolCall(
       checkAuthz(identity, tool.name, routerId);
 
       const routerConfig = registry.getRouter(routerId);
+
+      assertPlatformMatch(tool, routerConfig);
 
       assertMaintenanceWindow(tool.annotations.destructiveHint, routerConfig, routerId);
 
@@ -225,10 +246,10 @@ export async function executeToolCall(
       const { confirmationToken: _ct, ...handlerArgs } = args;
 
       const snapshotIds: string[] = [];
-      if (tool.snapshotPaths && tool.snapshotPaths.length > 0 && !tool.annotations.readOnlyHint) {
-        for (const path of tool.snapshotPaths) {
+      if (!tool.annotations.readOnlyHint) {
+        for (const path of snapshotPathsFor(tool, handlerArgs)) {
           try {
-            const meta = await takeSnapshot(toolContext.routerClient, routerId, path, config.snapshotDir);
+            const meta = await takeSnapshot(toolContext.deviceClient, routerId, path, config.snapshotDir);
             snapshotIds.push(meta.id);
             log.debug({ snapshotId: meta.id, path }, "Snapshot taken");
           } catch (err) {

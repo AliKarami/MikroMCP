@@ -5,15 +5,19 @@
 import { createHash } from "node:crypto";
 import type { RouterConfig } from "../types.js";
 import { RouterOSRestClient } from "./rest-client.js";
+import { SwosClient } from "./swos-client.js";
 
-/** Credentials used to authenticate with a RouterOS device. */
+/** Credentials used to authenticate with a MikroTik device. */
 export interface Credentials {
   username: string;
   password: string;
 }
 
+/** Union of the device clients the pool can hold. */
+export type DeviceClient = RouterOSRestClient | SwosClient;
+
 interface PooledClient {
-  client: RouterOSRestClient;
+  client: DeviceClient;
   credHash: string;
 }
 
@@ -23,15 +27,23 @@ function credentialHash(credentials: Credentials): string {
     .digest("hex");
 }
 
+/** Build the right client for the device platform (RouterOS REST vs SwOS ".b"). */
+export function createDeviceClient(config: RouterConfig, credentials: Credentials): DeviceClient {
+  if (config.deviceType === "swos") {
+    return new SwosClient(config.host, config.port, credentials);
+  }
+  return new RouterOSRestClient(config, credentials);
+}
+
 export class ConnectionPool {
   private readonly clients = new Map<string, PooledClient>();
 
   /**
-   * Get an existing client for the given router or create a new one. Clients are
+   * Get an existing client for the given device or create a new one. Clients are
    * keyed by `config.id`, but a client whose credentials no longer match the
    * request is closed and rebuilt so rotated credentials take effect.
    */
-  getClient(config: RouterConfig, credentials: Credentials): RouterOSRestClient {
+  getClient(config: RouterConfig, credentials: Credentials): DeviceClient {
     const credHash = credentialHash(credentials);
     const existing = this.clients.get(config.id);
     if (existing) {
@@ -41,7 +53,7 @@ export class ConnectionPool {
       existing.client.close();
     }
 
-    const client = new RouterOSRestClient(config, credentials);
+    const client = createDeviceClient(config, credentials);
     this.clients.set(config.id, { client, credHash });
     return client;
   }

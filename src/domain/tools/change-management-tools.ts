@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { readFileSync } from "node:fs";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
+import { snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
 import { createLogger } from "../../observability/logger.js";
 import { takeSnapshot, loadSnapshot } from "../snapshot/snapshot-engine.js";
+import type { StoredSnapshot } from "../snapshot/snapshot-engine.js";
 import { computeRestorePlan, applyRestorePlan } from "../snapshot/diff-engine.js";
 import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -50,6 +52,52 @@ const rollbackChangeInputSchema = z
   })
   .strict();
 
+/**
+ * Undo a SwOS write by re-POSTing the exact blob the device sent before it.
+ * There is no diff step: the firmware only accepts whole-blob writes, so the
+ * verbatim capture *is* the restore plan.
+ */
+async function restoreSwosBlobs(
+  snapshots: StoredSnapshot[],
+  journalId: string,
+  dryRun: boolean,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const client = context.swosClient;
+  if (!client) {
+    throw new MikroMCPError({
+      category: ErrorCategory.VALIDATION,
+      code: "PLATFORM_MISMATCH",
+      message: `Journal entry "${journalId}" holds SwOS blob snapshots, but router "${context.routerId}" is not a SwOS switch.`,
+      recoverability: {
+        retryable: false,
+        suggestedAction: "Roll back against the switch the write was made on.",
+      },
+    });
+  }
+
+  const targets = snapshots.map((s) => ({ endpoint: s.path, blob: s.blob! }));
+
+  if (dryRun) {
+    return {
+      content:
+        `Rollback dry run for journal entry "${journalId}": would restore ` +
+        `${targets.length} SwOS endpoint(s).\n` +
+        targets.map((t) => `  ${t.endpoint}:\n${t.blob}`).join("\n"),
+      structuredContent: { action: "dry_run", journalId, targets },
+    };
+  }
+
+  for (const target of targets) {
+    await client.postRaw(target.endpoint, target.blob);
+  }
+
+  return {
+    content: `Rolled back journal entry "${journalId}": restored ${targets.map((t) => t.endpoint).join(", ")}.`,
+    structuredContent: { action: "rolled_back", journalId, targets },
+  };
+}
+
 export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDefinition[] {
   const toolMap = new Map(baseTools.map((t) => [t.name, t]));
 
@@ -91,7 +139,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         const tool = requireTool(step.tool);
 
         const currentState: Record<string, unknown[]> = {};
-        for (const path of tool.snapshotPaths ?? []) {
+        for (const path of snapshotPathsFor(tool, { ...step.params, routerId: parsed.routerId })) {
           try {
             currentState[path] = await context.routerClient.get(path, {});
           } catch {
@@ -157,14 +205,12 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         const stepParams = { ...step.params, routerId: parsed.routerId };
 
         const snapshotIds: string[] = [];
-        if (tool.snapshotPaths && tool.snapshotPaths.length > 0) {
-          for (const path of tool.snapshotPaths) {
-            try {
-              const meta = await takeSnapshot(context.routerClient, context.routerId, path, snapshotDir);
-              snapshotIds.push(meta.id);
-            } catch (err) {
-              log.warn({ err, path, routerId: context.routerId, step: i }, "apply_plan step snapshot failed — proceeding without snapshot");
-            }
+        for (const path of snapshotPathsFor(tool, stepParams)) {
+          try {
+            const meta = await takeSnapshot(context.deviceClient, context.routerId, path, snapshotDir);
+            snapshotIds.push(meta.id);
+          } catch (err) {
+            log.warn({ err, path, routerId: context.routerId, step: i }, "apply_plan step snapshot failed — proceeding without snapshot");
           }
         }
 
@@ -246,7 +292,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     name: "rollback_change",
     title: "Rollback Change",
     description:
-      "Restore RouterOS state to before a write, identified by its journal ID: reads the before-snapshot, diffs against live state, and applies the reverse. Use dryRun=true to preview the restore plan. Requires MIKROMCP_DATA_DIR (defaults to data/).",
+      "Restore device state to before a write, identified by its journal ID. RouterOS: reads the before-snapshot, diffs against live state, and applies the reverse. SwOS: re-POSTs the exact pre-write '.b' blob. Use dryRun=true to preview. Requires MIKROMCP_DATA_DIR (defaults to data/).",
     inputSchema: rollbackChangeInputSchema,
     annotations: {
       readOnlyHint: false,
@@ -254,6 +300,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
       idempotentHint: false,
       openWorldHint: false,
     },
+    platform: "any",
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       const parsed = rollbackChangeInputSchema.parse(params);
       const journalPath = context.appConfig.journalPath;
@@ -270,11 +317,20 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         };
       }
 
+      const snapshots = await Promise.all(
+        snapshotIds.map((snapshotId) =>
+          loadSnapshot(`${snapshotDir}/${context.routerId}/${snapshotId}.json`),
+        ),
+      );
+
+      const swosSnapshots = snapshots.filter((s) => s.blob !== undefined);
+      if (swosSnapshots.length > 0) {
+        return restoreSwosBlobs(swosSnapshots, parsed.journalId, parsed.dryRun, context);
+      }
+
       const restorePlans = [];
 
-      for (const snapshotId of snapshotIds) {
-        const filePath = `${snapshotDir}/${context.routerId}/${snapshotId}.json`;
-        const stored = await loadSnapshot(filePath);
+      for (const stored of snapshots) {
         const current = await context.routerClient.get<RouterOSRecord>(stored.path, {});
         const plan = computeRestorePlan(stored.path, stored.records, current);
         restorePlans.push(plan);

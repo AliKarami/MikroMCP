@@ -17,12 +17,13 @@ import { VERSION } from "../version.js";
  * the `mikromcp` usage skill, not here.
  */
 export const SERVER_INSTRUCTIONS = [
-  "MikroMCP manages MikroTik RouterOS devices.",
+  "MikroMCP manages MikroTik RouterOS routers and SwOS switches.",
   "Reads are safe; treat writes as consequential — preview a write with dryRun:true and review the diff before applying.",
   "Destructive operations may require a two-step confirmation token.",
   "Writes are idempotent: already_exists and no_change are success, not errors.",
   "Prefer dedicated tools over run_command.",
   "routerId is optional when a default router is configured.",
+  "Check list_routers first: swos devices take the swos_* tools, RouterOS devices take everything else.",
   "For the full operating playbook, install the MikroMCP usage skill.",
 ].join(" ");
 
