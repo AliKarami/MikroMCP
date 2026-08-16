@@ -333,6 +333,24 @@ Bug fixes and refactors surfaced by a thorough code-review pass:
 
 ---
 
+## ✅ v1.9 — SwOS Switch Support (118 → 122 tools)
+
+**Goal:** Extend MikroMCP beyond RouterOS to MikroTik's switch firmware, without weakening the safety guarantees the RouterOS tools provide.
+
+- **Transport:** devices declared with `deviceType: "swos"` (`"swos-lite"` is an accepted alias) speak the undocumented `.b` HTTP API with digest auth. The field-naming dialect is detected per field from the device's own response, so SwOS and SwOS Lite share one device type.
+- **Tools:**
+  - `list_swos_endpoints` — supported `.b` endpoints and their decoded field names (no device call)
+  - `get_swos_status` — identity, model, firmware, uptime, per-port link/speed/duplex, PoE, SFP modules
+  - `get_swos_endpoint` — fetch and decode any single `.b` endpoint; unknown keys preserved under `_raw`
+  - `write_swos_blob` — merge fields and write the whole blob back, the only write the firmware accepts
+- **Write safety.** The firmware has no partial write, so a whole-blob POST is the only option and a codec that is not byte-exact would silently rewrite fields nobody touched. `write_swos_blob` defaults to `dryRun: true`, refuses a field the device did not send, snapshots the pre-write blob for `rollback_change`, and asserts at runtime that parse→dump round-trips *this* device's blob byte-for-byte before writing.
+- **Platform routing.** Every tool declares a `platform`; the executor and `bulk_execute` refuse a RouterOS tool aimed at a switch and vice versa (`PLATFORM_MISMATCH`).
+- **Scope.** Experimental: the schema is reverse-engineered and validated against a CSS610-8P-2S+ on SwOS Lite 2.21. Firmware compatibility is reported on every status read and write, warning rather than blocking. `plan_changes` / `apply_plan` remain RouterOS-only.
+
+Contributed by [@f0086](https://github.com/f0086).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

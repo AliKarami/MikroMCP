@@ -35,6 +35,7 @@ export const examples = [
   { label: "Safe Route Change", prompt: "Dry-run a route on core-01 for 10.20.0.0/16 via 192.168.88.1 in the main table. Show the exact planned diff and tell me whether an existing route conflicts." },
   { label: "WireGuard", prompt: "Show WireGuard peers on branch-02. Sort by last handshake age and flag peers that have not handshaken recently or have no transfer counters." },
   { label: "Fleet Audit", prompt: "List the routers MikroMCP is configured for, then check RouterOS version and pending upgrades on every router tagged edge. Summarize which ones are behind." },
+  { label: "SwOS Switch", prompt: "List the SwOS endpoints MikroMCP supports, then show the port status and PoE state on switch-01. Dry-run any change and show me the resulting blob before writing anything." },
   { label: "Diagnostics", prompt: "Check interface health on edge-01, then run ping and traceroute from the router to 1.1.1.1. If packet loss is present, use torch on the WAN interface for a short traffic snapshot." },
   { label: "Plan / Apply / Rollback", prompt: "Create a change plan that adds a DNS record and a firewall address-list entry on edge-01. Use dry-run first, explain the plan, then wait for approval before applying anything." },
 ];
@@ -45,6 +46,7 @@ export const faqs = [
   { q: "How is it different from SSH automation?", a: "Instead of brittle SSH scripts that screen-scrape CLI output, MikroMCP returns structured, typed results with confirmation gates and per-router circuit breakers. SSH is used only where REST can't reach — ping, traceroute, torch, and guarded run_command." },
   { q: "Does it work with Claude, Cursor, and Codex?", a: "Yes. MikroMCP speaks MCP over stdio and HTTP/SSE, so Claude Desktop, Claude Code, Cursor, Codex, and any MCP-compatible client can drive RouterOS directly." },
   { q: "Can it manage more than one router?", a: "Yes. Routers are declared in routers.yaml with per-router credentials and tags. Every tool takes a routerId, list_routers enumerates what is configured, and bulk_execute fans a single tool call out across routers selected by id or tag." },
+  { q: "Does it work with MikroTik switches?", a: "Experimentally, yes. Devices declared with deviceType: \"swos\" speak MikroTik's undocumented .b HTTP API instead of the RouterOS REST API, covering SwOS and SwOS Lite. The schema is reverse-engineered and validated against a CSS610-8P-2S+, so other models decode best-effort and writes default to dry-run." },
   { q: "Is it safe to run against production routers?", a: "MikroMCP is built for it: dry-run previews, idempotent writes, snapshots, rollback, confirmation tokens, per-router circuit breakers, RBAC, and audit logging. Use least-privilege RouterOS users and verified TLS." },
   { q: "Which RouterOS versions are supported?", a: "RouterOS 7.x, which provides the REST API MikroMCP uses." },
 ];

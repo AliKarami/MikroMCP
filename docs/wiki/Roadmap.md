@@ -2,7 +2,7 @@
 
 Milestones are intentionally scoped so each one ships working, testable software on its own. See [ROADMAP.md](https://github.com/AliKarami/MikroMCP/blob/main/ROADMAP.md) in the repository for the authoritative version with full milestone details.
 
-v1.6.0 is released and stable. All milestones v0.1 through v1.6.0 are shipped — including the four-phase post-v1.5 hardening effort (code review fixes, token optimisation, usage skill, docs overhaul) that shipped as v1.6.0.
+v1.9 is the current release. All milestones v0.1 through v1.9 are shipped — most recently SwOS switch support, which takes MikroMCP beyond RouterOS for the first time.
 
 ---
 
@@ -149,6 +149,18 @@ No new tools. A security and correctness release covering the HTTP transport, th
 **Change safety:** confirmation tokens are self-verifying HMACs that survive a restart; snapshots store only restorable configuration (dynamic records and runtime counters stripped) so rollback no longer writes back read-only fields; order-sensitive paths warn that rule order is not restored.
 
 **Correctness:** tool risk annotations audited against a written rubric; `bulk_execute` tag targeting matches routers carrying **all** requested tags and runs through the full per-router safety stack; boolean record fields compared via a shared `isTrue()` helper; 64-bit counters keep precision.
+
+---
+
+## ✅ v1.9 — SwOS Switch Support (118 → 122 tools)
+
+MikroMCP is no longer RouterOS-only. Devices declared with `deviceType: "swos"` speak MikroTik's undocumented `.b` HTTP API (digest auth) instead of the REST API, covering both SwOS and SwOS Lite.
+
+`list_swos_endpoints`, `get_swos_status`, `get_swos_endpoint`, `write_swos_blob` — schema introspection, switch status, per-endpoint reads, and the whole-blob write the firmware requires.
+
+**Experimental, and deliberately cautious.** The schema is reverse-engineered and pinned to a CSS610-8P-2S+ on SwOS Lite 2.21, so other models decode best-effort with unrecognised keys preserved verbatim. `write_swos_blob` defaults to `dryRun: true`, refuses a field the device did not send rather than injecting it, and verifies at runtime that the codec re-encodes *this* device's blob byte-for-byte before writing — a firmware that serializes differently fails loudly instead of corrupting the blob.
+
+Every tool now declares a `platform`, and the executor refuses a RouterOS tool aimed at a switch or vice versa (`PLATFORM_MISMATCH`). Contributed by [@f0086](https://github.com/f0086).
 
 ---
 
