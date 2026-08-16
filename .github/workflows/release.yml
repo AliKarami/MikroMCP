@@ -206,7 +206,9 @@ jobs:
           files: |
             artifacts/*
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          # Any semver prerelease (v1.9.0-experimental.1, -rc.1, -beta.2) carries a
+          # hyphen after the version; a stable tag never does.
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   publish-npm:
     name: Publish to npm
@@ -234,10 +236,18 @@ jobs:
       - name: Publish
         run: |
           VERSION=$(node -p "require('./package.json').version")
+          # npm always publishes to the `latest` dist-tag unless told otherwise, so a
+          # prerelease would become what `npm install -g mikromcp` hands every user.
+          # Route prereleases to `next`; they stay installable via `mikromcp@next`.
+          case "$VERSION" in
+            *-*) NPM_TAG=next ;;
+            *)   NPM_TAG=latest ;;
+          esac
+          echo "Publishing mikromcp@${VERSION} to dist-tag ${NPM_TAG}"
           if npm view "mikromcp@${VERSION}" version 2>/dev/null | grep -q "${VERSION}"; then
             echo "mikromcp@${VERSION} already published, skipping."
           else
-            npm publish --access public --provenance
+            npm publish --access public --provenance --tag "$NPM_TAG"
           fi
 
       - name: Install mcp-publisher
