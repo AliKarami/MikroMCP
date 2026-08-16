@@ -218,6 +218,10 @@ Development standards:
 
 Please open an issue before large changes so maintainers can align on scope.
 
+### Acknowledgements
+
+- [@f0086](https://github.com/f0086) — SwOS / SwOS Lite switch support (v1.9.0), which took MikroMCP beyond RouterOS for the first time.
+
 ---
 
 ## Security
