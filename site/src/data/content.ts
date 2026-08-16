@@ -6,7 +6,7 @@ export const SITE = {
   tagline: "Open Source MikroTik MCP Server for RouterOS",
   github: "https://github.com/AliKarami/MikroMCP",
   docs: "https://docs.mikromcp.com",
-  toolCount: 118,
+  toolCount: 122,
   version: VERSION,
 };
 

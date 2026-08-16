@@ -270,6 +270,32 @@ export class SwosClient {
     return parseWireBlob(await this.getRaw(endpoint)) as DecodedBlob;
   }
 
+  /**
+   * GET for mutation, proving the codec is lossless for *this* device first.
+   * The fixtures only prove it for the hardware they came from; a firmware that
+   * serializes differently must fail here rather than during a whole-blob write.
+   */
+  async readBlobForWrite(endpoint: string): Promise<DecodedBlob> {
+    assertKnownEndpoint(endpoint);
+    const raw = await this.getRaw(endpoint);
+    const wire = parseWireBlob(raw) as DecodedBlob;
+    const reencoded = dumpBlob(wire);
+    if (reencoded !== raw.trim()) {
+      throw new MikroMCPError({
+        category: ErrorCategory.VALIDATION,
+        code: "SWOS_ROUNDTRIP_MISMATCH",
+        message: `MikroMCP cannot re-encode ${endpoint} on this device byte-for-byte; refusing to write.`,
+        details: { endpoint, received: raw.trim(), reencoded },
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "This firmware serializes a value in a form the codec does not preserve. Reads are unaffected; please open an issue with the blob.",
+        },
+      });
+    }
+    return wire;
+  }
+
   /** POST a wire dict (re-encoded via the codec) back to the switch. */
   async writeBlob(endpoint: string, wire: unknown): Promise<string> {
     assertKnownEndpoint(endpoint);

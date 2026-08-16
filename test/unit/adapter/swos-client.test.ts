@@ -175,6 +175,21 @@ describe("SwosClient", () => {
     );
   });
 
+  it("readBlobForWrite refuses a blob the codec cannot round-trip byte-for-byte", async () => {
+    // A firmware that serializes a value as a bare decimal (12) instead of a
+    // hex token (0x0c) is numerically identical but not byte-preserving. The
+    // fixtures only prove the codec for the hardware they came from; a write
+    // to such a device must fail here, before the whole blob is POSTed back.
+    mock.state.store.set("snmp.b", "{i01:12}");
+    const err = await client.readBlobForWrite("snmp.b").catch((e) => e);
+    expect(err).toBeInstanceOf(MikroMCPError);
+    expect(err.category).toBe(ErrorCategory.VALIDATION);
+    expect(err.code).toBe("SWOS_ROUNDTRIP_MISMATCH");
+    expect(err.recoverability.retryable).toBe(false);
+    expect(err.recoverability.suggestedAction).toContain("Reads are unaffected");
+    expect(mock.state.requests.filter((r) => r.path === "snmp.b" && r.method === "POST")).toHaveLength(0);
+  });
+
   it("accepts a POST response whose status line ends in a bare LF", async () => {
     // Real CSS610 firmware answers a successful POST with "HTTP/1.0 200 OK\n"
     // — no CR. A strict HTTP parser rejects it, which would report a write that

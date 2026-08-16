@@ -7,6 +7,7 @@ import { snapshotPathsFor } from "../../../src/domain/tools/tool-definition.js";
 import type { SwosClient } from "../../../src/adapter/swos-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import { decodeEndpoint, dumpBlob, parseWireBlob } from "../../../src/adapter/swos-protocol.js";
+import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 const FIXTURES = join(import.meta.dirname, "../../fixtures/swos");
 const blob = (name: string) => readFileSync(join(FIXTURES, name), "utf8").trim();
@@ -40,6 +41,21 @@ function makeSwosClient(overrides: Partial<Record<string, string>> = {}) {
     get: vi.fn(async (endpoint: string) => decodeEndpoint(endpoint, load(endpoint))),
     getRaw: vi.fn(async (endpoint: string) => load(endpoint)),
     readBlob: vi.fn(async (endpoint: string) => parseWireBlob(load(endpoint))),
+    readBlobForWrite: vi.fn(async (endpoint: string) => {
+      const raw = load(endpoint);
+      const wire = parseWireBlob(raw);
+      const reencoded = dumpBlob(wire);
+      if (reencoded !== raw.trim()) {
+        throw new MikroMCPError({
+          category: ErrorCategory.VALIDATION,
+          code: "SWOS_ROUNDTRIP_MISMATCH",
+          message: `cannot re-encode ${endpoint} byte-for-byte`,
+          details: { endpoint, received: raw.trim(), reencoded },
+          recoverability: { retryable: false, suggestedAction: "" },
+        });
+      }
+      return wire;
+    }),
     writeBlob: vi.fn(async (endpoint: string, wire: unknown) => {
       const body = dumpBlob(wire);
       written.push({ endpoint, body });

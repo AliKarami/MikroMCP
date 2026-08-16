@@ -468,7 +468,9 @@ const writeSwosBlobTool: ToolDefinition = {
     const parsed = writeBlobSchema.parse(params);
     const client = requireSwosClient(context);
     try {
-      const wire = (await client.readBlob(parsed.endpoint)) as DecodedBlob;
+      // Read with the round-trip guarantee: the codec must re-encode this
+      // device's blob byte-for-byte before we POST it back.
+      const wire = (await client.readBlobForWrite(parsed.endpoint)) as DecodedBlob;
 
       const changes: Record<string, { from: unknown; to: unknown }> = {};
       for (const [key, value] of Object.entries(parsed.fields)) {
