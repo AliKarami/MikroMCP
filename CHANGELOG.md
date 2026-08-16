@@ -12,6 +12,8 @@ Each release section covers changes **since the previous release only**.
 
 ## [1.9.0] - 2026-08-16
 
+SwOS support was contributed by [@f0086](https://github.com/f0086) — MikroMCP's first community feature contribution, and the first time the server reaches beyond RouterOS.
+
 ### Added
 - **SwOS support (experimental).** Devices can now be declared with `deviceType: "swos"` in `routers.yaml` — MikroTik switch firmware, both SwOS and SwOS Lite (e.g. CSS326, CSS610-8P-2S+); `"swos-lite"` is accepted as an alias. These speak the `.b` HTTP API with digest auth instead of the RouterOS REST API, and the field-naming dialect is detected per field from the device's own response. MikroTik does not document that API: the schema is reverse-engineered and pinned to a CSS610-8P-2S+ on SwOS Lite 2.21, so other models decode best-effort (unrecognised keys are preserved under `_raw`) and writes should be dry-run first.
 - `list_swos_endpoints` tool — lists the supported `.b` endpoints and their decoded field names (schema introspection, no device call)
