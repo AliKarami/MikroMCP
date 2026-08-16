@@ -290,6 +290,28 @@ describe("swosTools", () => {
       expect(swos.client.writeBlob).not.toHaveBeenCalled();
     });
 
+    it("aborts the write when the codec cannot round-trip this device's blob", async () => {
+      // A firmware serializing a bare decimal (12) instead of a hex token is
+      // numerically identical but not byte-preserving, so re-encoding the whole
+      // blob would rewrite a field nobody asked to change. The guard lives in
+      // readBlobForWrite, ahead of any field resolution.
+      const swos = makeSwosClient({ "poe.b": "{i01:[0x00,12],i04:[0x01,0x01]}" });
+      await expect(
+        writeTool.handler(params({ out: "off" }, { dryRun: false }), makeContext(swos)),
+      ).rejects.toMatchObject({ code: "SWOS_ROUNDTRIP_MISMATCH" });
+      expect(swos.client.writeBlob).not.toHaveBeenCalled();
+    });
+
+    it("surfaces a round-trip mismatch during a dry run, before any real write", async () => {
+      // The preview is where an unverified firmware should be discovered, so the
+      // check has to run before the dryRun branch returns.
+      const swos = makeSwosClient({ "poe.b": "{i01:[0x00,12],i04:[0x01,0x01]}" });
+      await expect(
+        writeTool.handler(params({ out: "off" }), makeContext(swos)),
+      ).rejects.toMatchObject({ code: "SWOS_ROUNDTRIP_MISMATCH" });
+      expect(swos.client.writeBlob).not.toHaveBeenCalled();
+    });
+
     it("rejects an invalid option value", async () => {
       const swos = makeSwosClient();
       await expect(
