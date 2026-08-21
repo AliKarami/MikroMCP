@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { isTrue } from "../../adapter/response-parser.js";
+import { isTrue, sameValue } from "../../adapter/response-parser.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -97,7 +97,10 @@ const managePppoeClientInputSchema = z
     interface: z.string().optional().describe("Parent interface (required for add)"),
     user: z.string().optional().describe("PPPoE username (required for add)"),
     password: z.string().optional().describe("PPPoE password (never logged)"),
-    serviceName: z.string().optional().describe("PPPoE service name filter (leave empty to match any)"),
+    serviceName: z
+      .string()
+      .optional()
+      .describe("PPPoE service name filter (leave empty to match any)"),
     addDefaultRoute: z.boolean().optional().describe("Add default route via PPPoE (yes/no)"),
     dialOnDemand: z.boolean().optional().describe("Dial on demand instead of always-on (yes/no)"),
     dryRun,
@@ -119,14 +122,19 @@ const managePppoeClientTool: ToolDefinition = {
   snapshotPaths: [PPPOE_PATH],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = managePppoeClientInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing PPPoE client");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing PPPoE client",
+    );
 
     try {
       const allClients = await context.routerClient.get<RouterOSRecord>(PPPOE_PATH, {
         limit: undefined,
         offset: undefined,
       });
-      const existing = (allClients as Record<string, string>[]).find((c) => c.name === parsed.name);
+      const existing = (allClients as Record<string, string>[]).find((c) =>
+        sameValue(c.name, parsed.name),
+      );
 
       if (parsed.action === "add") {
         if (!parsed.interface) {
@@ -191,10 +199,18 @@ const managePppoeClientTool: ToolDefinition = {
           diff.push({ property: "service-name", before: null, after: parsed.serviceName });
         }
         if (parsed.addDefaultRoute !== undefined) {
-          diff.push({ property: "add-default-route", before: null, after: parsed.addDefaultRoute ? "yes" : "no" });
+          diff.push({
+            property: "add-default-route",
+            before: null,
+            after: parsed.addDefaultRoute ? "yes" : "no",
+          });
         }
         if (parsed.dialOnDemand !== undefined) {
-          diff.push({ property: "dial-on-demand", before: null, after: parsed.dialOnDemand ? "yes" : "no" });
+          diff.push({
+            property: "dial-on-demand",
+            before: null,
+            after: parsed.dialOnDemand ? "yes" : "no",
+          });
         }
 
         if (parsed.dryRun) {
@@ -211,8 +227,10 @@ const managePppoeClientTool: ToolDefinition = {
         };
         if (parsed.password !== undefined) body.password = parsed.password;
         if (parsed.serviceName !== undefined) body["service-name"] = parsed.serviceName;
-        if (parsed.addDefaultRoute !== undefined) body["add-default-route"] = parsed.addDefaultRoute ? "yes" : "no";
-        if (parsed.dialOnDemand !== undefined) body["dial-on-demand"] = parsed.dialOnDemand ? "yes" : "no";
+        if (parsed.addDefaultRoute !== undefined)
+          body["add-default-route"] = parsed.addDefaultRoute ? "yes" : "no";
+        if (parsed.dialOnDemand !== undefined)
+          body["dial-on-demand"] = parsed.dialOnDemand ? "yes" : "no";
 
         const created = await context.routerClient.create(PPPOE_PATH, body);
         log.info({ name: parsed.name, id: created[".id"] }, "PPPoE client created");
@@ -250,21 +268,39 @@ const managePppoeClientTool: ToolDefinition = {
         }
         if (parsed.serviceName !== undefined && existing["service-name"] !== parsed.serviceName) {
           updates["service-name"] = parsed.serviceName;
-          diff.push({ property: "service-name", before: existing["service-name"] ?? null, after: parsed.serviceName });
+          diff.push({
+            property: "service-name",
+            before: existing["service-name"] ?? null,
+            after: parsed.serviceName,
+          });
         }
-        if (parsed.addDefaultRoute !== undefined) {
+        if (
+          parsed.addDefaultRoute !== undefined &&
+          isTrue(existing["add-default-route"]) !== parsed.addDefaultRoute
+        ) {
           const desired = parsed.addDefaultRoute ? "yes" : "no";
-          if (existing["add-default-route"] !== desired) {
-            updates["add-default-route"] = desired;
-            diff.push({ property: "add-default-route", before: existing["add-default-route"] ?? null, after: desired });
-          }
+          updates["add-default-route"] = desired;
+          diff.push({
+            property: "add-default-route",
+            before:
+              existing["add-default-route"] === undefined
+                ? null
+                : String(existing["add-default-route"]),
+            after: desired,
+          });
         }
-        if (parsed.dialOnDemand !== undefined) {
+        if (
+          parsed.dialOnDemand !== undefined &&
+          isTrue(existing["dial-on-demand"]) !== parsed.dialOnDemand
+        ) {
           const desired = parsed.dialOnDemand ? "yes" : "no";
-          if (existing["dial-on-demand"] !== desired) {
-            updates["dial-on-demand"] = desired;
-            diff.push({ property: "dial-on-demand", before: existing["dial-on-demand"] ?? null, after: desired });
-          }
+          updates["dial-on-demand"] = desired;
+          diff.push({
+            property: "dial-on-demand",
+            before:
+              existing["dial-on-demand"] === undefined ? null : String(existing["dial-on-demand"]),
+            after: desired,
+          });
         }
 
         // RouterOS does not expose password in GET — always write it when provided

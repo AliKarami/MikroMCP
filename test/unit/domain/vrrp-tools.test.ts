@@ -220,7 +220,7 @@ describe("vrrpTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.instances as unknown[]).length).toBe(1);
-      expect(((sc.instances as unknown[]) as Record<string, unknown>[])[0].name).toBe("vrrp1");
+      expect((sc.instances as unknown[] as Record<string, unknown>[])[0].name).toBe("vrrp1");
     });
 
     it("applies limit", async () => {
@@ -229,10 +229,7 @@ describe("vrrpTools", () => {
         { ".id": "*2", name: "vrrp2", interface: "ether2", vrid: "101" },
         { ".id": "*3", name: "vrrp3", interface: "ether3", vrid: "102" },
       ]);
-      const result = await listInstancesTool.handler(
-        { routerId: "test-router", limit: 2 },
-        ctx,
-      );
+      const result = await listInstancesTool.handler({ routerId: "test-router", limit: 2 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.instances as unknown[]).length).toBe(2);
       expect(sc.total).toBe(3);
@@ -275,9 +272,26 @@ describe("vrrpTools", () => {
     });
 
     it("returns already_exists when instance found with same interface and vrid", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" },
-      ]);
+      const ctx = makeContext([{ ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" }]);
+      const result = await manageInstanceTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "vrrp1",
+          interface: "ether1",
+          vrid: 100,
+        },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("already_exists");
+      expect(ctx.routerClient.create).not.toHaveBeenCalled();
+    });
+
+    it("returns already_exists when the record carries a parsed numeric vrid", async () => {
+      // The response parser converts the vrid wire string to a number — the
+      // idempotency check must not report a false conflict.
+      const ctx = makeContext([{ ".id": "*1", name: "vrrp1", interface: "ether1", vrid: 100 }]);
       const result = await manageInstanceTool.handler(
         {
           routerId: "test-router",
@@ -294,9 +308,7 @@ describe("vrrpTools", () => {
     });
 
     it("throws CONFLICT when instance found with different interface", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" },
-      ]);
+      const ctx = makeContext([{ ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" }]);
       await expect(
         manageInstanceTool.handler(
           {
@@ -312,9 +324,7 @@ describe("vrrpTools", () => {
     });
 
     it("throws CONFLICT when instance found with different vrid", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" },
-      ]);
+      const ctx = makeContext([{ ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" }]);
       await expect(
         manageInstanceTool.handler(
           {
@@ -336,7 +346,10 @@ describe("vrrpTools", () => {
           { routerId: "test-router", action: "add", name: "vrrp1", vrid: 100 },
           ctx,
         ),
-      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "VRRP_INTERFACE_REQUIRED" });
+      ).rejects.toMatchObject({
+        category: ErrorCategory.VALIDATION,
+        code: "VRRP_INTERFACE_REQUIRED",
+      });
     });
 
     it("throws VALIDATION error when vrid is missing", async () => {
@@ -393,9 +406,7 @@ describe("vrrpTools", () => {
 
   describe("handler — manage_vrrp_instance remove", () => {
     it("removes instance when found", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" },
-      ]);
+      const ctx = makeContext([{ ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" }]);
       const result = await manageInstanceTool.handler(
         { routerId: "test-router", action: "remove", name: "vrrp1" },
         ctx,
@@ -417,9 +428,7 @@ describe("vrrpTools", () => {
     });
 
     it("dry_run returns preview without calling remove", async () => {
-      const ctx = makeContext([
-        { ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" },
-      ]);
+      const ctx = makeContext([{ ".id": "*1", name: "vrrp1", interface: "ether1", vrid: "100" }]);
       const result = await manageInstanceTool.handler(
         { routerId: "test-router", action: "remove", name: "vrrp1", dryRun: true },
         ctx,

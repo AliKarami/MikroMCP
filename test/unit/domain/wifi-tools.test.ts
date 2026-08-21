@@ -23,9 +23,17 @@ function makeContext(records: Record<string, unknown>[], rosVersion = "7"): Tool
     routerId: "test-router",
     correlationId: "corr",
     routerConfig: makeRouterConfig(rosVersion),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
       update: vi.fn().mockResolvedValue(undefined),
@@ -149,6 +157,32 @@ describe("wifiTools", () => {
       const ctx = makeContext([{ ".id": "*1", name: "wifi1", disabled: "false", ssid: "MyNet" }]);
       const result = await manageWifiTool.handler(
         { routerId: "test-router", name: "wifi1", ssid: "MyNet", disabled: false },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("no_change");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("returns no_change when a purely numeric ssid arrives parsed as a number", async () => {
+      // The response parser turns an SSID like "12345" into a number — the
+      // change detection must not report a spurious ssid update.
+      const ctx = makeContext([{ ".id": "*1", name: "wifi1", disabled: "false", ssid: 12345 }]);
+      const result = await manageWifiTool.handler(
+        { routerId: "test-router", name: "wifi1", ssid: "12345" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("no_change");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("returns no_change when the record carries a parsed boolean disabled field", async () => {
+      // The response parser converts "false" to boolean false — the change
+      // detection must not report a spurious disabled update.
+      const ctx = makeContext([{ ".id": "*1", name: "wifi1", disabled: false, ssid: "MyNet" }]);
+      const result = await manageWifiTool.handler(
+        { routerId: "test-router", name: "wifi1", disabled: false },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;

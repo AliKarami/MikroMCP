@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sameValue } from "../../adapter/response-parser.js";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
@@ -12,10 +13,7 @@ const log = createLogger("vrrp-tools");
 const listVrrpInstancesInputSchema = z
   .object({
     routerId,
-    interface: z
-      .string()
-      .optional()
-      .describe("Filter by master interface name (exact match)"),
+    interface: z.string().optional().describe("Filter by master interface name (exact match)"),
     limit,
   })
   .strict();
@@ -75,14 +73,14 @@ const manageVrrpInstanceInputSchema = z
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z.string().describe("VRRP interface name — idempotency key"),
     interface: z.string().optional().describe("Master interface (required for add)"),
-    vrid: z.number().int().min(1).max(255).optional().describe("Virtual router ID (required for add)"),
-    priority: z
+    vrid: z
       .number()
       .int()
       .min(1)
-      .max(254)
-      .default(100)
-      .describe("Router priority (1–254)"),
+      .max(255)
+      .optional()
+      .describe("Virtual router ID (required for add)"),
+    priority: z.number().int().min(1).max(254).default(100).describe("Router priority (1–254)"),
     interval: z.number().int().min(1).optional().describe("Advertisement interval in seconds"),
     version: z.enum(["2", "3"]).default("3").describe("VRRP protocol version"),
     comment: z.string().optional().describe("Optional comment"),
@@ -146,7 +144,7 @@ const manageVrrpInstanceTool: ToolDefinition = {
         }
 
         if (existing) {
-          if (existing.interface === parsed.interface && existing.vrid === String(parsed.vrid)) {
+          if (existing.interface === parsed.interface && sameValue(existing.vrid, parsed.vrid)) {
             return {
               content: `VRRP instance "${parsed.name}" already exists with the same interface and VRID. No changes made.`,
               structuredContent: { action: "already_exists", instance: existing },
@@ -178,7 +176,9 @@ const manageVrrpInstanceTool: ToolDefinition = {
             ...(parsed.interval
               ? [{ property: "interval", before: null, after: String(parsed.interval) }]
               : []),
-            ...(parsed.comment ? [{ property: "comment", before: null, after: parsed.comment }] : []),
+            ...(parsed.comment
+              ? [{ property: "comment", before: null, after: parsed.comment }]
+              : []),
           ];
           return {
             content: `Dry run: Would add VRRP instance "${parsed.name}".`,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTrue, sameValue } from "../../adapter/response-parser.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -49,7 +50,11 @@ const listWifiTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
+      const {
+        items: paginated,
+        total,
+        hasMore,
+      } = paginate(interfaces, parsed.offset, parsed.limit);
 
       return {
         content: listContent(
@@ -58,7 +63,8 @@ const listWifiTool: ToolDefinition = {
           paginated,
           total,
           parsed.offset,
-          (i) => compactFields(i, ["name", "master-interface", "mac-address", "disabled", "comment"]),
+          (i) =>
+            compactFields(i, ["name", "master-interface", "mac-address", "disabled", "comment"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -107,13 +113,8 @@ const listWifiClientsTool: ToolDefinition = {
       const { items: clients, total, hasMore } = paginate(allClients, parsed.offset, parsed.limit);
 
       return {
-        content: listContent(
-          "WiFi clients",
-          context.routerId,
-          clients,
-          total,
-          parsed.offset,
-          (c) => compactFields(c, ["interface", "mac-address", "signal", "tx-rate", "rx-rate", "uptime"]),
+        content: listContent("WiFi clients", context.routerId, clients, total, parsed.offset, (c) =>
+          compactFields(c, ["interface", "mac-address", "signal", "tx-rate", "rx-rate", "uptime"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -191,16 +192,22 @@ const manageWifiTool: ToolDefinition = {
       const changes: Record<string, string> = {};
       const diff: Array<{ property: string; before: string | null; after: string | null }> = [];
 
-      if (parsed.disabled !== undefined) {
+      if (parsed.disabled !== undefined && isTrue(rec.disabled) !== parsed.disabled) {
         const desired = parsed.disabled ? "true" : "false";
-        if (rec.disabled !== desired) {
-          changes.disabled = desired;
-          diff.push({ property: "disabled", before: rec.disabled ?? null, after: desired });
-        }
+        changes.disabled = desired;
+        diff.push({
+          property: "disabled",
+          before: rec.disabled === undefined ? null : String(rec.disabled),
+          after: desired,
+        });
       }
-      if (parsed.ssid !== undefined && rec.ssid !== parsed.ssid) {
+      if (parsed.ssid !== undefined && !sameValue(rec.ssid, parsed.ssid)) {
         changes.ssid = parsed.ssid;
-        diff.push({ property: "ssid", before: rec.ssid ?? null, after: parsed.ssid });
+        diff.push({
+          property: "ssid",
+          before: rec.ssid === undefined ? null : String(rec.ssid),
+          after: parsed.ssid,
+        });
       }
 
       if (diff.length === 0) {

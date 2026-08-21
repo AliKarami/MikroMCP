@@ -25,7 +25,12 @@ function makeContext(records: Record<string, unknown>[] = []): ToolContext {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
     ftpClient: {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -49,7 +54,8 @@ describe("pppoeTools", () => {
       expect(listTool.name).toBe("list_pppoe_clients");
       expect(manageTool.name).toBe("manage_pppoe_client");
     });
-    it("list_pppoe_clients is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
+    it("list_pppoe_clients is readOnly", () =>
+      expect(listTool.annotations.readOnlyHint).toBe(true));
     it("manage_pppoe_client is not readOnly and is destructive", () => {
       expect(manageTool.annotations.readOnlyHint).toBe(false);
       expect(manageTool.annotations.destructiveHint).toBe(true);
@@ -89,13 +95,22 @@ describe("pppoeTools", () => {
   describe("handler - list_pppoe_clients", () => {
     const clients = [
       { ".id": "*1", name: "pppoe-wan", interface: "ether1", user: "isp-user", running: true },
-      { ".id": "*2", name: "pppoe-backup", interface: "ether2", user: "isp-user-2", running: false },
+      {
+        ".id": "*2",
+        name: "pppoe-backup",
+        interface: "ether2",
+        user: "isp-user-2",
+        running: false,
+      },
       { ".id": "*3", name: "pppoe-lte", interface: "ether3", user: "lte-user", running: "true" },
     ];
 
     it("returns all clients with no filter", async () => {
       const ctx = makeContext(clients);
-      const r = await listTool.handler({ routerId: "test-router", status: "all", limit: 100, offset: 0 }, ctx);
+      const r = await listTool.handler(
+        { routerId: "test-router", status: "all", limit: 100, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.total).toBe(3);
       expect(r.structuredContent.clients).toHaveLength(3);
       expect(r.structuredContent.hasMore).toBe(false);
@@ -103,15 +118,23 @@ describe("pppoeTools", () => {
 
     it("filters to connected clients only", async () => {
       const ctx = makeContext(clients);
-      const r = await listTool.handler({ routerId: "test-router", status: "connected", limit: 100, offset: 0 }, ctx);
+      const r = await listTool.handler(
+        { routerId: "test-router", status: "connected", limit: 100, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.total).toBe(2); // running: true and running: "true"
     });
 
     it("filters to disconnected clients only", async () => {
       const ctx = makeContext(clients);
-      const r = await listTool.handler({ routerId: "test-router", status: "disconnected", limit: 100, offset: 0 }, ctx);
+      const r = await listTool.handler(
+        { routerId: "test-router", status: "disconnected", limit: 100, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.total).toBe(1);
-      expect((r.structuredContent.clients as Record<string, unknown>[])[0].name).toBe("pppoe-backup");
+      expect((r.structuredContent.clients as Record<string, unknown>[])[0].name).toBe(
+        "pppoe-backup",
+      );
     });
 
     it("filters by parent interface", async () => {
@@ -125,7 +148,10 @@ describe("pppoeTools", () => {
 
     it("paginates correctly and sets hasMore", async () => {
       const ctx = makeContext(clients);
-      const r = await listTool.handler({ routerId: "test-router", status: "all", limit: 2, offset: 0 }, ctx);
+      const r = await listTool.handler(
+        { routerId: "test-router", status: "all", limit: 2, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.clients).toHaveLength(2);
       expect(r.structuredContent.hasMore).toBe(true);
       expect(r.structuredContent.total).toBe(3);
@@ -133,7 +159,10 @@ describe("pppoeTools", () => {
 
     it("returns empty list when no clients exist", async () => {
       const ctx = makeContext([]);
-      const r = await listTool.handler({ routerId: "test-router", status: "all", limit: 100, offset: 0 }, ctx);
+      const r = await listTool.handler(
+        { routerId: "test-router", status: "all", limit: 100, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.total).toBe(0);
       expect(r.structuredContent.clients).toHaveLength(0);
     });
@@ -143,7 +172,14 @@ describe("pppoeTools", () => {
     it("creates a new client with required fields", async () => {
       const ctx = makeContext([]);
       const r = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "pppoe-wan", interface: "ether1", user: "myuser", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "pppoe-wan",
+          interface: "ether1",
+          user: "myuser",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("created");
@@ -185,7 +221,14 @@ describe("pppoeTools", () => {
       const existing = [{ ".id": "*1", name: "pppoe-wan", interface: "ether1", user: "myuser" }];
       const ctx = makeContext(existing);
       const r = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "pppoe-wan", interface: "ether1", user: "myuser", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "pppoe-wan",
+          interface: "ether1",
+          user: "myuser",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("already_exists");
@@ -197,7 +240,14 @@ describe("pppoeTools", () => {
       const ctx = makeContext(existing);
       await expect(
         manageTool.handler(
-          { routerId: "test-router", action: "add", name: "pppoe-wan", interface: "ether1", user: "new-user", dryRun: false },
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "pppoe-wan",
+            interface: "ether1",
+            user: "new-user",
+            dryRun: false,
+          },
           ctx,
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.CONFLICT, code: "PPPOE_CLIENT_CONFLICT" });
@@ -207,7 +257,13 @@ describe("pppoeTools", () => {
       const ctx = makeContext([]);
       await expect(
         manageTool.handler(
-          { routerId: "test-router", action: "add", name: "pppoe-wan", user: "myuser", dryRun: false },
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "pppoe-wan",
+            user: "myuser",
+            dryRun: false,
+          },
           ctx,
         ),
       ).rejects.toMatchObject({ code: "PPPOE_CLIENT_INTERFACE_REQUIRED" });
@@ -217,7 +273,13 @@ describe("pppoeTools", () => {
       const ctx = makeContext([]);
       await expect(
         manageTool.handler(
-          { routerId: "test-router", action: "add", name: "pppoe-wan", interface: "ether1", dryRun: false },
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "pppoe-wan",
+            interface: "ether1",
+            dryRun: false,
+          },
           ctx,
         ),
       ).rejects.toMatchObject({ code: "PPPOE_CLIENT_USER_REQUIRED" });
@@ -226,7 +288,14 @@ describe("pppoeTools", () => {
     it("returns dry_run without calling create", async () => {
       const ctx = makeContext([]);
       const r = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "pppoe-wan", interface: "ether1", user: "myuser", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "pppoe-wan",
+          interface: "ether1",
+          user: "myuser",
+          dryRun: true,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("dry_run");
@@ -237,14 +306,30 @@ describe("pppoeTools", () => {
 
   describe("handler - manage_pppoe_client update", () => {
     it("updates fields that differ", async () => {
-      const existing = [{ ".id": "*1", name: "pppoe-wan", interface: "ether1", user: "old-user", "service-name": "" }];
+      const existing = [
+        {
+          ".id": "*1",
+          name: "pppoe-wan",
+          interface: "ether1",
+          user: "old-user",
+          "service-name": "",
+        },
+      ];
       const ctx = makeContext(existing);
       const r = await manageTool.handler(
-        { routerId: "test-router", action: "update", name: "pppoe-wan", user: "new-user", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "pppoe-wan",
+          user: "new-user",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/pppoe-client", "*1", { user: "new-user" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/pppoe-client", "*1", {
+        user: "new-user",
+      });
       expect(r.structuredContent.diff).toHaveLength(1);
     });
 
@@ -252,7 +337,43 @@ describe("pppoeTools", () => {
       const existing = [{ ".id": "*1", name: "pppoe-wan", interface: "ether1", user: "myuser" }];
       const ctx = makeContext(existing);
       const r = await manageTool.handler(
-        { routerId: "test-router", action: "update", name: "pppoe-wan", interface: "ether1", user: "myuser", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "pppoe-wan",
+          interface: "ether1",
+          user: "myuser",
+          dryRun: false,
+        },
+        ctx,
+      );
+      expect(r.structuredContent.action).toBe("no_change");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("returns no_change when boolean flags arrive parsed from the wire", async () => {
+      // RouterOS echoes "true"/"false", which the response parser converts to
+      // booleans — matching yes/no inputs must not trigger a phantom write.
+      const existing = [
+        {
+          ".id": "*1",
+          name: "pppoe-wan",
+          interface: "ether1",
+          user: "myuser",
+          "add-default-route": true,
+          "dial-on-demand": false,
+        },
+      ];
+      const ctx = makeContext(existing);
+      const r = await manageTool.handler(
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "pppoe-wan",
+          addDefaultRoute: true,
+          dialOnDemand: false,
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("no_change");
@@ -263,21 +384,38 @@ describe("pppoeTools", () => {
       const existing = [{ ".id": "*1", name: "pppoe-wan", interface: "ether1", user: "myuser" }];
       const ctx = makeContext(existing);
       const r = await manageTool.handler(
-        { routerId: "test-router", action: "update", name: "pppoe-wan", password: "newpass", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "pppoe-wan",
+          password: "newpass",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/pppoe-client", "*1", { password: "newpass" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/pppoe-client", "*1", {
+        password: "newpass",
+      });
     });
 
     it("throws NOT_FOUND when client does not exist", async () => {
       const ctx = makeContext([]);
       await expect(
         manageTool.handler(
-          { routerId: "test-router", action: "update", name: "pppoe-wan", user: "x", dryRun: false },
+          {
+            routerId: "test-router",
+            action: "update",
+            name: "pppoe-wan",
+            user: "x",
+            dryRun: false,
+          },
           ctx,
         ),
-      ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND, code: "PPPOE_CLIENT_NOT_FOUND" });
+      ).rejects.toMatchObject({
+        category: ErrorCategory.NOT_FOUND,
+        code: "PPPOE_CLIENT_NOT_FOUND",
+      });
     });
 
     it("returns dry_run with diff without calling update", async () => {
