@@ -56,20 +56,23 @@ export class RouterOSRestClient {
    */
   async get<T = Record<string, unknown>>(path: string, options?: QueryOptions): Promise<T[]> {
     const query = buildListQuery(options);
-    let raw: Array<Record<string, string>>;
+    let raw: Array<Record<string, string>> | Record<string, string> | undefined;
 
     if (query.method === "POST") {
-      raw = (await this.doRequest("POST", `${this.baseUrl}/${path}`, query.body)) as Array<
-        Record<string, string>
-      >;
+      // Command-style queries (.proplist/.query) must target the /print
+      // command — RouterOS rejects a POST to the bare collection path.
+      raw = (await this.doRequest("POST", `${this.baseUrl}/${path}/print`, query.body)) as
+        | Array<Record<string, string>>
+        | undefined;
     } else {
       const qs = query.queryParams ? "?" + new URLSearchParams(query.queryParams).toString() : "";
-      raw = (await this.doRequest("GET", `${this.baseUrl}/${path}${qs}`)) as Array<
-        Record<string, string>
-      >;
+      raw = (await this.doRequest("GET", `${this.baseUrl}/${path}${qs}`)) as
+        | Array<Record<string, string>>
+        | undefined;
     }
 
-    const rawArray = Array.isArray(raw) ? raw : [raw as Record<string, string>];
+    // An empty 200 body parses to undefined — treat it as an empty collection.
+    const rawArray = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
     const parsed = parseRecords<T>(rawArray);
 
     // Client-side pagination
