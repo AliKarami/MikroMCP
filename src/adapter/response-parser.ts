@@ -63,6 +63,17 @@ export function isTrue(v: unknown): boolean {
 }
 
 /**
+ * Compare a (possibly parsed) record value against a desired value by
+ * normalising both to their wire-string form. The parser turns numeric wire
+ * strings into numbers, so `record.port === String(desired)` silently never
+ * matches — use this instead for any non-boolean field (booleans go through
+ * `isTrue`).
+ */
+export function sameValue(recordValue: unknown, desired: unknown): boolean {
+  return String(recordValue) === String(desired);
+}
+
+/**
  * Parse all values in a single RouterOS record.
  */
 export function parseRecord<T = Record<string, unknown>>(raw: Record<string, string>): T {
