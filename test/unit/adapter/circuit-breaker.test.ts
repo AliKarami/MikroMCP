@@ -105,7 +105,10 @@ describe("CircuitBreaker — half-open single-probe gate", () => {
 
     let releaseProbe!: () => void;
     const probe = cb.execute(
-      () => new Promise<string>((resolve) => { releaseProbe = () => resolve("ok"); }),
+      () =>
+        new Promise<string>((resolve) => {
+          releaseProbe = () => resolve("ok");
+        }),
     );
 
     // Second call arrives while the probe is still pending.

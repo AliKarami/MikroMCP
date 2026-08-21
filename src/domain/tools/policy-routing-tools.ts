@@ -61,7 +61,15 @@ const listRoutingRulesTool: ToolDefinition = {
           rules as Record<string, string>[],
           rules.length,
           0,
-          (r) => compactFields(r, ["src-address", "dst-address", "action", "table", "interface", "disabled"]),
+          (r) =>
+            compactFields(r, [
+              "src-address",
+              "dst-address",
+              "action",
+              "table",
+              "interface",
+              "disabled",
+            ]),
         ),
         structuredContent: { routerId: context.routerId, rules, total: rules.length },
       };

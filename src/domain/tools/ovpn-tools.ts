@@ -103,7 +103,10 @@ const manageOvpnClientTool: ToolDefinition = {
   snapshotPaths: [OVPN_CLIENT_PATH],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageOvpnClientInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing OpenVPN client");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing OpenVPN client",
+    );
 
     try {
       const allClients = await context.routerClient.get<RouterOSRecord>(OVPN_CLIENT_PATH, {
@@ -202,11 +205,19 @@ const manageOvpnClientTool: ToolDefinition = {
 
         if (parsed.connectTo !== undefined && existing["connect-to"] !== parsed.connectTo) {
           updates["connect-to"] = parsed.connectTo;
-          diff.push({ property: "connect-to", before: existing["connect-to"] ?? null, after: parsed.connectTo });
+          diff.push({
+            property: "connect-to",
+            before: existing["connect-to"] ?? null,
+            after: parsed.connectTo,
+          });
         }
         if (parsed.port !== undefined && existing.port !== String(parsed.port)) {
           updates.port = String(parsed.port);
-          diff.push({ property: "port", before: existing.port ?? null, after: String(parsed.port) });
+          diff.push({
+            property: "port",
+            before: existing.port ?? null,
+            after: String(parsed.port),
+          });
         }
         if (parsed.mode !== undefined && existing.mode !== parsed.mode) {
           updates.mode = parsed.mode;
@@ -214,11 +225,19 @@ const manageOvpnClientTool: ToolDefinition = {
         }
         if (parsed.protocol !== undefined && existing.protocol !== parsed.protocol) {
           updates.protocol = parsed.protocol;
-          diff.push({ property: "protocol", before: existing.protocol ?? null, after: parsed.protocol });
+          diff.push({
+            property: "protocol",
+            before: existing.protocol ?? null,
+            after: parsed.protocol,
+          });
         }
         if (parsed.certificate !== undefined && existing.certificate !== parsed.certificate) {
           updates.certificate = parsed.certificate;
-          diff.push({ property: "certificate", before: existing.certificate ?? null, after: parsed.certificate });
+          diff.push({
+            property: "certificate",
+            before: existing.certificate ?? null,
+            after: parsed.certificate,
+          });
         }
         if (parsed.user !== undefined && existing.user !== parsed.user) {
           updates.user = parsed.user;
@@ -292,10 +311,7 @@ const getOvpnServerInputSchema = z
   })
   .strict();
 
-function fetchOvpnServer(
-  allRecords: RouterOSRecord[],
-  routerId: string,
-): Record<string, string> {
+function fetchOvpnServer(allRecords: RouterOSRecord[], routerId: string): Record<string, string> {
   if (allRecords.length === 0) {
     throw new MikroMCPError({
       category: ErrorCategory.NOT_FOUND,
@@ -351,12 +367,29 @@ const manageOvpnServerInputSchema = z
   .object({
     routerId,
     action: z.enum(["enable", "disable", "set"]).describe("Action to perform"),
-    port: z.number().int().min(1).max(65535).optional().describe("Listening port (set action only)"),
+    port: z
+      .number()
+      .int()
+      .min(1)
+      .max(65535)
+      .optional()
+      .describe("Listening port (set action only)"),
     mode: z.enum(["ip", "ethernet"]).optional().describe("Tunnel mode (set action only)"),
-    protocol: z.enum(["tcp-server", "udp"]).optional().describe("Transport protocol (set action only)"),
+    protocol: z
+      .enum(["tcp-server", "udp"])
+      .optional()
+      .describe("Transport protocol (set action only)"),
     certificate: z.string().optional().describe("Server certificate name (set action only)"),
     cipher: z
-      .enum(["blowfish128", "aes128-cbc", "aes192-cbc", "aes256-cbc", "aes128-gcm", "aes256-gcm", "none"])
+      .enum([
+        "blowfish128",
+        "aes128-cbc",
+        "aes192-cbc",
+        "aes256-cbc",
+        "aes128-gcm",
+        "aes256-gcm",
+        "none",
+      ])
       .optional()
       .describe("Encryption cipher (set action only)"),
     auth: z
@@ -409,7 +442,13 @@ const manageOvpnServerTool: ToolDefinition = {
             content: `Dry run: Would ${parsed.action} OpenVPN server on ${context.routerId}.`,
             structuredContent: {
               action: "dry_run",
-              diff: [{ property: "enabled", before: server.enabled, after: desiredEnabled ? "yes" : "no" }],
+              diff: [
+                {
+                  property: "enabled",
+                  before: server.enabled,
+                  after: desiredEnabled ? "yes" : "no",
+                },
+              ],
             },
           };
         }
@@ -420,7 +459,10 @@ const manageOvpnServerTool: ToolDefinition = {
         log.info({ routerId: context.routerId, action: parsed.action }, "OpenVPN server updated");
         return {
           content: `OpenVPN server on ${context.routerId} ${parsed.action}d.`,
-          structuredContent: { action: parsed.action === "enable" ? "enabled" : "disabled", server },
+          structuredContent: {
+            action: parsed.action === "enable" ? "enabled" : "disabled",
+            server,
+          },
         };
       }
 
@@ -441,7 +483,8 @@ const manageOvpnServerTool: ToolDefinition = {
           details: {},
           recoverability: {
             retryable: false,
-            suggestedAction: "Provide at least one of: port, mode, protocol, certificate, cipher, auth.",
+            suggestedAction:
+              "Provide at least one of: port, mode, protocol, certificate, cipher, auth.",
             alternativeTools: [],
           },
         });
@@ -460,11 +503,19 @@ const manageOvpnServerTool: ToolDefinition = {
       }
       if (parsed.protocol !== undefined && server.protocol !== parsed.protocol) {
         updates.protocol = parsed.protocol;
-        diff.push({ property: "protocol", before: server.protocol ?? null, after: parsed.protocol });
+        diff.push({
+          property: "protocol",
+          before: server.protocol ?? null,
+          after: parsed.protocol,
+        });
       }
       if (parsed.certificate !== undefined && server.certificate !== parsed.certificate) {
         updates.certificate = parsed.certificate;
-        diff.push({ property: "certificate", before: server.certificate ?? null, after: parsed.certificate });
+        diff.push({
+          property: "certificate",
+          before: server.certificate ?? null,
+          after: parsed.certificate,
+        });
       }
       if (parsed.cipher !== undefined && server.cipher !== parsed.cipher) {
         updates.cipher = parsed.cipher;

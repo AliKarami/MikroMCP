@@ -24,9 +24,17 @@ function makeContext(records: Record<string, unknown>[] = []): ToolContext {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
       create: vi.fn().mockResolvedValue({ ".id": "*1", name: "vlan10", "vlan-id": "10" }),
@@ -50,7 +58,13 @@ describe("vlanTools", () => {
     it("creates vlan when not existing", async () => {
       const ctx = makeContext([]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "vlan10", vlanId: 10, parentInterface: "ether1" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "vlan10",
+          vlanId: 10,
+          parentInterface: "ether1",
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -62,7 +76,13 @@ describe("vlanTools", () => {
         { ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1", disabled: "false" },
       ]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "vlan10", vlanId: 10, parentInterface: "ether1" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "vlan10",
+          vlanId: 10,
+          parentInterface: "ether1",
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -74,7 +94,14 @@ describe("vlanTools", () => {
         { ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1", disabled: "false" },
       ]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "vlan10", vlanId: 10, parentInterface: "ether1", disabled: false },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "vlan10",
+          vlanId: 10,
+          parentInterface: "ether1",
+          disabled: false,
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -87,7 +114,13 @@ describe("vlanTools", () => {
       ]);
       await expect(
         manageTool.handler(
-          { routerId: "test-router", action: "add", name: "vlan10", vlanId: 10, parentInterface: "ether1" },
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "vlan10",
+            vlanId: 10,
+            parentInterface: "ether1",
+          },
           ctx,
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.CONFLICT });
@@ -116,7 +149,14 @@ describe("vlanTools", () => {
     it("dry_run returns diff without creating", async () => {
       const ctx = makeContext([]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "vlan10", vlanId: 10, parentInterface: "ether1", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "vlan10",
+          vlanId: 10,
+          parentInterface: "ether1",
+          dryRun: true,
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -127,7 +167,9 @@ describe("vlanTools", () => {
 
   describe("manage_vlan - remove", () => {
     it("removes existing vlan", async () => {
-      const ctx = makeContext([{ ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1" }]);
+      const ctx = makeContext([
+        { ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1" },
+      ]);
       const result = await manageTool.handler(
         { routerId: "test-router", action: "remove", name: "vlan10" },
         ctx,
@@ -148,7 +190,9 @@ describe("vlanTools", () => {
     });
 
     it("dry_run returns preview without calling remove", async () => {
-      const ctx = makeContext([{ ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1" }]);
+      const ctx = makeContext([
+        { ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1" },
+      ]);
       const result = await manageTool.handler(
         { routerId: "test-router", action: "remove", name: "vlan10", dryRun: true },
         ctx,
@@ -161,25 +205,33 @@ describe("vlanTools", () => {
 
   describe("manage_vlan - enable/disable", () => {
     it("disables an existing vlan", async () => {
-      const ctx = makeContext([{ ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1", disabled: "false" }]);
+      const ctx = makeContext([
+        { ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1", disabled: "false" },
+      ]);
       const result = await manageTool.handler(
         { routerId: "test-router", action: "disable", name: "vlan10" },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/vlan", "*1", { disabled: "true" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/vlan", "*1", {
+        disabled: "true",
+      });
     });
 
     it("enables an existing vlan", async () => {
-      const ctx = makeContext([{ ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1", disabled: "true" }]);
+      const ctx = makeContext([
+        { ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1", disabled: "true" },
+      ]);
       const result = await manageTool.handler(
         { routerId: "test-router", action: "enable", name: "vlan10" },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("enabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/vlan", "*1", { disabled: "false" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/vlan", "*1", {
+        disabled: "false",
+      });
     });
 
     it("throws NOT_FOUND on enable/disable when vlan missing", async () => {
@@ -190,7 +242,9 @@ describe("vlanTools", () => {
     });
 
     it("dry_run returns diff without updating", async () => {
-      const ctx = makeContext([{ ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1", disabled: "false" }]);
+      const ctx = makeContext([
+        { ".id": "*1", name: "vlan10", "vlan-id": "10", interface: "ether1", disabled: "false" },
+      ]);
       const result = await manageTool.handler(
         { routerId: "test-router", action: "disable", name: "vlan10", dryRun: true },
         ctx,

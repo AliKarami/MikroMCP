@@ -474,10 +474,7 @@ describe("networkServicesTools", () => {
         { ".id": "*2", interface: "ether2", address: "192.168.2.2" },
         { ".id": "*3", interface: "ether3", address: "192.168.3.2" },
       ]);
-      const result = await listNeighborsTool.handler(
-        { routerId: "test-router", limit: 2 },
-        ctx,
-      );
+      const result = await listNeighborsTool.handler({ routerId: "test-router", limit: 2 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.neighbors as unknown[]).length).toBe(2);
       expect(sc.total).toBe(3);
@@ -494,27 +491,27 @@ describe("networkServicesTools", () => {
 
     describe("input schema", () => {
       it("parses valid input with enabled only", () => {
-        expect(
-          manageTool.inputSchema.safeParse({ routerId: "r1", enabled: true }).success,
-        ).toBe(true);
+        expect(manageTool.inputSchema.safeParse({ routerId: "r1", enabled: true }).success).toBe(
+          true,
+        );
       });
       it("dryRun defaults to false", () => {
         expect(manageTool.inputSchema.parse({ routerId: "r1", enabled: true }).dryRun).toBe(false);
       });
       it("rejects extra fields", () => {
-        expect(
-          manageTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success,
-        ).toBe(false);
+        expect(manageTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(
+          false,
+        );
       });
       it("rejects invalid mode", () => {
-        expect(
-          manageTool.inputSchema.safeParse({ routerId: "r1", mode: "foobar" }).success,
-        ).toBe(false);
+        expect(manageTool.inputSchema.safeParse({ routerId: "r1", mode: "foobar" }).success).toBe(
+          false,
+        );
       });
       it("validates mode enum", () => {
-        expect(
-          manageTool.inputSchema.safeParse({ routerId: "r1", mode: "unicast" }).success,
-        ).toBe(true);
+        expect(manageTool.inputSchema.safeParse({ routerId: "r1", mode: "unicast" }).success).toBe(
+          true,
+        );
       });
     });
 
@@ -566,10 +563,7 @@ describe("networkServicesTools", () => {
 
     it("updates enabled field", async () => {
       const ctx = makeNtpContext({ ".id": "*1", enabled: "true", mode: "unicast" });
-      const result = await manageTool.handler(
-        { routerId: "test-router", enabled: false },
-        ctx,
-      );
+      const result = await manageTool.handler({ routerId: "test-router", enabled: false }, ctx);
       expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
       expect(ctx.routerClient.update).toHaveBeenCalledWith(
         "system/ntp/client",
@@ -629,8 +623,18 @@ describe("networkServicesTools", () => {
 
     it("filters by interface substring", async () => {
       const ctx = makeContext([
-        { ".id": "*1", address: "192.168.1.1", "mac-address": "AA:BB:CC:DD:EE:01", interface: "ether1" },
-        { ".id": "*2", address: "192.168.1.2", "mac-address": "AA:BB:CC:DD:EE:02", interface: "ether2" },
+        {
+          ".id": "*1",
+          address: "192.168.1.1",
+          "mac-address": "AA:BB:CC:DD:EE:01",
+          interface: "ether1",
+        },
+        {
+          ".id": "*2",
+          address: "192.168.1.2",
+          "mac-address": "AA:BB:CC:DD:EE:02",
+          interface: "ether2",
+        },
       ]);
       const result = await listArpEntriesTool.handler(
         { routerId: "test-router", interface: "ether1" },
@@ -642,8 +646,18 @@ describe("networkServicesTools", () => {
 
     it("filters by address substring", async () => {
       const ctx = makeContext([
-        { ".id": "*1", address: "192.168.1.1", "mac-address": "AA:BB:CC:DD:EE:01", interface: "ether1" },
-        { ".id": "*2", address: "10.0.0.1", "mac-address": "AA:BB:CC:DD:EE:02", interface: "ether2" },
+        {
+          ".id": "*1",
+          address: "192.168.1.1",
+          "mac-address": "AA:BB:CC:DD:EE:01",
+          interface: "ether1",
+        },
+        {
+          ".id": "*2",
+          address: "10.0.0.1",
+          "mac-address": "AA:BB:CC:DD:EE:02",
+          interface: "ether2",
+        },
       ]);
       const result = await listArpEntriesTool.handler(
         { routerId: "test-router", address: "192.168" },
@@ -655,8 +669,18 @@ describe("networkServicesTools", () => {
 
     it("filters by macAddress substring", async () => {
       const ctx = makeContext([
-        { ".id": "*1", address: "192.168.1.1", "mac-address": "AA:BB:CC:DD:EE:01", interface: "ether1" },
-        { ".id": "*2", address: "192.168.1.2", "mac-address": "FF:FF:FF:FF:FF:FF", interface: "ether2" },
+        {
+          ".id": "*1",
+          address: "192.168.1.1",
+          "mac-address": "AA:BB:CC:DD:EE:01",
+          interface: "ether1",
+        },
+        {
+          ".id": "*2",
+          address: "192.168.1.2",
+          "mac-address": "FF:FF:FF:FF:FF:FF",
+          interface: "ether2",
+        },
       ]);
       const result = await listArpEntriesTool.handler(
         { routerId: "test-router", macAddress: "AA:BB" },
@@ -668,14 +692,26 @@ describe("networkServicesTools", () => {
 
     it("applies limit", async () => {
       const ctx = makeContext([
-        { ".id": "*1", address: "192.168.1.1", "mac-address": "AA:BB:CC:DD:EE:01", interface: "ether1" },
-        { ".id": "*2", address: "192.168.1.2", "mac-address": "AA:BB:CC:DD:EE:02", interface: "ether2" },
-        { ".id": "*3", address: "192.168.1.3", "mac-address": "AA:BB:CC:DD:EE:03", interface: "ether3" },
+        {
+          ".id": "*1",
+          address: "192.168.1.1",
+          "mac-address": "AA:BB:CC:DD:EE:01",
+          interface: "ether1",
+        },
+        {
+          ".id": "*2",
+          address: "192.168.1.2",
+          "mac-address": "AA:BB:CC:DD:EE:02",
+          interface: "ether2",
+        },
+        {
+          ".id": "*3",
+          address: "192.168.1.3",
+          "mac-address": "AA:BB:CC:DD:EE:03",
+          interface: "ether3",
+        },
       ]);
-      const result = await listArpEntriesTool.handler(
-        { routerId: "test-router", limit: 2 },
-        ctx,
-      );
+      const result = await listArpEntriesTool.handler({ routerId: "test-router", limit: 2 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.entries as unknown[]).length).toBe(2);
       expect(sc.total).toBe(3);

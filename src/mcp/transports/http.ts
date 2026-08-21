@@ -200,7 +200,18 @@ export async function connectHttp(
 
         const boundIdentity = identity;
         await withIdentity(boundIdentity, async () => {
-          await handleMcpRequest(pathname, req, res, url, port, maxBodyBytes, makeServer, streamableSessions, sseTransports, boundIdentity.id);
+          await handleMcpRequest(
+            pathname,
+            req,
+            res,
+            url,
+            port,
+            maxBodyBytes,
+            makeServer,
+            streamableSessions,
+            sseTransports,
+            boundIdentity.id,
+          );
         });
         return;
       }

@@ -55,8 +55,7 @@ describe("queueTools", () => {
       expect(manageQueueTool.name).toBe("manage_queue");
     });
 
-    it("list_queues is readOnly", () =>
-      expect(listQueuesTool.annotations.readOnlyHint).toBe(true));
+    it("list_queues is readOnly", () => expect(listQueuesTool.annotations.readOnlyHint).toBe(true));
 
     it("manage_queue is not readOnly", () =>
       expect(manageQueueTool.annotations.readOnlyHint).toBe(false));
@@ -155,10 +154,7 @@ describe("queueTools", () => {
         { ".id": "*2", name: "q2", target: "10.0.0.1/24" },
         { ".id": "*3", name: "q3", target: "10.0.0.2/24" },
       ]);
-      const result = await listQueuesTool.handler(
-        { routerId: "test-router", limit: 2 },
-        ctx,
-      );
+      const result = await listQueuesTool.handler({ routerId: "test-router", limit: 2 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.queues as unknown[]).length).toBe(2);
       expect(sc.total).toBe(3);
@@ -169,9 +165,7 @@ describe("queueTools", () => {
       (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error("network error"),
       );
-      await expect(
-        listQueuesTool.handler({ routerId: "test-router" }, ctx),
-      ).rejects.toThrow();
+      await expect(listQueuesTool.handler({ routerId: "test-router" }, ctx)).rejects.toThrow();
     });
   });
 
@@ -232,10 +226,7 @@ describe("queueTools", () => {
     it("throws VALIDATION error when target is missing", async () => {
       const ctx = makeContext([]);
       await expect(
-        manageQueueTool.handler(
-          { routerId: "test-router", action: "add", name: "q1" },
-          ctx,
-        ),
+        manageQueueTool.handler({ routerId: "test-router", action: "add", name: "q1" }, ctx),
       ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION });
     });
 
@@ -311,11 +302,9 @@ describe("queueTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("enabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "queue/simple",
-        "*1",
-        { disabled: "false" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("queue/simple", "*1", {
+        disabled: "false",
+      });
     });
 
     it("sets disabled=true on disable", async () => {
@@ -326,11 +315,9 @@ describe("queueTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "queue/simple",
-        "*1",
-        { disabled: "true" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("queue/simple", "*1", {
+        disabled: "true",
+      });
     });
 
     it("throws NOT_FOUND when queue does not exist", async () => {

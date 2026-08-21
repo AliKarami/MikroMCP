@@ -10,7 +10,16 @@ import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("ip-service-tools");
 
-const SERVICE_NAMES = ["api", "api-ssl", "ssh", "telnet", "www", "www-ssl", "winbox", "ftp"] as const;
+const SERVICE_NAMES = [
+  "api",
+  "api-ssl",
+  "ssh",
+  "telnet",
+  "www",
+  "www-ssl",
+  "winbox",
+  "ftp",
+] as const;
 
 const listIpServicesInputSchema = z
   .object({
@@ -61,13 +70,8 @@ const listIpServicesTool: ToolDefinition = {
       }
 
       return {
-        content: listContent(
-          "IP services",
-          context.routerId,
-          filtered,
-          filtered.length,
-          0,
-          (s) => compactFields(s, ["name", "port", "address", "certificate", "disabled"]),
+        content: listContent("IP services", context.routerId, filtered, filtered.length, 0, (s) =>
+          compactFields(s, ["name", "port", "address", "certificate", "disabled"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -110,14 +114,19 @@ const manageIpServiceTool: ToolDefinition = {
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageIpServiceInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing IP service");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing IP service",
+    );
 
     try {
       const allServices = await context.routerClient.get<RouterOSRecord>("ip/service", {
         limit: undefined,
         offset: undefined,
       });
-      const existing = (allServices as Record<string, string>[]).find((s) => s.name === parsed.name);
+      const existing = (allServices as Record<string, string>[]).find(
+        (s) => s.name === parsed.name,
+      );
 
       if (!existing) {
         throw new MikroMCPError({

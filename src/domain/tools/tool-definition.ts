@@ -56,10 +56,7 @@ export interface ToolDefinition {
 export type ToolPlatform = DeviceType | "any";
 
 /** Snapshot paths for one call, resolving the argument-derived form. */
-export function snapshotPathsFor(
-  tool: ToolDefinition,
-  params: Record<string, unknown>,
-): string[] {
+export function snapshotPathsFor(tool: ToolDefinition, params: Record<string, unknown>): string[] {
   return typeof tool.snapshotPaths === "function"
     ? tool.snapshotPaths(params)
     : (tool.snapshotPaths ?? []);

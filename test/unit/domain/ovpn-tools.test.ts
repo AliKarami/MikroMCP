@@ -28,7 +28,12 @@ function makeContext(
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
     ftpClient: {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -68,8 +73,10 @@ describe("ovpnTools", () => {
         "manage_ovpn_server",
       ]);
     });
-    it("list_ovpn_clients is readOnly", () => expect(listClientsTool.annotations.readOnlyHint).toBe(true));
-    it("get_ovpn_server is readOnly", () => expect(getServerTool.annotations.readOnlyHint).toBe(true));
+    it("list_ovpn_clients is readOnly", () =>
+      expect(listClientsTool.annotations.readOnlyHint).toBe(true));
+    it("get_ovpn_server is readOnly", () =>
+      expect(getServerTool.annotations.readOnlyHint).toBe(true));
     it("manage_ovpn_client is not readOnly and is destructive", () => {
       expect(manageClientTool.annotations.readOnlyHint).toBe(false);
       expect(manageClientTool.annotations.destructiveHint).toBe(true);
@@ -111,7 +118,10 @@ describe("ovpnTools", () => {
 
     it("returns all clients", async () => {
       const ctx = makeContext(clients);
-      const r = await listClientsTool.handler({ routerId: "test-router", limit: 100, offset: 0 }, ctx);
+      const r = await listClientsTool.handler(
+        { routerId: "test-router", limit: 100, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.total).toBe(2);
       expect(r.structuredContent.clients).toHaveLength(2);
       expect(r.structuredContent.hasMore).toBe(false);
@@ -119,14 +129,20 @@ describe("ovpnTools", () => {
 
     it("paginates and sets hasMore", async () => {
       const ctx = makeContext(clients);
-      const r = await listClientsTool.handler({ routerId: "test-router", limit: 1, offset: 0 }, ctx);
+      const r = await listClientsTool.handler(
+        { routerId: "test-router", limit: 1, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.clients).toHaveLength(1);
       expect(r.structuredContent.hasMore).toBe(true);
     });
 
     it("returns empty list when no clients configured", async () => {
       const ctx = makeContext([]);
-      const r = await listClientsTool.handler({ routerId: "test-router", limit: 100, offset: 0 }, ctx);
+      const r = await listClientsTool.handler(
+        { routerId: "test-router", limit: 100, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.total).toBe(0);
     });
   });
@@ -135,7 +151,13 @@ describe("ovpnTools", () => {
     it("creates a new client with required fields", async () => {
       const ctx = makeContext([]);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "add", name: "ovpn-hq", connectTo: "10.0.0.1", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "ovpn-hq",
+          connectTo: "10.0.0.1",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("created");
@@ -180,7 +202,13 @@ describe("ovpnTools", () => {
       const existing = [{ ".id": "*1", name: "ovpn-hq", "connect-to": "10.0.0.1" }];
       const ctx = makeContext(existing);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "add", name: "ovpn-hq", connectTo: "10.0.0.1", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "ovpn-hq",
+          connectTo: "10.0.0.1",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("already_exists");
@@ -192,7 +220,13 @@ describe("ovpnTools", () => {
       const ctx = makeContext(existing);
       await expect(
         manageClientTool.handler(
-          { routerId: "test-router", action: "add", name: "ovpn-hq", connectTo: "10.0.0.2", dryRun: false },
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "ovpn-hq",
+            connectTo: "10.0.0.2",
+            dryRun: false,
+          },
           ctx,
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.CONFLICT, code: "OVPN_CLIENT_CONFLICT" });
@@ -211,7 +245,13 @@ describe("ovpnTools", () => {
     it("returns dry_run without calling create", async () => {
       const ctx = makeContext([]);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "add", name: "ovpn-hq", connectTo: "10.0.0.1", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "ovpn-hq",
+          connectTo: "10.0.0.1",
+          dryRun: true,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("dry_run");
@@ -228,14 +268,23 @@ describe("ovpnTools", () => {
         ctx,
       );
       expect(r.structuredContent.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-client", "*1", { port: "1195" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-client", "*1", {
+        port: "1195",
+      });
     });
 
     it("returns no_change when all specified fields already match", async () => {
       const existing = [{ ".id": "*1", name: "ovpn-hq", "connect-to": "10.0.0.1", port: "1194" }];
       const ctx = makeContext(existing);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "update", name: "ovpn-hq", connectTo: "10.0.0.1", port: 1194, dryRun: false },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "ovpn-hq",
+          connectTo: "10.0.0.1",
+          port: 1194,
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("no_change");
@@ -246,11 +295,19 @@ describe("ovpnTools", () => {
       const existing = [{ ".id": "*1", name: "ovpn-hq", "connect-to": "10.0.0.1" }];
       const ctx = makeContext(existing);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "update", name: "ovpn-hq", password: "newpass", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "ovpn-hq",
+          password: "newpass",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-client", "*1", { password: "newpass" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-client", "*1", {
+        password: "newpass",
+      });
     });
 
     it("throws NOT_FOUND when client does not exist", async () => {
@@ -332,11 +389,9 @@ describe("ovpnTools", () => {
         ctx,
       );
       expect(r.structuredContent.action).toBe("enabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "interface/ovpn-server/server",
-        "*0",
-        { enabled: "yes" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        enabled: "yes",
+      });
     });
 
     it("returns no_change when already enabled", async () => {
@@ -356,11 +411,9 @@ describe("ovpnTools", () => {
         ctx,
       );
       expect(r.structuredContent.action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "interface/ovpn-server/server",
-        "*0",
-        { enabled: "no" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        enabled: "no",
+      });
     });
 
     it("returns no_change when already disabled", async () => {
@@ -392,11 +445,9 @@ describe("ovpnTools", () => {
         ctx,
       );
       expect(r.structuredContent.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "interface/ovpn-server/server",
-        "*0",
-        { port: "1195" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        port: "1195",
+      });
     });
 
     it("returns no_change when all specified fields already match", async () => {
@@ -429,7 +480,10 @@ describe("ovpnTools", () => {
     it("throws NOT_FOUND when OpenVPN package is not installed", async () => {
       const ctx = makeContext([]);
       await expect(
-        manageServerTool.handler({ routerId: "test-router", action: "set", port: 1195, dryRun: false }, ctx),
+        manageServerTool.handler(
+          { routerId: "test-router", action: "set", port: 1195, dryRun: false },
+          ctx,
+        ),
       ).rejects.toMatchObject({ code: "OVPN_SERVER_NOT_FOUND" });
     });
   });

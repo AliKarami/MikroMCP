@@ -71,7 +71,9 @@ const exportConfigInputSchema = z
     file: z
       .string()
       .optional()
-      .describe("Save the export to a file on the router (without extension); omit to return inline"),
+      .describe(
+        "Save the export to a file on the router (without extension); omit to return inline",
+      ),
   })
   .strict();
 

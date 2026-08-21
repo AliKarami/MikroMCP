@@ -37,9 +37,7 @@ const getUpgradeStatusTool: ToolDefinition = {
 
       const update = (updateResults[0] ?? {}) as Record<string, string>;
       const routerboard =
-        routerboardResults.length > 0
-          ? (routerboardResults[0] as Record<string, string>)
-          : null;
+        routerboardResults.length > 0 ? (routerboardResults[0] as Record<string, string>) : null;
 
       return {
         content: `Upgrade status on ${parsed.routerId}: installed=${update["installed-version"] ?? "?"} latest=${update["latest-version"] ?? "?"} (${update.status ?? "unknown"})`,

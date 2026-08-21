@@ -54,13 +54,15 @@ const listBridgesTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(enriched, parsed.offset, parsed.limit);
 
       return {
-        content: listContent(
-          "Bridges",
-          context.routerId,
-          paginated,
-          total,
-          parsed.offset,
-          (b) => compactFields(b, ["name", "protocol-mode", "vlan-filtering", "mtu", "disabled", "comment"]),
+        content: listContent("Bridges", context.routerId, paginated, total, parsed.offset, (b) =>
+          compactFields(b, [
+            "name",
+            "protocol-mode",
+            "vlan-filtering",
+            "mtu",
+            "disabled",
+            "comment",
+          ]),
         ),
         structuredContent: {
           routerId: context.routerId,

@@ -29,7 +29,25 @@ describe("skill tool-map stays in lockstep with allTools", () => {
   it("every tool name referenced in tool-map.md exists in allTools", () => {
     // Only check tokens that look like tool names (verb_noun); ignore RouterOS
     // paths and field names by requiring an underscore and a known verb prefix.
-    const verbs = ["list", "get", "manage", "create", "export", "run", "set", "ping", "traceroute", "torch", "reboot", "rollback", "plan", "apply", "bulk", "check", "upload"];
+    const verbs = [
+      "list",
+      "get",
+      "manage",
+      "create",
+      "export",
+      "run",
+      "set",
+      "ping",
+      "traceroute",
+      "torch",
+      "reboot",
+      "rollback",
+      "plan",
+      "apply",
+      "bulk",
+      "check",
+      "upload",
+    ];
     const referencedTools = [...mapped].filter((n) =>
       verbs.some((v) => n === v || n.startsWith(v + "_")),
     );

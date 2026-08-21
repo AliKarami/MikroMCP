@@ -95,14 +95,20 @@ const listInterfacesTool: ToolDefinition = {
         });
       }
 
-      const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
+      const {
+        items: paginated,
+        total,
+        hasMore,
+      } = paginate(interfaces, parsed.offset, parsed.limit);
 
       // Strip counters if not requested and add computed status field
       const results = paginated.map((iface) => {
         const rec = iface as Record<string, unknown>;
         const isRunning = isTrue(rec.running);
         const isDisabled = isTrue(rec.disabled);
-        const enriched: Record<string, unknown> = { status: isDisabled ? "disabled" : isRunning ? "up" : "down" };
+        const enriched: Record<string, unknown> = {
+          status: isDisabled ? "disabled" : isRunning ? "up" : "down",
+        };
         for (const [key, value] of Object.entries(rec)) {
           if (parsed.includeCounters || !COUNTER_PROPS.includes(key)) {
             enriched[key] = value;
@@ -112,13 +118,8 @@ const listInterfacesTool: ToolDefinition = {
       });
 
       return {
-        content: listContent(
-          "Interfaces",
-          context.routerId,
-          results,
-          total,
-          parsed.offset,
-          (i) => compactFields(i, ["name", "type", "running", "disabled", "mtu", "comment"]),
+        content: listContent("Interfaces", context.routerId, results, total, parsed.offset, (i) =>
+          compactFields(i, ["name", "type", "running", "disabled", "mtu", "comment"]),
         ),
         structuredContent: {
           routerId: context.routerId,

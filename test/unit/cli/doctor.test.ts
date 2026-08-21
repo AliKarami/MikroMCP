@@ -85,7 +85,14 @@ function makeRouter(overrides: Partial<{ id: string; host: string; sshPort?: num
   };
 }
 
-function makeAppConfig(overrides: Partial<{ transport: "stdio" | "http"; configPath: string; identitiesPath: string; confirmationSecret?: string }> = {}) {
+function makeAppConfig(
+  overrides: Partial<{
+    transport: "stdio" | "http";
+    configPath: string;
+    identitiesPath: string;
+    confirmationSecret?: string;
+  }> = {},
+) {
   return {
     transport: overrides.transport ?? "stdio",
     port: 3000,
@@ -115,19 +122,15 @@ function makeTcpSocket(connectImmediately = true) {
     destroy: vi.fn(),
   };
   if (connectImmediately) {
-    (socket.on as ReturnType<typeof vi.fn>).mockImplementation(
-      (event: string, cb: () => void) => {
-        if (event === "connect") setTimeout(cb, 0);
-        return socket;
-      },
-    );
+    (socket.on as ReturnType<typeof vi.fn>).mockImplementation((event: string, cb: () => void) => {
+      if (event === "connect") setTimeout(cb, 0);
+      return socket;
+    });
   } else {
-    (socket.on as ReturnType<typeof vi.fn>).mockImplementation(
-      (event: string, cb: () => void) => {
-        if (event === "error") setTimeout(cb, 0);
-        return socket;
-      },
-    );
+    (socket.on as ReturnType<typeof vi.fn>).mockImplementation((event: string, cb: () => void) => {
+      if (event === "error") setTimeout(cb, 0);
+      return socket;
+    });
   }
   return socket;
 }
@@ -166,7 +169,9 @@ describe("runDoctor", () => {
     it("passes with current Node.js version ≥22", async () => {
       // Current test runner must be Node 22+ as required by engines
       mockExistsSync.mockReturnValue(false);
-      MockRouterRegistry.mockImplementation(() => ({ listRouters: () => [] } as unknown as RouterRegistry));
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
+      );
 
       const { runDoctor } = await import("../../../src/cli/doctor.js");
       await runDoctor();
@@ -187,7 +192,9 @@ describe("runDoctor", () => {
         // config file missing, everything else can be false
         return false;
       });
-      MockRouterRegistry.mockImplementation(() => ({ listRouters: () => [] } as unknown as RouterRegistry));
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
+      );
 
       const { runDoctor } = await import("../../../src/cli/doctor.js");
       await runDoctor();
@@ -219,7 +226,9 @@ describe("runDoctor", () => {
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
 
-      mockReadFileSync.mockReturnValue(JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }));
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }),
+      );
 
       const { runDoctor } = await import("../../../src/cli/doctor.js");
       await runDoctor();
@@ -265,7 +274,9 @@ describe("runDoctor", () => {
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
-      mockReadFileSync.mockReturnValue(JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }));
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }),
+      );
 
       // Stub env vars so checkEnvVars passes (router uses envPrefix ROUTER_CORE01)
       process.env.ROUTER_CORE01_USER = "test-user";
@@ -345,7 +356,9 @@ describe("runDoctor", () => {
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
-      mockReadFileSync.mockReturnValue(JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }));
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }),
+      );
 
       const { runDoctor } = await import("../../../src/cli/doctor.js");
       await runDoctor();
@@ -462,7 +475,10 @@ describe("runDoctor", () => {
 
     it("warns when multiple routers exist and no default is set", async () => {
       mockLoadAppConfig.mockReturnValue(makeAppConfig() as ReturnType<typeof loadAppConfig>);
-      setupRouters([makeRouter({ id: "core-01" }), makeRouter({ id: "core-02", host: "10.0.0.9" })]);
+      setupRouters([
+        makeRouter({ id: "core-01" }),
+        makeRouter({ id: "core-02", host: "10.0.0.9" }),
+      ]);
 
       const { runDoctor } = await import("../../../src/cli/doctor.js");
       await runDoctor();
@@ -583,7 +599,9 @@ describe("runDoctor", () => {
   describe("HTTP mode checks", () => {
     it("warns when MIKROMCP_CONFIRMATION_SECRET not set in HTTP mode", async () => {
       mockLoadAppConfig.mockReturnValue(
-        makeAppConfig({ transport: "http", confirmationSecret: undefined }) as ReturnType<typeof loadAppConfig>,
+        makeAppConfig({ transport: "http", confirmationSecret: undefined }) as ReturnType<
+          typeof loadAppConfig
+        >,
       );
       const router = makeRouter();
       mockExistsSync.mockReturnValue(true);

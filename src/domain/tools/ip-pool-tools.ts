@@ -22,7 +22,8 @@ const listIpPoolsInputSchema = z
 const listIpPoolsTool: ToolDefinition = {
   name: "list_ip_pools",
   title: "List IP Pools",
-  description: "List IP address pools on a MikroTik router. Supports filtering by name and pagination.",
+  description:
+    "List IP address pools on a MikroTik router. Supports filtering by name and pagination.",
   inputSchema: listIpPoolsInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -47,13 +48,8 @@ const listIpPoolsTool: ToolDefinition = {
       const { items: pools, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
       return {
-        content: listContent(
-          "IP pools",
-          context.routerId,
-          pools,
-          total,
-          parsed.offset,
-          (p) => compactFields(p, ["name", "ranges", "next-pool"]),
+        content: listContent("IP pools", context.routerId, pools, total, parsed.offset, (p) =>
+          compactFields(p, ["name", "ranges", "next-pool"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -99,7 +95,10 @@ const manageIpPoolTool: ToolDefinition = {
   snapshotPaths: ["ip/pool"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageIpPoolInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing IP pool");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing IP pool",
+    );
     try {
       const allPools = await context.routerClient.get<RouterOSRecord>("ip/pool", {
         limit: undefined,
@@ -145,7 +144,9 @@ const manageIpPoolTool: ToolDefinition = {
           const diff = [
             { property: "name", before: null, after: parsed.name },
             { property: "ranges", before: null, after: parsed.ranges },
-            ...(parsed.nextPool ? [{ property: "next-pool", before: null, after: parsed.nextPool }] : []),
+            ...(parsed.nextPool
+              ? [{ property: "next-pool", before: null, after: parsed.nextPool }]
+              : []),
           ];
           return {
             content: `Dry run: Would add IP pool "${parsed.name}" with ranges ${parsed.ranges}.`,
@@ -174,7 +175,10 @@ const manageIpPoolTool: ToolDefinition = {
       if (parsed.dryRun) {
         return {
           content: `Dry run: Would remove IP pool "${parsed.name}".`,
-          structuredContent: { action: "dry_run", diff: [{ property: "name", before: parsed.name, after: null }] },
+          structuredContent: {
+            action: "dry_run",
+            diff: [{ property: "name", before: parsed.name, after: null }],
+          },
         };
       }
       await context.routerClient.remove("ip/pool", existing[".id"]);

@@ -49,7 +49,11 @@ const listWifiTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
+      const {
+        items: paginated,
+        total,
+        hasMore,
+      } = paginate(interfaces, parsed.offset, parsed.limit);
 
       return {
         content: listContent(
@@ -58,7 +62,8 @@ const listWifiTool: ToolDefinition = {
           paginated,
           total,
           parsed.offset,
-          (i) => compactFields(i, ["name", "master-interface", "mac-address", "disabled", "comment"]),
+          (i) =>
+            compactFields(i, ["name", "master-interface", "mac-address", "disabled", "comment"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -107,13 +112,8 @@ const listWifiClientsTool: ToolDefinition = {
       const { items: clients, total, hasMore } = paginate(allClients, parsed.offset, parsed.limit);
 
       return {
-        content: listContent(
-          "WiFi clients",
-          context.routerId,
-          clients,
-          total,
-          parsed.offset,
-          (c) => compactFields(c, ["interface", "mac-address", "signal", "tx-rate", "rx-rate", "uptime"]),
+        content: listContent("WiFi clients", context.routerId, clients, total, parsed.offset, (c) =>
+          compactFields(c, ["interface", "mac-address", "signal", "tx-rate", "rx-rate", "uptime"]),
         ),
         structuredContent: {
           routerId: context.routerId,

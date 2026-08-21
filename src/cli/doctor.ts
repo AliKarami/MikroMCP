@@ -147,7 +147,9 @@ function checkDefaultRouter(defaultRouter: string | undefined, routers: RouterCo
 
   if (defaultRouter) {
     if (ids.includes(defaultRouter)) {
-      ok(`Default router: ${defaultRouter} (MIKROMCP_DEFAULT_ROUTER; used when routerId is omitted)`);
+      ok(
+        `Default router: ${defaultRouter} (MIKROMCP_DEFAULT_ROUTER; used when routerId is omitted)`,
+      );
     } else {
       fail(
         `MIKROMCP_DEFAULT_ROUTER="${defaultRouter}" does not match any configured router` +
@@ -213,7 +215,9 @@ async function checkRouter(router: RouterConfig): Promise<void> {
         indentWarn(`read policy: ip/address returned ${code} — check user permissions`);
         results.push({ passed: true, warning: true });
       } else {
-        indentFail(`read policy: ip/address failed — ${readErr instanceof Error ? readErr.message : String(readErr)}`);
+        indentFail(
+          `read policy: ip/address failed — ${readErr instanceof Error ? readErr.message : String(readErr)}`,
+        );
         results.push({ passed: false, warning: false });
       }
     }
@@ -252,7 +256,10 @@ async function checkRouter(router: RouterConfig): Promise<void> {
 // ─── Identities config ─────────────────────────────────────────────────────
 
 function checkIdentities(identitiesPath: string, transport: string): void {
-  if (!process.env.MIKROMCP_IDENTITIES_PATH && identitiesPath.endsWith(".mikromcp/identities.yaml")) {
+  if (
+    !process.env.MIKROMCP_IDENTITIES_PATH &&
+    identitiesPath.endsWith(".mikromcp/identities.yaml")
+  ) {
     // Default path not explicitly configured — skip unless file exists
     if (!existsSync(identitiesPath)) {
       return;
@@ -314,7 +321,9 @@ function checkClaudeDesktop(): void {
       );
     }
   } catch (err) {
-    warn(`Could not parse Claude Desktop config: ${err instanceof Error ? err.message : String(err)}`);
+    warn(
+      `Could not parse Claude Desktop config: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 

@@ -411,7 +411,15 @@ const listNeighborsTool: ToolDefinition = {
           neighbors,
           allNeighbors.length,
           0,
-          (n) => compactFields(n, ["interface", "address", "mac-address", "identity", "platform", "board"]),
+          (n) =>
+            compactFields(n, [
+              "interface",
+              "address",
+              "mac-address",
+              "identity",
+              "platform",
+              "board",
+            ]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -469,13 +477,15 @@ const listArpEntriesTool: ToolDefinition = {
       const entries = filtered.slice(0, parsed.limit);
 
       return {
-        content: listContent(
-          "ARP entries",
-          context.routerId,
-          entries,
-          allEntries.length,
-          0,
-          (e) => compactFields(e, ["address", "mac-address", "interface", "status", "complete", "dynamic"]),
+        content: listContent("ARP entries", context.routerId, entries, allEntries.length, 0, (e) =>
+          compactFields(e, [
+            "address",
+            "mac-address",
+            "interface",
+            "status",
+            "complete",
+            "dynamic",
+          ]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -546,7 +556,10 @@ const manageNtpClientTool: ToolDefinition = {
         changes.servers = parsed.servers;
         diff.push({ property: "servers", before: current.servers, after: parsed.servers });
       }
-      if (parsed.vlanInterface !== undefined && current["vlan-interface"] !== parsed.vlanInterface) {
+      if (
+        parsed.vlanInterface !== undefined &&
+        current["vlan-interface"] !== parsed.vlanInterface
+      ) {
         changes["vlan-interface"] = parsed.vlanInterface;
         diff.push({
           property: "vlan-interface",
