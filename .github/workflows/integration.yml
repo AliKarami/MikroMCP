@@ -28,7 +28,7 @@ jobs:
       # Image pins must match docker-compose.test.yml (GitHub service
       # containers cannot read the compose file).
       chr:
-        image: mnazarenko/docker-routeros:7.23.2
+        image: mnazarenko/docker-routeros:7.23.2@sha256:09d20cbd4538e316b90d51eb26711316c1cf2e4f0326ec5d75162d01acbdd772
         ports:
           - 18080:80
           - 12222:22
@@ -37,7 +37,7 @@ jobs:
           --device=/dev/net/tun
           --device=/dev/kvm
       chr2:
-        image: mnazarenko/docker-routeros:7.23.2
+        image: mnazarenko/docker-routeros:7.23.2@sha256:09d20cbd4538e316b90d51eb26711316c1cf2e4f0326ec5d75162d01acbdd772
         ports:
           - 18081:80
           - 12223:22

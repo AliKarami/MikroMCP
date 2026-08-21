@@ -170,7 +170,7 @@ This document describes what has been built and what is planned. Milestones are 
 **Goal:** Distribution, operability, and ecosystem milestone. v1.0 is about making MikroMCP production-ready for teams and accessible to individual users — not adding new router surfaces.
 
 - **Prometheus metrics** — `/metrics`, `/healthz`, `/readyz` endpoints: tool call latency, circuit breaker state, error rates per router, router availability
-- **RouterOS CHR integration test harness** — *deferred at v1.0 planning; see v1.10*
+- **RouterOS CHR integration test harness** — CHR in Docker for end-to-end CI without real hardware; REST adapter tests with real parsed payloads; idempotency edge-case coverage
 - **`mikromcp doctor` (expanded)** — interactive setup wizard: detect missing env vars and config, generate a starter `routers.yaml`, test router connectivity, verify API credentials, configure and register with Claude Desktop / Claude Code, check for MikroMCP updates, and summarise overall health with actionable fix suggestions
 - **Onboarding for non-experts** — step-by-step wiki guides (RouterOS API enable, credential setup, `routers.yaml` authoring, connecting to Claude Desktop / Claude Code / Codex / Cursor); `mikromcp init` wizard as the CLI entry point for first-time setup
 - **GitHub Releases + multi-arch binaries** — automated release workflow triggered by version tags: build standalone binaries (Linux x64/arm64, macOS x64/arm64, Windows x64) via `pkg` or `bun build --compile`; attach to the GitHub Release; generate a changelog from conventional commits
@@ -348,19 +348,6 @@ Bug fixes and refactors surfaced by a thorough code-review pass:
 - **Scope.** Experimental: the schema is reverse-engineered and validated against a CSS610-8P-2S+ on SwOS Lite 2.21. Firmware compatibility is reported on every status read and write, warning rather than blocking. `plan_changes` / `apply_plan` remain RouterOS-only.
 
 Contributed by [@f0086](https://github.com/f0086).
-
----
-
-## 🔜 v1.10 — RouterOS CHR Integration Test Harness
-
-**Goal:** Close the testing gap deferred since v1.0 — end-to-end tests against a real RouterOS, in CI, without real hardware. Mocks structurally cannot catch wire-format bugs (RouterOS sends strings; the response parser produces numbers and booleans), and this class of bug has surfaced repeatedly since v0.4.
-
-- **CHR in Docker** — `docker-compose.test.yml` boots a Cloud Hosted Router (QEMU inside the container, KVM-accelerated where `/dev/kvm` exists; ready in under a minute). The free CHR license tier covers CI use.
-- **Self-provisioning suite** — `npm run test:integration` (separate vitest config, excluded from `npm test`) polls the REST API until the router answers and sets the admin password on a fresh boot.
-- **Tool-handler-level coverage** — tests build a real `ToolContext` through the executor's own `buildRouterToolContext` and drive tool handlers against the live REST API: response parsing with real payloads, the full idempotency lifecycle (dry-run → create → already_exists → conflict → remove → not-found) for IP addresses, routes, firewall rules, DNS entries, VLANs, and VRRP instances, and the complete change-safety cycle (`plan_changes` → `apply_plan` → snapshot → `rollback_change`).
-- **Broad automatic coverage** — a smoke sweep runs every parameter-less RouterOS read tool (~50) against the live router, so new list/get tools are covered without writing a test; SSH-backed tools run over their real transport; one suite drives the full tool executor (retry, circuit breaker, snapshot + journal wiring); an opt-in second CHR covers fleet operations (`bulk_execute` fan-out, `list_routers`) across two genuinely distinct live routers.
-- **Label-gated CI** — the `Integration` GitHub Actions workflow runs the suite as a CHR service container on `workflow_dispatch` or the `integration` PR label, keeping regular CI Docker-free.
-- **Immediate payoff** — the first run caught two live idempotency bugs (`manage_route` false CONFLICT on identical re-add, `manage_ip_address` spurious `updated`); a systematic audit for the same comparison class found eight more (`manage_vrrp_instance`, `manage_vlan`, `manage_ovpn_server`/`manage_ovpn_client`, `manage_certificate`, `manage_ntp_client`, `manage_dns_settings`, `manage_ipsec_policy`, `manage_container_config`); the smoke sweep's first run exposed a REST-client bug that had broken `list_connections` entirely (`.proplist` queries must POST to `/print`); and provisioning the OVPN server surfaced a RouterOS 7.16+ dialect change that had silently broken `manage_ovpn_server` enable/disable and `get_ovpn_server` state reporting. All twelve fixed with regression tests, and the non-boolean comparisons now share a `sameValue()` helper in the response parser.
 
 ---
 

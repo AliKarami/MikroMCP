@@ -12,7 +12,7 @@
 # Review quarterly (or when new RouterOS releases introduce API changes) to ensure
 # compatibility with the latest firmware. Current pin is RouterOS 7.23.2.
 x-chr: &chr
-  image: mnazarenko/docker-routeros:7.23.2
+  image: mnazarenko/docker-routeros:7.23.2@sha256:09d20cbd4538e316b90d51eb26711316c1cf2e4f0326ec5d75162d01acbdd772
   cap_add:
     - NET_ADMIN
   devices:
