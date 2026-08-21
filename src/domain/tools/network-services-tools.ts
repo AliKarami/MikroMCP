@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTrue } from "../../adapter/response-parser.js";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
@@ -411,7 +412,15 @@ const listNeighborsTool: ToolDefinition = {
           neighbors,
           allNeighbors.length,
           0,
-          (n) => compactFields(n, ["interface", "address", "mac-address", "identity", "platform", "board"]),
+          (n) =>
+            compactFields(n, [
+              "interface",
+              "address",
+              "mac-address",
+              "identity",
+              "platform",
+              "board",
+            ]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -469,13 +478,15 @@ const listArpEntriesTool: ToolDefinition = {
       const entries = filtered.slice(0, parsed.limit);
 
       return {
-        content: listContent(
-          "ARP entries",
-          context.routerId,
-          entries,
-          allEntries.length,
-          0,
-          (e) => compactFields(e, ["address", "mac-address", "interface", "status", "complete", "dynamic"]),
+        content: listContent("ARP entries", context.routerId, entries, allEntries.length, 0, (e) =>
+          compactFields(e, [
+            "address",
+            "mac-address",
+            "interface",
+            "status",
+            "complete",
+            "dynamic",
+          ]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -529,14 +540,17 @@ const manageNtpClientTool: ToolDefinition = {
       const current = (
         Array.isArray(results) && results.length > 0 ? results[0] : results
       ) as Record<string, string>;
-      const id = current[".id"];
 
       const changes: Record<string, string> = {};
       const diff: { property: string; before: string | undefined; after: string }[] = [];
 
-      if (parsed.enabled !== undefined && current.enabled !== String(parsed.enabled)) {
+      if (parsed.enabled !== undefined && isTrue(current.enabled) !== parsed.enabled) {
         changes.enabled = String(parsed.enabled);
-        diff.push({ property: "enabled", before: current.enabled, after: String(parsed.enabled) });
+        diff.push({
+          property: "enabled",
+          before: current.enabled === undefined ? undefined : String(current.enabled),
+          after: String(parsed.enabled),
+        });
       }
       if (parsed.mode !== undefined && current.mode !== parsed.mode) {
         changes.mode = parsed.mode;
@@ -546,7 +560,10 @@ const manageNtpClientTool: ToolDefinition = {
         changes.servers = parsed.servers;
         diff.push({ property: "servers", before: current.servers, after: parsed.servers });
       }
-      if (parsed.vlanInterface !== undefined && current["vlan-interface"] !== parsed.vlanInterface) {
+      if (
+        parsed.vlanInterface !== undefined &&
+        current["vlan-interface"] !== parsed.vlanInterface
+      ) {
         changes["vlan-interface"] = parsed.vlanInterface;
         diff.push({
           property: "vlan-interface",
@@ -569,7 +586,8 @@ const manageNtpClientTool: ToolDefinition = {
         };
       }
 
-      await context.routerClient.update("system/ntp/client", id, changes);
+      // Set-menu singletons carry no `.id` — writes go through the /set command.
+      await context.routerClient.execute("system/ntp/client/set", changes);
       log.info({ routerId: context.routerId }, "NTP client updated");
       return {
         content: `NTP client on ${context.routerId} updated.`,

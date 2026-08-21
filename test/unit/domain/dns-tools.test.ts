@@ -24,9 +24,17 @@ function makeGetContext(records: Record<string, unknown>[]): ToolContext {
     routerId: "test-router",
     correlationId: "corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
       create: vi.fn().mockResolvedValue({ ".id": "*1" }),
@@ -126,8 +134,8 @@ describe("dnsTools", () => {
 describe("manage_dns_settings", () => {
   const manageDnsSettingsTool = dnsTools.find((t) => t.name === "manage_dns_settings")!;
 
+  // DNS settings are a set-menu singleton — real responses carry no ".id".
   const CURRENT_SETTINGS = {
-    ".id": "*1",
     servers: "8.8.8.8,8.8.4.4",
     "allow-remote-requests": "false",
     "max-udp-packet-size": "4096",
@@ -135,17 +143,22 @@ describe("manage_dns_settings", () => {
     "cache-size": "2048",
   };
 
-  function makeSettingsContext(settings = CURRENT_SETTINGS) {
+  function makeSettingsContext(settings: Record<string, unknown> = CURRENT_SETTINGS) {
     return {
       routerId: "test-router",
       correlationId: "test-corr",
       routerConfig: {} as RouterConfig,
       sshClient: {} as SshClient,
       ftpClient: {} as FtpClient,
-      identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+      identity: {
+        id: "superadmin-builtin",
+        role: "superadmin" as const,
+        allowedRouters: [],
+        allowedToolPatterns: [],
+      },
       routerClient: {
         get: vi.fn().mockResolvedValue([settings]),
-        update: vi.fn().mockResolvedValue(undefined),
+        execute: vi.fn().mockResolvedValue(undefined),
       } as unknown as RouterOSRestClient,
     } as unknown as ToolContext;
   }
@@ -153,7 +166,8 @@ describe("manage_dns_settings", () => {
   describe("metadata", () => {
     it("exists in dnsTools", () => expect(manageDnsSettingsTool).toBeDefined());
     it("is not readOnly", () => expect(manageDnsSettingsTool.annotations.readOnlyHint).toBe(false));
-    it("is destructive (DNS changes can break resolution)", () => expect(manageDnsSettingsTool.annotations.destructiveHint).toBe(true));
+    it("is destructive (DNS changes can break resolution)", () =>
+      expect(manageDnsSettingsTool.annotations.destructiveHint).toBe(true));
     it("is idempotent", () => expect(manageDnsSettingsTool.annotations.idempotentHint).toBe(true));
   });
 
@@ -165,10 +179,15 @@ describe("manage_dns_settings", () => {
       expect(manageDnsSettingsTool.inputSchema.parse({ routerId: "r1" }).dryRun).toBe(false);
     });
     it("rejects extra fields", () => {
-      expect(manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false);
+      expect(
+        manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success,
+      ).toBe(false);
     });
     it("rejects maxUdpPacketSize out of range", () => {
-      expect(manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", maxUdpPacketSize: 100 }).success).toBe(false);
+      expect(
+        manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", maxUdpPacketSize: 100 })
+          .success,
+      ).toBe(false);
     });
   });
 
@@ -180,19 +199,40 @@ describe("manage_dns_settings", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("no_change");
-      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+      expect(ctx.routerClient.execute).not.toHaveBeenCalled();
     });
 
-    it("updates changed fields", async () => {
+    it("returns no_change when the record carries parsed boolean/number fields", async () => {
+      // The response parser converts wire strings to typed values — the change
+      // detection must not report a spurious update.
+      const ctx = makeSettingsContext({
+        ...CURRENT_SETTINGS,
+        "allow-remote-requests": false,
+        "max-udp-packet-size": 4096,
+        "cache-size": 2048,
+      });
+      const result = await manageDnsSettingsTool.handler(
+        {
+          routerId: "test-router",
+          allowRemoteRequests: false,
+          maxUdpPacketSize: 4096,
+          cacheSize: 2048,
+        },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("no_change");
+      expect(ctx.routerClient.execute).not.toHaveBeenCalled();
+    });
+
+    it("updates changed fields via the /set command", async () => {
       const ctx = makeSettingsContext();
       const result = await manageDnsSettingsTool.handler(
         { routerId: "test-router", servers: "1.1.1.1", allowRemoteRequests: true },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "ip/dns",
-        "*1",
+      expect(ctx.routerClient.execute).toHaveBeenCalledWith(
+        "ip/dns/set",
         expect.objectContaining({ servers: "1.1.1.1", "allow-remote-requests": "true" }),
       );
     });
@@ -204,13 +244,15 @@ describe("manage_dns_settings", () => {
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
-      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+      expect(ctx.routerClient.execute).not.toHaveBeenCalled();
     });
 
     it("propagates network errors", async () => {
       const ctx = makeSettingsContext();
       (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("net"));
-      await expect(manageDnsSettingsTool.handler({ routerId: "test-router" }, ctx)).rejects.toThrow();
+      await expect(
+        manageDnsSettingsTool.handler({ routerId: "test-router" }, ctx),
+      ).rejects.toThrow();
     });
   });
 });
