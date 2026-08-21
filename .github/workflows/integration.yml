@@ -1,0 +1,66 @@
+name: Integration
+
+# Boots a real RouterOS CHR (QEMU inside the service container, KVM-accelerated
+# on GitHub's hosted runners) and runs test/integration/ against its REST API.
+# Deliberately not part of the regular CI: trigger it manually, or add the
+# "integration" label to a pull request.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+# A new push to the same PR obsoletes the running CHR job — don't let two
+# QEMU pairs race for runner slots.
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chr:
+    name: RouterOS CHR integration tests
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'integration')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # Image pins must match docker-compose.test.yml (GitHub service
+      # containers cannot read the compose file).
+      chr:
+        image: mnazarenko/docker-routeros:7.23.2
+        ports:
+          - 18080:80
+          - 12222:22
+        options: >-
+          --cap-add=NET_ADMIN
+          --device=/dev/net/tun
+          --device=/dev/kvm
+      chr2:
+        image: mnazarenko/docker-routeros:7.23.2
+        ports:
+          - 18081:80
+          - 12223:22
+        options: >-
+          --cap-add=NET_ADMIN
+          --device=/dev/net/tun
+          --device=/dev/kvm
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test:integration
+        env:
+          MIKROMCP_ITEST_PAIR: "1"
+
+      - name: Dump CHR logs on failure
+        if: failure()
+        run: |
+          docker logs "${{ job.services.chr.id }}" 2>&1 | tail -100
+          docker logs "${{ job.services.chr2.id }}" 2>&1 | tail -100
