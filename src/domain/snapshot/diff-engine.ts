@@ -74,16 +74,16 @@ export const SEMANTIC_KEYS: Record<string, readonly string[]> = {
   "system/scheduler": ["name"],
   "system/script": ["name"],
   "system/package": ["name"],
-  "container": ["name"],
-  "certificate": ["name"],
-  "file": ["name"],
+  container: ["name"],
+  certificate: ["name"],
+  file: ["name"],
   "interface/vrrp": ["name"],
   "ip/dhcp-server": ["name"],
   "ip/ipsec/peer": ["name"],
   "ip/pool": ["name"],
   "queue/simple": ["name"],
   "tool/netwatch": ["host"],
-  "user": ["name"],
+  user: ["name"],
 };
 
 function normalizeValue(v: RouterOSValue | undefined): string {

@@ -36,9 +36,9 @@ describe("compactFields", () => {
 
   it("skips fields that are missing, null, or empty", () => {
     const rec = { chain: "forward", action: "", comment: undefined, protocol: null };
-    expect(compactFields(rec as Record<string, unknown>, ["chain", "action", "comment", "protocol"])).toBe(
-      "chain=forward",
-    );
+    expect(
+      compactFields(rec as Record<string, unknown>, ["chain", "action", "comment", "protocol"]),
+    ).toBe("chain=forward");
   });
 
   it("quotes values containing spaces", () => {

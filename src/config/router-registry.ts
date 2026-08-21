@@ -22,9 +22,7 @@ const RouterConfigSchema = z
   .object({
     host: z.string().min(1, "host is required"),
     port: z.number().int().min(1).max(65535),
-    deviceType: z
-      .enum(Object.keys(DEVICE_TYPE_ALIASES) as [string, ...string[]])
-      .optional(),
+    deviceType: z.enum(Object.keys(DEVICE_TYPE_ALIASES) as [string, ...string[]]).optional(),
     tls: z
       .object({
         enabled: z.boolean(),
@@ -49,14 +47,14 @@ const RouterConfigSchema = z
     cmdDeny: z.array(z.string()).optional(),
     maintenanceWindows: z
       .array(
-        z.object({
-          days: z.array(
-            z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
-          ),
-          startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM"),
-          endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM"),
-          timezone: z.string().min(1),
-        }).strict(),
+        z
+          .object({
+            days: z.array(z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])),
+            startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM"),
+            endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM"),
+            timezone: z.string().min(1),
+          })
+          .strict(),
       )
       .optional(),
   })

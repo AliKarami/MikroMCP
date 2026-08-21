@@ -7,7 +7,9 @@ function makeIdentity(role: Identity["role"]): Identity {
   return { id: "test-user", role, allowedRouters: [], allowedToolPatterns: [] };
 }
 
-function isMikroMCPError(err: unknown): err is { category: string; code: string; details?: Record<string, unknown> } {
+function isMikroMCPError(
+  err: unknown,
+): err is { category: string; code: string; details?: Record<string, unknown> } {
   return (
     typeof err === "object" &&
     err !== null &&
@@ -26,14 +28,18 @@ describe("confirmation middleware", () => {
     const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
     const identity = makeIdentity("admin");
     const params = { routerId: "edge-01", action: "remove" };
-    await expect(checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET)).resolves.toBeUndefined();
+    await expect(
+      checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET),
+    ).resolves.toBeUndefined();
   });
 
   it("superadmin identity bypasses confirmation gate", async () => {
     const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
     const identity = makeIdentity("superadmin");
     const params = { routerId: "edge-01", action: "remove" };
-    await expect(checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET)).resolves.toBeUndefined();
+    await expect(
+      checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET),
+    ).resolves.toBeUndefined();
   });
 
   it("operator first call throws APPROVAL_REQUIRED with confirmationToken in details", async () => {
@@ -41,7 +47,7 @@ describe("confirmation middleware", () => {
     const identity = makeIdentity("operator");
     const params = { routerId: "edge-01", action: "remove" };
     await expect(
-      checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET)
+      checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET),
     ).rejects.toSatisfy((err: unknown) => {
       if (!isMikroMCPError(err)) return false;
       return (
@@ -60,12 +66,12 @@ describe("confirmation middleware", () => {
     try {
       await checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET);
     } catch (err) {
-      token = ((err as { details: Record<string, unknown> }).details).confirmationToken as string;
+      token = (err as { details: Record<string, unknown> }).details.confirmationToken as string;
     }
     expect(token).toBeTruthy();
     const paramsWithToken = { ...params, confirmationToken: token };
     await expect(
-      checkConfirmation("manage_firewall_rule", "edge-01", paramsWithToken, identity, SECRET)
+      checkConfirmation("manage_firewall_rule", "edge-01", paramsWithToken, identity, SECRET),
     ).resolves.toBeUndefined();
   });
 
@@ -77,11 +83,23 @@ describe("confirmation middleware", () => {
     try {
       await checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET);
     } catch (err) {
-      token = ((err as { details: Record<string, unknown> }).details).confirmationToken as string;
+      token = (err as { details: Record<string, unknown> }).details.confirmationToken as string;
     }
-    await checkConfirmation("manage_firewall_rule", "edge-01", { ...params, confirmationToken: token }, identity, SECRET);
+    await checkConfirmation(
+      "manage_firewall_rule",
+      "edge-01",
+      { ...params, confirmationToken: token },
+      identity,
+      SECRET,
+    );
     await expect(
-      checkConfirmation("manage_firewall_rule", "edge-01", { ...params, confirmationToken: token }, identity, SECRET)
+      checkConfirmation(
+        "manage_firewall_rule",
+        "edge-01",
+        { ...params, confirmationToken: token },
+        identity,
+        SECRET,
+      ),
     ).rejects.toSatisfy((err: unknown) => isMikroMCPError(err));
   });
 
@@ -93,13 +111,13 @@ describe("confirmation middleware", () => {
     try {
       await checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET);
     } catch (err) {
-      token = ((err as { details: Record<string, unknown> }).details).confirmationToken as string;
+      token = (err as { details: Record<string, unknown> }).details.confirmationToken as string;
     }
     const tampered = { routerId: "edge-01", action: "add", confirmationToken: token };
     await expect(
-      checkConfirmation("manage_firewall_rule", "edge-01", tampered, identity, SECRET)
-    ).rejects.toSatisfy((err: unknown) =>
-      isMikroMCPError(err) && err.category === "PERMISSION_DENIED"
+      checkConfirmation("manage_firewall_rule", "edge-01", tampered, identity, SECRET),
+    ).rejects.toSatisfy(
+      (err: unknown) => isMikroMCPError(err) && err.category === "PERMISSION_DENIED",
     );
   });
 
@@ -111,7 +129,7 @@ describe("confirmation middleware", () => {
     try {
       await mod1.checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET);
     } catch (err) {
-      token = ((err as { details: Record<string, unknown> }).details).confirmationToken as string;
+      token = (err as { details: Record<string, unknown> }).details.confirmationToken as string;
     }
     // Simulate a process restart: fresh module instance, empty replay cache.
     vi.resetModules();
@@ -132,9 +150,9 @@ describe("confirmation middleware", () => {
     const identity = makeIdentity("readonly");
     const params = { routerId: "edge-01", action: "remove" };
     await expect(
-      checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET)
-    ).rejects.toSatisfy((err: unknown) =>
-      isMikroMCPError(err) && err.category === "APPROVAL_REQUIRED"
+      checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET),
+    ).rejects.toSatisfy(
+      (err: unknown) => isMikroMCPError(err) && err.category === "APPROVAL_REQUIRED",
     );
   });
 });

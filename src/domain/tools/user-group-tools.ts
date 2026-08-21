@@ -37,13 +37,8 @@ const listUserGroupsTool: ToolDefinition = {
       });
       const groups = all.slice(0, parsed.limit);
       return {
-        content: listContent(
-          "User groups",
-          context.routerId,
-          groups,
-          all.length,
-          0,
-          (g) => compactFields(g, ["name", "policy", "comment"]),
+        content: listContent("User groups", context.routerId, groups, all.length, 0, (g) =>
+          compactFields(g, ["name", "policy", "comment"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -100,7 +95,11 @@ const manageUserGroupTool: ToolDefinition = {
           if (parsed.policy === undefined || existing.policy === parsed.policy) {
             return {
               content: `User group "${parsed.name}" already exists. No changes made.`,
-              structuredContent: { action: "already_exists", name: parsed.name, policy: existing.policy },
+              structuredContent: {
+                action: "already_exists",
+                name: parsed.name,
+                policy: existing.policy,
+              },
             };
           }
           throw new MikroMCPError({

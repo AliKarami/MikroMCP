@@ -13,10 +13,7 @@ const listCertificatesInputSchema = z
   .object({
     routerId,
     name: z.string().optional().describe("Filter by certificate name (substring match)"),
-    expired: z
-      .boolean()
-      .optional()
-      .describe("Filter by expiry status; omit to return all"),
+    expired: z.boolean().optional().describe("Filter by expiry status; omit to return all"),
     limit,
   })
   .strict();
@@ -56,13 +53,8 @@ const listCertificatesTool: ToolDefinition = {
       const certs = filtered.slice(0, parsed.limit);
 
       return {
-        content: listContent(
-          "Certificates",
-          context.routerId,
-          certs,
-          allCerts.length,
-          0,
-          (c) => compactFields(c, ["name", "common-name", "invalid-after", "expired", "revoked"]),
+        content: listContent("Certificates", context.routerId, certs, allCerts.length, 0, (c) =>
+          compactFields(c, ["name", "common-name", "invalid-after", "expired", "revoked"]),
         ),
         structuredContent: {
           routerId: context.routerId,

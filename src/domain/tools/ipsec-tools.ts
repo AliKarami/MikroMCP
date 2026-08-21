@@ -45,13 +45,8 @@ const listIpsecPeersTool: ToolDefinition = {
       const peers = filtered.slice(0, parsed.limit);
 
       return {
-        content: listContent(
-          "IPSec peers",
-          context.routerId,
-          peers,
-          allPeers.length,
-          0,
-          (p) => compactFields(p, ["name", "address", "profile", "exchange-mode", "disabled"]),
+        content: listContent("IPSec peers", context.routerId, peers, allPeers.length, 0, (p) =>
+          compactFields(p, ["name", "address", "profile", "exchange-mode", "disabled"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -69,14 +64,8 @@ const listIpsecPeersTool: ToolDefinition = {
 const listIpsecPoliciesInputSchema = z
   .object({
     routerId,
-    srcAddress: z
-      .string()
-      .optional()
-      .describe("Filter by source address (substring match)"),
-    dstAddress: z
-      .string()
-      .optional()
-      .describe("Filter by destination address (substring match)"),
+    srcAddress: z.string().optional().describe("Filter by source address (substring match)"),
+    dstAddress: z.string().optional().describe("Filter by destination address (substring match)"),
     limit,
   })
   .strict();
@@ -117,7 +106,15 @@ const listIpsecPoliciesTool: ToolDefinition = {
           policies,
           allPolicies.length,
           0,
-          (p) => compactFields(p, ["src-address", "dst-address", "protocol", "action", "level", "disabled"]),
+          (p) =>
+            compactFields(p, [
+              "src-address",
+              "dst-address",
+              "protocol",
+              "action",
+              "level",
+              "disabled",
+            ]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -139,10 +136,7 @@ const manageIpsecPeerInputSchema = z
     name: z.string().describe("Peer name — idempotency key"),
     address: z.string().optional().describe("Remote gateway address (required for add)"),
     localAddress: z.string().optional().describe("Local address"),
-    exchange: z
-      .enum(["ike1", "ike2"])
-      .default("ike2")
-      .describe("IKE exchange mode"),
+    exchange: z.enum(["ike1", "ike2"]).default("ike2").describe("IKE exchange mode"),
     profile: z.string().optional().describe("IKE profile name"),
     comment: z.string().optional().describe("Optional comment"),
     dryRun,
@@ -173,9 +167,7 @@ const manageIpsecPeerTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const existing = (allPeers as Record<string, string>[]).find(
-        (p) => p.name === parsed.name,
-      );
+      const existing = (allPeers as Record<string, string>[]).find((p) => p.name === parsed.name);
 
       if (parsed.action === "add") {
         if (existing) {

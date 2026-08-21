@@ -169,10 +169,7 @@ describe("dhcpServerTools", () => {
         { ".id": "*2", name: "dhcp2" },
         { ".id": "*3", name: "dhcp3" },
       ]);
-      const result = await listServersTool.handler(
-        { routerId: "test-router", limit: 2 },
-        ctx,
-      );
+      const result = await listServersTool.handler({ routerId: "test-router", limit: 2 }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.servers as unknown[]).length).toBe(2);
       expect(sc.total).toBe(3);
@@ -203,7 +200,10 @@ describe("dhcpServerTools", () => {
         disabled: "false",
       }));
       const ctx = makeContext(servers);
-      const result = await listServersTool.handler({ routerId: "test-router", limit: 2, offset: 3 }, ctx);
+      const result = await listServersTool.handler(
+        { routerId: "test-router", limit: 2, offset: 3 },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.servers as unknown[]).length).toBe(2);
       expect(sc.offset).toBe(3);
@@ -286,7 +286,10 @@ describe("dhcpServerTools", () => {
           { routerId: "test-router", action: "add", name: "dhcp1", addressPool: "pool1" },
           ctx,
         ),
-      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "DHCP_SERVER_INTERFACE_REQUIRED" });
+      ).rejects.toMatchObject({
+        category: ErrorCategory.VALIDATION,
+        code: "DHCP_SERVER_INTERFACE_REQUIRED",
+      });
     });
 
     it("throws VALIDATION error when addressPool is missing", async () => {
@@ -296,7 +299,10 @@ describe("dhcpServerTools", () => {
           { routerId: "test-router", action: "add", name: "dhcp1", interface: "bridge" },
           ctx,
         ),
-      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "DHCP_SERVER_POOL_REQUIRED" });
+      ).rejects.toMatchObject({
+        category: ErrorCategory.VALIDATION,
+        code: "DHCP_SERVER_POOL_REQUIRED",
+      });
     });
 
     it("dry_run returns preview without calling create", async () => {
@@ -381,11 +387,9 @@ describe("dhcpServerTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("enabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "ip/dhcp-server",
-        "*1",
-        { disabled: "false" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/dhcp-server", "*1", {
+        disabled: "false",
+      });
     });
 
     it("sets disabled=true on disable", async () => {
@@ -396,11 +400,9 @@ describe("dhcpServerTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "ip/dhcp-server",
-        "*1",
-        { disabled: "true" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/dhcp-server", "*1", {
+        disabled: "true",
+      });
     });
 
     it("throws NOT_FOUND when server does not exist", async () => {
@@ -424,5 +426,4 @@ describe("dhcpServerTools", () => {
       expect(ctx.routerClient.update).not.toHaveBeenCalled();
     });
   });
-
 });

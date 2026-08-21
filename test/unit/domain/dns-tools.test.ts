@@ -24,9 +24,17 @@ function makeGetContext(records: Record<string, unknown>[]): ToolContext {
     routerId: "test-router",
     correlationId: "corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
       create: vi.fn().mockResolvedValue({ ".id": "*1" }),
@@ -142,7 +150,12 @@ describe("manage_dns_settings", () => {
       routerConfig: {} as RouterConfig,
       sshClient: {} as SshClient,
       ftpClient: {} as FtpClient,
-      identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+      identity: {
+        id: "superadmin-builtin",
+        role: "superadmin" as const,
+        allowedRouters: [],
+        allowedToolPatterns: [],
+      },
       routerClient: {
         get: vi.fn().mockResolvedValue([settings]),
         update: vi.fn().mockResolvedValue(undefined),
@@ -153,7 +166,8 @@ describe("manage_dns_settings", () => {
   describe("metadata", () => {
     it("exists in dnsTools", () => expect(manageDnsSettingsTool).toBeDefined());
     it("is not readOnly", () => expect(manageDnsSettingsTool.annotations.readOnlyHint).toBe(false));
-    it("is destructive (DNS changes can break resolution)", () => expect(manageDnsSettingsTool.annotations.destructiveHint).toBe(true));
+    it("is destructive (DNS changes can break resolution)", () =>
+      expect(manageDnsSettingsTool.annotations.destructiveHint).toBe(true));
     it("is idempotent", () => expect(manageDnsSettingsTool.annotations.idempotentHint).toBe(true));
   });
 
@@ -165,10 +179,15 @@ describe("manage_dns_settings", () => {
       expect(manageDnsSettingsTool.inputSchema.parse({ routerId: "r1" }).dryRun).toBe(false);
     });
     it("rejects extra fields", () => {
-      expect(manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false);
+      expect(
+        manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success,
+      ).toBe(false);
     });
     it("rejects maxUdpPacketSize out of range", () => {
-      expect(manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", maxUdpPacketSize: 100 }).success).toBe(false);
+      expect(
+        manageDnsSettingsTool.inputSchema.safeParse({ routerId: "r1", maxUdpPacketSize: 100 })
+          .success,
+      ).toBe(false);
     });
   });
 
@@ -210,7 +229,9 @@ describe("manage_dns_settings", () => {
     it("propagates network errors", async () => {
       const ctx = makeSettingsContext();
       (ctx.routerClient.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("net"));
-      await expect(manageDnsSettingsTool.handler({ routerId: "test-router" }, ctx)).rejects.toThrow();
+      await expect(
+        manageDnsSettingsTool.handler({ routerId: "test-router" }, ctx),
+      ).rejects.toThrow();
     });
   });
 });

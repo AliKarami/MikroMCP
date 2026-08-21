@@ -16,6 +16,7 @@ npm run test:watch   # vitest in watch mode
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint src/
 npm run format       # prettier --write src/ test/
+npm run format:check # prettier --check src/ test/ (CI runs this)
 ```
 
 Run `npm test` before pushing a branch — it runs vitest, tsc, and eslint together, including the doc-accuracy guards (`test/unit/docs/`) and the skill tool-map lockstep (`test/unit/skill/`).

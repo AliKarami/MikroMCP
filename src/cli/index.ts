@@ -16,7 +16,10 @@ program
   .description("Start the MCP server (default)")
   .action(runServe);
 
-program.command("doctor").description("Check config, connectivity, and permissions").action(runDoctor);
+program
+  .command("doctor")
+  .description("Check config, connectivity, and permissions")
+  .action(runDoctor);
 
 program.command("init").description("Interactive setup wizard").action(runInit);
 

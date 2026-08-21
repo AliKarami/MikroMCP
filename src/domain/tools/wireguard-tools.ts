@@ -37,7 +37,11 @@ const listWgTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const { items: paginated, total, hasMore } = paginate(interfaces, parsed.offset, parsed.limit);
+      const {
+        items: paginated,
+        total,
+        hasMore,
+      } = paginate(interfaces, parsed.offset, parsed.limit);
 
       return {
         content: listContent(
@@ -104,7 +108,14 @@ const listPeersTool: ToolDefinition = {
           peers,
           total,
           parsed.offset,
-          (p) => compactFields(p, ["interface", "public-key", "endpoint-address", "allowed-address", "disabled"]),
+          (p) =>
+            compactFields(p, [
+              "interface",
+              "public-key",
+              "endpoint-address",
+              "allowed-address",
+              "disabled",
+            ]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -301,10 +312,10 @@ const manageWgIfaceTool: ToolDefinition = {
         const body: Record<string, string> = { name: parsed.name, mtu: String(parsed.mtu) };
         if (parsed.listenPort !== undefined) body["listen-port"] = String(parsed.listenPort);
         if (parsed.comment) body.comment = parsed.comment;
-        const created = (await context.routerClient.create(
-          "interface/wireguard",
-          body,
-        )) as Record<string, string>;
+        const created = (await context.routerClient.create("interface/wireguard", body)) as Record<
+          string,
+          string
+        >;
         log.info({ name: parsed.name, id: created[".id"] }, "WireGuard interface created");
         return {
           content: `Created WireGuard interface "${parsed.name}". Public key: ${created["public-key"] ?? "unknown"}`,

@@ -121,7 +121,12 @@ export class SwosClient {
   private challenge?: DigestChallenge;
   private nonceCount = 0;
 
-  constructor(host: string, port: number, credentials: Credentials, requestTimeoutMs = REQUEST_TIMEOUT_MS) {
+  constructor(
+    host: string,
+    port: number,
+    credentials: Credentials,
+    requestTimeoutMs = REQUEST_TIMEOUT_MS,
+  ) {
     this.host = host;
     this.port = port;
     this.credentials = credentials;

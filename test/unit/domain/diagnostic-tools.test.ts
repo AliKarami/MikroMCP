@@ -27,9 +27,17 @@ function makeContext(sshOutput = ""): ToolContext {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue(sshOutput) } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       execute: vi.fn().mockResolvedValue([]),
       get: vi.fn().mockResolvedValue([]),
@@ -145,7 +153,9 @@ describe("diagnostic tools", () => {
         { routerId: "test-router", address: "10.0.0.1", count: 10, size: 128 },
         ctx,
       );
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("address=10.0.0.1"));
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(
+        expect.stringContaining("address=10.0.0.1"),
+      );
       expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("count=10"));
       expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("size=128"));
     });
@@ -184,7 +194,9 @@ describe("diagnostic tools", () => {
         { routerId: "test-router", address: "8.8.8.8", count: 2, maxHops: 10 },
         ctx,
       );
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("address=8.8.8.8"));
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(
+        expect.stringContaining("address=8.8.8.8"),
+      );
       expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("count=2"));
       expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("max-hops=10"));
     });
@@ -275,7 +287,10 @@ describe("diagnostic tools", () => {
       const torchTool = diagnosticTools[2];
       const ctx = makeContext(TORCH_SSH_OUTPUT);
       await torchTool.handler({ routerId: "test-router", interface: "ether1", duration: 10 }, ctx);
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("interface=ether1"), 11_000);
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(
+        expect.stringContaining("interface=ether1"),
+        11_000,
+      );
     });
 
     it("returns empty flows for empty output", async () => {

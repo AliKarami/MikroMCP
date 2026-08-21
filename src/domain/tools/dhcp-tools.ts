@@ -196,7 +196,11 @@ const manageDhcpLeaseTool: ToolDefinition = {
         if (isAlreadyStatic) {
           return {
             content: `Lease for ${upperMac} (${existing.address ?? "unknown"}) is already static. No changes made.`,
-            structuredContent: { action: "already_static", macAddress: upperMac, id: existing[".id"] },
+            structuredContent: {
+              action: "already_static",
+              macAddress: upperMac,
+              id: existing[".id"],
+            },
           };
         }
 

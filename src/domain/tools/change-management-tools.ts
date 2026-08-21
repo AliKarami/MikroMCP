@@ -48,7 +48,10 @@ const rollbackChangeInputSchema = z
   .object({
     routerId,
     journalId: z.string().describe("Journal entry ID from write-journal.ndjson to roll back"),
-    dryRun: z.boolean().default(false).describe("Preview the restore plan without applying changes"),
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe("Preview the restore plan without applying changes"),
   })
   .strict();
 
@@ -171,8 +174,11 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
       }
 
       return {
-        content: `Plan for ${parsed.steps.length} step(s) on ${parsed.routerId}:\n` +
-          stepResults.map((s) => `  Step ${s.stepIndex + 1} (${s.tool}): ${s.dryRunResult}`).join("\n"),
+        content:
+          `Plan for ${parsed.steps.length} step(s) on ${parsed.routerId}:\n` +
+          stepResults
+            .map((s) => `  Step ${s.stepIndex + 1} (${s.tool}): ${s.dryRunResult}`)
+            .join("\n"),
         structuredContent: { routerId: parsed.routerId, steps: stepResults },
       };
     },
@@ -207,10 +213,18 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         const snapshotIds: string[] = [];
         for (const path of snapshotPathsFor(tool, stepParams)) {
           try {
-            const meta = await takeSnapshot(context.deviceClient, context.routerId, path, snapshotDir);
+            const meta = await takeSnapshot(
+              context.deviceClient,
+              context.routerId,
+              path,
+              snapshotDir,
+            );
             snapshotIds.push(meta.id);
           } catch (err) {
-            log.warn({ err, path, routerId: context.routerId, step: i }, "apply_plan step snapshot failed — proceeding without snapshot");
+            log.warn(
+              { err, path, routerId: context.routerId, step: i },
+              "apply_plan step snapshot failed — proceeding without snapshot",
+            );
           }
         }
 
@@ -230,7 +244,12 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
           const result = context.circuitBreaker
             ? await context.circuitBreaker.execute(runStep)
             : await runStep();
-          recordOutcome({ journalPath, journalId: stepJournalId, phase: "success", durationMs: Date.now() - stepStartMs });
+          recordOutcome({
+            journalPath,
+            journalId: stepJournalId,
+            phase: "success",
+            durationMs: Date.now() - stepStartMs,
+          });
           results.push({
             stepIndex: i,
             tool: step.tool,
@@ -240,7 +259,13 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
           });
         } catch (err) {
           const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: step.tool });
-          recordOutcome({ journalPath, journalId: stepJournalId, phase: "failure", outcome: error.code, durationMs: Date.now() - stepStartMs });
+          recordOutcome({
+            journalPath,
+            journalId: stepJournalId,
+            phase: "failure",
+            outcome: error.code,
+            durationMs: Date.now() - stepStartMs,
+          });
           log.error({ err: error, tool: step.tool, step: i }, "apply_plan step failed");
           return {
             content: `Apply failed at step ${i + 1}/${parsed.steps.length} (${step.tool}): ${error.message}. ${i} step(s) completed before failure.`,
@@ -341,12 +366,18 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         0,
       );
       const warnings = restorePlans.flatMap((p) => p.warnings);
-      const warningSuffix = warnings.length > 0 ? `\nWarnings:\n${warnings.map((w) => `  - ${w}`).join("\n")}` : "";
+      const warningSuffix =
+        warnings.length > 0 ? `\nWarnings:\n${warnings.map((w) => `  - ${w}`).join("\n")}` : "";
 
       if (parsed.dryRun) {
         return {
           content: `Rollback dry run for journal entry "${parsed.journalId}": ${totalOps} operation(s) would be applied across ${restorePlans.length} path(s).${warningSuffix}`,
-          structuredContent: { action: "dry_run", journalId: parsed.journalId, restorePlans, warnings },
+          structuredContent: {
+            action: "dry_run",
+            journalId: parsed.journalId,
+            restorePlans,
+            warnings,
+          },
         };
       }
 
@@ -356,7 +387,12 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
 
       return {
         content: `Rolled back journal entry "${parsed.journalId}": ${totalOps} operation(s) applied across ${restorePlans.length} path(s).${warningSuffix}`,
-        structuredContent: { action: "rolled_back", journalId: parsed.journalId, restorePlans, warnings },
+        structuredContent: {
+          action: "rolled_back",
+          journalId: parsed.journalId,
+          restorePlans,
+          warnings,
+        },
       };
     },
   };

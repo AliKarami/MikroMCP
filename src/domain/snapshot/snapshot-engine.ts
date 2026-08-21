@@ -24,10 +24,7 @@ export interface StoredSnapshot {
   blob?: string;
 }
 
-async function persist(
-  stored: StoredSnapshot,
-  snapshotDir: string,
-): Promise<SnapshotMeta> {
+async function persist(stored: StoredSnapshot, snapshotDir: string): Promise<SnapshotMeta> {
   const dir = join(snapshotDir, stored.routerId);
   const filePath = join(dir, `${stored.id}.json`);
   await mkdir(dir, { recursive: true });

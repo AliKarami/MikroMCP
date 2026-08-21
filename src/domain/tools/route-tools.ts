@@ -76,13 +76,15 @@ const listRoutesTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(routes, parsed.offset, parsed.limit);
 
       return {
-        content: listContent(
-          "Routes",
-          context.routerId,
-          paginated,
-          total,
-          parsed.offset,
-          (r) => compactFields(r, ["dst-address", "gateway", "distance", "routing-table", "active", "disabled"]),
+        content: listContent("Routes", context.routerId, paginated, total, parsed.offset, (r) =>
+          compactFields(r, [
+            "dst-address",
+            "gateway",
+            "distance",
+            "routing-table",
+            "active",
+            "disabled",
+          ]),
         ),
         structuredContent: {
           routerId: context.routerId,

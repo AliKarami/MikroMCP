@@ -46,7 +46,8 @@ export async function authenticateHttp(
       message: "Token does not match any configured identity.",
       recoverability: {
         retryable: false,
-        suggestedAction: "Verify the bearer token matches a configured identity in identities.yaml.",
+        suggestedAction:
+          "Verify the bearer token matches a configured identity in identities.yaml.",
       },
     });
   }

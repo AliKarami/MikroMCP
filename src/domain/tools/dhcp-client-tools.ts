@@ -57,13 +57,8 @@ const listDhcpClientsTool: ToolDefinition = {
       const { items: clients, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
       return {
-        content: listContent(
-          "DHCP clients",
-          context.routerId,
-          clients,
-          total,
-          parsed.offset,
-          (c) => compactFields(c, ["interface", "status", "address", "gateway", "disabled"]),
+        content: listContent("DHCP clients", context.routerId, clients, total, parsed.offset, (c) =>
+          compactFields(c, ["interface", "status", "address", "gateway", "disabled"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -85,8 +80,14 @@ const manageDhcpClientInputSchema = z
     routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     interface: z.string().describe("Interface name — idempotency key (e.g. ether1, ether2)"),
-    usePeerDns: z.boolean().default(true).describe("Use DNS servers provided by DHCP server (add only)"),
-    usePeerNtp: z.boolean().default(false).describe("Use NTP servers provided by DHCP server (add only)"),
+    usePeerDns: z
+      .boolean()
+      .default(true)
+      .describe("Use DNS servers provided by DHCP server (add only)"),
+    usePeerNtp: z
+      .boolean()
+      .default(false)
+      .describe("Use NTP servers provided by DHCP server (add only)"),
     addDefaultRoute: z.boolean().default(true).describe("Add default route from DHCP (add only)"),
     comment: z.string().max(255).optional().describe("Optional comment (add only)"),
     dryRun,
@@ -108,7 +109,10 @@ const manageDhcpClientTool: ToolDefinition = {
   snapshotPaths: ["ip/dhcp-client"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageDhcpClientInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, interface: parsed.interface }, "Managing DHCP client");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, interface: parsed.interface },
+      "Managing DHCP client",
+    );
 
     try {
       const allClients = await context.routerClient.get<RouterOSRecord>("ip/dhcp-client", {
@@ -132,7 +136,11 @@ const manageDhcpClientTool: ToolDefinition = {
             { property: "interface", before: null, after: parsed.interface },
             { property: "use-peer-dns", before: null, after: parsed.usePeerDns ? "yes" : "no" },
             { property: "use-peer-ntp", before: null, after: parsed.usePeerNtp ? "yes" : "no" },
-            { property: "add-default-route", before: null, after: parsed.addDefaultRoute ? "yes" : "no" },
+            {
+              property: "add-default-route",
+              before: null,
+              after: parsed.addDefaultRoute ? "yes" : "no",
+            },
           ];
           return {
             content: `Dry run: Would add DHCP client on "${parsed.interface}".`,
@@ -176,7 +184,11 @@ const manageDhcpClientTool: ToolDefinition = {
         log.info({ interface: parsed.interface }, "DHCP client removed");
         return {
           content: `Removed DHCP client on "${parsed.interface}".`,
-          structuredContent: { action: "removed", interface: parsed.interface, id: existing[".id"] },
+          structuredContent: {
+            action: "removed",
+            interface: parsed.interface,
+            id: existing[".id"],
+          },
         };
       }
 
@@ -212,12 +224,18 @@ const manageDhcpClientTool: ToolDefinition = {
       }
 
       const disabledValue = parsed.action === "disable" ? "true" : "false";
-      await context.routerClient.update("ip/dhcp-client", existing[".id"], { disabled: disabledValue });
+      await context.routerClient.update("ip/dhcp-client", existing[".id"], {
+        disabled: disabledValue,
+      });
       const resultAction = parsed.action === "disable" ? "disabled" : "enabled";
       log.info({ interface: parsed.interface, action: resultAction }, "DHCP client updated");
       return {
         content: `DHCP client on "${parsed.interface}" ${resultAction}.`,
-        structuredContent: { action: resultAction, interface: parsed.interface, id: existing[".id"] },
+        structuredContent: {
+          action: resultAction,
+          interface: parsed.interface,
+          id: existing[".id"],
+        },
       };
     } catch (err) {
       throw toolError(err, context, "manage_dhcp_client");

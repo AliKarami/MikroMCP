@@ -71,7 +71,9 @@ describe("logTools", () => {
       expect(listRulesTool.inputSchema.parse({ routerId: "r1" }).limit).toBe(100);
     });
     it("rejects extra fields", () => {
-      expect(listRulesTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false);
+      expect(listRulesTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(
+        false,
+      );
     });
   });
 
@@ -79,28 +81,41 @@ describe("logTools", () => {
     it("parses valid add input", () => {
       expect(
         manageRuleTool.inputSchema.safeParse({
-          routerId: "r1", action: "add", topics: "firewall", logAction: "memory",
+          routerId: "r1",
+          action: "add",
+          topics: "firewall",
+          logAction: "memory",
         }).success,
       ).toBe(true);
     });
     it("dryRun defaults to false", () => {
       expect(
         manageRuleTool.inputSchema.parse({
-          routerId: "r1", action: "add", topics: "firewall", logAction: "memory",
+          routerId: "r1",
+          action: "add",
+          topics: "firewall",
+          logAction: "memory",
         }).dryRun,
       ).toBe(false);
     });
     it("rejects extra fields", () => {
       expect(
         manageRuleTool.inputSchema.safeParse({
-          routerId: "r1", action: "add", topics: "firewall", logAction: "memory", extra: true,
+          routerId: "r1",
+          action: "add",
+          topics: "firewall",
+          logAction: "memory",
+          extra: true,
         }).success,
       ).toBe(false);
     });
     it("rejects invalid action", () => {
       expect(
         manageRuleTool.inputSchema.safeParse({
-          routerId: "r1", action: "update", topics: "firewall", logAction: "memory",
+          routerId: "r1",
+          action: "update",
+          topics: "firewall",
+          logAction: "memory",
         }).success,
       ).toBe(false);
     });
@@ -110,26 +125,38 @@ describe("logTools", () => {
     it("parses valid add input", () => {
       expect(
         manageActionTool.inputSchema.safeParse({
-          routerId: "r1", action: "add", name: "syslog-remote", type: "remote", remote: "10.0.0.1",
+          routerId: "r1",
+          action: "add",
+          name: "syslog-remote",
+          type: "remote",
+          remote: "10.0.0.1",
         }).success,
       ).toBe(true);
     });
     it("dryRun defaults to false", () => {
       expect(
-        manageActionTool.inputSchema.parse({ routerId: "r1", action: "remove", name: "old-action" }).dryRun,
+        manageActionTool.inputSchema.parse({ routerId: "r1", action: "remove", name: "old-action" })
+          .dryRun,
       ).toBe(false);
     });
     it("rejects extra fields", () => {
       expect(
         manageActionTool.inputSchema.safeParse({
-          routerId: "r1", action: "add", name: "test", type: "memory", extra: true,
+          routerId: "r1",
+          action: "add",
+          name: "test",
+          type: "memory",
+          extra: true,
         }).success,
       ).toBe(false);
     });
     it("rejects invalid type", () => {
       expect(
         manageActionTool.inputSchema.safeParse({
-          routerId: "r1", action: "add", name: "test", type: "invalid",
+          routerId: "r1",
+          action: "add",
+          name: "test",
+          type: "invalid",
         }).success,
       ).toBe(false);
     });
@@ -141,7 +168,10 @@ describe("logTools", () => {
         { ".id": "*1", topics: "firewall", action: "memory", disabled: "false" },
         { ".id": "*2", topics: "system", action: "disk", disabled: "false" },
       ]);
-      const result = await listRulesTool.handler({ routerId: "test-router", topics: "firewall" }, ctx);
+      const result = await listRulesTool.handler(
+        { routerId: "test-router", topics: "firewall" },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.rules as unknown[]).length).toBe(1);
     });
@@ -184,7 +214,13 @@ describe("logTools", () => {
     it("dry_run returns preview without calling create", async () => {
       const ctx = makeContext([]);
       const result = await manageRuleTool.handler(
-        { routerId: "test-router", action: "add", topics: "firewall", logAction: "memory", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          topics: "firewall",
+          logAction: "memory",
+          dryRun: true,
+        },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
@@ -194,13 +230,17 @@ describe("logTools", () => {
 
   describe("handler — manage_log_rule enable/disable/remove", () => {
     it("disables an existing rule", async () => {
-      const ctx = makeContext([{ ".id": "*1", topics: "firewall", action: "memory", disabled: "false" }]);
+      const ctx = makeContext([
+        { ".id": "*1", topics: "firewall", action: "memory", disabled: "false" },
+      ]);
       const result = await manageRuleTool.handler(
         { routerId: "test-router", action: "disable", topics: "firewall", logAction: "memory" },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("system/logging", "*1", { disabled: "true" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("system/logging", "*1", {
+        disabled: "true",
+      });
     });
 
     it("removes rule when found", async () => {
@@ -252,17 +292,20 @@ describe("logTools", () => {
     it("throws VALIDATION when type missing on add", async () => {
       const ctx = makeContext([], []);
       await expect(
-        manageActionTool.handler(
-          { routerId: "test-router", action: "add", name: "mysyslog" },
-          ctx,
-        ),
+        manageActionTool.handler({ routerId: "test-router", action: "add", name: "mysyslog" }, ctx),
       ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION });
     });
 
     it("creates action when not found", async () => {
       const ctx = makeContext([], []);
       const result = await manageActionTool.handler(
-        { routerId: "test-router", action: "add", name: "mysyslog", type: "remote", remote: "10.0.0.1" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "mysyslog",
+          type: "remote",
+          remote: "10.0.0.1",
+        },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("created");

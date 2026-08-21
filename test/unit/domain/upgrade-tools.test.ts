@@ -76,17 +76,17 @@ describe("upgradeTools", () => {
       expect(getStatusTool.inputSchema.safeParse({ routerId: "r1" }).success).toBe(true);
     });
     it("rejects extra fields", () => {
-      expect(
-        getStatusTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success,
-      ).toBe(false);
+      expect(getStatusTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(
+        false,
+      );
     });
   });
 
   describe("input schema — manage_upgrade", () => {
     it("parses valid check input", () => {
-      expect(
-        manageTool.inputSchema.safeParse({ routerId: "r1", action: "check" }).success,
-      ).toBe(true);
+      expect(manageTool.inputSchema.safeParse({ routerId: "r1", action: "check" }).success).toBe(
+        true,
+      );
     });
     it("dryRun defaults to false", () => {
       expect(manageTool.inputSchema.parse({ routerId: "r1", action: "check" }).dryRun).toBe(false);
@@ -97,9 +97,9 @@ describe("upgradeTools", () => {
       ).toBe(false);
     });
     it("rejects invalid action", () => {
-      expect(
-        manageTool.inputSchema.safeParse({ routerId: "r1", action: "download" }).success,
-      ).toBe(false);
+      expect(manageTool.inputSchema.safeParse({ routerId: "r1", action: "download" }).success).toBe(
+        false,
+      );
     });
   });
 
@@ -153,10 +153,7 @@ describe("upgradeTools", () => {
   describe("handler — manage_upgrade install", () => {
     it("calls install endpoint", async () => {
       const ctx = makeContext();
-      const result = await manageTool.handler(
-        { routerId: "test-router", action: "install" },
-        ctx,
-      );
+      const result = await manageTool.handler({ routerId: "test-router", action: "install" }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("install_triggered");
       expect(ctx.routerClient.execute).toHaveBeenCalledWith("system/package/update/install");

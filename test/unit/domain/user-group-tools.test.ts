@@ -40,8 +40,10 @@ describe("userGroupTools", () => {
       expect(manageTool.name).toBe("manage_user_group");
     });
     it("list_user_groups is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
-    it("manage_user_group is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
-    it("manage_user_group is destructive (authorization surface)", () => expect(manageTool.annotations.destructiveHint).toBe(true));
+    it("manage_user_group is not readOnly", () =>
+      expect(manageTool.annotations.readOnlyHint).toBe(false));
+    it("manage_user_group is destructive (authorization surface)", () =>
+      expect(manageTool.annotations.destructiveHint).toBe(true));
   });
 
   describe("input schema — list_user_groups", () => {
@@ -63,7 +65,10 @@ describe("userGroupTools", () => {
     it("parses valid add input", () => {
       expect(
         manageTool.inputSchema.safeParse({
-          routerId: "r1", action: "add", name: "ops", policy: "read,write",
+          routerId: "r1",
+          action: "add",
+          name: "ops",
+          policy: "read,write",
         }).success,
       ).toBe(true);
     });
@@ -75,7 +80,10 @@ describe("userGroupTools", () => {
     it("rejects extra fields", () => {
       expect(
         manageTool.inputSchema.safeParse({
-          routerId: "r1", action: "add", name: "ops", extra: true,
+          routerId: "r1",
+          action: "add",
+          name: "ops",
+          extra: true,
         }).success,
       ).toBe(false);
     });
@@ -160,7 +168,9 @@ describe("userGroupTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("user/group", "*1", { policy: "read,write" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("user/group", "*1", {
+        policy: "read,write",
+      });
     });
 
     it("returns no_change when policy unchanged", async () => {
@@ -185,7 +195,13 @@ describe("userGroupTools", () => {
     it("dry_run returns preview without calling update", async () => {
       const ctx = makeContext([{ ".id": "*1", name: "ops", policy: "read" }]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "update", name: "ops", policy: "read,write", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "ops",
+          policy: "read,write",
+          dryRun: true,
+        },
         ctx,
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
