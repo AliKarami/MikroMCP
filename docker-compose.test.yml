@@ -7,7 +7,10 @@
 # The image boots the official CHR disk image inside QEMU. With /dev/kvm the
 # router is ready in well under a minute; without it (e.g. Docker Desktop on
 # macOS) remove the kvm device below and expect a slow emulated boot.
+#
 # Image pin must match the services in .github/workflows/integration.yml.
+# Review quarterly (or when new RouterOS releases introduce API changes) to ensure
+# compatibility with the latest firmware. Current pin is RouterOS 7.23.2.
 x-chr: &chr
   image: mnazarenko/docker-routeros:7.23.2
   cap_add:

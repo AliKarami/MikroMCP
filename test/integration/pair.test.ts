@@ -21,8 +21,8 @@ import type { ToolDefinition } from "../../src/domain/tools/tool-definition.js";
 // MIKROMCP_ITEST_PAIR=1. Without it, this whole file is skipped.
 describe.skipIf(!pairEnabled)("fleet operations across two live CHRs", () => {
   // Created in beforeAll so a skipped suite allocates nothing at collection time.
-  let harness: ReturnType<typeof createHarness>;
-  let pairHarness: ReturnType<typeof createHarness>;
+  let harness: ReturnType<typeof createHarness> | undefined;
+  let pairHarness: ReturnType<typeof createHarness> | undefined;
 
   function tool(name: string): ToolDefinition {
     const found = allTools.find((t) => t.name === name);
@@ -33,6 +33,7 @@ describe.skipIf(!pairEnabled)("fleet operations across two live CHRs", () => {
   let deps: ToolExecutorDeps | undefined;
 
   beforeAll(() => {
+    if (!pairEnabled) return; // Guard: don't allocate resources if suite is skipped
     harness = createHarness();
     pairHarness = createHarness({ routerId: ITEST_PAIR_ROUTER_ID, ...pairConnection });
     const configDir = mkdtempSync(join(tmpdir(), "mikromcp-itest-pair-"));
@@ -75,6 +76,7 @@ describe.skipIf(!pairEnabled)("fleet operations across two live CHRs", () => {
   });
 
   it("the second router answers on its own identity", async () => {
+    if (!pairHarness) throw new Error("pairHarness not initialized");
     const result = await tool("get_system_status").handler({}, pairHarness.context);
 
     expect(result.structuredContent.routerId).toBe(ITEST_PAIR_ROUTER_ID);

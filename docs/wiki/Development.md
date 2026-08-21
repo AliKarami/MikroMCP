@@ -142,10 +142,15 @@ If you add, rename, or remove a tool, you must update `docs/wiki/Available-Tools
 `test/integration/` runs tool handlers against a real RouterOS instance — a Cloud Hosted Router booted in Docker (QEMU inside the container, KVM-accelerated where `/dev/kvm` exists). These tests catch what mocks structurally cannot: REST response parsing against real wire payloads and idempotency checks against real record types.
 
 ```bash
-docker compose -f docker-compose.test.yml up -d   # boot CHR (ready in <1 min with KVM)
-npm run test:integration                          # waits for readiness, provisions, runs
+docker compose -f docker-compose.test.yml up -d   # boot CHR (~30-60s with KVM, slower without)
+npm run test:integration                          # waits for readiness, provisions, runs (~2-5 min total)
 docker compose -f docker-compose.test.yml down    # tear down
 ```
+
+**Expected runtimes:**
+- CHR boot time: ~30-60 seconds with `/dev/kvm` (hardware acceleration), 2-5 minutes without
+- Test suite execution: ~2-5 minutes (depends on router responsiveness and test parallelism)
+- Total time: ~3-8 minutes for a full run
 
 The suite's global setup polls the REST API until the router answers and, on a fresh boot, sets the admin password (`mikromcp-itest` by default) — CHR ships with an empty admin password, which MikroMCP's credential layer rejects. Endpoints and credentials are overridable via `MIKROMCP_ITEST_HOST`, `MIKROMCP_ITEST_HTTP_PORT`, `MIKROMCP_ITEST_SSH_PORT`, and `MIKROMCP_ITEST_PASSWORD`.
 

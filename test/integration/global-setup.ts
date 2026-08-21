@@ -114,7 +114,19 @@ export default async function globalSetup(): Promise<void> {
         if (status[i] === "ready") return;
         // A transient provisioning failure (user DB not up yet, timed-out
         // fetch) means "not ready yet", not "abort the whole run".
-        status[i] = await provisionTarget(target).catch((): ProbeResult => "down");
+        status[i] = await provisionTarget(target).catch((err: unknown): ProbeResult => {
+          // Log provisioning errors for troubleshooting (e.g., network issues,
+          // container not running), but don't fail immediately — the CHR may
+          // still be booting and these errors are expected during startup.
+          if (process.env.MIKROMCP_LOG_LEVEL === "debug") {
+            const endpoint = `http://${target.host}:${target.httpPort}`;
+            console.debug(
+              `[global-setup] Provisioning ${endpoint} failed (will retry):`,
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+          return "down";
+        });
       }),
     );
     if (status.some((s) => s !== "ready")) {
