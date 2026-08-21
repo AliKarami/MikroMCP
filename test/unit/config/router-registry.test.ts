@@ -3,6 +3,7 @@ import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RouterRegistry } from "../../../src/config/router-registry.js";
+import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 function tempYaml(content: string): string {
   const dir = mkdtempSync(join(tmpdir(), "mikromcp-"));
@@ -36,6 +37,21 @@ describe("RouterRegistry", () => {
     const path = tempYaml(VALID_CONFIG);
     const registry = new RouterRegistry(path);
     expect(registry.getRouter("home").host).toBe("192.168.1.1");
+  });
+
+  it("throws a typed NOT_FOUND listing available routers for an unknown id", () => {
+    const path = tempYaml(VALID_CONFIG);
+    const registry = new RouterRegistry(path);
+    try {
+      registry.getRouter("nope");
+      expect.unreachable("getRouter should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(MikroMCPError);
+      const error = err as MikroMCPError;
+      expect(error.code).toBe("ROUTER_NOT_FOUND");
+      expect(error.category).toBe(ErrorCategory.NOT_FOUND);
+      expect(error.details).toMatchObject({ availableRouters: ["home"] });
+    }
   });
 
   it("throws on missing required field (host)", () => {
