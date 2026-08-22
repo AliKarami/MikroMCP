@@ -28,7 +28,12 @@ function makeContext(
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
     ftpClient: {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -38,6 +43,7 @@ function makeContext(
       get: vi.fn().mockResolvedValue(records),
       create: vi.fn().mockResolvedValue({ ".id": "*1", name: "ovpn-client1" }),
       update: vi.fn().mockResolvedValue(undefined),
+      execute: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
       ...overrides,
     } as unknown as RouterOSRestClient,
@@ -68,8 +74,10 @@ describe("ovpnTools", () => {
         "manage_ovpn_server",
       ]);
     });
-    it("list_ovpn_clients is readOnly", () => expect(listClientsTool.annotations.readOnlyHint).toBe(true));
-    it("get_ovpn_server is readOnly", () => expect(getServerTool.annotations.readOnlyHint).toBe(true));
+    it("list_ovpn_clients is readOnly", () =>
+      expect(listClientsTool.annotations.readOnlyHint).toBe(true));
+    it("get_ovpn_server is readOnly", () =>
+      expect(getServerTool.annotations.readOnlyHint).toBe(true));
     it("manage_ovpn_client is not readOnly and is destructive", () => {
       expect(manageClientTool.annotations.readOnlyHint).toBe(false);
       expect(manageClientTool.annotations.destructiveHint).toBe(true);
@@ -111,7 +119,10 @@ describe("ovpnTools", () => {
 
     it("returns all clients", async () => {
       const ctx = makeContext(clients);
-      const r = await listClientsTool.handler({ routerId: "test-router", limit: 100, offset: 0 }, ctx);
+      const r = await listClientsTool.handler(
+        { routerId: "test-router", limit: 100, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.total).toBe(2);
       expect(r.structuredContent.clients).toHaveLength(2);
       expect(r.structuredContent.hasMore).toBe(false);
@@ -119,14 +130,20 @@ describe("ovpnTools", () => {
 
     it("paginates and sets hasMore", async () => {
       const ctx = makeContext(clients);
-      const r = await listClientsTool.handler({ routerId: "test-router", limit: 1, offset: 0 }, ctx);
+      const r = await listClientsTool.handler(
+        { routerId: "test-router", limit: 1, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.clients).toHaveLength(1);
       expect(r.structuredContent.hasMore).toBe(true);
     });
 
     it("returns empty list when no clients configured", async () => {
       const ctx = makeContext([]);
-      const r = await listClientsTool.handler({ routerId: "test-router", limit: 100, offset: 0 }, ctx);
+      const r = await listClientsTool.handler(
+        { routerId: "test-router", limit: 100, offset: 0 },
+        ctx,
+      );
       expect(r.structuredContent.total).toBe(0);
     });
   });
@@ -135,7 +152,13 @@ describe("ovpnTools", () => {
     it("creates a new client with required fields", async () => {
       const ctx = makeContext([]);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "add", name: "ovpn-hq", connectTo: "10.0.0.1", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "ovpn-hq",
+          connectTo: "10.0.0.1",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("created");
@@ -180,7 +203,13 @@ describe("ovpnTools", () => {
       const existing = [{ ".id": "*1", name: "ovpn-hq", "connect-to": "10.0.0.1" }];
       const ctx = makeContext(existing);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "add", name: "ovpn-hq", connectTo: "10.0.0.1", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "ovpn-hq",
+          connectTo: "10.0.0.1",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("already_exists");
@@ -192,7 +221,13 @@ describe("ovpnTools", () => {
       const ctx = makeContext(existing);
       await expect(
         manageClientTool.handler(
-          { routerId: "test-router", action: "add", name: "ovpn-hq", connectTo: "10.0.0.2", dryRun: false },
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "ovpn-hq",
+            connectTo: "10.0.0.2",
+            dryRun: false,
+          },
           ctx,
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.CONFLICT, code: "OVPN_CLIENT_CONFLICT" });
@@ -211,7 +246,13 @@ describe("ovpnTools", () => {
     it("returns dry_run without calling create", async () => {
       const ctx = makeContext([]);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "add", name: "ovpn-hq", connectTo: "10.0.0.1", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "ovpn-hq",
+          connectTo: "10.0.0.1",
+          dryRun: true,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("dry_run");
@@ -228,14 +269,23 @@ describe("ovpnTools", () => {
         ctx,
       );
       expect(r.structuredContent.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-client", "*1", { port: "1195" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-client", "*1", {
+        port: "1195",
+      });
     });
 
     it("returns no_change when all specified fields already match", async () => {
       const existing = [{ ".id": "*1", name: "ovpn-hq", "connect-to": "10.0.0.1", port: "1194" }];
       const ctx = makeContext(existing);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "update", name: "ovpn-hq", connectTo: "10.0.0.1", port: 1194, dryRun: false },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "ovpn-hq",
+          connectTo: "10.0.0.1",
+          port: 1194,
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("no_change");
@@ -246,11 +296,19 @@ describe("ovpnTools", () => {
       const existing = [{ ".id": "*1", name: "ovpn-hq", "connect-to": "10.0.0.1" }];
       const ctx = makeContext(existing);
       const r = await manageClientTool.handler(
-        { routerId: "test-router", action: "update", name: "ovpn-hq", password: "newpass", dryRun: false },
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "ovpn-hq",
+          password: "newpass",
+          dryRun: false,
+        },
         ctx,
       );
       expect(r.structuredContent.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-client", "*1", { password: "newpass" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-client", "*1", {
+        password: "newpass",
+      });
     });
 
     it("throws NOT_FOUND when client does not exist", async () => {
@@ -316,6 +374,15 @@ describe("ovpnTools", () => {
       expect(r.structuredContent.server).toMatchObject({ enabled: "yes", port: "1194" });
     });
 
+    it("reports the enabled state from the disabled field on RouterOS 7.16+", async () => {
+      // 7.16+ records carry `disabled` instead of `enabled` — the reader must
+      // not render "enabled=undefined".
+      const { enabled: _e, ...rest } = sampleServer;
+      const ctx = makeContext([{ ...rest, disabled: false }]);
+      const r = await getServerTool.handler({ routerId: "test-router" }, ctx);
+      expect(r.content).toContain("enabled=true");
+    });
+
     it("throws NOT_FOUND when OpenVPN package is not installed", async () => {
       const ctx = makeContext([]);
       await expect(getServerTool.handler({ routerId: "test-router" }, ctx)).rejects.toMatchObject({
@@ -332,11 +399,9 @@ describe("ovpnTools", () => {
         ctx,
       );
       expect(r.structuredContent.action).toBe("enabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "interface/ovpn-server/server",
-        "*0",
-        { enabled: "yes" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        enabled: "yes",
+      });
     });
 
     it("returns no_change when already enabled", async () => {
@@ -356,11 +421,9 @@ describe("ovpnTools", () => {
         ctx,
       );
       expect(r.structuredContent.action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "interface/ovpn-server/server",
-        "*0",
-        { enabled: "no" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        enabled: "no",
+      });
     });
 
     it("returns no_change when already disabled", async () => {
@@ -371,6 +434,91 @@ describe("ovpnTools", () => {
       );
       expect(r.structuredContent.action).toBe("no_change");
       expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("enables a RouterOS 7.16+ instance via the disabled field", async () => {
+      // 7.16+ replaced the singleton's `enabled` flag with per-instance
+      // `disabled` — the tool must read and write that dialect.
+      const { enabled: _e, ...rest } = sampleServer;
+      const ctx = makeContext([{ ...rest, disabled: "true" }]);
+      const r = await manageServerTool.handler(
+        { routerId: "test-router", action: "enable", dryRun: false },
+        ctx,
+      );
+      expect(r.structuredContent.action).toBe("enabled");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        disabled: "no",
+      });
+    });
+
+    it("disables a RouterOS 7.16+ instance via the disabled field", async () => {
+      const { enabled: _e, ...rest } = sampleServer;
+      const ctx = makeContext([{ ...rest, disabled: false }]);
+      const r = await manageServerTool.handler(
+        { routerId: "test-router", action: "disable", dryRun: false },
+        ctx,
+      );
+      expect(r.structuredContent.action).toBe("disabled");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        disabled: "yes",
+      });
+    });
+
+    it("reports no_change for an already-disabled 7.16+ instance", async () => {
+      const { enabled: _e, ...rest } = sampleServer;
+      const ctx = makeContext([{ ...rest, disabled: "true" }]);
+      const r = await manageServerTool.handler(
+        { routerId: "test-router", action: "disable", dryRun: false },
+        ctx,
+      );
+      expect(r.structuredContent.action).toBe("no_change");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("writes a legacy singleton without .id via the /set command", async () => {
+      // Pre-7.16 set-menu singletons carry no ".id" — a PATCH URL would end in
+      // "/undefined", so the write must go through the /set command instead.
+      const { ".id": _id, ...legacy } = sampleServer;
+      const ctx = makeContext([{ ...legacy, enabled: "no" }]);
+      const r = await manageServerTool.handler(
+        { routerId: "test-router", action: "enable", dryRun: false },
+        ctx,
+      );
+      expect(r.structuredContent.action).toBe("enabled");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+      expect(ctx.routerClient.execute).toHaveBeenCalledWith("interface/ovpn-server/server/set", {
+        enabled: "yes",
+      });
+    });
+
+    it("throws CONFLICT when multiple 7.16+ instances exist", async () => {
+      const { enabled: _e, ...rest } = sampleServer;
+      const ctx = makeContext([
+        { ...rest, ".id": "*0", name: "ovpn-udp", disabled: "false" },
+        { ...rest, ".id": "*1", name: "ovpn-tcp", disabled: "false" },
+      ]);
+      await expect(
+        manageServerTool.handler(
+          { routerId: "test-router", action: "disable", dryRun: false },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ category: ErrorCategory.CONFLICT, code: "OVPN_SERVER_AMBIGUOUS" });
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+      expect(ctx.routerClient.execute).not.toHaveBeenCalled();
+    });
+
+    it("disables the server when the record carries a parsed boolean enabled field", async () => {
+      // The response parser converts boolean wire strings to real booleans —
+      // disable must not become a silent no-op on an enabled server.
+      const ctx = makeContext([{ ...sampleServer, enabled: true }]);
+      const r = await manageServerTool.handler(
+        { routerId: "test-router", action: "disable", dryRun: false },
+        ctx,
+      );
+      expect(r.structuredContent.action).toBe("disabled");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        enabled: "no",
+      });
     });
 
     it("returns dry_run for enable without calling update", async () => {
@@ -392,17 +540,25 @@ describe("ovpnTools", () => {
         ctx,
       );
       expect(r.structuredContent.action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith(
-        "interface/ovpn-server/server",
-        "*0",
-        { port: "1195" },
-      );
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/ovpn-server/server", "*0", {
+        port: "1195",
+      });
     });
 
     it("returns no_change when all specified fields already match", async () => {
       const ctx = makeContext([sampleServer]);
       const r = await manageServerTool.handler(
         { routerId: "test-router", action: "set", port: 1194, cipher: "aes256-cbc", dryRun: false },
+        ctx,
+      );
+      expect(r.structuredContent.action).toBe("no_change");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("returns no_change when the record carries a parsed numeric port", async () => {
+      const ctx = makeContext([{ ...sampleServer, port: 1194 }]);
+      const r = await manageServerTool.handler(
+        { routerId: "test-router", action: "set", port: 1194, dryRun: false },
         ctx,
       );
       expect(r.structuredContent.action).toBe("no_change");
@@ -429,7 +585,10 @@ describe("ovpnTools", () => {
     it("throws NOT_FOUND when OpenVPN package is not installed", async () => {
       const ctx = makeContext([]);
       await expect(
-        manageServerTool.handler({ routerId: "test-router", action: "set", port: 1195, dryRun: false }, ctx),
+        manageServerTool.handler(
+          { routerId: "test-router", action: "set", port: 1195, dryRun: false },
+          ctx,
+        ),
       ).rejects.toMatchObject({ code: "OVPN_SERVER_NOT_FOUND" });
     });
   });

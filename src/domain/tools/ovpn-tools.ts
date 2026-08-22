@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTrue, sameValue } from "../../adapter/response-parser.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -103,14 +104,19 @@ const manageOvpnClientTool: ToolDefinition = {
   snapshotPaths: [OVPN_CLIENT_PATH],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageOvpnClientInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing OpenVPN client");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing OpenVPN client",
+    );
 
     try {
       const allClients = await context.routerClient.get<RouterOSRecord>(OVPN_CLIENT_PATH, {
         limit: undefined,
         offset: undefined,
       });
-      const existing = (allClients as Record<string, string>[]).find((c) => c.name === parsed.name);
+      const existing = (allClients as Record<string, string>[]).find((c) =>
+        sameValue(c.name, parsed.name),
+      );
 
       if (parsed.action === "add") {
         if (!parsed.connectTo) {
@@ -202,11 +208,19 @@ const manageOvpnClientTool: ToolDefinition = {
 
         if (parsed.connectTo !== undefined && existing["connect-to"] !== parsed.connectTo) {
           updates["connect-to"] = parsed.connectTo;
-          diff.push({ property: "connect-to", before: existing["connect-to"] ?? null, after: parsed.connectTo });
+          diff.push({
+            property: "connect-to",
+            before: existing["connect-to"] ?? null,
+            after: parsed.connectTo,
+          });
         }
-        if (parsed.port !== undefined && existing.port !== String(parsed.port)) {
+        if (parsed.port !== undefined && !sameValue(existing.port, parsed.port)) {
           updates.port = String(parsed.port);
-          diff.push({ property: "port", before: existing.port ?? null, after: String(parsed.port) });
+          diff.push({
+            property: "port",
+            before: existing.port === undefined ? null : String(existing.port),
+            after: String(parsed.port),
+          });
         }
         if (parsed.mode !== undefined && existing.mode !== parsed.mode) {
           updates.mode = parsed.mode;
@@ -214,11 +228,19 @@ const manageOvpnClientTool: ToolDefinition = {
         }
         if (parsed.protocol !== undefined && existing.protocol !== parsed.protocol) {
           updates.protocol = parsed.protocol;
-          diff.push({ property: "protocol", before: existing.protocol ?? null, after: parsed.protocol });
+          diff.push({
+            property: "protocol",
+            before: existing.protocol ?? null,
+            after: parsed.protocol,
+          });
         }
         if (parsed.certificate !== undefined && existing.certificate !== parsed.certificate) {
           updates.certificate = parsed.certificate;
-          diff.push({ property: "certificate", before: existing.certificate ?? null, after: parsed.certificate });
+          diff.push({
+            property: "certificate",
+            before: existing.certificate ?? null,
+            after: parsed.certificate,
+          });
         }
         if (parsed.user !== undefined && existing.user !== parsed.user) {
           updates.user = parsed.user;
@@ -292,10 +314,7 @@ const getOvpnServerInputSchema = z
   })
   .strict();
 
-function fetchOvpnServer(
-  allRecords: RouterOSRecord[],
-  routerId: string,
-): Record<string, string> {
+function fetchOvpnServer(allRecords: RouterOSRecord[], routerId: string): Record<string, string> {
   if (allRecords.length === 0) {
     throw new MikroMCPError({
       category: ErrorCategory.NOT_FOUND,
@@ -309,7 +328,47 @@ function fetchOvpnServer(
       },
     });
   }
+  if (allRecords.length > 1) {
+    const names = allRecords.map((r) => (r as Record<string, string>).name ?? "?").join(", ");
+    throw new MikroMCPError({
+      category: ErrorCategory.CONFLICT,
+      code: "OVPN_SERVER_AMBIGUOUS",
+      message: `Multiple OpenVPN server instances exist (${names}); this tool cannot pick one safely.`,
+      details: { routerId, instances: names },
+      recoverability: {
+        retryable: false,
+        suggestedAction: "Remove the extra instances so exactly one remains.",
+        alternativeTools: [],
+      },
+    });
+  }
   return allRecords[0] as Record<string, string>;
+}
+
+/**
+ * On <7.16 the OVPN server is a set-menu singleton with no `.id` — writes must
+ * go through the /set command; 7.16+ instances are updated by `.id`.
+ */
+async function writeOvpnServer(
+  context: ToolContext,
+  server: Record<string, string>,
+  changes: Record<string, string>,
+): Promise<void> {
+  const serverId = server[".id"];
+  if (serverId !== undefined) {
+    await context.routerClient.update(OVPN_SERVER_PATH, serverId, changes);
+  } else {
+    await context.routerClient.execute(`${OVPN_SERVER_PATH}/set`, changes);
+  }
+}
+
+/**
+ * RouterOS < 7.16 exposes the OVPN server as a singleton with an `enabled`
+ * flag; 7.16+ turned the server into instances carrying `disabled` instead.
+ * Read whichever field this device actually has.
+ */
+function ovpnServerEnabled(server: Record<string, string>): boolean {
+  return server.enabled !== undefined ? isTrue(server.enabled) : !isTrue(server.disabled);
 }
 
 const getOvpnServerTool: ToolDefinition = {
@@ -336,7 +395,7 @@ const getOvpnServerTool: ToolDefinition = {
       const server = fetchOvpnServer(records, context.routerId);
 
       return {
-        content: `OpenVPN server on ${context.routerId}: enabled=${server.enabled}, port=${server.port}, protocol=${server.protocol}`,
+        content: `OpenVPN server on ${context.routerId}: enabled=${ovpnServerEnabled(server)}, port=${server.port}, protocol=${server.protocol}`,
         structuredContent: { routerId: context.routerId, server },
       };
     } catch (err) {
@@ -351,12 +410,29 @@ const manageOvpnServerInputSchema = z
   .object({
     routerId,
     action: z.enum(["enable", "disable", "set"]).describe("Action to perform"),
-    port: z.number().int().min(1).max(65535).optional().describe("Listening port (set action only)"),
+    port: z
+      .number()
+      .int()
+      .min(1)
+      .max(65535)
+      .optional()
+      .describe("Listening port (set action only)"),
     mode: z.enum(["ip", "ethernet"]).optional().describe("Tunnel mode (set action only)"),
-    protocol: z.enum(["tcp-server", "udp"]).optional().describe("Transport protocol (set action only)"),
+    protocol: z
+      .enum(["tcp-server", "udp"])
+      .optional()
+      .describe("Transport protocol (set action only)"),
     certificate: z.string().optional().describe("Server certificate name (set action only)"),
     cipher: z
-      .enum(["blowfish128", "aes128-cbc", "aes192-cbc", "aes256-cbc", "aes128-gcm", "aes256-gcm", "none"])
+      .enum([
+        "blowfish128",
+        "aes128-cbc",
+        "aes192-cbc",
+        "aes256-cbc",
+        "aes128-gcm",
+        "aes256-gcm",
+        "none",
+      ])
       .optional()
       .describe("Encryption cipher (set action only)"),
     auth: z
@@ -391,11 +467,11 @@ const manageOvpnServerTool: ToolDefinition = {
       });
 
       const server = fetchOvpnServer(records, context.routerId);
-      const serverId = server[".id"];
 
       if (parsed.action === "enable" || parsed.action === "disable") {
         const desiredEnabled = parsed.action === "enable";
-        const currentEnabled = server.enabled === "yes";
+        const legacyDialect = server.enabled !== undefined;
+        const currentEnabled = ovpnServerEnabled(server);
 
         if (desiredEnabled === currentEnabled) {
           return {
@@ -404,23 +480,36 @@ const manageOvpnServerTool: ToolDefinition = {
           };
         }
 
+        const change = legacyDialect
+          ? {
+              property: "enabled",
+              before: String(server.enabled),
+              after: desiredEnabled ? "yes" : "no",
+            }
+          : {
+              property: "disabled",
+              before: server.disabled === undefined ? null : String(server.disabled),
+              after: desiredEnabled ? "no" : "yes",
+            };
+
         if (parsed.dryRun) {
           return {
             content: `Dry run: Would ${parsed.action} OpenVPN server on ${context.routerId}.`,
             structuredContent: {
               action: "dry_run",
-              diff: [{ property: "enabled", before: server.enabled, after: desiredEnabled ? "yes" : "no" }],
+              diff: [change],
             },
           };
         }
 
-        await context.routerClient.update(OVPN_SERVER_PATH, serverId, {
-          enabled: desiredEnabled ? "yes" : "no",
-        });
+        await writeOvpnServer(context, server, { [change.property]: change.after });
         log.info({ routerId: context.routerId, action: parsed.action }, "OpenVPN server updated");
         return {
           content: `OpenVPN server on ${context.routerId} ${parsed.action}d.`,
-          structuredContent: { action: parsed.action === "enable" ? "enabled" : "disabled", server },
+          structuredContent: {
+            action: parsed.action === "enable" ? "enabled" : "disabled",
+            server,
+          },
         };
       }
 
@@ -441,7 +530,8 @@ const manageOvpnServerTool: ToolDefinition = {
           details: {},
           recoverability: {
             retryable: false,
-            suggestedAction: "Provide at least one of: port, mode, protocol, certificate, cipher, auth.",
+            suggestedAction:
+              "Provide at least one of: port, mode, protocol, certificate, cipher, auth.",
             alternativeTools: [],
           },
         });
@@ -450,9 +540,13 @@ const manageOvpnServerTool: ToolDefinition = {
       const updates: Record<string, string> = {};
       const diff: Array<{ property: string; before: string | null; after: string }> = [];
 
-      if (parsed.port !== undefined && server.port !== String(parsed.port)) {
+      if (parsed.port !== undefined && !sameValue(server.port, parsed.port)) {
         updates.port = String(parsed.port);
-        diff.push({ property: "port", before: server.port ?? null, after: String(parsed.port) });
+        diff.push({
+          property: "port",
+          before: server.port === undefined ? null : String(server.port),
+          after: String(parsed.port),
+        });
       }
       if (parsed.mode !== undefined && server.mode !== parsed.mode) {
         updates.mode = parsed.mode;
@@ -460,11 +554,19 @@ const manageOvpnServerTool: ToolDefinition = {
       }
       if (parsed.protocol !== undefined && server.protocol !== parsed.protocol) {
         updates.protocol = parsed.protocol;
-        diff.push({ property: "protocol", before: server.protocol ?? null, after: parsed.protocol });
+        diff.push({
+          property: "protocol",
+          before: server.protocol ?? null,
+          after: parsed.protocol,
+        });
       }
       if (parsed.certificate !== undefined && server.certificate !== parsed.certificate) {
         updates.certificate = parsed.certificate;
-        diff.push({ property: "certificate", before: server.certificate ?? null, after: parsed.certificate });
+        diff.push({
+          property: "certificate",
+          before: server.certificate ?? null,
+          after: parsed.certificate,
+        });
       }
       if (parsed.cipher !== undefined && server.cipher !== parsed.cipher) {
         updates.cipher = parsed.cipher;
@@ -489,7 +591,7 @@ const manageOvpnServerTool: ToolDefinition = {
         };
       }
 
-      await context.routerClient.update(OVPN_SERVER_PATH, serverId, updates);
+      await writeOvpnServer(context, server, updates);
       log.info({ routerId: context.routerId }, "OpenVPN server configuration updated");
       return {
         content: `Updated OpenVPN server configuration on ${context.routerId}.`,

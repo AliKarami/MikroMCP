@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTrue, sameValue } from "../../adapter/response-parser.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -274,9 +275,21 @@ const getDnsSettingsTool: ToolDefinition = {
 const manageDnsSettingsInputSchema = z
   .object({
     routerId,
-    servers: z.string().optional().describe("Comma-separated upstream DNS server IPs (e.g. '8.8.8.8,1.1.1.1')"),
-    allowRemoteRequests: z.boolean().optional().describe("Allow router to answer DNS queries from the network"),
-    maxUdpPacketSize: z.number().int().min(512).max(65535).optional().describe("Maximum UDP packet size in bytes"),
+    servers: z
+      .string()
+      .optional()
+      .describe("Comma-separated upstream DNS server IPs (e.g. '8.8.8.8,1.1.1.1')"),
+    allowRemoteRequests: z
+      .boolean()
+      .optional()
+      .describe("Allow router to answer DNS queries from the network"),
+    maxUdpPacketSize: z
+      .number()
+      .int()
+      .min(512)
+      .max(65535)
+      .optional()
+      .describe("Maximum UDP packet size in bytes"),
     cacheMaxTtl: z.string().optional().describe("Maximum cache TTL (e.g. '1d', '00:30:00')"),
     cacheSize: z.number().int().min(1).optional().describe("DNS cache size in KiB"),
     dryRun,
@@ -301,8 +314,9 @@ const manageDnsSettingsTool: ToolDefinition = {
     log.info({ routerId: context.routerId }, "Managing DNS settings");
     try {
       const results = await context.routerClient.get<RouterOSRecord>("ip/dns");
-      const current = (Array.isArray(results) && results.length > 0 ? results[0] : results) as Record<string, string>;
-      const id = current[".id"];
+      const current = (
+        Array.isArray(results) && results.length > 0 ? results[0] : results
+      ) as Record<string, string>;
 
       const changes: Record<string, string> = {};
       const diff: { property: string; before: string | null; after: string }[] = [];
@@ -313,27 +327,49 @@ const manageDnsSettingsTool: ToolDefinition = {
       }
       if (parsed.allowRemoteRequests !== undefined) {
         const next = String(parsed.allowRemoteRequests);
-        if (current["allow-remote-requests"] !== next) {
+        if (isTrue(current["allow-remote-requests"]) !== parsed.allowRemoteRequests) {
           changes["allow-remote-requests"] = next;
-          diff.push({ property: "allow-remote-requests", before: current["allow-remote-requests"] ?? null, after: next });
+          diff.push({
+            property: "allow-remote-requests",
+            before:
+              current["allow-remote-requests"] === undefined
+                ? null
+                : String(current["allow-remote-requests"]),
+            after: next,
+          });
         }
       }
       if (parsed.maxUdpPacketSize !== undefined) {
         const next = String(parsed.maxUdpPacketSize);
-        if (current["max-udp-packet-size"] !== next) {
+        if (!sameValue(current["max-udp-packet-size"], next)) {
           changes["max-udp-packet-size"] = next;
-          diff.push({ property: "max-udp-packet-size", before: current["max-udp-packet-size"] ?? null, after: next });
+          diff.push({
+            property: "max-udp-packet-size",
+            before:
+              current["max-udp-packet-size"] === undefined
+                ? null
+                : String(current["max-udp-packet-size"]),
+            after: next,
+          });
         }
       }
       if (parsed.cacheMaxTtl !== undefined && current["cache-max-ttl"] !== parsed.cacheMaxTtl) {
         changes["cache-max-ttl"] = parsed.cacheMaxTtl;
-        diff.push({ property: "cache-max-ttl", before: current["cache-max-ttl"] ?? null, after: parsed.cacheMaxTtl });
+        diff.push({
+          property: "cache-max-ttl",
+          before: current["cache-max-ttl"] ?? null,
+          after: parsed.cacheMaxTtl,
+        });
       }
       if (parsed.cacheSize !== undefined) {
         const next = String(parsed.cacheSize);
-        if (current["cache-size"] !== next) {
+        if (!sameValue(current["cache-size"], next)) {
           changes["cache-size"] = next;
-          diff.push({ property: "cache-size", before: current["cache-size"] ?? null, after: next });
+          diff.push({
+            property: "cache-size",
+            before: current["cache-size"] === undefined ? null : String(current["cache-size"]),
+            after: next,
+          });
         }
       }
 
@@ -351,8 +387,12 @@ const manageDnsSettingsTool: ToolDefinition = {
         };
       }
 
-      await context.routerClient.update("ip/dns", id, changes);
-      log.info({ routerId: context.routerId, changes: Object.keys(changes) }, "DNS settings updated");
+      // Set-menu singletons carry no `.id` — writes go through the /set command.
+      await context.routerClient.execute("ip/dns/set", changes);
+      log.info(
+        { routerId: context.routerId, changes: Object.keys(changes) },
+        "DNS settings updated",
+      );
       return {
         content: `Updated DNS settings on ${context.routerId}.`,
         structuredContent: { action: "updated", routerId: context.routerId, diff },
@@ -363,4 +403,9 @@ const manageDnsSettingsTool: ToolDefinition = {
   },
 };
 
-export const dnsTools: ToolDefinition[] = [listDnsTool, manageDnsTool, getDnsSettingsTool, manageDnsSettingsTool];
+export const dnsTools: ToolDefinition[] = [
+  listDnsTool,
+  manageDnsTool,
+  getDnsSettingsTool,
+  manageDnsSettingsTool,
+];

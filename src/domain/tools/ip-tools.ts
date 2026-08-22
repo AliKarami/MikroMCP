@@ -196,9 +196,13 @@ const manageIpAddressTool: ToolDefinition = {
         const diff: Array<{ property: string; before: string | null; after: string | null }> = [];
 
         const disabledStr = parsed.disabled ? "true" : "false";
-        if (rec.disabled !== disabledStr) {
+        if (isTrue(rec.disabled) !== parsed.disabled) {
           changes.disabled = disabledStr;
-          diff.push({ property: "disabled", before: rec.disabled ?? null, after: disabledStr });
+          diff.push({
+            property: "disabled",
+            before: rec.disabled === undefined ? null : String(rec.disabled),
+            after: disabledStr,
+          });
         }
         if (comment !== undefined && (rec.comment ?? "") !== comment) {
           changes.comment = comment;

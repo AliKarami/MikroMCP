@@ -1,0 +1,38 @@
+# RouterOS CHR for the integration test suite (test/integration/).
+#
+#   docker compose -f docker-compose.test.yml up -d
+#   npm run test:integration
+#   docker compose -f docker-compose.test.yml down
+#
+# The image boots the official CHR disk image inside QEMU. With /dev/kvm the
+# router is ready in well under a minute; without it (e.g. Docker Desktop on
+# macOS) remove the kvm device below and expect a slow emulated boot.
+#
+# Image pin must match the services in .github/workflows/integration.yml.
+# Review quarterly (or when new RouterOS releases introduce API changes) to ensure
+# compatibility with the latest firmware. Current pin is RouterOS 7.23.2.
+x-chr: &chr
+  image: mnazarenko/docker-routeros:7.23.2@sha256:09d20cbd4538e316b90d51eb26711316c1cf2e4f0326ec5d75162d01acbdd772
+  cap_add:
+    - NET_ADMIN
+  devices:
+    - /dev/net/tun
+    - /dev/kvm
+
+services:
+  chr:
+    <<: *chr
+    ports:
+      # Loopback-only: the test router carries a well-known password.
+      - "127.0.0.1:18080:80" # RouterOS REST API (plain HTTP, available since ROS 7.9)
+      - "127.0.0.1:12222:22" # SSH
+
+  # Second router for fleet/pair tests. Opt-in:
+  #   docker compose -f docker-compose.test.yml --profile pair up -d
+  #   MIKROMCP_ITEST_PAIR=1 npm run test:integration
+  chr2:
+    <<: *chr
+    profiles: ["pair"]
+    ports:
+      - "127.0.0.1:18081:80"
+      - "127.0.0.1:12223:22"

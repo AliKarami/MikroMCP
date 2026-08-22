@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sameValue } from "../../adapter/response-parser.js";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
@@ -13,9 +14,7 @@ const log = createLogger("container-config-tools");
 // get_container_config
 // ---------------------------------------------------------------------------
 
-const getContainerConfigInputSchema = z
-  .object({ routerId })
-  .strict();
+const getContainerConfigInputSchema = z.object({ routerId }).strict();
 
 const getContainerConfigTool: ToolDefinition = {
   name: "get_container_config",
@@ -23,15 +22,21 @@ const getContainerConfigTool: ToolDefinition = {
   description:
     "Read global container configuration: registry URL, RAM high-water mark, and veth interface.",
   inputSchema: getContainerConfigInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     getContainerConfigInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Getting container config");
     try {
       const results = await context.routerClient.get<RouterOSRecord>("container/config");
-      const cfg = (Array.isArray(results) && results.length > 0
-        ? results[0]
-        : results) as Record<string, string>;
+      const cfg = (Array.isArray(results) && results.length > 0 ? results[0] : results) as Record<
+        string,
+        string
+      >;
       return {
         content: `Container config on ${context.routerId}: registry=${cfg["registry-url"] ?? "none"} ram-high=${cfg["ram-high"] ?? "?"}MB veth=${cfg["veth-interface"] ?? "none"}`,
         structuredContent: {
@@ -67,35 +72,54 @@ const manageContainerConfigTool: ToolDefinition = {
   description:
     "Update global container settings. Idempotent: returns no_change if nothing differs.",
   inputSchema: manageContainerConfigInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   snapshotPaths: ["container/config"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageContainerConfigInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Managing container config");
     try {
       const results = await context.routerClient.get<RouterOSRecord>("container/config");
-      const current = (Array.isArray(results) && results.length > 0
-        ? results[0]
-        : results) as Record<string, string>;
-      const id = current[".id"];
+      const current = (
+        Array.isArray(results) && results.length > 0 ? results[0] : results
+      ) as Record<string, string>;
 
       const changes: Record<string, string> = {};
       const diff: { property: string; before: string | null; after: string }[] = [];
 
       if (parsed.registryUrl !== undefined && current["registry-url"] !== parsed.registryUrl) {
         changes["registry-url"] = parsed.registryUrl;
-        diff.push({ property: "registry-url", before: current["registry-url"] ?? null, after: parsed.registryUrl });
+        diff.push({
+          property: "registry-url",
+          before: current["registry-url"] ?? null,
+          after: parsed.registryUrl,
+        });
       }
       if (parsed.ramHighMb !== undefined) {
         const next = String(parsed.ramHighMb);
-        if (current["ram-high"] !== next) {
+        if (!sameValue(current["ram-high"], next)) {
           changes["ram-high"] = next;
-          diff.push({ property: "ram-high", before: current["ram-high"] ?? null, after: next });
+          diff.push({
+            property: "ram-high",
+            before: current["ram-high"] === undefined ? null : String(current["ram-high"]),
+            after: next,
+          });
         }
       }
-      if (parsed.vethInterface !== undefined && current["veth-interface"] !== parsed.vethInterface) {
+      if (
+        parsed.vethInterface !== undefined &&
+        current["veth-interface"] !== parsed.vethInterface
+      ) {
         changes["veth-interface"] = parsed.vethInterface;
-        diff.push({ property: "veth-interface", before: current["veth-interface"] ?? null, after: parsed.vethInterface });
+        diff.push({
+          property: "veth-interface",
+          before: current["veth-interface"] ?? null,
+          after: parsed.vethInterface,
+        });
       }
 
       if (Object.keys(changes).length === 0) {
@@ -110,7 +134,8 @@ const manageContainerConfigTool: ToolDefinition = {
           structuredContent: { action: "dry_run", diff },
         };
       }
-      await context.routerClient.update("container/config", id, changes);
+      // Set-menu singletons carry no `.id` — writes go through the /set command.
+      await context.routerClient.execute("container/config/set", changes);
       log.info({ routerId: context.routerId }, "Container config updated");
       return {
         content: `Updated container config on ${context.routerId}.`,
@@ -140,7 +165,12 @@ const listContainerEnvsTool: ToolDefinition = {
   description:
     "List container environment variable entries, optionally filtered by container name.",
   inputSchema: listContainerEnvsInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listContainerEnvsInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Listing container envs");
@@ -154,15 +184,15 @@ const listContainerEnvsTool: ToolDefinition = {
         : (all as Record<string, string>[]);
       const envs = filtered.slice(0, parsed.limit);
       return {
-        content: listContent(
-          "Container envs",
-          context.routerId,
-          envs,
-          all.length,
-          0,
-          (e) => compactFields(e, ["name", "key", "value"]),
+        content: listContent("Container envs", context.routerId, envs, all.length, 0, (e) =>
+          compactFields(e, ["name", "key", "value"]),
         ),
-        structuredContent: { routerId: context.routerId, envs, total: all.length, returned: envs.length },
+        structuredContent: {
+          routerId: context.routerId,
+          envs,
+          total: all.length,
+          returned: envs.length,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "list_container_envs");
@@ -191,7 +221,12 @@ const manageContainerEnvTool: ToolDefinition = {
   description:
     "Add or remove a container environment variable. Idempotent by name+key. add returns already_exists if the entry exists with the same value; throws CONFLICT if the value differs.",
   inputSchema: manageContainerEnvInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageContainerEnvInputSchema.parse(params);
     log.info(
@@ -307,7 +342,12 @@ const listContainerMountsTool: ToolDefinition = {
   description:
     "List container volume mount definitions with source path, destination path, and mount name.",
   inputSchema: listContainerMountsInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listContainerMountsInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Listing container mounts");
@@ -321,15 +361,15 @@ const listContainerMountsTool: ToolDefinition = {
         : (all as Record<string, string>[]);
       const mounts = filtered.slice(0, parsed.limit);
       return {
-        content: listContent(
-          "Container mounts",
-          context.routerId,
-          mounts,
-          all.length,
-          0,
-          (m) => compactFields(m, ["name", "src", "dst"]),
+        content: listContent("Container mounts", context.routerId, mounts, all.length, 0, (m) =>
+          compactFields(m, ["name", "src", "dst"]),
         ),
-        structuredContent: { routerId: context.routerId, mounts, total: all.length, returned: mounts.length },
+        structuredContent: {
+          routerId: context.routerId,
+          mounts,
+          total: all.length,
+          returned: mounts.length,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "list_container_mounts");
@@ -358,10 +398,18 @@ const manageContainerMountTool: ToolDefinition = {
   description:
     "Add or remove a container volume mount. Idempotent by name: add returns already_exists if the mount exists with matching src/dst; throws CONFLICT if name exists with different paths.",
   inputSchema: manageContainerMountInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageContainerMountInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing container mount");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing container mount",
+    );
     try {
       const all = await context.routerClient.get<RouterOSRecord>("container/mounts", {
         limit: undefined,
@@ -397,7 +445,10 @@ const manageContainerMountTool: ToolDefinition = {
             category: ErrorCategory.VALIDATION,
             code: "MOUNT_PATHS_REQUIRED",
             message: "src and dst are required for add.",
-            recoverability: { retryable: false, suggestedAction: "Provide src and dst parameters." },
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Provide src and dst parameters.",
+            },
           });
         }
         if (parsed.dryRun) {

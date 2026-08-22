@@ -306,6 +306,25 @@ describe("route tools", () => {
       expect((ctx.routerClient as Record<string, unknown>).create).not.toHaveBeenCalled();
     });
 
+    it("returns already_exists when the record carries parsed number/boolean fields", async () => {
+      // The response parser converts wire strings ("1", "false") to typed
+      // values — the idempotency check must not report a false conflict.
+      const ctx = makeContext([{ ...sampleRoute, distance: 1, disabled: false }]);
+      const result = await manageRouteTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          dstAddress: "10.0.0.0/8",
+          gateway: "192.168.1.1",
+          distance: 1,
+          disabled: false,
+        },
+        ctx,
+      );
+      expect(result.structuredContent).toHaveProperty("action", "already_exists");
+      expect((ctx.routerClient as Record<string, unknown>).create).not.toHaveBeenCalled();
+    });
+
     it("throws CONFLICT when match found but distance differs", async () => {
       const ctx = makeContext([sampleRoute]);
       await expect(
