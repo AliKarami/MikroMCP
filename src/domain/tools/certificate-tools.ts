@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTrue } from "../../adapter/response-parser.js";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, routerId } from "./schema-fields.js";
@@ -13,10 +14,7 @@ const listCertificatesInputSchema = z
   .object({
     routerId,
     name: z.string().optional().describe("Filter by certificate name (substring match)"),
-    expired: z
-      .boolean()
-      .optional()
-      .describe("Filter by expiry status; omit to return all"),
+    expired: z.boolean().optional().describe("Filter by expiry status; omit to return all"),
     limit,
   })
   .strict();
@@ -56,13 +54,8 @@ const listCertificatesTool: ToolDefinition = {
       const certs = filtered.slice(0, parsed.limit);
 
       return {
-        content: listContent(
-          "Certificates",
-          context.routerId,
-          certs,
-          allCerts.length,
-          0,
-          (c) => compactFields(c, ["name", "common-name", "invalid-after", "expired", "revoked"]),
+        content: listContent("Certificates", context.routerId, certs, allCerts.length, 0, (c) =>
+          compactFields(c, ["name", "common-name", "invalid-after", "expired", "revoked"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -139,7 +132,7 @@ const manageCertificateTool: ToolDefinition = {
       }
 
       if (parsed.action === "trust") {
-        if (cert.trusted === "yes") {
+        if (isTrue(cert.trusted)) {
           return {
             content: `Certificate "${parsed.name}" is already trusted. No changes made.`,
             structuredContent: { action: "already_trusted", name: parsed.name },
@@ -163,8 +156,9 @@ const manageCertificateTool: ToolDefinition = {
         };
       }
 
-      // untrust
-      if (cert.trusted === "no") {
+      // untrust — a record without a `trusted` field falls through to the
+      // write, so the desired state is guaranteed rather than assumed.
+      if (cert.trusted !== undefined && !isTrue(cert.trusted)) {
         return {
           content: `Certificate "${parsed.name}" is already untrusted. No changes made.`,
           structuredContent: { action: "already_untrusted", name: parsed.name },

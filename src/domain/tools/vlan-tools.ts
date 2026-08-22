@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sameValue } from "../../adapter/response-parser.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -16,16 +17,25 @@ function sanitizeComment(comment: string | undefined): string | undefined {
 const manageVlanInputSchema = z
   .object({
     routerId,
-    action: z
-      .enum(["add", "remove", "enable", "disable"])
-      .describe("Action to perform"),
+    action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z
       .string()
       .regex(/^[a-zA-Z0-9_-]+$/)
       .max(15)
-      .describe("VLAN interface name — idempotency key (alphanumeric, hyphens, underscores, max 15 chars)"),
-    vlanId: z.number().int().min(1).max(4094).optional().describe("VLAN ID (1-4094; required for add)"),
-    parentInterface: z.string().optional().describe("Parent interface name (e.g., ether1, bridge1; required for add)"),
+      .describe(
+        "VLAN interface name — idempotency key (alphanumeric, hyphens, underscores, max 15 chars)",
+      ),
+    vlanId: z
+      .number()
+      .int()
+      .min(1)
+      .max(4094)
+      .optional()
+      .describe("VLAN ID (1-4094; required for add)"),
+    parentInterface: z
+      .string()
+      .optional()
+      .describe("Parent interface name (e.g., ether1, bridge1; required for add)"),
     mtu: z.number().int().min(68).max(9000).default(1500).describe("MTU size (add only)"),
     disabled: z.boolean().default(false).describe("Whether to create the VLAN disabled (add only)"),
     comment: z.string().max(255).optional().describe("Optional comment (add only)"),
@@ -50,14 +60,20 @@ const manageVlanTool: ToolDefinition = {
     const parsed = manageVlanInputSchema.parse(params);
     const comment = sanitizeComment(parsed.comment);
 
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing VLAN");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing VLAN",
+    );
 
     try {
       const allVlans = await context.routerClient.get<RouterOSRecord>("interface/vlan", {
         limit: undefined,
         offset: undefined,
       });
-      const existing = (allVlans as Record<string, string>[]).find((v) => v.name === parsed.name);
+      // sameValue, not ===: a purely numeric name ("100") comes back parsed as a number.
+      const existing = (allVlans as Record<string, string>[]).find((v) =>
+        sameValue(v.name, parsed.name),
+      );
 
       if (parsed.action === "add") {
         if (parsed.vlanId === undefined) {
@@ -75,13 +91,16 @@ const manageVlanTool: ToolDefinition = {
             code: "VLAN_PARENT_REQUIRED",
             message: "parentInterface is required when adding a VLAN.",
             details: { name: parsed.name },
-            recoverability: { retryable: false, suggestedAction: "Provide the parent interface name." },
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Provide the parent interface name.",
+            },
           });
         }
 
         if (existing) {
           if (
-            existing["vlan-id"] === String(parsed.vlanId) &&
+            sameValue(existing["vlan-id"], parsed.vlanId) &&
             existing.interface === parsed.parentInterface
           ) {
             log.info({ name: parsed.name }, "VLAN already exists with matching config");
@@ -148,7 +167,10 @@ const manageVlanTool: ToolDefinition = {
         if (parsed.dryRun) {
           return {
             content: `Dry run: Would remove VLAN "${parsed.name}".`,
-            structuredContent: { action: "dry_run", diff: [{ property: "name", before: parsed.name, after: null }] },
+            structuredContent: {
+              action: "dry_run",
+              diff: [{ property: "name", before: parsed.name, after: null }],
+            },
           };
         }
         await context.routerClient.remove("interface/vlan", existing[".id"]);
@@ -179,13 +201,21 @@ const manageVlanTool: ToolDefinition = {
           content: `Dry run: Would ${parsed.action} VLAN "${parsed.name}".`,
           structuredContent: {
             action: "dry_run",
-            diff: [{ property: "disabled", before: existing.disabled, after: parsed.action === "disable" ? "true" : "false" }],
+            diff: [
+              {
+                property: "disabled",
+                before: existing.disabled,
+                after: parsed.action === "disable" ? "true" : "false",
+              },
+            ],
           },
         };
       }
 
       const disabledValue = parsed.action === "disable" ? "true" : "false";
-      await context.routerClient.update("interface/vlan", existing[".id"], { disabled: disabledValue });
+      await context.routerClient.update("interface/vlan", existing[".id"], {
+        disabled: disabledValue,
+      });
       const resultAction = parsed.action === "disable" ? "disabled" : "enabled";
       log.info({ name: parsed.name, action: resultAction }, "VLAN updated");
       return {

@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
 import type { DeviceType, RouterConfig } from "../types.js";
+import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 import { createLogger } from "../observability/logger.js";
 
 const log = createLogger("router-registry");
@@ -22,9 +23,7 @@ const RouterConfigSchema = z
   .object({
     host: z.string().min(1, "host is required"),
     port: z.number().int().min(1).max(65535),
-    deviceType: z
-      .enum(Object.keys(DEVICE_TYPE_ALIASES) as [string, ...string[]])
-      .optional(),
+    deviceType: z.enum(Object.keys(DEVICE_TYPE_ALIASES) as [string, ...string[]]).optional(),
     tls: z
       .object({
         enabled: z.boolean(),
@@ -49,14 +48,14 @@ const RouterConfigSchema = z
     cmdDeny: z.array(z.string()).optional(),
     maintenanceWindows: z
       .array(
-        z.object({
-          days: z.array(
-            z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
-          ),
-          startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM"),
-          endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM"),
-          timezone: z.string().min(1),
-        }).strict(),
+        z
+          .object({
+            days: z.array(z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])),
+            startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM"),
+            endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM"),
+            timezone: z.string().min(1),
+          })
+          .strict(),
       )
       .optional(),
   })
@@ -151,7 +150,21 @@ export class RouterRegistry {
   getRouter(id: string): RouterConfig {
     const router = this.routers.get(id);
     if (!router) {
-      throw new Error(`Router not found: ${id}`);
+      const available = this.routerIds();
+      throw new MikroMCPError({
+        category: ErrorCategory.NOT_FOUND,
+        code: "ROUTER_NOT_FOUND",
+        message:
+          available.length > 0
+            ? `Router not found: ${id}. Available: ${available.join(", ")}.`
+            : `Router not found: ${id}. No routers are configured.`,
+        details: { routerId: id, availableRouters: available },
+        recoverability: {
+          retryable: false,
+          suggestedAction: "Check the routerId, or use list_routers to see the configured routers.",
+          alternativeTools: ["list_routers"],
+        },
+      });
     }
     return router;
   }

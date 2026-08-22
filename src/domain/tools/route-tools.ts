@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { isTrue } from "../../adapter/response-parser.js";
+import { isTrue, sameValue } from "../../adapter/response-parser.js";
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { paginate, listContent, compactFields } from "./pagination.js";
@@ -76,13 +76,15 @@ const listRoutesTool: ToolDefinition = {
       const { items: paginated, total, hasMore } = paginate(routes, parsed.offset, parsed.limit);
 
       return {
-        content: listContent(
-          "Routes",
-          context.routerId,
-          paginated,
-          total,
-          parsed.offset,
-          (r) => compactFields(r, ["dst-address", "gateway", "distance", "routing-table", "active", "disabled"]),
+        content: listContent("Routes", context.routerId, paginated, total, parsed.offset, (r) =>
+          compactFields(r, [
+            "dst-address",
+            "gateway",
+            "distance",
+            "routing-table",
+            "active",
+            "disabled",
+          ]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -187,9 +189,9 @@ const manageRouteTool: ToolDefinition = {
       if (parsed.action === "add") {
         if (existing) {
           const rec = existing as Record<string, unknown>;
-          const existingDistance = rec.distance ?? "1";
+          const existingDistance = String(rec.distance ?? "1");
           const existingDisabled = isTrue(rec.disabled);
-          const sameDistance = existingDistance === String(parsed.distance);
+          const sameDistance = sameValue(rec.distance ?? 1, parsed.distance);
           const sameDisabled = existingDisabled === parsed.disabled;
 
           if (sameDistance && sameDisabled) {

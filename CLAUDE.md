@@ -162,7 +162,7 @@ remove(path: string, id: string): Promise<void>
 execute<T>(path: string, data?: Record<string, unknown>): Promise<T>
 ```
 
-RouterOS record fields use kebab-case (`"dst-address"`, `"routing-table"`). The special ID field is `".id"`. RouterOS sends everything as strings, but `response-parser.ts` converts records: `"true"`/`"false"` become real JS booleans and numeric strings become numbers (unsafe 64-bit integers stay strings to preserve precision). For boolean-ish fields, **always use `isTrue(value)` from `adapter/response-parser.js`** — it handles parsed booleans, raw `"true"`/`"false"`, and `"yes"`/`"no"`. Never compare a record field with `=== "true"` directly (it silently fails on parsed booleans). Note `RouterOSRecord` values are typed `string | number | boolean`.
+RouterOS record fields use kebab-case (`"dst-address"`, `"routing-table"`). The special ID field is `".id"`. RouterOS sends everything as strings, but `response-parser.ts` converts records: `"true"`/`"false"` become real JS booleans and numeric strings become numbers (unsafe 64-bit integers stay strings to preserve precision). For boolean-ish fields, **always use `isTrue(value)` from `adapter/response-parser.js`** — it handles parsed booleans, raw `"true"`/`"false"`, and `"yes"`/`"no"`. For any other field, **compare with `sameValue(recordValue, desired)`** from the same module — never `record.x === String(desired)` (it silently never matches once the parser has turned the wire string into a number). Note `RouterOSRecord` values are typed `string | number | boolean`.
 
 ## Code conventions
 
@@ -177,7 +177,7 @@ RouterOS record fields use kebab-case (`"dst-address"`, `"routing-table"`). The 
 
 ## Test conventions
 
-Tests live in `test/unit/` mirroring `src/`. File naming: `<module>.test.ts`.
+Unit tests live in `test/unit/` mirroring `src/` (file naming: `<module>.test.ts`) and run via `npm test`. Integration tests live in `test/integration/` and run only via `npm run test:integration` against a live RouterOS CHR in Docker (see `docs/wiki/Development.md`) — never put a live-router test under `test/unit/`.
 
 ```typescript
 import { describe, it, expect, vi } from "vitest";

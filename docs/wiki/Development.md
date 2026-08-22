@@ -13,6 +13,7 @@ npm run build        # tsup → dist/main.js (ESM)
 npm start            # run built server (stdio mode)
 npm test             # vitest + tsc + eslint (run once)
 npm run test:watch   # vitest in watch mode
+npm run test:integration  # integration tests against a live RouterOS CHR (Docker)
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint src/
 npm run format       # prettier --write src/ test/
@@ -135,6 +136,33 @@ Test structure for each tool file:
 - `test/unit/skill/tool-map-sync.test.ts` — verifies `skills/mikromcp/references/tool-map.md` is in lockstep with the registered tools.
 
 If you add, rename, or remove a tool, you must update `docs/wiki/Available-Tools.md` **and** `skills/mikromcp/references/tool-map.md` in the same PR, or these tests will fail.
+
+### Integration tests (live RouterOS CHR)
+
+`test/integration/` runs tool handlers against a real RouterOS instance — a Cloud Hosted Router booted in Docker (QEMU inside the container, KVM-accelerated where `/dev/kvm` exists). These tests catch what mocks structurally cannot: REST response parsing against real wire payloads and idempotency checks against real record types.
+
+```bash
+docker compose -f docker-compose.test.yml up -d   # boot CHR (~30-60s with KVM, slower without)
+npm run test:integration                          # waits for readiness, provisions, runs (~2-5 min total)
+docker compose -f docker-compose.test.yml down    # tear down
+```
+
+**Expected runtimes:**
+- With `/dev/kvm` (hardware acceleration): ~40 seconds total (boot + tests)
+- Without `/dev/kvm`: 2-5 minutes for boot, plus another 2-5 minutes for tests
+
+The suite's global setup polls the REST API until the router answers and, on a fresh boot, sets the admin password (`mikromcp-itest` by default) — CHR ships with an empty admin password, which MikroMCP's credential layer rejects. Endpoints and credentials are overridable via `MIKROMCP_ITEST_HOST`, `MIKROMCP_ITEST_HTTP_PORT`, `MIKROMCP_ITEST_SSH_PORT`, and `MIKROMCP_ITEST_PASSWORD`.
+
+Integration tests are **not** part of `npm test` and do not run in regular CI. The `Integration` GitHub Actions workflow runs them on `workflow_dispatch` or when a pull request carries the `integration` label. Write tests clean up after themselves, so a local CHR container can be reused across runs.
+
+Fleet tests (`bulk_execute`, `list_routers` across routers) need a second CHR and are skipped by default. To run them locally:
+
+```bash
+docker compose -f docker-compose.test.yml --profile pair up -d
+MIKROMCP_ITEST_PAIR=1 npm run test:integration
+```
+
+CI always runs with both routers. The second router's endpoints default to `18081`/`12223` and can be overridden via `MIKROMCP_ITEST_PAIR_HOST`, `MIKROMCP_ITEST_PAIR_HTTP_PORT`, and `MIKROMCP_ITEST_PAIR_SSH_PORT`.
 
 ---
 

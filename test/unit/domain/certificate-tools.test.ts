@@ -274,6 +274,19 @@ describe("certificateTools", () => {
       expect(ctx.routerClient.update).not.toHaveBeenCalled();
     });
 
+    it("returns already_trusted when the record carries a parsed boolean trusted field", async () => {
+      // The response parser converts boolean wire strings to real booleans —
+      // the trust check must recognise them.
+      const ctx = makeContext([{ ".id": "*1", name: "my-cert", trusted: true }]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "trust", name: "my-cert" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("already_trusted");
+      expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
     it("throws NOT_FOUND when certificate is missing", async () => {
       const ctx = makeContext([]);
       await expect(
@@ -317,6 +330,21 @@ describe("certificateTools", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("already_untrusted");
       expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    });
+
+    it("performs the write when the record has no trusted field", async () => {
+      // A record without a `trusted` field must not be assumed untrusted —
+      // untrust guarantees the state rather than skipping the write.
+      const ctx = makeContext([{ ".id": "*1", name: "my-cert" }]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "untrust", name: "my-cert" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("untrusted");
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("certificate", "*1", {
+        trusted: "no",
+      });
     });
 
     it("throws NOT_FOUND when certificate is missing", async () => {

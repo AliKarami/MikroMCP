@@ -23,6 +23,7 @@
     "clean": "rm -rf dist",
     "test": "vitest run && tsc --noEmit && eslint src/",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "lint": "eslint src/",
     "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
     "typecheck": "tsc --noEmit",

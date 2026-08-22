@@ -4,6 +4,7 @@ import {
   parseRecord,
   parseRecords,
   isTrue,
+  sameValue,
 } from "../../../src/adapter/response-parser.js";
 
 describe("isTrue", () => {
@@ -115,5 +116,22 @@ describe("parseRecords", () => {
 
   it("handles empty array", () => {
     expect(parseRecords([])).toEqual([]);
+  });
+});
+
+describe("sameValue", () => {
+  it("matches a parsed number against the desired number or wire string", () => {
+    expect(sameValue(10, 10)).toBe(true);
+    expect(sameValue(10, "10")).toBe(true);
+    expect(sameValue("10", 10)).toBe(true);
+  });
+
+  it("rejects differing values", () => {
+    expect(sameValue(10, 20)).toBe(false);
+    expect(sameValue("ether1", "ether2")).toBe(false);
+  });
+
+  it("treats a missing record field as not matching", () => {
+    expect(sameValue(undefined, "10")).toBe(false);
   });
 });

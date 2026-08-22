@@ -837,6 +837,8 @@ Add, update, or remove an OpenVPN client interface. Idempotent by name: add retu
 
 Read the OpenVPN server configuration from a MikroTik router, including enabled state, port, protocol, cipher, auth, and certificate.
 
+On RouterOS 7.16+, throws `OVPN_SERVER_AMBIGUOUS` if multiple OpenVPN server instances exist (the tool expects a singleton).
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
