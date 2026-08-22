@@ -68,20 +68,20 @@ function makeTempProject() {
 
 function setupRouterOnlyPrompts() {
   mockInput
-    .mockResolvedValueOnce("core-01")        // routerId
-    .mockResolvedValueOnce("192.168.1.1")    // host
-    .mockResolvedValueOnce("80")             // port
+    .mockResolvedValueOnce("core-01") // routerId
+    .mockResolvedValueOnce("192.168.1.1") // host
+    .mockResolvedValueOnce("80") // port
     .mockResolvedValueOnce("ROUTER_CORE_01") // envPrefix
-    .mockResolvedValueOnce("admin")          // routerUser
-    .mockResolvedValueOnce("secret")         // routerPass
-    .mockResolvedValueOnce("")               // tags
-    .mockResolvedValueOnce("7");             // rosVersion
+    .mockResolvedValueOnce("admin") // routerUser
+    .mockResolvedValueOnce("secret") // routerPass
+    .mockResolvedValueOnce("") // tags
+    .mockResolvedValueOnce("7"); // rosVersion
 
   mockConfirm
-    .mockResolvedValueOnce(false)  // tls
-    .mockResolvedValueOnce(true)   // setAsDefault
-    .mockResolvedValueOnce(false)  // createIdentity
-    .mockResolvedValueOnce(false)  // writeEnv
+    .mockResolvedValueOnce(false) // tls
+    .mockResolvedValueOnce(true) // setAsDefault
+    .mockResolvedValueOnce(false) // createIdentity
+    .mockResolvedValueOnce(false) // writeEnv
     .mockResolvedValueOnce(false); // claudeDesktop
 
   mockSelect.mockResolvedValueOnce("stdio"); // transport
@@ -141,27 +141,27 @@ describe("runInit — identity creation", () => {
     mockHomedirRef.value = tmpDir;
 
     mockInput
-      .mockResolvedValueOnce("edge-01")       // routerId
-      .mockResolvedValueOnce("10.0.0.1")      // host
-      .mockResolvedValueOnce("443")           // port
+      .mockResolvedValueOnce("edge-01") // routerId
+      .mockResolvedValueOnce("10.0.0.1") // host
+      .mockResolvedValueOnce("443") // port
       .mockResolvedValueOnce("ROUTER_EDGE01") // envPrefix
-      .mockResolvedValueOnce("admin")         // routerUser
-      .mockResolvedValueOnce("secret")        // routerPass
-      .mockResolvedValueOnce("edge")          // tags
-      .mockResolvedValueOnce("7.14")          // rosVersion
-      .mockResolvedValueOnce("claude")        // identityId
-      .mockResolvedValueOnce("*")             // allowedRouters
-      .mockResolvedValueOnce("*");            // allowedToolPatterns
+      .mockResolvedValueOnce("admin") // routerUser
+      .mockResolvedValueOnce("secret") // routerPass
+      .mockResolvedValueOnce("edge") // tags
+      .mockResolvedValueOnce("7.14") // rosVersion
+      .mockResolvedValueOnce("claude") // identityId
+      .mockResolvedValueOnce("*") // allowedRouters
+      .mockResolvedValueOnce("*"); // allowedToolPatterns
 
     mockSelect
-      .mockResolvedValueOnce("operator")  // role
-      .mockResolvedValueOnce("stdio");    // transport
+      .mockResolvedValueOnce("operator") // role
+      .mockResolvedValueOnce("stdio"); // transport
 
     mockConfirm
-      .mockResolvedValueOnce(false)  // tls
-      .mockResolvedValueOnce(true)   // setAsDefault
-      .mockResolvedValueOnce(true)   // createIdentity
-      .mockResolvedValueOnce(false)  // writeEnv
+      .mockResolvedValueOnce(false) // tls
+      .mockResolvedValueOnce(true) // setAsDefault
+      .mockResolvedValueOnce(true) // createIdentity
+      .mockResolvedValueOnce(false) // writeEnv
       .mockResolvedValueOnce(false); // claudeDesktop
   });
 
@@ -204,16 +204,16 @@ describe("runInit — .env write path", () => {
       .mockResolvedValueOnce("192.168.88.1")
       .mockResolvedValueOnce("80")
       .mockResolvedValueOnce("ROUTER_HOME_GW")
-      .mockResolvedValueOnce("admin")          // routerUser
-      .mockResolvedValueOnce("secret")         // routerPass
+      .mockResolvedValueOnce("admin") // routerUser
+      .mockResolvedValueOnce("secret") // routerPass
       .mockResolvedValueOnce("")
       .mockResolvedValueOnce("7");
 
     mockConfirm
-      .mockResolvedValueOnce(false)  // tls
-      .mockResolvedValueOnce(true)   // setAsDefault
-      .mockResolvedValueOnce(false)  // createIdentity
-      .mockResolvedValueOnce(true)   // writeEnv → YES
+      .mockResolvedValueOnce(false) // tls
+      .mockResolvedValueOnce(true) // setAsDefault
+      .mockResolvedValueOnce(false) // createIdentity
+      .mockResolvedValueOnce(true) // writeEnv → YES
       .mockResolvedValueOnce(false); // claudeDesktop
 
     mockSelect.mockResolvedValueOnce("stdio"); // transport
@@ -260,10 +260,10 @@ describe("runInit — default router opt-out", () => {
       .mockResolvedValueOnce("7");
 
     mockConfirm
-      .mockResolvedValueOnce(false)  // tls
-      .mockResolvedValueOnce(false)  // setAsDefault → NO
-      .mockResolvedValueOnce(false)  // createIdentity
-      .mockResolvedValueOnce(true)   // writeEnv → YES
+      .mockResolvedValueOnce(false) // tls
+      .mockResolvedValueOnce(false) // setAsDefault → NO
+      .mockResolvedValueOnce(false) // createIdentity
+      .mockResolvedValueOnce(true) // writeEnv → YES
       .mockResolvedValueOnce(false); // claudeDesktop
 
     mockSelect.mockResolvedValueOnce("stdio");
@@ -292,17 +292,17 @@ describe("runInit — Claude Desktop registration", () => {
       .mockResolvedValueOnce("10.1.1.1")
       .mockResolvedValueOnce("80")
       .mockResolvedValueOnce("ROUTER_WAN_01")
-      .mockResolvedValueOnce("admin")          // routerUser
-      .mockResolvedValueOnce("secret")         // routerPass
+      .mockResolvedValueOnce("admin") // routerUser
+      .mockResolvedValueOnce("secret") // routerPass
       .mockResolvedValueOnce("")
       .mockResolvedValueOnce("7");
 
     mockConfirm
-      .mockResolvedValueOnce(false)  // tls
-      .mockResolvedValueOnce(true)   // setAsDefault
-      .mockResolvedValueOnce(false)  // createIdentity
-      .mockResolvedValueOnce(false)  // writeEnv
-      .mockResolvedValueOnce(true);  // claudeDesktop → YES
+      .mockResolvedValueOnce(false) // tls
+      .mockResolvedValueOnce(true) // setAsDefault
+      .mockResolvedValueOnce(false) // createIdentity
+      .mockResolvedValueOnce(false) // writeEnv
+      .mockResolvedValueOnce(true); // claudeDesktop → YES
 
     mockSelect.mockResolvedValueOnce("stdio"); // transport
   });
@@ -330,9 +330,7 @@ describe("runInit — Claude Desktop registration", () => {
 
     // A backup file should exist
     const files = (await import("node:fs")).readdirSync(fakeConfigDir);
-    const backups = files.filter((f) =>
-      f.startsWith("claude_desktop_config.json.backup-"),
-    );
+    const backups = files.filter((f) => f.startsWith("claude_desktop_config.json.backup-"));
     expect(backups.length).toBeGreaterThanOrEqual(1);
   });
 });
@@ -350,17 +348,17 @@ describe("runInit — existing routers.yaml merge", () => {
       .mockResolvedValueOnce("10.0.0.2")
       .mockResolvedValueOnce("80")
       .mockResolvedValueOnce("ROUTER_NEW")
-      .mockResolvedValueOnce("admin")          // routerUser
-      .mockResolvedValueOnce("secret")         // routerPass
+      .mockResolvedValueOnce("admin") // routerUser
+      .mockResolvedValueOnce("secret") // routerPass
       .mockResolvedValueOnce("")
       .mockResolvedValueOnce("7");
 
     mockConfirm
-      .mockResolvedValueOnce(true)   // upfront: existing files detected, continue?
-      .mockResolvedValueOnce(false)  // tls
-      .mockResolvedValueOnce(true)   // setAsDefault
-      .mockResolvedValueOnce(false)  // createIdentity
-      .mockResolvedValueOnce(false)  // writeEnv
+      .mockResolvedValueOnce(true) // upfront: existing files detected, continue?
+      .mockResolvedValueOnce(false) // tls
+      .mockResolvedValueOnce(true) // setAsDefault
+      .mockResolvedValueOnce(false) // createIdentity
+      .mockResolvedValueOnce(false) // writeEnv
       .mockResolvedValueOnce(false); // claudeDesktop
 
     mockSelect.mockResolvedValueOnce("stdio"); // transport
@@ -399,27 +397,27 @@ describe("runInit — allowedRouters / allowedToolPatterns mapping", () => {
 
   function setupIdentityPrompts(allowedRouters: string, allowedToolPatterns: string) {
     mockInput
-      .mockResolvedValueOnce("r-01")           // routerId
-      .mockResolvedValueOnce("10.0.0.1")       // host
-      .mockResolvedValueOnce("80")             // port
-      .mockResolvedValueOnce("ROUTER_R_01")    // envPrefix
-      .mockResolvedValueOnce("admin")          // routerUser
-      .mockResolvedValueOnce("pass")           // routerPass
-      .mockResolvedValueOnce("")               // tags
-      .mockResolvedValueOnce("7")              // rosVersion
-      .mockResolvedValueOnce("myid")           // identityId
-      .mockResolvedValueOnce(allowedRouters)   // allowedRouters
+      .mockResolvedValueOnce("r-01") // routerId
+      .mockResolvedValueOnce("10.0.0.1") // host
+      .mockResolvedValueOnce("80") // port
+      .mockResolvedValueOnce("ROUTER_R_01") // envPrefix
+      .mockResolvedValueOnce("admin") // routerUser
+      .mockResolvedValueOnce("pass") // routerPass
+      .mockResolvedValueOnce("") // tags
+      .mockResolvedValueOnce("7") // rosVersion
+      .mockResolvedValueOnce("myid") // identityId
+      .mockResolvedValueOnce(allowedRouters) // allowedRouters
       .mockResolvedValueOnce(allowedToolPatterns); // allowedToolPatterns
 
     mockSelect
       .mockResolvedValueOnce("operator") // role
-      .mockResolvedValueOnce("stdio");   // transport
+      .mockResolvedValueOnce("stdio"); // transport
 
     mockConfirm
-      .mockResolvedValueOnce(false)  // tls
-      .mockResolvedValueOnce(true)   // setAsDefault
-      .mockResolvedValueOnce(true)   // createIdentity
-      .mockResolvedValueOnce(false)  // writeEnv
+      .mockResolvedValueOnce(false) // tls
+      .mockResolvedValueOnce(true) // setAsDefault
+      .mockResolvedValueOnce(true) // createIdentity
+      .mockResolvedValueOnce(false) // writeEnv
       .mockResolvedValueOnce(false); // claudeDesktop
   }
 

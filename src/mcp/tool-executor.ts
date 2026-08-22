@@ -178,7 +178,8 @@ export async function executeToolCall(
     let journalId: string | undefined;
 
     try {
-      const identity = getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
+      const identity =
+        getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
 
       if (tool.skipRouterContext) {
         const fleetContext: ToolContext = {
@@ -218,17 +219,20 @@ export async function executeToolCall(
 
       const shouldAudit = tool.annotations.destructiveHint || !tool.annotations.readOnlyHint;
       if (shouldAudit) {
-        auditLog({
-          type: "audit",
-          ts: new Date().toISOString(),
-          correlationId,
-          identityId: identity.id,
-          role: identity.role,
-          tool: tool.name,
-          routerId,
-          phase: "attempt",
-          params: args,
-        }, config.auditLogPath);
+        auditLog(
+          {
+            type: "audit",
+            ts: new Date().toISOString(),
+            correlationId,
+            identityId: identity.id,
+            role: identity.role,
+            tool: tool.name,
+            routerId,
+            phase: "attempt",
+            params: args,
+          },
+          config.auditLogPath,
+        );
       }
 
       const toolContext = buildRouterToolContext({
@@ -249,7 +253,12 @@ export async function executeToolCall(
       if (!tool.annotations.readOnlyHint) {
         for (const path of snapshotPathsFor(tool, handlerArgs)) {
           try {
-            const meta = await takeSnapshot(toolContext.deviceClient, routerId, path, config.snapshotDir);
+            const meta = await takeSnapshot(
+              toolContext.deviceClient,
+              routerId,
+              path,
+              config.snapshotDir,
+            );
             snapshotIds.push(meta.id);
             log.debug({ snapshotId: meta.id, path }, "Snapshot taken");
           } catch (err) {
@@ -288,18 +297,21 @@ export async function executeToolCall(
       }
 
       if (shouldAudit) {
-        auditLog({
-          type: "audit",
-          ts: new Date().toISOString(),
-          correlationId,
-          identityId: identity.id,
-          role: identity.role,
-          tool: tool.name,
-          routerId,
-          phase: "success",
-          params: args,
-          durationMs: Date.now() - startMs,
-        }, config.auditLogPath);
+        auditLog(
+          {
+            type: "audit",
+            ts: new Date().toISOString(),
+            correlationId,
+            identityId: identity.id,
+            role: identity.role,
+            tool: tool.name,
+            routerId,
+            phase: "success",
+            params: args,
+            durationMs: Date.now() - startMs,
+          },
+          config.auditLogPath,
+        );
       }
 
       log.info({ tool: tool.name, routerId, correlationId }, "Tool executed successfully");
@@ -340,20 +352,24 @@ export async function executeToolCall(
       const shouldAudit = tool.annotations.destructiveHint || !tool.annotations.readOnlyHint;
       if (shouldAudit && error.category !== ErrorCategory.APPROVAL_REQUIRED) {
         const routerId = (args.routerId as string | undefined) ?? "unknown";
-        const identity = getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
-        auditLog({
-          type: "audit",
-          ts: new Date().toISOString(),
-          correlationId,
-          identityId: identity.id,
-          role: identity.role,
-          tool: tool.name,
-          routerId,
-          phase: "failure",
-          params: args,
-          outcome: error.code,
-          durationMs: Date.now() - startMs,
-        }, config.auditLogPath);
+        const identity =
+          getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
+        auditLog(
+          {
+            type: "audit",
+            ts: new Date().toISOString(),
+            correlationId,
+            identityId: identity.id,
+            role: identity.role,
+            tool: tool.name,
+            routerId,
+            phase: "failure",
+            params: args,
+            outcome: error.code,
+            durationMs: Date.now() - startMs,
+          },
+          config.auditLogPath,
+        );
       }
 
       log.error({ err: error, tool: tool.name, correlationId }, "Tool execution failed");

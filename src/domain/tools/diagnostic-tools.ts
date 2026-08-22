@@ -364,7 +364,14 @@ function parseRouterClock(dateStr: string | undefined, timeStr: string | undefin
 
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   if (iso) {
-    return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10), hh, mm, ss);
+    return new Date(
+      parseInt(iso[1], 10),
+      parseInt(iso[2], 10) - 1,
+      parseInt(iso[3], 10),
+      hh,
+      mm,
+      ss,
+    );
   }
 
   const named = /^([a-z]{3})\/(\d{2})\/(\d{4})$/i.exec(dateStr);
@@ -412,7 +419,8 @@ const getLogTool: ToolDefinition = {
           const clock = Array.isArray(clockResult) ? clockResult[0] : clockResult;
           const routerNow = parseRouterClock(clock?.date, clock?.time);
           if (routerNow !== null) now = routerNow;
-          else log.warn({ routerId: context.routerId }, "Unparseable router clock; using host clock");
+          else
+            log.warn({ routerId: context.routerId }, "Unparseable router clock; using host clock");
         } catch {
           log.warn({ routerId: context.routerId }, "Router clock unavailable; using host clock");
         }

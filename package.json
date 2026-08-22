@@ -26,6 +26,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "lint": "eslint src/",
     "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
     "typecheck": "tsc --noEmit",
     "package:binaries": "pkg dist/main.js --targets node22-linux-x64,node22-linux-arm64,node22-macos-x64,node22-macos-arm64,node22-win-x64 --out-path ./binaries"
   },

@@ -44,7 +44,12 @@ describe("isWithinMaintenanceWindow", () => {
   });
 
   it("returns false when startTime equals endTime (zero-length window)", () => {
-    const w: MaintenanceWindow = { days: ["Mon"], startTime: "03:00", endTime: "03:00", timezone: "Europe/Helsinki" };
+    const w: MaintenanceWindow = {
+      days: ["Mon"],
+      startTime: "03:00",
+      endTime: "03:00",
+      timezone: "Europe/Helsinki",
+    };
     expect(isWithinMaintenanceWindow([w], MONDAY_03_UTC)).toBe(false);
   });
 

@@ -36,10 +36,7 @@ const DENIED_TOOL_SUGGESTIONS: Record<string, string> = {
  * makes `/system/reboot`, `/system reboot`, and `  /system   reboot` identical.
  */
 export function normalizeCommand(raw: string): string {
-  return raw
-    .replace(/\//g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return raw.replace(/\//g, " ").replace(/\s+/g, " ").trim();
 }
 
 /** Split a command line into independently-checked segments on `;` and newlines. */
@@ -94,9 +91,7 @@ export function checkCommand(command: string, policy: CommandPolicy): void {
 
   if (policy.allow.length > 0) {
     const normAllow = policy.allow.map((p) => normalizeCommand(p));
-    const everySegmentAllowed = normSegs.every((seg) =>
-      normAllow.some((p) => globMatch(p, seg)),
-    );
+    const everySegmentAllowed = normSegs.every((seg) => normAllow.some((p) => globMatch(p, seg)));
     if (!everySegmentAllowed) {
       throw new MikroMCPError({
         category: ErrorCategory.VALIDATION,

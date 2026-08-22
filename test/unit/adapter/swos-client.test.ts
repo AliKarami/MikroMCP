@@ -187,7 +187,9 @@ describe("SwosClient", () => {
     expect(err.code).toBe("SWOS_ROUNDTRIP_MISMATCH");
     expect(err.recoverability.retryable).toBe(false);
     expect(err.recoverability.suggestedAction).toContain("Reads are unaffected");
-    expect(mock.state.requests.filter((r) => r.path === "snmp.b" && r.method === "POST")).toHaveLength(0);
+    expect(
+      mock.state.requests.filter((r) => r.path === "snmp.b" && r.method === "POST"),
+    ).toHaveLength(0);
   });
 
   it("accepts a POST response whose status line ends in a bare LF", async () => {

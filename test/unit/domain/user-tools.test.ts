@@ -43,7 +43,8 @@ describe("userTools", () => {
 
     it("list_users is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
 
-    it("manage_user is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
+    it("manage_user is not readOnly", () =>
+      expect(manageTool.annotations.readOnlyHint).toBe(false));
 
     it("manage_user is destructive (authentication surface)", () =>
       expect(manageTool.annotations.destructiveHint).toBe(true));
@@ -180,7 +181,13 @@ describe("userTools", () => {
     it("creates user when not found", async () => {
       const ctx = makeContext([]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "alice", group: "read", password: "secret123" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "alice",
+          group: "read",
+          password: "secret123",
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -194,7 +201,13 @@ describe("userTools", () => {
     it("returns already_exists when user found with same group", async () => {
       const ctx = makeContext([{ ".id": "*1", name: "alice", group: "read" }]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "alice", group: "read", password: "secret123" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "alice",
+          group: "read",
+          password: "secret123",
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -206,7 +219,13 @@ describe("userTools", () => {
       const ctx = makeContext([{ ".id": "*1", name: "alice", group: "full" }]);
       await expect(
         manageTool.handler(
-          { routerId: "test-router", action: "add", name: "alice", group: "read", password: "secret123" },
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "alice",
+            group: "read",
+            password: "secret123",
+          },
           ctx,
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.CONFLICT });
@@ -229,13 +248,23 @@ describe("userTools", () => {
           { routerId: "test-router", action: "add", name: "alice", group: "read" },
           ctx,
         ),
-      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "USER_PASSWORD_REQUIRED" });
+      ).rejects.toMatchObject({
+        category: ErrorCategory.VALIDATION,
+        code: "USER_PASSWORD_REQUIRED",
+      });
     });
 
     it("dry_run returns preview without calling create", async () => {
       const ctx = makeContext([]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "alice", group: "read", password: "secret123", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "alice",
+          group: "read",
+          password: "secret123",
+          dryRun: true,
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -246,7 +275,14 @@ describe("userTools", () => {
     it("never includes password in structuredContent", async () => {
       const ctx = makeContext([]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "alice", group: "read", password: "secret123", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "alice",
+          group: "read",
+          password: "secret123",
+          dryRun: true,
+        },
         ctx,
       );
       expect(JSON.stringify(result.structuredContent)).not.toContain("secret123");
@@ -255,7 +291,13 @@ describe("userTools", () => {
     it("never includes password in structuredContent on created action", async () => {
       const ctx = makeContext([]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "alice", group: "read", password: "secret123" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "alice",
+          group: "read",
+          password: "secret123",
+        },
         ctx,
       );
       expect(JSON.stringify(result.structuredContent)).not.toContain("secret123");
@@ -323,10 +365,7 @@ describe("userTools", () => {
     it("throws NOT_FOUND when user does not exist", async () => {
       const ctx = makeContext([]);
       await expect(
-        manageTool.handler(
-          { routerId: "test-router", action: "enable", name: "nonexistent" },
-          ctx,
-        ),
+        manageTool.handler({ routerId: "test-router", action: "enable", name: "nonexistent" }, ctx),
       ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND });
     });
 
@@ -369,17 +408,23 @@ describe("userTools", () => {
     it("throws VALIDATION when password missing", async () => {
       const ctx = makeContext([{ ".id": "*1", name: "alice", group: "read" }]);
       await expect(
-        manageTool.handler(
-          { routerId: "test-router", action: "set-password", name: "alice" },
-          ctx,
-        ),
-      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "USER_PASSWORD_REQUIRED" });
+        manageTool.handler({ routerId: "test-router", action: "set-password", name: "alice" }, ctx),
+      ).rejects.toMatchObject({
+        category: ErrorCategory.VALIDATION,
+        code: "USER_PASSWORD_REQUIRED",
+      });
     });
 
     it("dry_run returns preview without calling update", async () => {
       const ctx = makeContext([{ ".id": "*1", name: "alice", group: "read" }]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "set-password", name: "alice", password: "newpass123", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "set-password",
+          name: "alice",
+          password: "newpass123",
+          dryRun: true,
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -390,7 +435,13 @@ describe("userTools", () => {
     it("never includes password in dry_run structuredContent", async () => {
       const ctx = makeContext([{ ".id": "*1", name: "alice", group: "read" }]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "set-password", name: "alice", password: "secret999", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "set-password",
+          name: "alice",
+          password: "secret999",
+          dryRun: true,
+        },
         ctx,
       );
       expect(JSON.stringify(result.structuredContent)).not.toContain("secret999");

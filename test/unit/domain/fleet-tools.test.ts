@@ -133,7 +133,9 @@ function makeContext(overrides: Partial<ToolContext> = {}): ToolContext {
 function makeFleetContext(overrides: Partial<ToolContext> = {}): ToolContext {
   const mockRegistry = {
     getRouter: vi.fn().mockImplementation((id: string) => makeRouterConfig(id)),
-    listRouters: vi.fn().mockReturnValue([makeRouterConfig("r1"), makeRouterConfig("r2"), makeRouterConfig("r3")]),
+    listRouters: vi
+      .fn()
+      .mockReturnValue([makeRouterConfig("r1"), makeRouterConfig("r2"), makeRouterConfig("r3")]),
     hasRouter: vi.fn().mockReturnValue(true),
   };
   const mockPool = {
@@ -181,14 +183,20 @@ describe("fleet-tools", () => {
   });
 
   describe("list_routers", () => {
-    function taggedRouter(id: string, tags: string[], overrides: Partial<RouterConfig> = {}): RouterConfig {
+    function taggedRouter(
+      id: string,
+      tags: string[],
+      overrides: Partial<RouterConfig> = {},
+    ): RouterConfig {
       return { ...makeRouterConfig(id), tags, ...overrides };
     }
 
     function listCtx(routers: RouterConfig[], over: Partial<ToolContext> = {}): ToolContext {
       const registry = {
         listRouters: vi.fn((tags?: string[]) =>
-          !tags || tags.length === 0 ? routers : routers.filter((r) => tags.some((t) => r.tags.includes(t))),
+          !tags || tags.length === 0
+            ? routers
+            : routers.filter((r) => tags.some((t) => r.tags.includes(t))),
         ),
         getRouter: vi.fn(),
         hasRouter: vi.fn(),
@@ -207,10 +215,16 @@ describe("fleet-tools", () => {
 
     it("returns every configured router with the expected fields and no credentials", async () => {
       const routers = [
-        taggedRouter("edge-1", ["edge", "prod"], { host: "10.0.0.1", port: 8443, rosVersion: "7.15" }),
+        taggedRouter("edge-1", ["edge", "prod"], {
+          host: "10.0.0.1",
+          port: 8443,
+          rosVersion: "7.15",
+        }),
         taggedRouter("core-1", ["core"], { tls: { enabled: false, rejectUnauthorized: false } }),
       ];
-      const ctx = listCtx(routers, { appConfig: { defaultRouter: undefined } as unknown as AppConfig });
+      const ctx = listCtx(routers, {
+        appConfig: { defaultRouter: undefined } as unknown as AppConfig,
+      });
       const result = await listRoutersTool.handler({}, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       const rows = sc.routers as Record<string, unknown>[];
@@ -238,7 +252,10 @@ describe("fleet-tools", () => {
         appConfig: { defaultRouter: "r2" } as unknown as AppConfig,
       });
       const result = await listRoutersTool.handler({}, ctx);
-      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<string, unknown>[];
+      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<
+        string,
+        unknown
+      >[];
       expect(rows.find((r) => r.id === "r1")!.isDefault).toBe(false);
       expect(rows.find((r) => r.id === "r2")!.isDefault).toBe(true);
     });
@@ -248,15 +265,23 @@ describe("fleet-tools", () => {
         appConfig: { defaultRouter: undefined } as unknown as AppConfig,
       });
       const result = await listRoutersTool.handler({}, ctx);
-      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<string, unknown>[];
+      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<
+        string,
+        unknown
+      >[];
       expect(rows[0].isDefault).toBe(true);
     });
 
     it("passes the tags filter through to the registry", async () => {
       const routers = [taggedRouter("r1", ["edge"]), taggedRouter("r2", ["core"])];
-      const ctx = listCtx(routers, { appConfig: { defaultRouter: undefined } as unknown as AppConfig });
+      const ctx = listCtx(routers, {
+        appConfig: { defaultRouter: undefined } as unknown as AppConfig,
+      });
       const result = await listRoutersTool.handler({ tags: ["edge"] }, ctx);
-      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<string, unknown>[];
+      const rows = (result.structuredContent as Record<string, unknown>).routers as Record<
+        string,
+        unknown
+      >[];
       expect(rows).toHaveLength(1);
       expect(rows[0].id).toBe("r1");
     });
@@ -265,7 +290,12 @@ describe("fleet-tools", () => {
       const routers = [taggedRouter("r1", []), taggedRouter("r2", []), taggedRouter("r3", [])];
       const ctx = listCtx(routers, {
         appConfig: { defaultRouter: undefined } as unknown as AppConfig,
-        identity: { id: "scoped", role: "operator" as const, allowedRouters: ["r2"], allowedToolPatterns: [] },
+        identity: {
+          id: "scoped",
+          role: "operator" as const,
+          allowedRouters: ["r2"],
+          allowedToolPatterns: [],
+        },
       });
       const result = await listRoutersTool.handler({}, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
@@ -290,8 +320,8 @@ describe("fleet-tools", () => {
   describe("handler — check_router_health", () => {
     it("returns healthy when routerClient.get succeeds", async () => {
       const resource = {
-        "version": "7.14",
-        "uptime": "1d00:00:00",
+        version: "7.14",
+        uptime: "1d00:00:00",
         "cpu-load": "5",
         "free-memory": "100000",
         "total-memory": "500000",
@@ -313,7 +343,9 @@ describe("fleet-tools", () => {
         freeMemory: "100000",
         totalMemory: "500000",
       });
-      expect((result.structuredContent as Record<string, unknown>).latencyMs).toBeGreaterThanOrEqual(0);
+      expect(
+        (result.structuredContent as Record<string, unknown>).latencyMs,
+      ).toBeGreaterThanOrEqual(0);
       expect(result.content).toContain("is healthy");
     });
 
@@ -339,10 +371,7 @@ describe("fleet-tools", () => {
     it("throws VALIDATION when toolName is 'bulk_execute'", async () => {
       const ctx = makeFleetContext();
       await expect(
-        bulkTool.handler(
-          { toolName: "bulk_execute", routerIds: ["r1"], params: {} },
-          ctx,
-        ),
+        bulkTool.handler({ toolName: "bulk_execute", routerIds: ["r1"], params: {} }, ctx),
       ).rejects.toMatchObject({
         category: ErrorCategory.VALIDATION,
         code: "BULK_SELF_REFERENCE",
@@ -352,10 +381,7 @@ describe("fleet-tools", () => {
     it("throws VALIDATION when toolName is 'check_router_health'", async () => {
       const ctx = makeFleetContext();
       await expect(
-        bulkTool.handler(
-          { toolName: "check_router_health", routerIds: ["r1"], params: {} },
-          ctx,
-        ),
+        bulkTool.handler({ toolName: "check_router_health", routerIds: ["r1"], params: {} }, ctx),
       ).rejects.toMatchObject({
         category: ErrorCategory.VALIDATION,
         code: "BULK_SELF_REFERENCE",
@@ -436,10 +462,9 @@ describe("fleet-tools", () => {
     it("fans out to routers from tags", async () => {
       const mockRegistry = {
         getRouter: vi.fn(),
-        listRouters: vi.fn().mockReturnValue([
-          makeRouterConfig("r1", ["edge"]),
-          makeRouterConfig("r2", ["edge"]),
-        ]),
+        listRouters: vi
+          .fn()
+          .mockReturnValue([makeRouterConfig("r1", ["edge"]), makeRouterConfig("r2", ["edge"])]),
         hasRouter: vi.fn(),
       };
       const mockPool = {
@@ -469,11 +494,13 @@ describe("fleet-tools", () => {
     it("targets only routers carrying ALL requested tags", async () => {
       const mockRegistry = {
         getRouter: vi.fn(),
-        listRouters: vi.fn().mockReturnValue([
-          makeRouterConfig("r1", ["edge", "prod"]),
-          makeRouterConfig("r2", ["edge"]),
-          makeRouterConfig("r3", ["prod"]),
-        ]),
+        listRouters: vi
+          .fn()
+          .mockReturnValue([
+            makeRouterConfig("r1", ["edge", "prod"]),
+            makeRouterConfig("r2", ["edge"]),
+            makeRouterConfig("r3", ["prod"]),
+          ]),
         hasRouter: vi.fn(),
       };
       const mockPool = {
@@ -493,12 +520,16 @@ describe("fleet-tools", () => {
 
       // Only r1 has both edge and prod.
       expect(result.structuredContent).toMatchObject({ totalRouters: 1, succeeded: 1 });
-      expect((result.structuredContent as { results: Array<{ routerId: string }> }).results[0].routerId).toBe("r1");
+      expect(
+        (result.structuredContent as { results: Array<{ routerId: string }> }).results[0].routerId,
+      ).toBe("r1");
     });
 
     it("unknown routerIds appear as status:error in results", async () => {
       const mockRegistry = {
-        getRouter: vi.fn().mockImplementation(() => { throw new Error("not found"); }),
+        getRouter: vi.fn().mockImplementation(() => {
+          throw new Error("not found");
+        }),
         listRouters: vi.fn().mockReturnValue([]),
         hasRouter: vi.fn(),
       };
@@ -517,7 +548,11 @@ describe("fleet-tools", () => {
         succeeded: 0,
         failed: 2,
       });
-      const results = result.structuredContent.results as Array<{ routerId: string; status: string; error: string }>;
+      const results = result.structuredContent.results as Array<{
+        routerId: string;
+        status: string;
+        error: string;
+      }>;
       expect(results).toHaveLength(2);
       expect(results[0]).toMatchObject({ routerId: "asghar", status: "error" });
       expect(results[1]).toMatchObject({ routerId: "akbar", status: "error" });
@@ -612,20 +647,28 @@ describe("fleet-tools", () => {
 
       // Overall attempt event
       expect(calls).toEqual(
-        expect.arrayContaining([expect.objectContaining({ tool: "bulk_execute", phase: "attempt" })]),
+        expect.arrayContaining([
+          expect.objectContaining({ tool: "bulk_execute", phase: "attempt" }),
+        ]),
       );
 
       // Overall success event
       expect(calls).toEqual(
-        expect.arrayContaining([expect.objectContaining({ tool: "bulk_execute", phase: "success" })]),
+        expect.arrayContaining([
+          expect.objectContaining({ tool: "bulk_execute", phase: "success" }),
+        ]),
       );
 
       // Per-router events — one per router with the router's id, tool, and phase
       expect(calls).toEqual(
-        expect.arrayContaining([expect.objectContaining({ tool: "list_interfaces", routerId: "r1", phase: "success" })]),
+        expect.arrayContaining([
+          expect.objectContaining({ tool: "list_interfaces", routerId: "r1", phase: "success" }),
+        ]),
       );
       expect(calls).toEqual(
-        expect.arrayContaining([expect.objectContaining({ tool: "list_interfaces", routerId: "r2", phase: "success" })]),
+        expect.arrayContaining([
+          expect.objectContaining({ tool: "list_interfaces", routerId: "r2", phase: "success" }),
+        ]),
       );
     });
 
@@ -726,7 +769,10 @@ describe("fleet-tools", () => {
     });
 
     it("blocks a destructive fan-out to a router outside its maintenance window", async () => {
-      vi.mocked(mockDestructiveTool.handler).mockResolvedValue({ content: "ok", structuredContent: {} });
+      vi.mocked(mockDestructiveTool.handler).mockResolvedValue({
+        content: "ok",
+        structuredContent: {},
+      });
       // A window closed at the current instant (only open Mondays 03:00-04:00 UTC).
       const gatedRouter = {
         ...makeRouterConfig("r1"),
@@ -761,7 +807,10 @@ describe("fleet-tools", () => {
         ctx,
       );
 
-      const sc = result.structuredContent as { failed: number; results: Array<{ status: string; error?: string }> };
+      const sc = result.structuredContent as {
+        failed: number;
+        results: Array<{ status: string; error?: string }>;
+      };
       expect(sc.failed).toBe(1);
       expect(sc.results[0].status).toBe("error");
       expect(sc.results[0].error).toMatch(/maintenance/i);

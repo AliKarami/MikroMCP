@@ -19,7 +19,13 @@ const bandwidthTestInputSchema = z
     address: z.string().describe("Remote host running RouterOS btest server"),
     protocol: z.enum(["tcp", "udp"]).default("tcp").describe("Test protocol"),
     direction: z.enum(["send", "receive", "both"]).default("both").describe("Test direction"),
-    duration: z.number().int().min(1).max(20).default(5).describe("Test duration in seconds (max 20)"),
+    duration: z
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(5)
+      .describe("Test duration in seconds (max 20)"),
   })
   .strict();
 
@@ -32,17 +38,25 @@ const bandwidthTestTool: ToolDefinition = {
   // Reaches an external host and saturates the link; a silent retry would
   // double the load, so opt out of auto-retry.
   retryable: false,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = bandwidthTestInputSchema.parse(params);
     log.info({ routerId: context.routerId, address: parsed.address }, "Running bandwidth test");
     try {
-      const result = await context.routerClient.execute<Record<string, string>>("tool/bandwidth-test", {
-        address: parsed.address,
-        protocol: parsed.protocol,
-        direction: parsed.direction,
-        duration: String(parsed.duration),
-      });
+      const result = await context.routerClient.execute<Record<string, string>>(
+        "tool/bandwidth-test",
+        {
+          address: parsed.address,
+          protocol: parsed.protocol,
+          direction: parsed.direction,
+          duration: String(parsed.duration),
+        },
+      );
       const txBps = Number(result["tx-current"] ?? 0);
       const rxBps = Number(result["rx-current"] ?? 0);
       const txMbps = Math.round((txBps / 1_000_000) * 100) / 100;
@@ -90,12 +104,23 @@ const fetchUrlTool: ToolDefinition = {
   inputSchema: fetchUrlInputSchema,
   // Not read-only: a POST has external side effects and outputFile writes a
   // file on the router. openWorld: reaches arbitrary external hosts.
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = fetchUrlInputSchema.parse(params);
-    log.info({ routerId: context.routerId, url: parsed.url, method: parsed.method }, "Fetching URL");
+    log.info(
+      { routerId: context.routerId, url: parsed.url, method: parsed.method },
+      "Fetching URL",
+    );
     try {
-      const body: Record<string, string> = { url: parsed.url, "http-method": parsed.method.toLowerCase() };
+      const body: Record<string, string> = {
+        url: parsed.url,
+        "http-method": parsed.method.toLowerCase(),
+      };
       if (parsed.httpData) body["http-data"] = parsed.httpData;
       if (parsed.outputFile) {
         body.output = "file";
@@ -104,14 +129,23 @@ const fetchUrlTool: ToolDefinition = {
         body.output = "user";
       }
 
-      const sections = await context.routerClient.execute<Record<string, string>[]>("tool/fetch", body);
-      const finished = sections.find((s) => s.status === "finished") ?? sections[sections.length - 1];
+      const sections = await context.routerClient.execute<Record<string, string>[]>(
+        "tool/fetch",
+        body,
+      );
+      const finished =
+        sections.find((s) => s.status === "finished") ?? sections[sections.length - 1];
       const statusCode = finished?.code ?? null;
 
       if (parsed.outputFile) {
         return {
           content: `Fetched ${parsed.url} → saved to ${parsed.outputFile} (status ${statusCode})`,
-          structuredContent: { routerId: context.routerId, url: parsed.url, statusCode, outputFile: parsed.outputFile },
+          structuredContent: {
+            routerId: context.routerId,
+            url: parsed.url,
+            statusCode,
+            outputFile: parsed.outputFile,
+          },
         };
       }
 
@@ -121,7 +155,12 @@ const fetchUrlTool: ToolDefinition = {
       }
       return {
         content: `Fetched ${parsed.url}: status=${statusCode} body_length=${responseBody.length}`,
-        structuredContent: { routerId: context.routerId, url: parsed.url, statusCode, body: responseBody },
+        structuredContent: {
+          routerId: context.routerId,
+          url: parsed.url,
+          statusCode,
+          body: responseBody,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "fetch_url");
@@ -138,7 +177,10 @@ const listConnectionsInputSchema = z
     routerId,
     srcAddress: z.string().optional().describe("Filter by source address (substring match)"),
     dstAddress: z.string().optional().describe("Filter by destination address (substring match)"),
-    protocol: z.string().optional().describe("Filter by protocol (exact match, e.g. tcp, udp, icmp)"),
+    protocol: z
+      .string()
+      .optional()
+      .describe("Filter by protocol (exact match, e.g. tcp, udp, icmp)"),
     limit,
   })
   .strict();
@@ -149,7 +191,12 @@ const listConnectionsTool: ToolDefinition = {
   description:
     "List active connection tracking entries from the router firewall table. Filters are applied client-side. Useful for diagnosing NAT and firewall behavior.",
   inputSchema: listConnectionsInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listConnectionsInputSchema.parse(params);
     log.info({ routerId: context.routerId }, "Listing connections");
@@ -167,8 +214,12 @@ const listConnectionsTool: ToolDefinition = {
         offset: undefined,
       });
       const filtered = (all as Record<string, string>[])
-        .filter((c) => (parsed.srcAddress ? (c["src-address"] ?? "").includes(parsed.srcAddress) : true))
-        .filter((c) => (parsed.dstAddress ? (c["dst-address"] ?? "").includes(parsed.dstAddress) : true))
+        .filter((c) =>
+          parsed.srcAddress ? (c["src-address"] ?? "").includes(parsed.srcAddress) : true,
+        )
+        .filter((c) =>
+          parsed.dstAddress ? (c["dst-address"] ?? "").includes(parsed.dstAddress) : true,
+        )
         .filter((c) => (parsed.protocol ? c.protocol === parsed.protocol : true));
       const connections = filtered.slice(0, parsed.limit);
       return {
@@ -187,7 +238,12 @@ const listConnectionsTool: ToolDefinition = {
               "connection-mark",
             ]),
         ),
-        structuredContent: { routerId: context.routerId, connections, total: all.length, returned: connections.length },
+        structuredContent: {
+          routerId: context.routerId,
+          connections,
+          total: all.length,
+          returned: connections.length,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "list_connections");
@@ -195,4 +251,8 @@ const listConnectionsTool: ToolDefinition = {
   },
 };
 
-export const networkTestTools: ToolDefinition[] = [bandwidthTestTool, fetchUrlTool, listConnectionsTool];
+export const networkTestTools: ToolDefinition[] = [
+  bandwidthTestTool,
+  fetchUrlTool,
+  listConnectionsTool,
+];

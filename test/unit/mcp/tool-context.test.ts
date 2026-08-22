@@ -8,10 +8,13 @@ function makePool(client: unknown) {
 
 function makeRouterConfig(overrides: Record<string, unknown> = {}) {
   return {
-    id: "r1", host: "h", port: 80,
+    id: "r1",
+    host: "h",
+    port: 80,
     tls: { enabled: false, rejectUnauthorized: false },
     credentials: { source: "env" as const, envPrefix: "ROUTER_R1" },
-    tags: [], rosVersion: "7.x",
+    tags: [],
+    rosVersion: "7.x",
     ...overrides,
   };
 }
@@ -51,10 +54,7 @@ describe("buildRouterToolContext", () => {
   it("injects swosClient for swos devices when the pool returns a SwosClient", () => {
     const swosClient = new SwosClient("h", 80, { username: "u", password: "p" });
     const ctx = buildRouterToolContext(
-      makeArgs(
-        makePool(swosClient),
-        makeRouterConfig({ deviceType: "swos", rosVersion: "swos" }),
-      ),
+      makeArgs(makePool(swosClient), makeRouterConfig({ deviceType: "swos", rosVersion: "swos" })),
     );
     expect(ctx.swosClient).toBe(swosClient);
     expect(ctx.deviceClient).toBe(swosClient);
@@ -65,10 +65,7 @@ describe("buildRouterToolContext", () => {
     // fail loudly rather than calling REST methods on a SwOS client.
     const swosClient = new SwosClient("h", 80, { username: "u", password: "p" });
     const ctx = buildRouterToolContext(
-      makeArgs(
-        makePool(swosClient),
-        makeRouterConfig({ deviceType: "swos", rosVersion: "swos" }),
-      ),
+      makeArgs(makePool(swosClient), makeRouterConfig({ deviceType: "swos", rosVersion: "swos" })),
     );
     expect(() => ctx.routerClient.get("ip/address")).toThrow(/no RouterOS REST API/);
   });

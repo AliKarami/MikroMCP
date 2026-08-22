@@ -47,19 +47,12 @@ const listUsersTool: ToolDefinition = {
         comment: u.comment,
       }));
 
-      const filtered = parsed.group
-        ? safeUsers.filter((u) => u.group === parsed.group)
-        : safeUsers;
+      const filtered = parsed.group ? safeUsers.filter((u) => u.group === parsed.group) : safeUsers;
       const users = filtered.slice(0, parsed.limit);
 
       return {
-        content: listContent(
-          "Users",
-          context.routerId,
-          users,
-          allUsers.length,
-          0,
-          (u) => compactFields(u, ["name", "group", "address", "disabled", "comment"]),
+        content: listContent("Users", context.routerId, users, allUsers.length, 0, (u) =>
+          compactFields(u, ["name", "group", "address", "disabled", "comment"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -142,15 +135,17 @@ const manageUserTool: ToolDefinition = {
           limit: undefined,
           offset: undefined,
         });
-        const existing = (allUsers as Record<string, string>[]).find(
-          (u) => u.name === parsed.name,
-        );
+        const existing = (allUsers as Record<string, string>[]).find((u) => u.name === parsed.name);
 
         if (existing) {
           if (existing.group === parsed.group) {
             return {
               content: `User "${parsed.name}" already exists in group "${parsed.group}". No changes made.`,
-              structuredContent: { action: "already_exists", name: parsed.name, group: existing.group },
+              structuredContent: {
+                action: "already_exists",
+                name: parsed.name,
+                group: existing.group,
+              },
             };
           }
           throw new MikroMCPError({
@@ -197,7 +192,12 @@ const manageUserTool: ToolDefinition = {
         log.info({ name: parsed.name, id: created[".id"] }, "User added");
         return {
           content: `Added user "${parsed.name}" in group "${parsed.group}".`,
-          structuredContent: { action: "created", routerId: context.routerId, name: parsed.name, group: parsed.group },
+          structuredContent: {
+            action: "created",
+            routerId: context.routerId,
+            name: parsed.name,
+            group: parsed.group,
+          },
         };
       }
 
@@ -219,9 +219,7 @@ const manageUserTool: ToolDefinition = {
           limit: undefined,
           offset: undefined,
         });
-        const existing = (allUsers as Record<string, string>[]).find(
-          (u) => u.name === parsed.name,
-        );
+        const existing = (allUsers as Record<string, string>[]).find((u) => u.name === parsed.name);
 
         if (!existing) {
           throw new MikroMCPError({
@@ -253,7 +251,11 @@ const manageUserTool: ToolDefinition = {
         log.info({ name: parsed.name }, "User password updated");
         return {
           content: `Password updated for user "${parsed.name}".`,
-          structuredContent: { action: "password_set", routerId: context.routerId, name: parsed.name },
+          structuredContent: {
+            action: "password_set",
+            routerId: context.routerId,
+            name: parsed.name,
+          },
         };
       }
 
@@ -262,9 +264,7 @@ const manageUserTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const existing = (allUsers as Record<string, string>[]).find(
-        (u) => u.name === parsed.name,
-      );
+      const existing = (allUsers as Record<string, string>[]).find((u) => u.name === parsed.name);
 
       if (parsed.action === "remove") {
         if (!existing) {

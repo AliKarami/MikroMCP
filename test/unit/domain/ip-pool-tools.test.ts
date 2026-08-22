@@ -24,12 +24,22 @@ function makeContext(records: Record<string, unknown>[] = []): ToolContext {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
-      create: vi.fn().mockResolvedValue({ ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" }),
+      create: vi
+        .fn()
+        .mockResolvedValue({ ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" }),
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
     } as unknown as RouterOSRestClient,
@@ -46,8 +56,10 @@ describe("ipPoolTools", () => {
       expect(manageTool.name).toBe("manage_ip_pool");
     });
     it("list_ip_pools is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
-    it("manage_ip_pool is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
-    it("manage_ip_pool has snapshotPaths", () => expect(manageTool.snapshotPaths).toContain("ip/pool"));
+    it("manage_ip_pool is not readOnly", () =>
+      expect(manageTool.annotations.readOnlyHint).toBe(false));
+    it("manage_ip_pool has snapshotPaths", () =>
+      expect(manageTool.snapshotPaths).toContain("ip/pool"));
   });
 
   describe("list_ip_pools handler", () => {
@@ -93,7 +105,12 @@ describe("ipPoolTools", () => {
     it("creates pool when not existing", async () => {
       const ctx = makeContext([]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "pool1",
+          ranges: "192.168.1.100-192.168.1.200",
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -101,9 +118,16 @@ describe("ipPoolTools", () => {
     });
 
     it("returns already_exists when pool with same name and ranges exists", async () => {
-      const ctx = makeContext([{ ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" }]);
+      const ctx = makeContext([
+        { ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
+      ]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "pool1",
+          ranges: "192.168.1.100-192.168.1.200",
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -114,7 +138,12 @@ describe("ipPoolTools", () => {
       const ctx = makeContext([{ ".id": "*1", name: "pool1", ranges: "10.0.0.1-10.0.0.100" }]);
       await expect(
         manageTool.handler(
-          { routerId: "test-router", action: "add", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "pool1",
+            ranges: "192.168.1.100-192.168.1.200",
+          },
           ctx,
         ),
       ).rejects.toMatchObject({ category: ErrorCategory.CONFLICT });
@@ -130,7 +159,13 @@ describe("ipPoolTools", () => {
     it("dry_run returns diff without creating", async () => {
       const ctx = makeContext([]);
       const result = await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "pool1", ranges: "192.168.1.100-192.168.1.200", dryRun: true },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "pool1",
+          ranges: "192.168.1.100-192.168.1.200",
+          dryRun: true,
+        },
         ctx,
       );
       const sc = result.structuredContent as Record<string, unknown>;
@@ -141,7 +176,13 @@ describe("ipPoolTools", () => {
     it("includes next-pool in body when nextPool is provided", async () => {
       const ctx = makeContext([]);
       await manageTool.handler(
-        { routerId: "test-router", action: "add", name: "pool1", ranges: "192.168.1.100-192.168.1.200", nextPool: "pool2" },
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "pool1",
+          ranges: "192.168.1.100-192.168.1.200",
+          nextPool: "pool2",
+        },
         ctx,
       );
       expect(ctx.routerClient.create).toHaveBeenCalledWith(
@@ -153,7 +194,9 @@ describe("ipPoolTools", () => {
 
   describe("manage_ip_pool handler - remove", () => {
     it("removes existing pool", async () => {
-      const ctx = makeContext([{ ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" }]);
+      const ctx = makeContext([
+        { ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
+      ]);
       const result = await manageTool.handler(
         { routerId: "test-router", action: "remove", name: "pool1" },
         ctx,
@@ -174,7 +217,9 @@ describe("ipPoolTools", () => {
     });
 
     it("dry_run returns preview without calling remove", async () => {
-      const ctx = makeContext([{ ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" }]);
+      const ctx = makeContext([
+        { ".id": "*1", name: "pool1", ranges: "192.168.1.100-192.168.1.200" },
+      ]);
       const result = await manageTool.handler(
         { routerId: "test-router", action: "remove", name: "pool1", dryRun: true },
         ctx,

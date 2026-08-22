@@ -27,9 +27,17 @@ function makeContext(
     routerId: "test-router",
     correlationId: "corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValueOnce(bridgeRecords).mockResolvedValueOnce(portRecords),
       create: vi.fn().mockResolvedValue({ ".id": "*1" }),

@@ -46,13 +46,8 @@ const listDhcpServersTool: ToolDefinition = {
       const { items: servers, total, hasMore } = paginate(filtered, parsed.offset, parsed.limit);
 
       return {
-        content: listContent(
-          "DHCP servers",
-          context.routerId,
-          servers,
-          total,
-          parsed.offset,
-          (s) => compactFields(s, ["name", "interface", "address-pool", "lease-time", "disabled"]),
+        content: listContent("DHCP servers", context.routerId, servers, total, parsed.offset, (s) =>
+          compactFields(s, ["name", "interface", "address-pool", "lease-time", "disabled"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -106,9 +101,7 @@ const manageDhcpServerTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const existing = (allServers as Record<string, string>[]).find(
-        (s) => s.name === parsed.name,
-      );
+      const existing = (allServers as Record<string, string>[]).find((s) => s.name === parsed.name);
 
       if (parsed.action === "add") {
         if (!parsed.interface) {

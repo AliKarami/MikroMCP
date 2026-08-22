@@ -18,9 +18,9 @@ export async function runServe(): Promise<void> {
   const identityRegistry = new IdentityRegistry(config.identitiesPath);
 
   if (config.transport === "http") {
-    const hasLimitedRoles = identityRegistry.getIdentities().some(
-      (i) => i.role === "readonly" || i.role === "operator",
-    );
+    const hasLimitedRoles = identityRegistry
+      .getIdentities()
+      .some((i) => i.role === "readonly" || i.role === "operator");
     if (hasLimitedRoles && !config.confirmationSecret) {
       log.error(
         "MIKROMCP_CONFIRMATION_SECRET is required in HTTP mode when identities with role readonly or operator are configured",

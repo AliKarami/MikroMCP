@@ -25,7 +25,12 @@ function makeContext(profiles: Record<string, unknown>[] = []) {
     routerConfig: {} as RouterConfig,
     sshClient: {} as SshClient,
     ftpClient: {} as FtpClient,
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     routerClient: {
       get: vi.fn().mockResolvedValue(profiles),
       create: vi.fn().mockResolvedValue({ ".id": "*2", name: "broadband" }),
@@ -45,34 +50,56 @@ describe("pppTools", () => {
       expect(manageTool.name).toBe("manage_ppp_profile");
     });
     it("list_ppp_profiles is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
-    it("manage_ppp_profile is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
-    it("manage_ppp_profile is not destructive", () => expect(manageTool.annotations.destructiveHint).toBe(false));
+    it("manage_ppp_profile is not readOnly", () =>
+      expect(manageTool.annotations.readOnlyHint).toBe(false));
+    it("manage_ppp_profile is not destructive", () =>
+      expect(manageTool.annotations.destructiveHint).toBe(false));
   });
 
   describe("list_ppp_profiles input schema", () => {
-    it("parses valid input", () => expect(listTool.inputSchema.safeParse({ routerId: "r1" }).success).toBe(true));
-    it("applies default limit 100", () => expect(listTool.inputSchema.parse({ routerId: "r1" }).limit).toBe(100));
-    it("rejects extra fields", () => expect(listTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false));
+    it("parses valid input", () =>
+      expect(listTool.inputSchema.safeParse({ routerId: "r1" }).success).toBe(true));
+    it("applies default limit 100", () =>
+      expect(listTool.inputSchema.parse({ routerId: "r1" }).limit).toBe(100));
+    it("rejects extra fields", () =>
+      expect(listTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false));
   });
 
   describe("manage_ppp_profile input schema", () => {
     it("parses valid add input", () => {
-      expect(manageTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "basic" }).success).toBe(true);
+      expect(
+        manageTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "basic" }).success,
+      ).toBe(true);
     });
     it("dryRun defaults false", () => {
-      expect(manageTool.inputSchema.parse({ routerId: "r1", action: "add", name: "basic" }).dryRun).toBe(false);
+      expect(
+        manageTool.inputSchema.parse({ routerId: "r1", action: "add", name: "basic" }).dryRun,
+      ).toBe(false);
     });
     it("rejects invalid action", () => {
-      expect(manageTool.inputSchema.safeParse({ routerId: "r1", action: "enable", name: "basic" }).success).toBe(false);
+      expect(
+        manageTool.inputSchema.safeParse({ routerId: "r1", action: "enable", name: "basic" })
+          .success,
+      ).toBe(false);
     });
     it("rejects extra fields", () => {
-      expect(manageTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "basic", extra: true }).success).toBe(false);
+      expect(
+        manageTool.inputSchema.safeParse({
+          routerId: "r1",
+          action: "add",
+          name: "basic",
+          extra: true,
+        }).success,
+      ).toBe(false);
     });
   });
 
   describe("handler — list_ppp_profiles", () => {
     it("returns all profiles", async () => {
-      const ctx = makeContext([PROFILE1, { ".id": "*2", name: "default", "local-address": "", "remote-address": "" }]);
+      const ctx = makeContext([
+        PROFILE1,
+        { ".id": "*2", name: "default", "local-address": "", "remote-address": "" },
+      ]);
       const result = await listTool.handler({ routerId: "test-router" }, ctx);
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.profiles as unknown[]).length).toBe(2);
@@ -80,30 +107,53 @@ describe("pppTools", () => {
     });
 
     it("filters by exact name", async () => {
-      const ctx = makeContext([PROFILE1, { ".id": "*2", name: "default", "local-address": "", "remote-address": "" }]);
+      const ctx = makeContext([
+        PROFILE1,
+        { ".id": "*2", name: "default", "local-address": "", "remote-address": "" },
+      ]);
       const result = await listTool.handler({ routerId: "test-router", name: "broadband" }, ctx);
-      expect(((result.structuredContent as Record<string, unknown>).profiles as unknown[]).length).toBe(1);
+      expect(
+        ((result.structuredContent as Record<string, unknown>).profiles as unknown[]).length,
+      ).toBe(1);
     });
   });
 
   describe("handler — manage_ppp_profile add", () => {
     it("creates profile when not found", async () => {
       const ctx = makeContext([]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "add", name: "broadband" }, ctx);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "add", name: "broadband" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
-      expect(ctx.routerClient.create).toHaveBeenCalledWith("ppp/profile", expect.objectContaining({ name: "broadband" }));
+      expect(ctx.routerClient.create).toHaveBeenCalledWith(
+        "ppp/profile",
+        expect.objectContaining({ name: "broadband" }),
+      );
     });
 
     it("returns already_exists when profile found", async () => {
       const ctx = makeContext([PROFILE1]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "add", name: "broadband" }, ctx);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "add", name: "broadband" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
     });
 
     it("dry_run returns preview without create", async () => {
       const ctx = makeContext([]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "add", name: "broadband", rateLimit: "10M/10M", dryRun: true }, ctx);
+      const result = await manageTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "broadband",
+          rateLimit: "10M/10M",
+          dryRun: true,
+        },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("dry_run");
       const diff = sc.diff as Array<{ property: string; before: null; after: string }>;
@@ -116,14 +166,24 @@ describe("pppTools", () => {
   describe("handler — manage_ppp_profile update", () => {
     it("updates profile when found", async () => {
       const ctx = makeContext([PROFILE1]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "update", name: "broadband", rateLimit: "20M/20M" }, ctx);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "update", name: "broadband", rateLimit: "20M/20M" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("updated");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("ppp/profile", "*1", expect.objectContaining({ "rate-limit": "20M/20M" }));
+      expect(ctx.routerClient.update).toHaveBeenCalledWith(
+        "ppp/profile",
+        "*1",
+        expect.objectContaining({ "rate-limit": "20M/20M" }),
+      );
     });
 
     it("returns no_change when all requested values match", async () => {
       const ctx = makeContext([PROFILE1]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "update", name: "broadband", rateLimit: "10M/10M" }, ctx);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "update", name: "broadband", rateLimit: "10M/10M" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("no_change");
       expect(ctx.routerClient.update).not.toHaveBeenCalled();
     });
@@ -137,18 +197,40 @@ describe("pppTools", () => {
 
     it("dry_run returns preview without update", async () => {
       const ctx = makeContext([PROFILE1]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "update", name: "broadband", rateLimit: "20M/20M", dryRun: true }, ctx);
+      const result = await manageTool.handler(
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "broadband",
+          rateLimit: "20M/20M",
+          dryRun: true,
+        },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
       expect(ctx.routerClient.update).not.toHaveBeenCalled();
     });
 
     it("dry_run returns diff without updating", async () => {
       const ctx = makeContext([PROFILE1]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "update", name: "broadband", rateLimit: "20M/20M", dryRun: true }, ctx);
+      const result = await manageTool.handler(
+        {
+          routerId: "test-router",
+          action: "update",
+          name: "broadband",
+          rateLimit: "20M/20M",
+          dryRun: true,
+        },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("dry_run");
       const diff = sc.diff as Array<{ property: string; before: string; after: string }>;
-      expect(diff.some((d) => d.property === "rate-limit" && d.before === "10M/10M" && d.after === "20M/20M")).toBe(true);
+      expect(
+        diff.some(
+          (d) => d.property === "rate-limit" && d.before === "10M/10M" && d.after === "20M/20M",
+        ),
+      ).toBe(true);
       expect(ctx.routerClient.update).not.toHaveBeenCalled();
     });
   });
@@ -156,20 +238,29 @@ describe("pppTools", () => {
   describe("handler — manage_ppp_profile remove", () => {
     it("removes profile when found", async () => {
       const ctx = makeContext([PROFILE1]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "remove", name: "broadband" }, ctx);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", name: "broadband" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("removed");
       expect(ctx.routerClient.remove).toHaveBeenCalledWith("ppp/profile", "*1");
     });
 
     it("returns not_found gracefully when already gone", async () => {
       const ctx = makeContext([]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "remove", name: "broadband" }, ctx);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", name: "broadband" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("not_found");
     });
 
     it("dry_run returns preview without remove", async () => {
       const ctx = makeContext([PROFILE1]);
-      const result = await manageTool.handler({ routerId: "test-router", action: "remove", name: "broadband", dryRun: true }, ctx);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", name: "broadband", dryRun: true },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
       expect(ctx.routerClient.remove).not.toHaveBeenCalled();
     });

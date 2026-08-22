@@ -177,14 +177,27 @@ const uploadFileTool: ToolDefinition = {
           await context.sftpClient.upload(`${parsed.name}.mikromcp-probe`, "");
           return {
             content: `Dry run: SFTP connectivity to ${context.routerId} verified. Would upload "${parsed.name}".`,
-            structuredContent: { action: "dry_run", transport: "sftp", name: parsed.name, routerId: context.routerId },
+            structuredContent: {
+              action: "dry_run",
+              transport: "sftp",
+              name: parsed.name,
+              routerId: context.routerId,
+            },
           };
         } catch (sftpErr) {
-          log.warn({ err: sftpErr, routerId: context.routerId }, "SFTP dry-run probe failed — falling back to FTP");
+          log.warn(
+            { err: sftpErr, routerId: context.routerId },
+            "SFTP dry-run probe failed — falling back to FTP",
+          );
           await context.ftpClient.connect();
           return {
             content: `Dry run: FTP connectivity to ${context.routerId} verified${ftpPlaintextNote}. Would upload "${parsed.name}".`,
-            structuredContent: { action: "dry_run", transport: "ftp", name: parsed.name, routerId: context.routerId },
+            structuredContent: {
+              action: "dry_run",
+              transport: "ftp",
+              name: parsed.name,
+              routerId: context.routerId,
+            },
           };
         }
       }
@@ -194,15 +207,28 @@ const uploadFileTool: ToolDefinition = {
         log.info({ name: parsed.name }, "File uploaded via SFTP");
         return {
           content: `Uploaded "${parsed.name}" to ${context.routerId} via SFTP.`,
-          structuredContent: { action: "uploaded", transport: "sftp", name: parsed.name, routerId: context.routerId },
+          structuredContent: {
+            action: "uploaded",
+            transport: "sftp",
+            name: parsed.name,
+            routerId: context.routerId,
+          },
         };
       } catch (sftpErr) {
-        log.warn({ err: sftpErr, routerId: context.routerId }, "SFTP upload failed — falling back to FTP");
+        log.warn(
+          { err: sftpErr, routerId: context.routerId },
+          "SFTP upload failed — falling back to FTP",
+        );
         await context.ftpClient.upload(parsed.name, parsed.content);
         log.info({ name: parsed.name }, "File uploaded via FTP");
         return {
           content: `Uploaded "${parsed.name}" to ${context.routerId}${ftpPlaintextNote}.`,
-          structuredContent: { action: "uploaded", transport: "ftp", name: parsed.name, routerId: context.routerId },
+          structuredContent: {
+            action: "uploaded",
+            transport: "ftp",
+            name: parsed.name,
+            routerId: context.routerId,
+          },
         };
       }
     } catch (err) {

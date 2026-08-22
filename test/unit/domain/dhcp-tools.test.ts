@@ -311,7 +311,12 @@ describe("manage_dhcp_lease", () => {
   });
 
   it("returns already_static when lease is already static (dynamic: false)", async () => {
-    const staticLease = { ".id": "*1", "mac-address": "AA:BB:CC:DD:EE:01", address: "192.168.1.10", dynamic: "false" };
+    const staticLease = {
+      ".id": "*1",
+      "mac-address": "AA:BB:CC:DD:EE:01",
+      address: "192.168.1.10",
+      dynamic: "false",
+    };
     const ctx = makeContext([staticLease]);
     const result = await dhcpTools[1].handler(
       { routerId: "test-router", action: "make-static", macAddress: "AA:BB:CC:DD:EE:01" },
@@ -323,7 +328,12 @@ describe("manage_dhcp_lease", () => {
   });
 
   it("returns already_static when lease is already static (dynamic: boolean false)", async () => {
-    const staticLease = { ".id": "*1", "mac-address": "AA:BB:CC:DD:EE:01", address: "192.168.1.10", dynamic: false };
+    const staticLease = {
+      ".id": "*1",
+      "mac-address": "AA:BB:CC:DD:EE:01",
+      address: "192.168.1.10",
+      dynamic: false,
+    };
     const ctx = makeContext([staticLease]);
     const result = await dhcpTools[1].handler(
       { routerId: "test-router", action: "make-static", macAddress: "AA:BB:CC:DD:EE:01" },

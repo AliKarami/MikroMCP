@@ -1,16 +1,18 @@
 import type { MaintenanceWindow } from "../types.js";
 
 const DAY_ABBREVS: Record<string, MaintenanceWindow["days"][number]> = {
-  Sun: "Sun", Mon: "Mon", Tue: "Tue", Wed: "Wed",
-  Thu: "Thu", Fri: "Fri", Sat: "Sat",
+  Sun: "Sun",
+  Mon: "Mon",
+  Tue: "Tue",
+  Wed: "Wed",
+  Thu: "Thu",
+  Fri: "Fri",
+  Sat: "Sat",
 };
 
 const DAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-export function isWithinMaintenanceWindow(
-  windows: MaintenanceWindow[],
-  now: Date,
-): boolean {
+export function isWithinMaintenanceWindow(windows: MaintenanceWindow[], now: Date): boolean {
   if (windows.length === 0) return true;
 
   return windows.some((w) => {
