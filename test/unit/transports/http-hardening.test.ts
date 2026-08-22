@@ -160,7 +160,11 @@ describe("connectHttp — /metrics authentication", () => {
 
   it("requires a token for /metrics when identities are configured (401 + WWW-Authenticate)", async () => {
     const registry = {
-      getIdentities: vi.fn().mockReturnValue([{ id: "op", role: "operator", allowedRouters: [], allowedToolPatterns: [] }]),
+      getIdentities: vi
+        .fn()
+        .mockReturnValue([
+          { id: "op", role: "operator", allowedRouters: [], allowedToolPatterns: [] },
+        ]),
       findIdentityByToken: vi.fn().mockResolvedValue(null),
     } as unknown as IdentityRegistry;
     await withServer(registry, async (port) => {

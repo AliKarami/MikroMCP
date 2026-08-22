@@ -40,9 +40,12 @@ describe("backupTools", () => {
       expect(createBackupTool.name).toBe("create_backup");
       expect(exportConfigTool.name).toBe("export_config");
     });
-    it("create_backup is not readOnly", () => expect(createBackupTool.annotations.readOnlyHint).toBe(false));
-    it("create_backup is not destructive", () => expect(createBackupTool.annotations.destructiveHint).toBe(false));
-    it("export_config is not read-only (writes a file with `file` arg)", () => expect(exportConfigTool.annotations.readOnlyHint).toBe(false));
+    it("create_backup is not readOnly", () =>
+      expect(createBackupTool.annotations.readOnlyHint).toBe(false));
+    it("create_backup is not destructive", () =>
+      expect(createBackupTool.annotations.destructiveHint).toBe(false));
+    it("export_config is not read-only (writes a file with `file` arg)", () =>
+      expect(exportConfigTool.annotations.readOnlyHint).toBe(false));
   });
 
   describe("input schema — create_backup", () => {
@@ -51,7 +54,9 @@ describe("backupTools", () => {
       expect(result.success).toBe(true);
     });
     it("rejects extra fields", () => {
-      expect(createBackupTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false);
+      expect(createBackupTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(
+        false,
+      );
     });
     it("dryRun defaults to false", () => {
       expect(createBackupTool.inputSchema.parse({ routerId: "r1" }).dryRun).toBe(false);
@@ -66,7 +71,9 @@ describe("backupTools", () => {
       expect(exportConfigTool.inputSchema.safeParse({ routerId: "r1" }).success).toBe(true);
     });
     it("rejects extra fields", () => {
-      expect(exportConfigTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(false);
+      expect(exportConfigTool.inputSchema.safeParse({ routerId: "r1", extra: true }).success).toBe(
+        false,
+      );
     });
     it("compact defaults to false", () => {
       expect(exportConfigTool.inputSchema.parse({ routerId: "r1" }).compact).toBe(false);
@@ -117,10 +124,7 @@ describe("backupTools", () => {
 
     it("dry_run returns preview without calling execute", async () => {
       const ctx = makeContext({});
-      const result = await createBackupTool.handler(
-        { routerId: "test-router", dryRun: true },
-        ctx,
-      );
+      const result = await createBackupTool.handler({ routerId: "test-router", dryRun: true }, ctx);
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
       expect(ctx.routerClient.execute).not.toHaveBeenCalled();
     });
@@ -153,7 +157,10 @@ describe("backupTools", () => {
 
     it("saves to file when provided", async () => {
       const ctx = makeContext("");
-      const result = await exportConfigTool.handler({ routerId: "test-router", file: "my-config" }, ctx);
+      const result = await exportConfigTool.handler(
+        { routerId: "test-router", file: "my-config" },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.filePath).toBe("my-config.rsc");
       expect(ctx.routerClient.execute).toHaveBeenCalledWith(
@@ -164,7 +171,10 @@ describe("backupTools", () => {
 
     it("does not include script in response when file is provided", async () => {
       const ctx = makeContext("# export");
-      const result = await exportConfigTool.handler({ routerId: "test-router", file: "config" }, ctx);
+      const result = await exportConfigTool.handler(
+        { routerId: "test-router", file: "config" },
+        ctx,
+      );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc).not.toHaveProperty("script");
     });

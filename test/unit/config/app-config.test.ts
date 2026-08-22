@@ -115,7 +115,9 @@ describe("loadAppConfig", () => {
     });
 
     it("journalPath defaults to ~/.mikromcp/data/write-journal.ndjson", () => {
-      expect(loadAppConfig().journalPath).toBe(join(homedir(), ".mikromcp", "data", "write-journal.ndjson"));
+      expect(loadAppConfig().journalPath).toBe(
+        join(homedir(), ".mikromcp", "data", "write-journal.ndjson"),
+      );
     });
 
     it("snapshotDir uses MIKROMCP_DATA_DIR as prefix", () => {

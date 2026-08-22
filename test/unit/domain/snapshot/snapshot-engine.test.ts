@@ -13,7 +13,7 @@ import { takeSnapshot, loadSnapshot } from "../../../../src/domain/snapshot/snap
 import type { RouterOSRestClient } from "../../../../src/adapter/rest-client.js";
 
 const RECORDS = [
-  { ".id": "*1", "dst-address": "10.0.0.0/8", "gateway": "192.168.1.1", "routing-table": "main" },
+  { ".id": "*1", "dst-address": "10.0.0.0/8", gateway: "192.168.1.1", "routing-table": "main" },
 ];
 
 function makeClient(records = RECORDS): RouterOSRestClient {
@@ -30,12 +30,11 @@ describe("takeSnapshot", () => {
     const meta = await takeSnapshot(client, "edge-01", "ip/route", "/tmp/snapshots");
 
     expect(client.get).toHaveBeenCalledWith("ip/route", {});
-    expect(fsp.mkdir).toHaveBeenCalledWith(
-      join("/tmp/snapshots", "edge-01"),
-      { recursive: true },
-    );
+    expect(fsp.mkdir).toHaveBeenCalledWith(join("/tmp/snapshots", "edge-01"), { recursive: true });
     expect(fsp.writeFile).toHaveBeenCalledOnce();
-    const written = JSON.parse((fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string);
+    const written = JSON.parse(
+      (fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string,
+    );
     expect(written.routerId).toBe("edge-01");
     expect(written.path).toBe("ip/route");
     expect(written.records).toEqual(RECORDS);
@@ -53,7 +52,13 @@ describe("takeSnapshot", () => {
 
 describe("loadSnapshot", () => {
   it("parses JSON file and returns records", async () => {
-    const stored = { id: "snap1", routerId: "edge-01", path: "ip/route", ts: "2026-01-01T00:00:00Z", records: RECORDS };
+    const stored = {
+      id: "snap1",
+      routerId: "edge-01",
+      path: "ip/route",
+      ts: "2026-01-01T00:00:00Z",
+      records: RECORDS,
+    };
     (fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue(JSON.stringify(stored));
     const result = await loadSnapshot("/tmp/snapshots/edge-01/snap1.json");
     expect(result).toEqual(stored);

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("node:fs/promises", () => ({ appendFile: vi.fn().mockResolvedValue(undefined), mkdir: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("node:fs/promises", () => ({
+  appendFile: vi.fn().mockResolvedValue(undefined),
+  mkdir: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("nanoid", () => ({ nanoid: () => "journal-id-1" }));
 
 import * as fsp from "node:fs/promises";
@@ -64,7 +67,12 @@ describe("recordOutcome", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("appends a success line with durationMs", async () => {
-    recordOutcome({ journalPath: "/tmp/journal.ndjson", journalId: "j1", phase: "success", durationMs: 120 });
+    recordOutcome({
+      journalPath: "/tmp/journal.ndjson",
+      journalId: "j1",
+      phase: "success",
+      durationMs: 120,
+    });
     await vi.waitFor(() => {
       expect(fsp.appendFile).toHaveBeenCalledOnce();
     });
@@ -76,7 +84,13 @@ describe("recordOutcome", () => {
   });
 
   it("appends a failure line with outcome code", async () => {
-    recordOutcome({ journalPath: "/tmp/journal.ndjson", journalId: "j1", phase: "failure", outcome: "ROUTER_DOWN", durationMs: 50 });
+    recordOutcome({
+      journalPath: "/tmp/journal.ndjson",
+      journalId: "j1",
+      phase: "failure",
+      outcome: "ROUTER_DOWN",
+      durationMs: 50,
+    });
     await vi.waitFor(() => {
       expect(fsp.appendFile).toHaveBeenCalledOnce();
     });

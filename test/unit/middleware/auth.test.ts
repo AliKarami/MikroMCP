@@ -40,13 +40,13 @@ describe("extractBearerToken", () => {
 describe("authenticateHttp", () => {
   it("throws PERMISSION_DENIED when Authorization header is missing", async () => {
     const { authenticateHttp } = await import("../../../src/middleware/auth.js");
-    const { MikroMCPError, ErrorCategory } = await import("../../../src/domain/errors/error-types.js");
+    const { MikroMCPError, ErrorCategory } =
+      await import("../../../src/domain/errors/error-types.js");
     mockRegistry.findIdentityByToken.mockResolvedValue(null);
     const req = makeReq();
-    await expect(
-      authenticateHttp(req, mockRegistry as never)
-    ).rejects.toSatisfy((err: unknown) =>
-      err instanceof MikroMCPError && err.category === ErrorCategory.PERMISSION_DENIED
+    await expect(authenticateHttp(req, mockRegistry as never)).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof MikroMCPError && err.category === ErrorCategory.PERMISSION_DENIED,
     );
   });
 
@@ -55,10 +55,9 @@ describe("authenticateHttp", () => {
     const { MikroMCPError } = await import("../../../src/domain/errors/error-types.js");
     mockRegistry.findIdentityByToken.mockResolvedValue(null);
     const req = makeReq("Bearer bad-token");
-    await expect(
-      authenticateHttp(req, mockRegistry as never)
-    ).rejects.toSatisfy((err: unknown) =>
-      err instanceof MikroMCPError && (err as MikroMCPError).code === "INVALID_TOKEN"
+    await expect(authenticateHttp(req, mockRegistry as never)).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof MikroMCPError && (err as MikroMCPError).code === "INVALID_TOKEN",
     );
   });
 

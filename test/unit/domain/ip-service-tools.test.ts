@@ -34,9 +34,17 @@ function makeContext(records: Record<string, unknown>[] = sampleServices): ToolC
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
       update: vi.fn().mockResolvedValue(undefined),
@@ -54,7 +62,8 @@ describe("ipServiceTools", () => {
       expect(manageTool.name).toBe("manage_ip_service");
     });
     it("list_ip_services is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
-    it("manage_ip_service is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
+    it("manage_ip_service is not readOnly", () =>
+      expect(manageTool.annotations.readOnlyHint).toBe(false));
   });
 
   describe("input schema validation", () => {
@@ -68,14 +77,20 @@ describe("ipServiceTools", () => {
     it("rejects extra fields on manage schema", () => {
       const ctx = makeContext();
       return expect(
-        manageTool.handler({ routerId: "test-router", action: "enable", name: "ssh", unknownField: true }, ctx),
+        manageTool.handler(
+          { routerId: "test-router", action: "enable", name: "ssh", unknownField: true },
+          ctx,
+        ),
       ).rejects.toThrow();
     });
 
     it("rejects invalid service name", () => {
       const ctx = makeContext();
       return expect(
-        manageTool.handler({ routerId: "test-router", action: "enable", name: "not-a-service" }, ctx),
+        manageTool.handler(
+          { routerId: "test-router", action: "enable", name: "not-a-service" },
+          ctx,
+        ),
       ).rejects.toThrow();
     });
 
@@ -128,7 +143,9 @@ describe("ipServiceTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/service", "*3", { disabled: "true" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/service", "*3", {
+        disabled: "true",
+      });
     });
 
     it("enables a service", async () => {
@@ -139,7 +156,9 @@ describe("ipServiceTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("enabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/service", "*4", { disabled: "false" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/service", "*4", {
+        disabled: "false",
+      });
     });
 
     it("dry_run returns diff without updating", async () => {

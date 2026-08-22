@@ -27,7 +27,11 @@ export function checkAuthz(identity: Identity, toolName: string, routerId: strin
         category: ErrorCategory.PERMISSION_DENIED,
         code: "TOOL_NOT_ALLOWED",
         message: `Identity "${identity.id}" is not allowed to call tool "${toolName}".`,
-        details: { identityId: identity.id, toolName, allowedToolPatterns: identity.allowedToolPatterns },
+        details: {
+          identityId: identity.id,
+          toolName,
+          allowedToolPatterns: identity.allowedToolPatterns,
+        },
         recoverability: {
           retryable: false,
           suggestedAction: `Add a matching pattern to allowedToolPatterns for identity "${identity.id}" in identities.yaml.`,

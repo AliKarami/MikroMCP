@@ -32,10 +32,11 @@ describe("checkAuthz — router check", () => {
     } catch (err) {
       thrown = err;
     }
-    expect(thrown).toSatisfy((err: unknown) =>
-      err instanceof MikroMCPError &&
-      err.category === ErrorCategory.PERMISSION_DENIED &&
-      (err as MikroMCPError).code === "ROUTER_NOT_ALLOWED"
+    expect(thrown).toSatisfy(
+      (err: unknown) =>
+        err instanceof MikroMCPError &&
+        err.category === ErrorCategory.PERMISSION_DENIED &&
+        (err as MikroMCPError).code === "ROUTER_NOT_ALLOWED",
     );
   });
 });
@@ -83,10 +84,11 @@ describe("checkAuthz — tool pattern check", () => {
     } catch (err) {
       thrown = err;
     }
-    expect(thrown).toSatisfy((err: unknown) =>
-      err instanceof MikroMCPError &&
-      err.category === ErrorCategory.PERMISSION_DENIED &&
-      (err as MikroMCPError).code === "TOOL_NOT_ALLOWED"
+    expect(thrown).toSatisfy(
+      (err: unknown) =>
+        err instanceof MikroMCPError &&
+        err.category === ErrorCategory.PERMISSION_DENIED &&
+        (err as MikroMCPError).code === "TOOL_NOT_ALLOWED",
     );
   });
 });

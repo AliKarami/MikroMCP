@@ -23,7 +23,15 @@ describe("auditLog — credential stripping", () => {
   it("strips password field from params at top level", async () => {
     vi.resetModules();
     const { redactParams } = await import("../../../src/observability/audit-log.js");
-    const params = { routerId: "r", password: "hunter2", secret: "shh", token: "abc", authorization: "Bearer xyz", credentials: "creds", safe: "keep" };
+    const params = {
+      routerId: "r",
+      password: "hunter2",
+      secret: "shh",
+      token: "abc",
+      authorization: "Bearer xyz",
+      credentials: "creds",
+      safe: "keep",
+    };
     const redacted = redactParams(params);
     expect(redacted.password).toBeUndefined();
     expect(redacted.secret).toBeUndefined();

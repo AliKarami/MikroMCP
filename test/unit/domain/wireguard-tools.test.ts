@@ -24,9 +24,17 @@ function makeContext(records: Record<string, unknown>[]): ToolContext {
     routerId: "test-router",
     correlationId: "corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
       create: vi.fn().mockResolvedValue({ ".id": "*1" }),
@@ -40,7 +48,15 @@ const [listWgTool, listPeersTool, managePeerTool] = wireguardTools;
 describe("manage_wireguard_interface", () => {
   const manageWgIfaceTool = wireguardTools.find((t) => t.name === "manage_wireguard_interface")!;
 
-  const WG_IFACE = { ".id": "*1", name: "wg0", "listen-port": "51820", mtu: "1420", "public-key": "AAAA==", disabled: "false", running: "true" };
+  const WG_IFACE = {
+    ".id": "*1",
+    name: "wg0",
+    "listen-port": "51820",
+    mtu: "1420",
+    "public-key": "AAAA==",
+    disabled: "false",
+    running: "true",
+  };
 
   function makeWgIfaceContext(ifaces: Record<string, unknown>[] = []) {
     return {
@@ -49,7 +65,12 @@ describe("manage_wireguard_interface", () => {
       routerConfig: {} as RouterConfig,
       sshClient: {} as SshClient,
       ftpClient: {} as FtpClient,
-      identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+      identity: {
+        id: "superadmin-builtin",
+        role: "superadmin" as const,
+        allowedRouters: [],
+        allowedToolPatterns: [],
+      },
       routerClient: {
         get: vi.fn().mockResolvedValue(ifaces),
         create: vi.fn().mockResolvedValue({ ".id": "*2", name: "wg1", "public-key": "BBBB==" }),
@@ -62,40 +83,65 @@ describe("manage_wireguard_interface", () => {
   describe("metadata", () => {
     it("exists in wireguardTools", () => expect(manageWgIfaceTool).toBeDefined());
     it("is not readOnly", () => expect(manageWgIfaceTool.annotations.readOnlyHint).toBe(false));
-    it("is destructive (can sever VPN connectivity)", () => expect(manageWgIfaceTool.annotations.destructiveHint).toBe(true));
+    it("is destructive (can sever VPN connectivity)", () =>
+      expect(manageWgIfaceTool.annotations.destructiveHint).toBe(true));
   });
 
   describe("input schema", () => {
     it("parses valid add", () => {
-      expect(manageWgIfaceTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "wg1" }).success).toBe(true);
+      expect(
+        manageWgIfaceTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "wg1" })
+          .success,
+      ).toBe(true);
     });
     it("mtu defaults 1420", () => {
-      expect(manageWgIfaceTool.inputSchema.parse({ routerId: "r1", action: "add", name: "wg1" }).mtu).toBe(1420);
+      expect(
+        manageWgIfaceTool.inputSchema.parse({ routerId: "r1", action: "add", name: "wg1" }).mtu,
+      ).toBe(1420);
     });
     it("rejects extra fields", () => {
-      expect(manageWgIfaceTool.inputSchema.safeParse({ routerId: "r1", action: "add", name: "wg1", extra: true }).success).toBe(false);
+      expect(
+        manageWgIfaceTool.inputSchema.safeParse({
+          routerId: "r1",
+          action: "add",
+          name: "wg1",
+          extra: true,
+        }).success,
+      ).toBe(false);
     });
   });
 
   describe("handler — add", () => {
     it("creates interface when not found", async () => {
       const ctx = makeWgIfaceContext([]);
-      const result = await manageWgIfaceTool.handler({ routerId: "test-router", action: "add", name: "wg1" }, ctx);
+      const result = await manageWgIfaceTool.handler(
+        { routerId: "test-router", action: "add", name: "wg1" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
       expect((result.structuredContent as Record<string, unknown>).publicKey).toBe("BBBB==");
-      expect(ctx.routerClient.create).toHaveBeenCalledWith("interface/wireguard", expect.objectContaining({ name: "wg1" }));
+      expect(ctx.routerClient.create).toHaveBeenCalledWith(
+        "interface/wireguard",
+        expect.objectContaining({ name: "wg1" }),
+      );
     });
 
     it("returns already_exists when found", async () => {
       const ctx = makeWgIfaceContext([WG_IFACE]);
-      const result = await manageWgIfaceTool.handler({ routerId: "test-router", action: "add", name: "wg0" }, ctx);
+      const result = await manageWgIfaceTool.handler(
+        { routerId: "test-router", action: "add", name: "wg0" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
     });
 
     it("dry_run returns preview without create", async () => {
       const ctx = makeWgIfaceContext([]);
-      const result = await manageWgIfaceTool.handler({ routerId: "test-router", action: "add", name: "wg1", dryRun: true }, ctx);
+      const result = await manageWgIfaceTool.handler(
+        { routerId: "test-router", action: "add", name: "wg1", dryRun: true },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
     });
@@ -104,14 +150,20 @@ describe("manage_wireguard_interface", () => {
   describe("handler — remove", () => {
     it("removes interface when found", async () => {
       const ctx = makeWgIfaceContext([WG_IFACE]);
-      const result = await manageWgIfaceTool.handler({ routerId: "test-router", action: "remove", name: "wg0" }, ctx);
+      const result = await manageWgIfaceTool.handler(
+        { routerId: "test-router", action: "remove", name: "wg0" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("removed");
       expect(ctx.routerClient.remove).toHaveBeenCalledWith("interface/wireguard", "*1");
     });
 
     it("returns not_found gracefully when missing", async () => {
       const ctx = makeWgIfaceContext([]);
-      const result = await manageWgIfaceTool.handler({ routerId: "test-router", action: "remove", name: "wg1" }, ctx);
+      const result = await manageWgIfaceTool.handler(
+        { routerId: "test-router", action: "remove", name: "wg1" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("not_found");
     });
   });
@@ -119,17 +171,27 @@ describe("manage_wireguard_interface", () => {
   describe("handler — enable/disable", () => {
     it("disables an interface", async () => {
       const ctx = makeWgIfaceContext([WG_IFACE]);
-      const result = await manageWgIfaceTool.handler({ routerId: "test-router", action: "disable", name: "wg0" }, ctx);
+      const result = await manageWgIfaceTool.handler(
+        { routerId: "test-router", action: "disable", name: "wg0" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/wireguard", "*1", { disabled: "true" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/wireguard", "*1", {
+        disabled: "true",
+      });
     });
 
     it("enables an interface", async () => {
       const disabledIface = { ...WG_IFACE, disabled: "true" };
       const ctx = makeWgIfaceContext([disabledIface]);
-      const result = await manageWgIfaceTool.handler({ routerId: "test-router", action: "enable", name: "wg0" }, ctx);
+      const result = await manageWgIfaceTool.handler(
+        { routerId: "test-router", action: "enable", name: "wg0" },
+        ctx,
+      );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("enabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/wireguard", "*1", { disabled: "false" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("interface/wireguard", "*1", {
+        disabled: "false",
+      });
     });
   });
 });

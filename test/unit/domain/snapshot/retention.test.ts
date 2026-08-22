@@ -6,8 +6,12 @@ import { pruneSnapshots } from "../../../../src/domain/snapshot/retention.js";
 
 describe("pruneSnapshots", () => {
   let dir: string;
-  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "mmcp-ret-")); });
-  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "mmcp-ret-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   it("deletes snapshot files older than maxAgeDays and keeps recent ones", async () => {
     const routerDir = join(dir, "r1");

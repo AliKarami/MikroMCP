@@ -1,12 +1,6 @@
 import { input, confirm, select } from "@inquirer/prompts";
 import { randomBytes } from "node:crypto";
-import {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  copyFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as yamlParse, Document, visit } from "yaml";
@@ -213,7 +207,18 @@ async function collectRouterInfo(): Promise<
     validate: (v) => (v.trim().length > 0 ? true : "Version is required"),
   });
 
-  return { routerId, host, port, tlsEnabled, rejectUnauthorized, envPrefix, routerUser, routerPass, tags, rosVersion };
+  return {
+    routerId,
+    host,
+    port,
+    tlsEnabled,
+    rejectUnauthorized,
+    envPrefix,
+    routerUser,
+    routerPass,
+    tags,
+    rosVersion,
+  };
 }
 
 async function collectDefaultRouterPreference(routerId: string): Promise<boolean> {
@@ -299,7 +304,10 @@ async function collectTransport(): Promise<string> {
   const transport = await select({
     message: "Transport mode:",
     choices: [
-      { value: "stdio", name: "stdio  — launched by Claude Desktop or an MCP client (recommended)" },
+      {
+        value: "stdio",
+        name: "stdio  — launched by Claude Desktop or an MCP client (recommended)",
+      },
       { value: "http", name: "http   — standalone HTTP server with bearer-token auth" },
     ],
     default: "stdio",
@@ -584,7 +592,9 @@ export async function runInit(): Promise<void> {
   }
   if (data.createIdentity && data.rawToken) {
     console.log(
-      chalk.bold.yellow(`  ✅  Bearer token: ${data.rawToken} (save this — it won't be shown again)`),
+      chalk.bold.yellow(
+        `  ✅  Bearer token: ${data.rawToken} (save this — it won't be shown again)`,
+      ),
     );
   }
 
@@ -592,7 +602,9 @@ export async function runInit(): Promise<void> {
   console.log(chalk.dim("  1. Run: mikromcp doctor"));
   console.log(chalk.dim("  2. Restart Claude Desktop to load the MCP server"));
   console.log(
-    chalk.dim("  3. (Optional) Install the usage skill so your AI assistant drives MikroMCP safely"),
+    chalk.dim(
+      "  3. (Optional) Install the usage skill so your AI assistant drives MikroMCP safely",
+    ),
   );
   console.log(chalk.dim("     See: docs/wiki/Using-the-Skill.md"));
   console.log();

@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { recordToolCall, renderPrometheus, resetMetrics } from "../../../src/observability/metrics.js";
+import {
+  recordToolCall,
+  renderPrometheus,
+  resetMetrics,
+} from "../../../src/observability/metrics.js";
 
 describe("metrics", () => {
   beforeEach(() => resetMetrics());

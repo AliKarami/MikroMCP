@@ -20,7 +20,12 @@ vi.mock("node:fs/promises", () => ({
 import * as nodeFs from "node:fs";
 import * as nodeFsp from "node:fs/promises";
 
-const ROUTE_RECORD = { ".id": "*1", "dst-address": "10.0.0.0/8", "gateway": "192.168.1.1", "routing-table": "main" };
+const ROUTE_RECORD = {
+  ".id": "*1",
+  "dst-address": "10.0.0.0/8",
+  gateway: "192.168.1.1",
+  "routing-table": "main",
+};
 
 function makeManageRoute(dryRunResult: string): ToolDefinition {
   return {
@@ -28,9 +33,16 @@ function makeManageRoute(dryRunResult: string): ToolDefinition {
     title: "Manage Route",
     description: "",
     inputSchema: { parse: (p: unknown) => p } as unknown as import("zod").ZodType,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     snapshotPaths: ["ip/route"],
-    handler: vi.fn().mockResolvedValue({ content: dryRunResult, structuredContent: { action: "dry_run" } }),
+    handler: vi
+      .fn()
+      .mockResolvedValue({ content: dryRunResult, structuredContent: { action: "dry_run" } }),
   };
 }
 
@@ -66,7 +78,15 @@ describe("plan_changes", () => {
     const ctx = makeContext();
 
     const result = await planTool.handler(
-      { routerId: "edge-01", steps: [{ tool: "manage_route", params: { action: "add", dstAddress: "10.0.0.0/8", gateway: "192.168.1.1" } }] },
+      {
+        routerId: "edge-01",
+        steps: [
+          {
+            tool: "manage_route",
+            params: { action: "add", dstAddress: "10.0.0.0/8", gateway: "192.168.1.1" },
+          },
+        ],
+      },
       ctx,
     );
 
@@ -82,7 +102,10 @@ describe("plan_changes", () => {
     const tools = createChangeManagementTools([]);
     const planTool = tools.find((t) => t.name === "plan_changes")!;
     await expect(
-      planTool.handler({ routerId: "edge-01", steps: [{ tool: "nonexistent", params: {} }] }, makeContext()),
+      planTool.handler(
+        { routerId: "edge-01", steps: [{ tool: "nonexistent", params: {} }] },
+        makeContext(),
+      ),
     ).rejects.toMatchObject({ code: "TOOL_NOT_FOUND" });
   });
 
@@ -110,7 +133,15 @@ describe("apply_plan", () => {
     const ctx = makeContext();
 
     const result = await applyTool.handler(
-      { routerId: "edge-01", steps: [{ tool: "manage_route", params: { action: "add", dstAddress: "10.0.0.0/8", gateway: "192.168.1.1" } }] },
+      {
+        routerId: "edge-01",
+        steps: [
+          {
+            tool: "manage_route",
+            params: { action: "add", dstAddress: "10.0.0.0/8", gateway: "192.168.1.1" },
+          },
+        ],
+      },
       ctx,
     );
 
@@ -148,7 +179,15 @@ describe("apply_plan", () => {
     const ctx = makeContext();
 
     await applyTool.handler(
-      { routerId: "edge-01", steps: [{ tool: "manage_route", params: { action: "add", dstAddress: "10.0.0.0/8", gateway: "192.168.1.1" } }] },
+      {
+        routerId: "edge-01",
+        steps: [
+          {
+            tool: "manage_route",
+            params: { action: "add", dstAddress: "10.0.0.0/8", gateway: "192.168.1.1" },
+          },
+        ],
+      },
       ctx,
     );
 
@@ -158,7 +197,9 @@ describe("apply_plan", () => {
     });
 
     // The outcome line is the last call; parse all lines and find the success phase
-    const allLines = appendFileSpy.mock.calls.map((c) => JSON.parse(c[1] as string) as Record<string, unknown>);
+    const allLines = appendFileSpy.mock.calls.map(
+      (c) => JSON.parse(c[1] as string) as Record<string, unknown>,
+    );
     const outcomeLine = allLines.find((l) => l.phase === "success");
 
     expect(outcomeLine).toBeDefined();
@@ -176,7 +217,8 @@ describe("apply_plan", () => {
 
   it("fails fast without invoking the sub-tool handler when the circuit breaker is already open", async () => {
     const { CircuitBreaker } = await import("../../../../src/adapter/circuit-breaker.js");
-    const { MikroMCPError, ErrorCategory } = await import("../../../../src/domain/errors/error-types.js");
+    const { MikroMCPError, ErrorCategory } =
+      await import("../../../../src/domain/errors/error-types.js");
 
     const cb = new CircuitBreaker("test-router", { failureThreshold: 1, cooldownMs: 60_000 });
 
@@ -190,13 +232,20 @@ describe("apply_plan", () => {
     await cb.execute(() => Promise.reject(transient)).catch(() => {});
     // breaker is now open (failureThreshold 1)
 
-    const handlerSpy = vi.fn().mockResolvedValue({ content: "ok", structuredContent: { action: "created" } });
+    const handlerSpy = vi
+      .fn()
+      .mockResolvedValue({ content: "ok", structuredContent: { action: "created" } });
     const spyTool: ToolDefinition = {
       name: "manage_route",
       title: "Manage Route",
       description: "",
       inputSchema: { parse: (p: unknown) => p } as unknown as import("zod").ZodType,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       snapshotPaths: [],
       handler: handlerSpy,
     };
@@ -258,11 +307,11 @@ describe("rollback_change", () => {
 
   it("dryRun returns restore plan without applying", async () => {
     // Journal file read uses node:fs readFileSync (in change-management-tools.ts)
-    (nodeFs.readFileSync as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce(`${JOURNAL_LINE_ATTEMPT}\n${JOURNAL_LINE_SUCCESS}\n`);
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${JOURNAL_LINE_ATTEMPT}\n${JOURNAL_LINE_SUCCESS}\n`,
+    );
     // Snapshot file read uses node:fs/promises readFile (in snapshot-engine.ts)
-    (nodeFsp.readFile as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(SNAPSHOT_CONTENT);
+    (nodeFsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(SNAPSHOT_CONTENT);
 
     const tools = createChangeManagementTools([]);
     const rollbackTool = tools.find((t) => t.name === "rollback_change")!;
@@ -285,7 +334,10 @@ describe("rollback_change", () => {
     const rollbackTool = tools.find((t) => t.name === "rollback_change")!;
 
     await expect(
-      rollbackTool.handler({ routerId: "edge-01", journalId: "missing-id", dryRun: false }, makeContext()),
+      rollbackTool.handler(
+        { routerId: "edge-01", journalId: "missing-id", dryRun: false },
+        makeContext(),
+      ),
     ).rejects.toMatchObject({ code: "JOURNAL_ENTRY_NOT_FOUND" });
   });
 });

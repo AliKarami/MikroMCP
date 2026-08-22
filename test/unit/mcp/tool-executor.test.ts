@@ -198,7 +198,14 @@ describe("executeToolCall", () => {
           recoverability: { retryable: true, suggestedAction: "Retry later." },
         });
       },
-      { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
+      {
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+      },
     );
 
     const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
@@ -271,10 +278,9 @@ describe("executeToolCall", () => {
   });
 
   it("platform gate — swos tool refused on a RouterOS router", async () => {
-    const tool = makeReadTool(
-      async () => ({ content: "never", structuredContent: {} }),
-      { platform: "swos" },
-    );
+    const tool = makeReadTool(async () => ({ content: "never", structuredContent: {} }), {
+      platform: "swos",
+    });
 
     const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
 

@@ -22,26 +22,34 @@ const listPppProfilesTool: ToolDefinition = {
   title: "List PPP Profiles",
   description: "List PPP profiles including the built-in default and default-encryption profiles.",
   inputSchema: listPppProfilesInputSchema,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listPppProfilesInputSchema.parse(params);
     try {
       log.info({ routerId: context.routerId }, "Listing PPP profiles");
-      const all = await context.routerClient.get<RouterOSRecord>("ppp/profile", { limit: undefined, offset: undefined });
+      const all = await context.routerClient.get<RouterOSRecord>("ppp/profile", {
+        limit: undefined,
+        offset: undefined,
+      });
       const filtered = parsed.name
         ? (all as Record<string, string>[]).filter((p) => p.name === parsed.name)
         : (all as Record<string, string>[]);
       const profiles = filtered.slice(0, parsed.limit);
       return {
-        content: listContent(
-          "PPP profiles",
-          context.routerId,
-          profiles,
-          all.length,
-          0,
-          (p) => compactFields(p, ["name", "local-address", "remote-address", "dns-server", "rate-limit"]),
+        content: listContent("PPP profiles", context.routerId, profiles, all.length, 0, (p) =>
+          compactFields(p, ["name", "local-address", "remote-address", "dns-server", "rate-limit"]),
         ),
-        structuredContent: { routerId: context.routerId, profiles, total: all.length, returned: profiles.length },
+        structuredContent: {
+          routerId: context.routerId,
+          profiles,
+          total: all.length,
+          returned: profiles.length,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "list_ppp_profiles");
@@ -70,13 +78,24 @@ const managePppProfileTool: ToolDefinition = {
   description:
     "Add, update, or remove a PPP profile. Idempotent by name. update returns no_change when requested values match. Built-in profiles (default, default-encryption) cannot be removed — RouterOS blocks this and the error is surfaced.",
   inputSchema: managePppProfileInputSchema,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   snapshotPaths: ["ppp/profile"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = managePppProfileInputSchema.parse(params);
-    log.info({ routerId: context.routerId, action: parsed.action, name: parsed.name }, "Managing PPP profile");
+    log.info(
+      { routerId: context.routerId, action: parsed.action, name: parsed.name },
+      "Managing PPP profile",
+    );
     try {
-      const all = await context.routerClient.get<RouterOSRecord>("ppp/profile", { limit: undefined, offset: undefined });
+      const all = await context.routerClient.get<RouterOSRecord>("ppp/profile", {
+        limit: undefined,
+        offset: undefined,
+      });
       const existing = (all as Record<string, string>[]).find((p) => p.name === parsed.name);
 
       if (parsed.action === "add") {
@@ -90,12 +109,18 @@ const managePppProfileTool: ToolDefinition = {
           const diff: { property: string; before: null; after: string }[] = [
             { property: "name", before: null, after: parsed.name },
           ];
-          if (parsed.localAddress) diff.push({ property: "local-address", before: null, after: parsed.localAddress });
-          if (parsed.remoteAddress) diff.push({ property: "remote-address", before: null, after: parsed.remoteAddress });
-          if (parsed.dnsServer) diff.push({ property: "dns-server", before: null, after: parsed.dnsServer });
-          if (parsed.rateLimit) diff.push({ property: "rate-limit", before: null, after: parsed.rateLimit });
-          if (parsed.sessionTimeout) diff.push({ property: "session-timeout", before: null, after: parsed.sessionTimeout });
-          if (parsed.comment) diff.push({ property: "comment", before: null, after: parsed.comment });
+          if (parsed.localAddress)
+            diff.push({ property: "local-address", before: null, after: parsed.localAddress });
+          if (parsed.remoteAddress)
+            diff.push({ property: "remote-address", before: null, after: parsed.remoteAddress });
+          if (parsed.dnsServer)
+            diff.push({ property: "dns-server", before: null, after: parsed.dnsServer });
+          if (parsed.rateLimit)
+            diff.push({ property: "rate-limit", before: null, after: parsed.rateLimit });
+          if (parsed.sessionTimeout)
+            diff.push({ property: "session-timeout", before: null, after: parsed.sessionTimeout });
+          if (parsed.comment)
+            diff.push({ property: "comment", before: null, after: parsed.comment });
           return {
             content: `Dry run: Would create PPP profile "${parsed.name}".`,
             structuredContent: { action: "dry_run", diff },
@@ -123,35 +148,72 @@ const managePppProfileTool: ToolDefinition = {
             code: "PPP_PROFILE_NOT_FOUND",
             message: `PPP profile "${parsed.name}" not found.`,
             details: { name: parsed.name },
-            recoverability: { retryable: false, suggestedAction: "Verify with list_ppp_profiles.", alternativeTools: ["list_ppp_profiles"] },
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Verify with list_ppp_profiles.",
+              alternativeTools: ["list_ppp_profiles"],
+            },
           });
         }
         const changes: Record<string, string> = {};
         const diff: { property: string; before: string | null; after: string }[] = [];
 
-        if (parsed.localAddress !== undefined && existing["local-address"] !== parsed.localAddress) {
+        if (
+          parsed.localAddress !== undefined &&
+          existing["local-address"] !== parsed.localAddress
+        ) {
           changes["local-address"] = parsed.localAddress;
-          diff.push({ property: "local-address", before: existing["local-address"] ?? null, after: parsed.localAddress });
+          diff.push({
+            property: "local-address",
+            before: existing["local-address"] ?? null,
+            after: parsed.localAddress,
+          });
         }
-        if (parsed.remoteAddress !== undefined && existing["remote-address"] !== parsed.remoteAddress) {
+        if (
+          parsed.remoteAddress !== undefined &&
+          existing["remote-address"] !== parsed.remoteAddress
+        ) {
           changes["remote-address"] = parsed.remoteAddress;
-          diff.push({ property: "remote-address", before: existing["remote-address"] ?? null, after: parsed.remoteAddress });
+          diff.push({
+            property: "remote-address",
+            before: existing["remote-address"] ?? null,
+            after: parsed.remoteAddress,
+          });
         }
         if (parsed.dnsServer !== undefined && existing["dns-server"] !== parsed.dnsServer) {
           changes["dns-server"] = parsed.dnsServer;
-          diff.push({ property: "dns-server", before: existing["dns-server"] ?? null, after: parsed.dnsServer });
+          diff.push({
+            property: "dns-server",
+            before: existing["dns-server"] ?? null,
+            after: parsed.dnsServer,
+          });
         }
         if (parsed.rateLimit !== undefined && existing["rate-limit"] !== parsed.rateLimit) {
           changes["rate-limit"] = parsed.rateLimit;
-          diff.push({ property: "rate-limit", before: existing["rate-limit"] ?? null, after: parsed.rateLimit });
+          diff.push({
+            property: "rate-limit",
+            before: existing["rate-limit"] ?? null,
+            after: parsed.rateLimit,
+          });
         }
-        if (parsed.sessionTimeout !== undefined && existing["session-timeout"] !== parsed.sessionTimeout) {
+        if (
+          parsed.sessionTimeout !== undefined &&
+          existing["session-timeout"] !== parsed.sessionTimeout
+        ) {
           changes["session-timeout"] = parsed.sessionTimeout;
-          diff.push({ property: "session-timeout", before: existing["session-timeout"] ?? null, after: parsed.sessionTimeout });
+          diff.push({
+            property: "session-timeout",
+            before: existing["session-timeout"] ?? null,
+            after: parsed.sessionTimeout,
+          });
         }
         if (parsed.comment !== undefined && existing.comment !== parsed.comment) {
           changes.comment = parsed.comment;
-          diff.push({ property: "comment", before: existing.comment ?? null, after: parsed.comment });
+          diff.push({
+            property: "comment",
+            before: existing.comment ?? null,
+            after: parsed.comment,
+          });
         }
 
         if (Object.keys(changes).length === 0) {
@@ -184,7 +246,10 @@ const managePppProfileTool: ToolDefinition = {
       if (parsed.dryRun) {
         return {
           content: `Dry run: Would remove PPP profile "${parsed.name}".`,
-          structuredContent: { action: "dry_run", diff: [{ property: "name", before: parsed.name, after: null }] },
+          structuredContent: {
+            action: "dry_run",
+            diff: [{ property: "name", before: parsed.name, after: null }],
+          },
         };
       }
       await context.routerClient.remove("ppp/profile", existing[".id"]);

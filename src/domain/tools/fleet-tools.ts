@@ -110,7 +110,8 @@ const listRoutersTool: ToolDefinition = {
 
     // A router is default when explicitly configured, or — when none is set — when it is the
     // only one. Mirrors the executor's routerId resolution.
-    const soleDefaultId = defaultRouter === undefined && routers.length === 1 ? routers[0].id : undefined;
+    const soleDefaultId =
+      defaultRouter === undefined && routers.length === 1 ? routers[0].id : undefined;
     const rows = routers.map((r) => ({
       id: r.id,
       host: r.host,
@@ -126,10 +127,16 @@ const listRoutersTool: ToolDefinition = {
     const header = `Routers: ${total === 0 ? "none" : `1-${total} of ${total}`}.`;
     const lines = rows.map(
       (r) =>
-        `  ${compactFields(
-          { ...r, tags: r.tags.join(",") },
-          ["id", "host", "port", "deviceType", "tlsEnabled", "tags", "rosVersion", "isDefault"],
-        )}`,
+        `  ${compactFields({ ...r, tags: r.tags.join(",") }, [
+          "id",
+          "host",
+          "port",
+          "deviceType",
+          "tlsEnabled",
+          "tags",
+          "rosVersion",
+          "isDefault",
+        ])}`,
     );
 
     return {
@@ -224,7 +231,8 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           message: "Provide exactly one of routerIds or tags, not both and not neither.",
           recoverability: {
             retryable: false,
-            suggestedAction: "Supply either routerIds (array of IDs) or tags (array of tag strings).",
+            suggestedAction:
+              "Supply either routerIds (array of IDs) or tags (array of tag strings).",
           },
         });
       }
@@ -234,17 +242,20 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         "bulk_execute invoked",
       );
 
-      auditLog({
-        type: "audit",
-        ts: new Date().toISOString(),
-        correlationId: context.correlationId,
-        identityId: context.identity.id,
-        role: context.identity.role,
-        tool: "bulk_execute",
-        routerId: "(fleet)",
-        phase: "attempt",
-        params: { toolName: parsed.toolName, routerIds: parsed.routerIds, tags: parsed.tags },
-      }, context.appConfig.auditLogPath);
+      auditLog(
+        {
+          type: "audit",
+          ts: new Date().toISOString(),
+          correlationId: context.correlationId,
+          identityId: context.identity.id,
+          role: context.identity.role,
+          tool: "bulk_execute",
+          routerId: "(fleet)",
+          phase: "attempt",
+          params: { toolName: parsed.toolName, routerIds: parsed.routerIds, tags: parsed.tags },
+        },
+        context.appConfig.auditLogPath,
+      );
 
       if (parsed.toolName === "bulk_execute" || parsed.toolName === "check_router_health") {
         throw new MikroMCPError({
@@ -295,8 +306,8 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         // ALL-tag targeting (schema documents "ALL of these tags"): a router must
         // carry every requested tag. listRouters() matches ANY tag, so filter here.
         const tags = parsed.tags!;
-        routers = context.routerRegistry!
-          .listRouters()
+        routers = context
+          .routerRegistry!.listRouters()
           .filter((r) => tags.every((t) => r.tags.includes(t)));
       }
 
@@ -328,17 +339,20 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       }
 
       if (routers.length === 0 && preErrors.length === 0) {
-        auditLog({
-          type: "audit",
-          ts: new Date().toISOString(),
-          correlationId: context.correlationId,
-          identityId: context.identity.id,
-          role: context.identity.role,
-          tool: "bulk_execute",
-          routerId: "(fleet)",
-          phase: "success",
-          params: { toolName: parsed.toolName, succeeded: 0, failed: 0 },
-        }, context.appConfig.auditLogPath);
+        auditLog(
+          {
+            type: "audit",
+            ts: new Date().toISOString(),
+            correlationId: context.correlationId,
+            identityId: context.identity.id,
+            role: context.identity.role,
+            tool: "bulk_execute",
+            routerId: "(fleet)",
+            phase: "success",
+            params: { toolName: parsed.toolName, succeeded: 0, failed: 0 },
+          },
+          context.appConfig.auditLogPath,
+        );
         return {
           content: `Executed ${parsed.toolName} on 0 routers: 0 succeeded, 0 failed`,
           structuredContent: {
@@ -376,7 +390,10 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
 
           const snapshotIds: string[] = [];
           if (isWrite) {
-            for (const path of snapshotPathsFor(targetTool, toolParams as Record<string, unknown>)) {
+            for (const path of snapshotPathsFor(
+              targetTool,
+              toolParams as Record<string, unknown>,
+            )) {
               try {
                 const meta = await takeSnapshot(
                   routerContext.deviceClient,
@@ -410,47 +427,63 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           routerContext.circuitBreaker = cb;
           const runOnce = () =>
             targetTool.handler(toolParams as Record<string, unknown>, routerContext);
-          const shouldRetry =
-            targetTool.annotations.readOnlyHint && targetTool.retryable !== false;
+          const shouldRetry = targetTool.annotations.readOnlyHint && targetTool.retryable !== false;
           const result = await cb.execute(
             shouldRetry ? () => withRetry(runOnce, context.appConfig.retry) : runOnce,
           );
           const elapsed = Date.now() - start;
           if (journalId) {
-            recordOutcome({ journalPath: journalPath!, journalId, phase: "success", durationMs: elapsed });
+            recordOutcome({
+              journalPath: journalPath!,
+              journalId,
+              phase: "success",
+              durationMs: elapsed,
+            });
           }
-          auditLog({
-            type: "audit",
-            ts: new Date().toISOString(),
-            correlationId: context.correlationId,
-            identityId: context.identity.id,
-            role: context.identity.role,
-            tool: parsed.toolName,
-            routerId: router.id,
-            phase: "success",
-            params: parsed.params as Record<string, unknown>,
-            durationMs: elapsed,
-          }, context.appConfig.auditLogPath);
+          auditLog(
+            {
+              type: "audit",
+              ts: new Date().toISOString(),
+              correlationId: context.correlationId,
+              identityId: context.identity.id,
+              role: context.identity.role,
+              tool: parsed.toolName,
+              routerId: router.id,
+              phase: "success",
+              params: parsed.params as Record<string, unknown>,
+              durationMs: elapsed,
+            },
+            context.appConfig.auditLogPath,
+          );
           return { routerId: router.id, status: "ok", result, durationMs: elapsed };
         } catch (err) {
           const elapsed = Date.now() - start;
           const message = err instanceof Error ? err.message : String(err);
           if (journalId) {
-            recordOutcome({ journalPath: journalPath!, journalId, phase: "failure", outcome: message, durationMs: elapsed });
+            recordOutcome({
+              journalPath: journalPath!,
+              journalId,
+              phase: "failure",
+              outcome: message,
+              durationMs: elapsed,
+            });
           }
-          auditLog({
-            type: "audit",
-            ts: new Date().toISOString(),
-            correlationId: context.correlationId,
-            identityId: context.identity.id,
-            role: context.identity.role,
-            tool: parsed.toolName,
-            routerId: router.id,
-            phase: "failure",
-            params: parsed.params as Record<string, unknown>,
-            outcome: message,
-            durationMs: elapsed,
-          }, context.appConfig.auditLogPath);
+          auditLog(
+            {
+              type: "audit",
+              ts: new Date().toISOString(),
+              correlationId: context.correlationId,
+              identityId: context.identity.id,
+              role: context.identity.role,
+              tool: parsed.toolName,
+              routerId: router.id,
+              phase: "failure",
+              params: parsed.params as Record<string, unknown>,
+              outcome: message,
+              durationMs: elapsed,
+            },
+            context.appConfig.auditLogPath,
+          );
           return { routerId: router.id, status: "error", error: message, durationMs: elapsed };
         }
       }
@@ -465,17 +498,20 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       const succeeded = results.filter((r) => r.status === "ok").length;
       const failed = results.filter((r) => r.status === "error").length;
 
-      auditLog({
-        type: "audit",
-        ts: new Date().toISOString(),
-        correlationId: context.correlationId,
-        identityId: context.identity.id,
-        role: context.identity.role,
-        tool: "bulk_execute",
-        routerId: "(fleet)",
-        phase: "success",
-        params: { toolName: parsed.toolName, succeeded, failed },
-      }, context.appConfig.auditLogPath);
+      auditLog(
+        {
+          type: "audit",
+          ts: new Date().toISOString(),
+          correlationId: context.correlationId,
+          identityId: context.identity.id,
+          role: context.identity.role,
+          tool: "bulk_execute",
+          routerId: "(fleet)",
+          phase: "success",
+          params: { toolName: parsed.toolName, succeeded, failed },
+        },
+        context.appConfig.auditLogPath,
+      );
 
       return {
         content: `Executed ${parsed.toolName} on ${results.length} routers: ${succeeded} succeeded, ${failed} failed`,

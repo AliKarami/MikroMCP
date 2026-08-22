@@ -61,13 +61,8 @@ const listLogRulesTool: ToolDefinition = {
       const returned = rules.slice(0, parsed.limit);
 
       return {
-        content: listContent(
-          "Log rules",
-          context.routerId,
-          returned,
-          all.length,
-          0,
-          (r) => compactFields(r, ["topics", "action", "prefix", "disabled"]),
+        content: listContent("Log rules", context.routerId, returned, all.length, 0, (r) =>
+          compactFields(r, ["topics", "action", "prefix", "disabled"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -157,7 +152,10 @@ const manageLogRuleTool: ToolDefinition = {
         }
 
         const created = await context.routerClient.create(LOG_RULES_PATH, body);
-        log.info({ topics: parsed.topics, logAction: parsed.logAction, id: created[".id"] }, "Log rule added");
+        log.info(
+          { topics: parsed.topics, logAction: parsed.logAction, id: created[".id"] },
+          "Log rule added",
+        );
         return {
           content: `Added log rule topics="${parsed.topics}" action="${parsed.logAction}".`,
           structuredContent: {
@@ -220,7 +218,13 @@ const manageLogRuleTool: ToolDefinition = {
             structuredContent: {
               action: "dry_run",
               id,
-              diff: [{ property: "disabled", before: existing.disabled ?? "false", after: String(wantDisabled) }],
+              diff: [
+                {
+                  property: "disabled",
+                  before: existing.disabled ?? "false",
+                  after: String(wantDisabled),
+                },
+              ],
             },
           };
         }
@@ -292,13 +296,8 @@ const listLogActionsTool: ToolDefinition = {
       const returned = actions.slice(0, parsed.limit);
 
       return {
-        content: listContent(
-          "Log actions",
-          context.routerId,
-          returned,
-          all.length,
-          0,
-          (a) => compactFields(a, ["name", "target", "type", "remote"]),
+        content: listContent("Log actions", context.routerId, returned, all.length, 0, (a) =>
+          compactFields(a, ["name", "target", "type", "remote"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -374,8 +373,7 @@ const manageLogActionTool: ToolDefinition = {
             message: "type is required when action is add",
             recoverability: {
               retryable: false,
-              suggestedAction:
-                "Provide the type field: memory, disk, remote, echo, or email.",
+              suggestedAction: "Provide the type field: memory, disk, remote, echo, or email.",
             },
           });
         }

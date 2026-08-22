@@ -24,9 +24,17 @@ function makeContext(records: Record<string, unknown>[] = []): ToolContext {
     routerId: "test-router",
     correlationId: "test-corr",
     routerConfig: makeRouterConfig(),
-    identity: { id: "superadmin-builtin", role: "superadmin" as const, allowedRouters: [], allowedToolPatterns: [] },
+    identity: {
+      id: "superadmin-builtin",
+      role: "superadmin" as const,
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    },
     sshClient: { execute: vi.fn().mockResolvedValue("") } as unknown as SshClient,
-    ftpClient: { upload: vi.fn().mockResolvedValue(undefined), connect: vi.fn().mockResolvedValue(undefined) } as unknown as FtpClient,
+    ftpClient: {
+      upload: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FtpClient,
     routerClient: {
       get: vi.fn().mockResolvedValue(records),
       create: vi.fn().mockResolvedValue({ ".id": "*1", interface: "ether1" }),
@@ -46,8 +54,10 @@ describe("dhcpClientTools", () => {
       expect(manageTool.name).toBe("manage_dhcp_client");
     });
     it("list_dhcp_clients is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
-    it("manage_dhcp_client is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
-    it("manage_dhcp_client has snapshotPaths", () => expect(manageTool.snapshotPaths).toContain("ip/dhcp-client"));
+    it("manage_dhcp_client is not readOnly", () =>
+      expect(manageTool.annotations.readOnlyHint).toBe(false));
+    it("manage_dhcp_client has snapshotPaths", () =>
+      expect(manageTool.snapshotPaths).toContain("ip/dhcp-client"));
   });
 
   describe("input schema validation", () => {
@@ -116,7 +126,13 @@ describe("dhcpClientTools", () => {
 
   describe("list_dhcp_clients handler", () => {
     const clients = [
-      { ".id": "*1", interface: "ether1", status: "bound", address: "192.168.1.100/24", disabled: "false" },
+      {
+        ".id": "*1",
+        interface: "ether1",
+        status: "bound",
+        address: "192.168.1.100/24",
+        disabled: "false",
+      },
       { ".id": "*2", interface: "ether2", status: "searching", disabled: "false" },
     ];
 
@@ -237,7 +253,9 @@ describe("dhcpClientTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("disabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/dhcp-client", "*1", { disabled: "true" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/dhcp-client", "*1", {
+        disabled: "true",
+      });
     });
 
     it("enables client", async () => {
@@ -248,13 +266,18 @@ describe("dhcpClientTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("enabled");
-      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/dhcp-client", "*1", { disabled: "false" });
+      expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/dhcp-client", "*1", {
+        disabled: "false",
+      });
     });
 
     it("throws NOT_FOUND on enable/disable when client missing", async () => {
       const ctx = makeContext([]);
       await expect(
-        manageTool.handler({ routerId: "test-router", action: "enable", interface: "ether99" }, ctx),
+        manageTool.handler(
+          { routerId: "test-router", action: "enable", interface: "ether99" },
+          ctx,
+        ),
       ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND });
     });
 
