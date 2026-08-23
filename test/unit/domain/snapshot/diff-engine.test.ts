@@ -221,6 +221,65 @@ describe("computeRestorePlan", () => {
       expect(plan.warnings.join(" ")).toMatch(/password/i);
     });
   });
+
+  describe("set-menu singletons (no .id)", () => {
+    const DNS_BEFORE: RouterOSRecord = {
+      servers: "1.1.1.1",
+      "allow-remote-requests": "true",
+      "cache-size": "2048",
+    };
+    const DNS_CURRENT: RouterOSRecord = {
+      servers: "8.8.8.8",
+      "allow-remote-requests": "false",
+      "cache-size": "2048",
+    };
+
+    it("restores a changed singleton via toSet, never create/remove/update", () => {
+      const plan = computeRestorePlan("ip/dns", [DNS_BEFORE], [DNS_CURRENT]);
+
+      expect(plan.toSet).toEqual({
+        servers: "1.1.1.1",
+        "allow-remote-requests": "true",
+        "cache-size": "2048",
+      });
+      expect(plan.toCreate).toHaveLength(0);
+      expect(plan.toRemove).toHaveLength(0);
+      expect(plan.toUpdate).toHaveLength(0);
+    });
+
+    it("never emits an undefined id for a singleton", () => {
+      const plan = computeRestorePlan("system/ntp/client", [DNS_BEFORE], [DNS_CURRENT]);
+
+      expect(plan.toRemove).not.toContain(undefined);
+      expect(plan.toUpdate.every((u) => u.currentId !== undefined)).toBe(true);
+    });
+
+    it("no-op when the singleton is unchanged", () => {
+      const plan = computeRestorePlan("container/config", [DNS_BEFORE], [DNS_BEFORE]);
+
+      expect(plan.toSet).toBeUndefined();
+      expect(plan.toCreate).toHaveLength(0);
+      expect(plan.toRemove).toHaveLength(0);
+      expect(plan.toUpdate).toHaveLength(0);
+    });
+
+    it("warns rather than deleting when the snapshot predates the singleton", () => {
+      const plan = computeRestorePlan("ip/dns", [], [DNS_CURRENT]);
+
+      expect(plan.toRemove).toHaveLength(0);
+      expect(plan.warnings.join(" ")).toMatch(/singleton/i);
+    });
+
+    it("still uses create/remove for .id-bearing records on an unkeyed path", () => {
+      const a: RouterOSRecord = { ".id": "*1", foo: "a" };
+      const b: RouterOSRecord = { ".id": "*1", foo: "b" };
+      const plan = computeRestorePlan("some/unkeyed/path", [a], [b]);
+
+      expect(plan.toSet).toBeUndefined();
+      expect(plan.toCreate).toHaveLength(1);
+      expect(plan.toRemove).toEqual(["*1"]);
+    });
+  });
 });
 
 describe("applyRestorePlan", () => {
@@ -272,5 +331,28 @@ describe("applyRestorePlan", () => {
     };
     await applyRestorePlan(plan, client);
     expect(client.update).toHaveBeenCalledWith("ip/route", "*1", { distance: "1" });
+  });
+
+  it("writes a singleton through the /set command endpoint", async () => {
+    const client = {
+      create: vi.fn(),
+      remove: vi.fn(),
+      update: vi.fn(),
+      execute: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RouterOSRestClient;
+    const plan = {
+      path: "ip/dns",
+      toCreate: [],
+      toRemove: [],
+      toUpdate: [],
+      toSet: { servers: "1.1.1.1" },
+      warnings: [],
+    };
+    await applyRestorePlan(plan, client);
+
+    expect(client.execute).toHaveBeenCalledWith("ip/dns/set", { servers: "1.1.1.1" });
+    expect(client.update).not.toHaveBeenCalled();
+    expect(client.create).not.toHaveBeenCalled();
+    expect(client.remove).not.toHaveBeenCalled();
   });
 });

@@ -128,6 +128,12 @@ export interface RestorePlan {
   toCreate: RouterOSRecord[];
   toRemove: string[];
   toUpdate: Array<{ currentId: string; data: Record<string, string> }>;
+  /**
+   * Field values to write through `POST <path>/set`. Set-menu singletons
+   * (ip/dns, system/ntp/client, container/config) carry no `.id`, so they can
+   * only be restored as a whole-record write — never create/remove/update.
+   */
+  toSet?: Record<string, string>;
   warnings: string[];
 }
 

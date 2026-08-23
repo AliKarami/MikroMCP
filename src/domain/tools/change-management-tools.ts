@@ -362,7 +362,8 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
       }
 
       const totalOps = restorePlans.reduce(
-        (sum, p) => sum + p.toCreate.length + p.toRemove.length + p.toUpdate.length,
+        (sum, p) =>
+          sum + p.toCreate.length + p.toRemove.length + p.toUpdate.length + (p.toSet ? 1 : 0),
         0,
       );
       const warnings = restorePlans.flatMap((p) => p.warnings);

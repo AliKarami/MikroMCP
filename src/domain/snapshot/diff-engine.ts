@@ -31,6 +31,11 @@ export const RUNTIME_FIELDS: ReadonlySet<string> = new Set([
   "rx-packet",
   "tx-packet",
   "uptime",
+  // Read-only fields on set-menu singletons. Harmless in a normal diff, but a
+  // singleton is restored by writing the whole record back through /set, and
+  // RouterOS rejects the request outright if it carries a read-only parameter.
+  "cache-used",
+  "dynamic-servers",
 ]);
 
 /** Paths where record ORDER is semantically significant and cannot be restored via create/update. */
@@ -151,6 +156,32 @@ export function computeRestorePlan(
     );
   }
 
+  // A set-menu singleton (ip/dns, system/ntp/client, container/config) has no
+  // `.id`, so it cannot be addressed for create/remove/update — the whole
+  // record is written back through the /set command instead. Detected
+  // structurally rather than from a path list so new singleton tools are
+  // covered without touching this file.
+  if (isSingleton(before, current)) {
+    const beforeRecord = before[0];
+    if (beforeRecord === undefined) {
+      warnings.push(
+        `Snapshot for ${path} holds no record for this singleton — its current settings are left untouched, as a set-menu singleton cannot be removed.`,
+      );
+      return { path, toCreate: [], toRemove: [], toUpdate: [], warnings };
+    }
+
+    const currentRecord = current[0];
+    if (currentRecord !== undefined && recordsAreEqual(beforeRecord, currentRecord)) {
+      return { path, toCreate: [], toRemove: [], toUpdate: [], warnings };
+    }
+
+    const { ".id": _id, ...data } = beforeRecord;
+    const toSet = Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k, String(v)]),
+    ) as Record<string, string>;
+    return { path, toCreate: [], toRemove: [], toUpdate: [], toSet, warnings };
+  }
+
   const keys = SEMANTIC_KEYS[path];
   // Fall back to full-record signature matching when a path has no semantic key
   // or when the chosen keys are not unique within a side (e.g. multiple
@@ -194,10 +225,24 @@ export function computeRestorePlan(
   return applyUserRestriction(path, { path, toCreate, toRemove, toUpdate, warnings });
 }
 
+/**
+ * True when both sides describe a set-menu singleton: at most one record per
+ * side, none of them carrying an `.id`, and at least one record present.
+ */
+function isSingleton(before: RouterOSRecord[], current: RouterOSRecord[]): boolean {
+  if (before.length > 1 || current.length > 1) return false;
+  if (before.length === 0 && current.length === 0) return false;
+  return [...before, ...current].every((r) => r[".id"] === undefined);
+}
+
 export async function applyRestorePlan(
   plan: RestorePlan,
   client: RouterOSRestClient,
 ): Promise<void> {
+  if (plan.toSet !== undefined) {
+    await client.execute(`${plan.path}/set`, plan.toSet);
+    return;
+  }
   for (const id of plan.toRemove) {
     await client.remove(plan.path, id);
   }
