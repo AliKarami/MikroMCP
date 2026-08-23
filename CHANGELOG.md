@@ -10,6 +10,8 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-08-23
+
 ### Added
 - **RouterOS CHR integration test harness.** `test/integration/` runs tool handlers against a real RouterOS instance — a Cloud Hosted Router booted in Docker via `docker-compose.test.yml` (QEMU, KVM-accelerated where available). The suite provisions a fresh CHR automatically (readiness poll + admin password setup) and covers REST response parsing, the full idempotency lifecycle (dry-run → create → already_exists → conflict → remove → not-found) for IP addresses, routes, firewall rules, DNS entries, VLANs, and VRRP instances, and the complete change-safety cycle (`plan_changes` → `apply_plan` → snapshot → `rollback_change`) against live state. A smoke sweep additionally runs every parameter-less RouterOS read tool (~50) against the live router, so new list/get tools are covered automatically; SSH-backed tools (`run_command`, `export_config`, `ping`) are exercised over their real transport, and one suite drives the full tool executor (retry, circuit breaker, snapshot + journal wiring). An opt-in second CHR (`docker compose --profile pair` + `MIKROMCP_ITEST_PAIR=1`; always on in CI) covers fleet operations — `list_routers` and `bulk_execute` fan-out across two genuinely distinct live routers. Runs via `npm run test:integration`; a new `Integration` GitHub Actions workflow runs it on demand (`workflow_dispatch` or the `integration` PR label). This closes the harness the v1.0 roadmap had deferred.
 

@@ -164,6 +164,16 @@ Every tool now declares a `platform`, and the executor refuses a RouterOS tool a
 
 ---
 
+## ✅ v1.10 — RouterOS CHR Integration Test Harness
+
+End-to-end tests against a real RouterOS, in CI, without real hardware — the testing gap deferred at v1.0. `docker-compose.test.yml` boots a Cloud Hosted Router in Docker (QEMU, KVM-accelerated where available; the free CHR licence covers CI use), and `npm run test:integration` provisions it automatically and drives tool handlers against the live REST API: the full idempotency lifecycle (dry-run → create → already_exists → conflict → remove → not-found) for IP addresses, routes, firewall rules, DNS entries, VLANs, and VRRP instances, plus the complete change-safety cycle (`plan_changes` → `apply_plan` → snapshot → `rollback_change`). A smoke sweep runs every parameter-less read tool against the live router, so new list/get tools are covered automatically, and an opt-in second CHR covers fleet fan-out across two distinct routers. A label-gated `Integration` workflow runs the suite in CI in about 40 seconds.
+
+Mocks structurally cannot see wire-format bugs — RouterOS sends every value as a string and the response parser converts them — and the harness proved it on its first runs: idempotency checks across twelve tools were comparing parsed values against wire strings and could never match, `list_connections` was entirely broken, three set-menu singletons could never write at all, `manage_ipsec_policy` created duplicate policies on re-add, and RouterOS 7.16+ had silently broken the OVPN server tools. All fixed with regression tests.
+
+Contributed by [@f0086](https://github.com/f0086).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
