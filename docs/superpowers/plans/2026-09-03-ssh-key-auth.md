@@ -153,6 +153,15 @@ Expected: both files pass with no skipped tests.
   connections under the same contract as SSH commands.
 - [x] Run the focused SSH and SFTP adapter tests.
 
+#### Review follow-up: diagnostic command isolation
+
+- [x] Reproduce the unquoted RouterOS CLI arguments in handler tests.
+- [x] Add a single-command builder that validates command and parameter names,
+  quotes all string values, escapes RouterOS substitutions, and rejects control
+  characters.
+- [x] Route ping, traceroute, and torch arguments through the builder.
+- [x] Run the focused builder and diagnostic tool tests.
+
 ### Task 3: User documentation
 
 **Files:**
@@ -168,7 +177,7 @@ Expected: both files pass with no skipped tests.
 - [x] **Step 1: Document `sshUsername` and `sshPrivateKeyPath` beside `sshPort` in `config/routers.example.yaml` and `docs/wiki/Configuration.md`**
 
 Use an absolute example path and state that setting a key suppresses password
-authentication for SSH only; REST continues to use `ROUTER_<PREFIX>_*`.
+authentication for SSH and SFTP; REST continues to use `ROUTER_<PREFIX>_*`.
 
 - [x] **Step 2: Update the architecture and assistant-connection guidance**
 
@@ -198,7 +207,8 @@ Run: `npx vitest run test/unit/docs test/unit/skill/tool-map-sync.test.ts`
 **Interfaces:**
 - Each router keeps its REST username and password under a distinct environment
   prefix.
-- Each router can use a separate SSH username and absolute private-key path.
+- Each router can use a separate SSH/SFTP username and absolute private-key
+  path.
 
 - [x] **Step 1: Run the complete source verification and build**
 

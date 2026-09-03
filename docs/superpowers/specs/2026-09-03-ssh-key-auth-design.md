@@ -41,6 +41,9 @@ fallback continues to use REST credentials.
 - Private-key contents are never returned by `list_routers` and never logged.
 - The configuration stores only a filesystem path, not key material.
 - Existing SSH host-key fingerprint verification remains applicable.
+- SSH-backed diagnostic tools construct one RouterOS command from fixed command
+  and parameter names. Every string value is quoted and escaped, and control
+  characters are rejected before SSH execution.
 - No RouterOS service is exposed to a wider source range by this change.
 - No inline private key or key passphrase setting is introduced.
 

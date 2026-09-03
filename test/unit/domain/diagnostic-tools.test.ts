@@ -154,10 +154,24 @@ describe("diagnostic tools", () => {
         ctx,
       );
       expect(ctx.sshClient.execute).toHaveBeenCalledWith(
-        expect.stringContaining("address=10.0.0.1"),
+        '/tool ping address="10.0.0.1" count=10 size=128',
       );
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("count=10"));
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("size=128"));
+    });
+
+    it("keeps an injected routing table inside one quoted parameter", async () => {
+      const ctx = makeContext(PING_SSH_OUTPUT);
+      await pingTool.handler(
+        {
+          routerId: "test-router",
+          address: "10.0.0.1",
+          routingTable: 'main\"; /user add name=owned; :put $identity',
+        },
+        ctx,
+      );
+
+      expect(ctx.sshClient.execute).toHaveBeenCalledWith(
+        '/tool ping address="10.0.0.1" count=4 size=56 routing-table="main\\\"; /user add name=owned; :put \\$identity"',
+      );
     });
 
     it("treats 100% packet loss as a valid (non-error) response", async () => {
@@ -195,10 +209,8 @@ describe("diagnostic tools", () => {
         ctx,
       );
       expect(ctx.sshClient.execute).toHaveBeenCalledWith(
-        expect.stringContaining("address=8.8.8.8"),
+        '/tool traceroute address="8.8.8.8" count=2 max-hops=10',
       );
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("count=2"));
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(expect.stringContaining("max-hops=10"));
     });
 
     it("treats partial hop list (some timeouts shown as ???) as valid response", async () => {
@@ -286,9 +298,18 @@ describe("diagnostic tools", () => {
     it("sends interface in the SSH command and uses duration as timeout", async () => {
       const torchTool = diagnosticTools[2];
       const ctx = makeContext(TORCH_SSH_OUTPUT);
-      await torchTool.handler({ routerId: "test-router", interface: "ether1", duration: 10 }, ctx);
+      await torchTool.handler(
+        {
+          routerId: "test-router",
+          interface: "ether1",
+          duration: 10,
+          srcAddress: "192.168.1.0/24",
+          dstAddress: "8.8.8.8",
+        },
+        ctx,
+      );
       expect(ctx.sshClient.execute).toHaveBeenCalledWith(
-        expect.stringContaining("interface=ether1"),
+        '/tool torch interface="ether1" src-address="192.168.1.0/24" dst-address="8.8.8.8"',
         11_000,
       );
     });

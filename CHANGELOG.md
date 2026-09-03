@@ -13,6 +13,9 @@ Each release section covers changes **since the previous release only**.
 ### Added
 - Router entries can use a separate SSH/SFTP username and an absolute private-key path; SSH-backed commands and SFTP uploads no longer require RouterOS password authentication when a key is configured.
 
+### Fixed
+- SSH-backed diagnostic tools now build one RouterOS command with every user-supplied string quoted, preventing command injection through ping, traceroute, or torch arguments.
+
 ## [1.10.0] - 2026-08-23
 
 ### Added
