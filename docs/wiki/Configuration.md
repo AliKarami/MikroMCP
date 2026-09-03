@@ -19,6 +19,9 @@ routers:
       envPrefix: "ROUTER_CORE01"  # reads ROUTER_CORE01_USER + ROUTER_CORE01_PASS
     tags: ["datacenter", "core"]
     rosVersion: "7.14"
+    sshUsername: "automation"      # optional; defaults to the REST username
+    sshPrivateKeyPath: "/home/mikromcp/.ssh/id_ed25519"
+    sshFingerprint: "aabbcc..."    # optional raw SHA-256 host-key fingerprint (hex)
 
   edge-01:
     host: "192.168.88.1"
@@ -193,7 +196,24 @@ For Docker and systemd deployment examples, see [Connecting to AI Assistants](Co
 
 ## Per-Router SSH and FTP
 
-The SSH adapter (`ping`, `traceroute`, `torch`, `run_command`) and FTP adapter (`upload_file`) use the same credentials as the REST API. They do not need separate configuration — ensure the RouterOS user has the required policies (`ssh`, `sniff`, `ftp`) as described in [RouterOS API Setup](RouterOS-API-Setup#required-policies-by-tool-category).
+By default, the SSH adapter (`ping`, `traceroute`, `torch`, `run_command`) uses
+the same username and password as the REST API. A router can instead use a
+separate SSH username and private key:
+
+```yaml
+sshUsername: "automation"
+sshPrivateKeyPath: "/home/mikromcp/.ssh/id_ed25519"
+```
+
+`sshPrivateKeyPath` must be absolute. When it is configured, MikroMCP sends the
+private key to the SSH client and does not send the REST password over SSH. The
+file stays local: the registry stores only its path, and `list_routers` does not
+return the path or key contents. Protect the file with owner-only permissions
+such as `0600`. Encrypted private keys are not supported by these fields.
+
+The FTP adapter (`upload_file`) continues to use the REST credentials. Ensure
+the relevant RouterOS users have the required policies (`ssh`, `sniff`, `ftp`)
+described in [RouterOS API Setup](RouterOS-API-Setup#required-policies-by-tool-category).
 
 Per-router command allow/deny overrides:
 

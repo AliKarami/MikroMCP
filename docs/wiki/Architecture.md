@@ -25,7 +25,7 @@ flowchart LR
 
     subgraph Adapters["Device adapters"]
         Rest["RouterOS REST\nHTTPS"]
-        Ssh["SSH adapter\ndiagnostics and guarded commands"]
+        Ssh["SSH adapter\npassword or private key"]
         Ftp["FTP adapter\nfile uploads"]
         Swos["SwOS '.b' API\nHTTP digest"]
     end
@@ -120,7 +120,7 @@ flowchart TD
 | Tool registry | `src/mcp/tool-registry.ts` | Registers tools; injects circuit breaker, retry, correlation ID, credentials |
 | All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**122 typed tools**) |
 | REST client | `src/adapter/rest-client.ts` | `get`, `getOne`, `create`, `update`, `remove`, `execute` over HTTPS |
-| SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping`, `/tool/traceroute`, `/tool/torch`, and `run_command` |
+| SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping`, `/tool/traceroute`, `/tool/torch`, and `run_command`; optionally uses a separate SSH username and local private key |
 | FTP adapter | `src/adapter/ftp-client.ts` | Uploads files via `upload_file` |
 | SwOS client | `src/adapter/swos-client.ts` | SwOS / SwOS Lite `.b` API over HTTP digest auth (`deviceType: "swos"`) |
 | SwOS protocol | `src/adapter/swos-protocol.ts` | Endpoint schemas and the "broken JSON" wire codec |
@@ -146,3 +146,4 @@ HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) o
 - **Destructive tools** (`reboot`, `manage_user`, and others flagged `destructiveHint: true`) require a short-lived HMAC confirmation token in HTTP mode.
 - **Snapshots** are taken of affected RouterOS paths before `apply_plan` runs a write sequence, enabling `rollback_change` to restore previous state.
 - **Audit log** records every write and destructive call with identity, tool name, router, parameters (credentials redacted), and outcome.
+- **SSH private keys** remain local and are never returned by router discovery or written to logs; when a key is configured, the REST password is not offered to SSH.

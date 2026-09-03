@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- Router entries can use a separate SSH username and an absolute private-key path; SSH-backed tools no longer require RouterOS password authentication when a key is configured.
+
 ## [1.10.0] - 2026-08-23
 
 ### Added
