@@ -3,7 +3,8 @@
 ## Goal
 
 Allow MikroMCP to keep using the existing RouterOS REST username and password
-while SSH-backed tools authenticate with a separate username and private key.
+while SSH-backed commands and SFTP uploads authenticate with a separate
+username and private key.
 
 ## Approved outcome
 
@@ -24,13 +25,15 @@ sshUsername: "admin"
 sshPrivateKeyPath: "/absolute/path/to/private-key"
 ```
 
-`sshUsername` overrides only the SSH username. `sshPrivateKeyPath` selects
-public-key authentication for SSH-backed tools. When the key path is present,
-MikroMCP must not send the REST password to the SSH server. Relative paths and
-tilde expansion are not part of this change; deployments use an absolute path.
+`sshUsername` overrides the username for SSH and SFTP. `sshPrivateKeyPath`
+selects public-key authentication for both clients. When the key path is
+present, MikroMCP must not send the REST password to either client. Relative
+paths and tilde expansion are not part of this change; deployments use an
+absolute path.
 
 If `sshPrivateKeyPath` is absent, MikroMCP retains the current behavior and uses
-the resolved REST username and password for SSH.
+the resolved REST username and password for SSH and SFTP. The plaintext FTP
+fallback continues to use REST credentials.
 
 ## Security boundaries
 

@@ -61,8 +61,8 @@ routers:
     tags: ["datacenter", "core"]
     rosVersion: "7.14"
     # sshPort: 22                  # SSH port (default 22)
-    # sshUsername: "automation"    # Optional SSH-only username; defaults to REST username
-    # sshPrivateKeyPath: "/home/user/.ssh/id_ed25519" # Absolute path; suppresses SSH password auth
+    # sshUsername: "automation"    # Optional SSH/SFTP username; defaults to REST username
+    # sshPrivateKeyPath: "/home/user/.ssh/id_ed25519" # Absolute path; suppresses SSH/SFTP password auth
     # sshFingerprint: "aabbcc..."  # Pin SSH host key SHA256 fingerprint (hex)
     # cmdAllow:                    # Strict allow-list for run_command (see above)
     #   - "/ip/route/print*"

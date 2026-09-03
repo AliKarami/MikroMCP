@@ -23,8 +23,9 @@ export MIKROMCP_CONFIG_PATH=/absolute/path/to/config/routers.yaml
 If RouterOS accepts SSH keys but rejects password authentication, add
 `sshUsername` and an absolute `sshPrivateKeyPath` to that router's
 `routers.yaml` entry. The MCP client does not need the private key in its own
-configuration; the MikroMCP child process reads it locally. See
-[Configuration](Configuration#per-router-ssh-and-ftp).
+configuration; the MikroMCP child process reads it locally for SSH commands and
+SFTP uploads. See
+[Configuration](Configuration#per-router-ssh-sftp-and-ftp).
 
 Register MikroMCP (npm global install):
 

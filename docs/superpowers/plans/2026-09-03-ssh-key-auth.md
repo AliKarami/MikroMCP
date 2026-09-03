@@ -77,7 +77,7 @@ Run: `npx vitest run test/unit/config/router-registry.test.ts`
 
 Expected: the complete registry test file passes.
 
-### Task 2: SSH public-key authentication
+### Task 2: SSH and SFTP public-key authentication
 
 **Files:**
 - Modify: `src/adapter/ssh-client.ts`
@@ -143,6 +143,16 @@ Run: `npx vitest run test/unit/adapter/ssh-client.test.ts test/unit/config/route
 
 Expected: both files pass with no skipped tests.
 
+#### Review follow-up: SFTP authentication parity
+
+- [x] Add `test/unit/adapter/sftp-client.test.ts` with private-key, password
+  fallback, and unreadable-key cases.
+- [x] Confirm the private-key and unreadable-key cases fail against the original
+  `SftpClient`.
+- [x] Apply `sshUsername`, `sshPrivateKeyPath`, and `sshFingerprint` to SFTP
+  connections under the same contract as SSH commands.
+- [x] Run the focused SSH and SFTP adapter tests.
+
 ### Task 3: User documentation
 
 **Files:**
@@ -169,7 +179,7 @@ that the key stays local, and that `list_routers` never returns key material.
 
 ```markdown
 ### Added
-- Router entries can use a separate SSH username and an absolute private-key path; SSH-backed tools no longer require RouterOS password authentication when a key is configured.
+- Router entries can use a separate SSH/SFTP username and an absolute private-key path; SSH-backed commands and SFTP uploads no longer require RouterOS password authentication when a key is configured.
 ```
 
 - [x] **Step 4: Run formatting checks and documentation lockstep tests**
