@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add separate SSH username and private-key authentication to MikroMCP, then register and verify HMaster and HSlave without enabling password-based SSH.
+**Goal:** Add separate SSH username and private-key authentication to MikroMCP, then verify a multi-router deployment without enabling password-based SSH.
 
 **Architecture:** Extend the existing router registry with two optional SSH-only fields. `SshClient` uses the configured private key and SSH username when present and preserves the current REST-password fallback when absent. Runtime configuration pins both router host keys and keeps REST credentials separate from SSH credentials.
 
@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- Keep RouterOS SSH key-only on HMaster.
-- Disable password SSH on HSlave only after a positive key-authentication check.
+- Keep existing key-only RouterOS access working.
+- Disable password SSH only after a positive key-authentication check.
 - Never print, commit, or copy private-key contents or router passwords into documentation.
 - Preserve password-based SSH behavior for router entries without `sshPrivateKeyPath`.
 - Do not change firewall, VLAN, CAPsMAN, Wi-Fi, or forwarding configuration.
@@ -181,14 +181,14 @@ Run: `npx vitest run test/unit/docs test/unit/skill/tool-map-sync.test.ts`
 ### Task 4: Build and live rollout
 
 **Files outside Git:**
-- Modify: `/home/anmax/.mikromcp/routers.yaml`
-- Modify: `/home/anmax/.mikromcp/.env`
-- Replace installed build: `/home/anmax/.npm-global/lib/node_modules/mikromcp`
+- Modify: `~/.mikromcp/routers.yaml`
+- Modify: `~/.mikromcp/.env`
+- Replace the globally installed MikroMCP package
 
 **Interfaces:**
-- HMaster REST: `mcp-api` password from `ROUTER_HMaster_*`
-- HSlave REST: `mcp-api` password from `ROUTER_HSlave_*`
-- Both routers SSH: `admin` with `/home/anmax/.ssh/id_sel`
+- Each router keeps its REST username and password under a distinct environment
+  prefix.
+- Each router can use a separate SSH username and absolute private-key path.
 
 - [x] **Step 1: Run the complete source verification and build**
 
@@ -198,28 +198,29 @@ Run: `npm run build`
 
 - [x] **Step 2: Back up active configuration without exposing secrets**
 
-Create mode-preserving timestamped copies of `/home/anmax/.mikromcp/routers.yaml`
-and `/home/anmax/.mikromcp/.env` in the same directory. Do not print either file.
+Create timestamped copies of `~/.mikromcp/routers.yaml` and
+`~/.mikromcp/.env`. Do not print either file, and restrict the environment file
+and its backup to owner-only access.
 
-- [x] **Step 3: Verify both aliases use `admin`, `/home/anmax/.ssh/id_sel`, and public-key authentication; calculate raw SHA-256 host-key fingerprints for the registry**
+- [x] **Step 3: Verify each SSH alias uses the intended username and private key; calculate raw SHA-256 host-key fingerprints for the registry**
 
 Expected: both `/system identity print` commands succeed non-interactively.
 
-- [x] **Step 4: Configure HSlave REST credentials without displaying the generated password**
+- [x] **Step 4: Configure separate REST credentials without displaying the generated password**
 
-Generate 32 random bytes locally. Set or rotate only user `mcp-api` on HSlave,
-store the same value as `ROUTER_HSlave_PASS`, and keep the environment file mode
-`0600`. The command must not include the password in captured output.
+Generate 32 random bytes locally. Set or rotate only the intended REST user,
+store the same value under that router's environment prefix, and keep the
+environment file mode `0600`. The command must not include the password in
+captured output.
 
 - [x] **Step 5: Configure both router entries**
 
-Each entry uses `sshUsername: "admin"`,
-`sshPrivateKeyPath: "/home/anmax/.ssh/id_sel"`, and its pinned
-`sshFingerprint`. Add HSlave at `192.168.88.21`, RouterOS 7.24.2, REST port 80.
+Each entry uses its intended `sshUsername`, an absolute `sshPrivateKeyPath`,
+and a pinned `sshFingerprint`.
 
 - [x] **Step 6: Install the tested worktree package**
 
-Run: `npm install --global /home/anmax/Documents/mikrotik/.worktrees/mikromcp-ssh-key`
+Run: `npm install --global /absolute/path/to/mikromcp-worktree`
 
 - [x] **Step 7: Verify both protocol paths on both routers**
 
@@ -227,7 +228,7 @@ REST check: read `system/identity` through MikroMCP for each router.
 
 SSH check: run `/system identity print` through MikroMCP for each router.
 
-- [x] **Step 8: Disable HSlave SSH password authentication only after Step 7 succeeds**
+- [x] **Step 8: Disable SSH password authentication only after Step 7 succeeds**
 
 Keep a working key-authenticated session open, apply
 `/ip ssh set password-authentication=no`, then open a new key-authenticated

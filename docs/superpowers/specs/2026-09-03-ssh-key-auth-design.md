@@ -4,15 +4,14 @@
 
 Allow MikroMCP to keep using the existing RouterOS REST username and password
 while SSH-backed tools authenticate with a separate username and private key.
-Register both home routers without enabling SSH password authentication.
 
 ## Approved outcome
 
 - REST authentication remains `mcp-api` plus a per-router password.
-- SSH authentication uses user `admin` and `/home/anmax/.ssh/id_sel`.
-- RouterOS SSH password authentication stays disabled on HMaster and is disabled
-  on HSlave only after key access is positively verified.
-- HMaster and HSlave are both present in the MikroMCP router registry.
+- SSH authentication can use a dedicated username and an absolute private-key
+  path.
+- Operators can keep RouterOS SSH password authentication disabled after they
+  verify key access.
 - Existing installations that omit the new SSH fields keep password-based SSH
   behavior for backward compatibility.
 
@@ -47,16 +46,16 @@ the resolved REST username and password for SSH.
 1. Build and test the patched MikroMCP in an isolated worktree.
 2. Back up the active registry and environment file with their current modes.
 3. Add separate SSH settings and host-key fingerprints for both routers.
-4. Ensure HSlave has a dedicated `mcp-api` REST credential without printing the
-   generated password.
-5. Install the tested package into the existing npm-global location.
-6. Verify REST and SSH-backed reads independently on HMaster, then HSlave.
-7. Disable SSH password authentication on HSlave after key authentication has
-   passed, and verify key access again.
+4. Ensure each router has a dedicated REST credential without printing its
+   password.
+5. Install the tested package.
+6. Verify REST and SSH-backed reads on each router.
+7. Disable SSH password authentication after key authentication passes, then
+   verify key access again.
 
 ## Rollback
 
 - Restore the backed-up registry and environment file.
 - Reinstall MikroMCP 1.10.0 from the unchanged `main` checkout.
-- If the final HSlave hardening step causes unexpected access loss, use the
-  already-open key-authenticated session to restore its previous SSH setting.
+- If the final hardening step causes access loss, use the open key-authenticated
+  session to restore the previous SSH setting.
