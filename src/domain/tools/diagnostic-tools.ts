@@ -3,11 +3,14 @@ import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
-import { buildRouterOsCommand } from "../../adapter/routeros-command.js";
+import { buildRouterOsCommand, isRouterOsCommandString } from "../../adapter/routeros-command.js";
 
 import { paginate } from "./pagination.js";
 
 const log = createLogger("diagnostic-tools");
+const routerOsCommandString = z
+  .string()
+  .refine(isRouterOsCommandString, "Must not contain control characters");
 
 // ---------------------------------------------------------------------------
 // ping
@@ -16,7 +19,7 @@ const log = createLogger("diagnostic-tools");
 const pingInputSchema = z
   .object({
     routerId,
-    address: z.string().describe("Target IP address or hostname to ping"),
+    address: routerOsCommandString.describe("Target IP address or hostname to ping"),
     count: z
       .number()
       .int()
@@ -31,7 +34,7 @@ const pingInputSchema = z
       .max(65535)
       .default(56)
       .describe("Packet size in bytes (14–65535)"),
-    routingTable: z.string().optional().describe("Routing table to use for the ping"),
+    routingTable: routerOsCommandString.optional().describe("Routing table to use for the ping"),
   })
   .strict();
 
@@ -101,7 +104,7 @@ const pingTool: ToolDefinition = {
 const tracerouteInputSchema = z
   .object({
     routerId,
-    address: z.string().describe("Target IP address or hostname to trace"),
+    address: routerOsCommandString.describe("Target IP address or hostname to trace"),
     count: z.number().int().min(1).max(5).default(3).describe("Probes per hop (1–5)"),
     maxHops: z.number().int().min(1).max(30).default(15).describe("Maximum number of hops (1–30)"),
   })
@@ -173,7 +176,7 @@ const tracerouteTool: ToolDefinition = {
 const torchInputSchema = z
   .object({
     routerId,
-    interface: z.string().describe("Interface name to monitor (e.g. ether1, bridge1)"),
+    interface: routerOsCommandString.describe("Interface name to monitor (e.g. ether1, bridge1)"),
     duration: z
       .number()
       .int()
@@ -181,8 +184,8 @@ const torchInputSchema = z
       .max(30)
       .default(5)
       .describe("Capture duration in seconds (1–30)"),
-    srcAddress: z.string().optional().describe("Filter by source IP address"),
-    dstAddress: z.string().optional().describe("Filter by destination IP address"),
+    srcAddress: routerOsCommandString.optional().describe("Filter by source IP address"),
+    dstAddress: routerOsCommandString.optional().describe("Filter by destination IP address"),
   })
   .strict();
 

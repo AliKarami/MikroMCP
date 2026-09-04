@@ -4,8 +4,12 @@ const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 
 export type RouterOsCommandValue = string | number;
 
+export function isRouterOsCommandString(value: string): boolean {
+  return !CONTROL_CHARACTER.test(value);
+}
+
 function quoteRouterOsString(value: string): string {
-  if (CONTROL_CHARACTER.test(value)) {
+  if (!isRouterOsCommandString(value)) {
     throw new Error("RouterOS command values must not contain control characters");
   }
 

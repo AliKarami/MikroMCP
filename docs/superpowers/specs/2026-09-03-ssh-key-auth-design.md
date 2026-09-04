@@ -42,8 +42,9 @@ fallback continues to use REST credentials.
 - The configuration stores only a filesystem path, not key material.
 - Existing SSH host-key fingerprint verification remains applicable.
 - SSH-backed diagnostic tools construct one RouterOS command from fixed command
-  and parameter names. Every string value is quoted and escaped, and control
-  characters are rejected before SSH execution.
+  and parameter names. Every string value is quoted and escaped. Input schemas
+  classify control characters as validation errors before SSH execution, and
+  the builder repeats the check as a second boundary.
 - No RouterOS service is exposed to a wider source range by this change.
 - No inline private key or key passphrase setting is introduced.
 

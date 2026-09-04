@@ -5,6 +5,8 @@ import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
+import { enrichError } from "../../../src/domain/errors/error-enricher.js";
+import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
 import { z } from "zod";
 
 const pingTool = diagnosticTools[0];
@@ -65,6 +67,52 @@ const tracerouteInputSchema = z
   .strict();
 
 describe("diagnostic tools", () => {
+  describe("control character validation", () => {
+    it.each([
+      ["ping address", pingTool, { routerId: "test-router", address: "host\n:put owned" }],
+      [
+        "ping routing table",
+        pingTool,
+        { routerId: "test-router", address: "127.0.0.1", routingTable: "main\towned" },
+      ],
+      [
+        "traceroute address",
+        tracerouteTool,
+        { routerId: "test-router", address: "host\r:put owned" },
+      ],
+      [
+        "torch interface",
+        diagnosticTools[2],
+        { routerId: "test-router", interface: "ether1\n:put owned" },
+      ],
+      [
+        "torch source address",
+        diagnosticTools[2],
+        { routerId: "test-router", interface: "ether1", srcAddress: "10.0.0.0/8\towned" },
+      ],
+      [
+        "torch destination address",
+        diagnosticTools[2],
+        { routerId: "test-router", interface: "ether1", dstAddress: "10.0.0.1\u007fowned" },
+      ],
+    ])("classifies %s as validation before SSH", async (_label, tool, params) => {
+      const ctx = makeContext();
+      let thrown: unknown;
+
+      try {
+        await tool.handler(params, ctx);
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(enrichError(thrown)).toMatchObject({
+        category: ErrorCategory.VALIDATION,
+        code: "VALIDATION_ERROR",
+      });
+      expect(ctx.sshClient.execute).not.toHaveBeenCalled();
+    });
+  });
+
   describe("metadata", () => {
     it("exports at least 2 tools: ping and traceroute as first two", () => {
       expect(diagnosticTools.length).toBeGreaterThanOrEqual(2);

@@ -161,6 +161,11 @@ Expected: both files pass with no skipped tests.
   characters.
 - [x] Route ping, traceroute, and torch arguments through the builder.
 - [x] Run the focused builder and diagnostic tool tests.
+- [x] Reproduce that control characters were blocked but reported as an
+  internal error.
+- [x] Reject control characters in every diagnostic string schema so the
+  caller receives `VALIDATION_ERROR` before SSH; retain the builder check as a
+  second boundary.
 
 ### Task 3: User documentation
 
