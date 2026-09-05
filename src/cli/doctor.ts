@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import * as net from "node:net";
 import chalk from "chalk";
 import { RouterRegistry } from "../config/router-registry.js";
+import { privateKeyIsShared, privateKeyReadError } from "../config/ssh-key.js";
 import { getCredentials } from "../config/secrets.js";
 import { RouterOSRestClient } from "../adapter/rest-client.js";
 import { loadAppConfig } from "../config/app-config.js";
@@ -137,6 +138,23 @@ function checkEnvVars(routers: RouterConfig[], transport: string): void {
 
   if (transport === "http" && !process.env.MIKROMCP_CONFIRMATION_SECRET) {
     warn("MIKROMCP_CONFIRMATION_SECRET not set — required in HTTP mode");
+  }
+}
+
+// ─── SSH key check ─────────────────────────────────────────────────────────
+
+function checkSshKeys(routers: RouterConfig[]): void {
+  for (const router of routers) {
+    const keyPath = router.sshPrivateKeyPath;
+    if (keyPath === undefined) continue;
+    const problem = privateKeyReadError(keyPath);
+    if (problem !== null) {
+      fail(`SSH key for ${router.id}: ${keyPath} is not readable (${problem})`);
+    } else if (privateKeyIsShared(keyPath)) {
+      warn(`SSH key for ${router.id}: ${keyPath} is readable by group/others — chmod 0600`);
+    } else {
+      ok(`SSH key for ${router.id}: ${keyPath}`);
+    }
   }
 }
 
@@ -391,6 +409,7 @@ export async function runDoctor(): Promise<void> {
   // 3. Env vars
   if (routers.length > 0) {
     checkEnvVars(routers, appConfig.transport);
+    checkSshKeys(routers);
   }
 
   // 3b. Default router resolution

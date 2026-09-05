@@ -47,14 +47,17 @@ vi.mock("node:net", () => ({
   createConnection: vi.fn(),
 }));
 
-vi.mock("node:os", () => ({
-  homedir: vi.fn(() => "/mock/home"),
-}));
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return { ...actual, homedir: vi.fn(() => "/mock/home") };
+});
 
 // ─── Imports after mocks ─────────────────────────────────────────────────────
 
 import * as fsModule from "node:fs";
 import * as netModule from "node:net";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { RouterRegistry } from "../../../src/config/router-registry.js";
 import { getCredentials } from "../../../src/config/secrets.js";
 import { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
@@ -72,7 +75,14 @@ const mockCreateConnection = vi.mocked(netModule.createConnection);
 
 // ─── Test router fixture ─────────────────────────────────────────────────────
 
-function makeRouter(overrides: Partial<{ id: string; host: string; sshPort?: number }> = {}) {
+function makeRouter(
+  overrides: Partial<{
+    id: string;
+    host: string;
+    sshPort?: number;
+    sshPrivateKeyPath?: string;
+  }> = {},
+) {
   return {
     id: overrides.id ?? "core-01",
     host: overrides.host ?? "192.168.1.1",
@@ -82,6 +92,7 @@ function makeRouter(overrides: Partial<{ id: string; host: string; sshPort?: num
     tags: [],
     rosVersion: "7.14",
     sshPort: overrides.sshPort,
+    sshPrivateKeyPath: overrides.sshPrivateKeyPath,
   };
 }
 
@@ -486,6 +497,56 @@ describe("runDoctor", () => {
       const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
       expect(allOutput).toMatch(/⚠️.*No MIKROMCP_DEFAULT_ROUTER set and 2 routers configured/);
     });
+  });
+
+  describe("SSH key check", () => {
+    function tempKey(mode: number): string {
+      const dir = fsModule.mkdtempSync(join(tmpdir(), "mikromcp-doctor-key-"));
+      const path = join(dir, "id_test");
+      fsModule.writeFileSync(path, "test-private-key", { mode });
+      fsModule.chmodSync(path, mode);
+      return path;
+    }
+
+    async function runWithKey(keyPath: string): Promise<string> {
+      const router = makeRouter({ sshPrivateKeyPath: keyPath });
+      mockExistsSync.mockImplementation(() => true);
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [router] }) as unknown as RouterRegistry,
+      );
+      mockGetCredentials.mockReturnValue({ username: "admin", password: "secret" });
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([{ version: "7.14" }]),
+        close: vi.fn(),
+      };
+      MockRouterOSRestClient.mockImplementation(() => mockClient as unknown as RouterOSRestClient);
+      mockCreateConnection.mockReturnValue(
+        makeTcpSocket(true) as unknown as ReturnType<typeof netModule.createConnection>,
+      );
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }),
+      );
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+      return consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    }
+
+    it("reports an owner-only private key as ok", async () => {
+      const out = await runWithKey(tempKey(0o600));
+      expect(out).toMatch(/✅.*SSH key for core-01/);
+    });
+
+    it.skipIf(process.platform === "win32")(
+      "warns when the private key is readable by group or others",
+      async () => {
+        const out = await runWithKey(tempKey(0o644));
+        expect(out).toMatch(/⚠️.*SSH key for core-01.*0600/);
+      },
+    );
   });
 
   describe("Usage skill check", () => {
