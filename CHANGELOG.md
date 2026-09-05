@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Fixed
+- A misconfigured `sshPrivateKeyPath` (missing file, wrong Docker mount, unreadable permissions) now fails at startup with a config error naming the router and the path, instead of surfacing as `INTERNAL_ERROR: ENOENT …` on the first SSH-backed tool call. A key readable by group or others logs a warning at startup, and `mikromcp doctor` reports the status of every configured key.
+
 ## [1.11.0] - 2026-09-05
 
 ### Added

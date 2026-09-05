@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { DeviceType, RouterConfig } from "../types.js";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 import { createLogger } from "../observability/logger.js";
+import { privateKeyIsShared, privateKeyReadError } from "./ssh-key.js";
 
 const log = createLogger("router-registry");
 
@@ -131,6 +132,23 @@ export class RouterRegistry {
       throw new Error(`Invalid router config at ${configPath}:\n${issues}`);
     }
 
+    // A key path that passed the schema can still be unusable — a typo, or a
+    // Docker mount that was never made. Check it here so the mistake fails at
+    // startup rather than surfacing as INTERNAL_ERROR on the first SSH call.
+    const keyIssues: string[] = [];
+    for (const [id, config] of Object.entries(result.data.routers)) {
+      if (config.sshPrivateKeyPath === undefined) continue;
+      const problem = privateKeyReadError(config.sshPrivateKeyPath);
+      if (problem !== null) {
+        keyIssues.push(
+          `  ${id}.sshPrivateKeyPath: not readable (${problem}) — ${config.sshPrivateKeyPath}`,
+        );
+      }
+    }
+    if (keyIssues.length > 0) {
+      throw new Error(`Invalid router config at ${configPath}:\n${keyIssues.join("\n")}`);
+    }
+
     for (const [id, config] of Object.entries(result.data.routers)) {
       const deviceType = deviceTypeOf(config.deviceType);
       // The schema guarantees tls and rosVersion for RouterOS devices, so these
@@ -147,6 +165,15 @@ export class RouterRegistry {
           { routerId: id },
           "TLS certificate validation is DISABLED (rejectUnauthorized=false). " +
             "Set tls.fingerprint to pin the server certificate instead.",
+        );
+      }
+      if (
+        routerConfig.sshPrivateKeyPath !== undefined &&
+        privateKeyIsShared(routerConfig.sshPrivateKeyPath)
+      ) {
+        log.warn(
+          { routerId: id, sshPrivateKeyPath: routerConfig.sshPrivateKeyPath },
+          "SSH private key is readable by group or others — restrict it to the owner (chmod 0600).",
         );
       }
       this.routers.set(id, routerConfig);

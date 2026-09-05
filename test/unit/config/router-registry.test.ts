@@ -1,9 +1,41 @@
-import { describe, it, expect } from "vitest";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { describe, it, expect, vi } from "vitest";
+import { writeFileSync, mkdtempSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RouterRegistry } from "../../../src/config/router-registry.js";
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
+
+const { warnSpy } = vi.hoisted(() => ({ warnSpy: vi.fn() }));
+vi.mock("../../../src/observability/logger.js", () => ({
+  createLogger: () => ({ warn: warnSpy, info: vi.fn(), debug: vi.fn(), error: vi.fn() }),
+}));
+
+function tempKey(mode: number): string {
+  const dir = mkdtempSync(join(tmpdir(), "mikromcp-key-"));
+  const path = join(dir, "id_test");
+  writeFileSync(path, "test-private-key", { mode });
+  chmodSync(path, mode);
+  return path;
+}
+
+function yamlWithKey(keyPath: string): string {
+  return `
+routers:
+  home:
+    host: 192.168.1.1
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: true
+    credentials:
+      source: env
+      envPrefix: ROUTER_HOME
+    tags: []
+    rosVersion: "7"
+    sshUsername: automation
+    sshPrivateKeyPath: ${keyPath}
+`;
+}
 
 function tempYaml(content: string): string {
   const dir = mkdtempSync(join(tmpdir(), "mikromcp-"));
@@ -112,25 +144,36 @@ routers:
   });
 
   it("accepts a separate SSH username and absolute private-key path", () => {
-    const path = tempYaml(`
-routers:
-  home:
-    host: 192.168.1.1
-    port: 443
-    tls:
-      enabled: true
-      rejectUnauthorized: true
-    credentials:
-      source: env
-      envPrefix: ROUTER_HOME
-    tags: []
-    rosVersion: "7"
-    sshUsername: automation
-    sshPrivateKeyPath: /tmp/id_automation
-`);
-    const router = new RouterRegistry(path).getRouter("home");
+    const keyPath = tempKey(0o600);
+    const router = new RouterRegistry(tempYaml(yamlWithKey(keyPath))).getRouter("home");
     expect(router.sshUsername).toBe("automation");
-    expect(router.sshPrivateKeyPath).toBe("/tmp/id_automation");
+    expect(router.sshPrivateKeyPath).toBe(keyPath);
+  });
+
+  it("rejects an sshPrivateKeyPath that cannot be read, at load time", () => {
+    const path = tempYaml(yamlWithKey("/nonexistent/mikromcp/id_missing"));
+    expect(() => new RouterRegistry(path)).toThrow(
+      /home\.sshPrivateKeyPath: not readable \(ENOENT\)/,
+    );
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "warns when the private key is readable by group or others",
+    () => {
+      warnSpy.mockClear();
+      const keyPath = tempKey(0o644);
+      new RouterRegistry(tempYaml(yamlWithKey(keyPath)));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ routerId: "home", sshPrivateKeyPath: keyPath }),
+        expect.stringMatching(/0600/),
+      );
+    },
+  );
+
+  it("does not warn about permissions for an owner-only private key", () => {
+    warnSpy.mockClear();
+    new RouterRegistry(tempYaml(yamlWithKey(tempKey(0o600))));
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.anything(), expect.stringMatching(/0600/));
   });
 
   it("rejects a relative SSH private-key path", () => {

@@ -22,6 +22,7 @@ RouterOS credentials are read from environment variables (`ROUTER_<PREFIX>_USER`
 - **Never log credentials.** MikroMCP never logs auth headers or passwords, but custom log processors or reverse proxies may. Audit your log pipeline.
 - Rotate RouterOS API credentials independently from MikroMCP tokens. Use RouterOS user groups to limit API credentials to the minimum required policies (see policy table below).
 - On Linux, use a secrets manager (e.g., systemd credentials, Vault, AWS Secrets Manager) rather than a plain `.env` file for production deployments.
+- **SSH private keys** (optional `sshPrivateKeyPath` in `routers.yaml`) are read from disk for each SSH/SFTP connection, never logged, and the path is not returned by `list_routers`. When a key is configured, the REST password is not offered to SSH or SFTP at all. A path that does not exist or cannot be read fails at startup rather than on the first SSH-backed call. Keep the file owner-only (`0600` — the registry warns at startup otherwise), mount only that one file read-only into a container, and note that passphrase-protected keys are not supported. See [Configuration → Per-Router SSH, SFTP, and FTP](wiki/Configuration.md#per-router-ssh-sftp-and-ftp).
 
 ### HTTP transport attack surface
 
