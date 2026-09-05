@@ -92,7 +92,8 @@ src/
 ├── adapter/
 │   ├── rest-client.ts             # RouterOS REST client — get, getOne, create, update, remove, execute
 │   ├── ssh-client.ts              # SSH adapter — ping, traceroute, torch, run_command
-│   ├── ftp-client.ts              # FTP adapter — upload_file
+│   ├── sftp-client.ts             # Preferred encrypted upload_file transport
+│   ├── ftp-client.ts              # Plaintext upload_file fallback
 │   ├── circuit-breaker.ts         # Per-router circuit breaker (closed/open/half-open)
 │   ├── retry-engine.ts            # Exponential backoff + jitter for read tools
 │   ├── connection-pool.ts         # REST client pooling

@@ -20,6 +20,13 @@ export ROUTER_CORE01_PASS=your-router-password
 export MIKROMCP_CONFIG_PATH=/absolute/path/to/config/routers.yaml
 ```
 
+If RouterOS accepts SSH keys but rejects password authentication, add
+`sshUsername` and an absolute `sshPrivateKeyPath` to that router's
+`routers.yaml` entry. The MCP client does not need the private key in its own
+configuration; the MikroMCP child process reads it locally for SSH commands and
+SFTP uploads. See
+[Configuration](Configuration#per-router-ssh-sftp-and-ftp).
+
 Register MikroMCP (npm global install):
 
 ```bash
@@ -180,6 +187,17 @@ docker run -d \
 ```
 
 The config directory must contain a `routers.yaml` (and optionally `identities.yaml`). The container reads router credentials from environment variables as usual.
+
+If a router entry uses `sshPrivateKeyPath`, that path must exist inside the
+container. Mount only the required private key read-only and use the container
+path in `routers.yaml`, for example:
+
+```bash
+-v "$HOME/.ssh/id_ed25519:/run/secrets/mikromcp_ssh_key:ro"
+```
+
+Then set `sshPrivateKeyPath: "/run/secrets/mikromcp_ssh_key"`. Do not mount the
+entire `.ssh` directory.
 
 Once running, point your MCP client at `http://localhost:3000/mcp` (or the host IP if the client is on a different machine).
 

@@ -111,6 +111,47 @@ routers:
     expect(registry.getRouter("home").sshFingerprint).toBe("sha256hexvalue");
   });
 
+  it("accepts a separate SSH username and absolute private-key path", () => {
+    const path = tempYaml(`
+routers:
+  home:
+    host: 192.168.1.1
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: true
+    credentials:
+      source: env
+      envPrefix: ROUTER_HOME
+    tags: []
+    rosVersion: "7"
+    sshUsername: automation
+    sshPrivateKeyPath: /tmp/id_automation
+`);
+    const router = new RouterRegistry(path).getRouter("home");
+    expect(router.sshUsername).toBe("automation");
+    expect(router.sshPrivateKeyPath).toBe("/tmp/id_automation");
+  });
+
+  it("rejects a relative SSH private-key path", () => {
+    const path = tempYaml(`
+routers:
+  home:
+    host: 192.168.1.1
+    port: 443
+    tls:
+      enabled: true
+      rejectUnauthorized: true
+    credentials:
+      source: env
+      envPrefix: ROUTER_HOME
+    tags: []
+    rosVersion: "7"
+    sshPrivateKeyPath: .ssh/id_automation
+`);
+    expect(() => new RouterRegistry(path)).toThrow(/sshPrivateKeyPath must be absolute/);
+  });
+
   it("soleRouterId returns the id when exactly one router is configured", () => {
     const registry = new RouterRegistry(tempYaml(VALID_CONFIG));
     expect(registry.soleRouterId()).toBe("home");

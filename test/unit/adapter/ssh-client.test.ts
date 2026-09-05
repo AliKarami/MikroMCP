@@ -1,5 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { RouterConfig } from "../../../src/types.js";
 
 vi.mock("ssh2", () => ({
@@ -21,6 +24,15 @@ const routerConfig: RouterConfig = {
   rosVersion: "7",
 };
 const credentials = { username: "admin", password: "pass" };
+const tempDirs: string[] = [];
+
+function tempPrivateKey(content: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "mikromcp-ssh-key-"));
+  tempDirs.push(dir);
+  const path = join(dir, "id_test");
+  writeFileSync(path, content, { mode: 0o600 });
+  return path;
+}
 
 type MockStream = EventEmitter & {
   stderr: EventEmitter;
@@ -53,6 +65,10 @@ describe("SshClient", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
   describe("happy path", () => {
     it("resolves with output from stream data", async () => {
       const { stream } = buildMocks();
@@ -76,6 +92,52 @@ describe("SshClient", () => {
       await promise;
 
       expect(conn.end).toHaveBeenCalled();
+    });
+
+    it("uses a separate SSH username and private key without the REST password", async () => {
+      const { conn, stream } = buildMocks();
+      const keyPath = tempPrivateKey("test-private-key");
+      const client = new SshClient(
+        { ...routerConfig, sshUsername: "automation", sshPrivateKeyPath: keyPath },
+        credentials,
+      );
+
+      const promise = client.execute("test command");
+
+      const options = conn.connect.mock.calls[0][0] as Record<string, unknown>;
+      expect(options.username).toBe("automation");
+      expect(options.privateKey).toEqual(Buffer.from("test-private-key"));
+      expect(options.password).toBeUndefined();
+
+      await new Promise((resolve) => setImmediate(resolve));
+      stream.emit("close");
+      await promise;
+    });
+
+    it("keeps password authentication when no private key is configured", async () => {
+      const { conn, stream } = buildMocks();
+      const client = new SshClient(routerConfig, credentials);
+
+      const promise = client.execute("test command");
+
+      const options = conn.connect.mock.calls[0][0] as Record<string, unknown>;
+      expect(options).toMatchObject({ username: "admin", password: "pass" });
+      expect(options.privateKey).toBeUndefined();
+
+      await new Promise((resolve) => setImmediate(resolve));
+      stream.emit("close");
+      await promise;
+    });
+
+    it("fails closed instead of falling back to the REST password when the key is unreadable", async () => {
+      const { conn } = buildMocks();
+      const client = new SshClient(
+        { ...routerConfig, sshPrivateKeyPath: "/tmp/mikromcp-key-that-does-not-exist" },
+        credentials,
+      );
+
+      await expect(client.execute("test command")).rejects.toMatchObject({ code: "ENOENT" });
+      expect(conn.connect).not.toHaveBeenCalled();
     });
   });
 

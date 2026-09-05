@@ -10,6 +10,12 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- Router entries can use a separate SSH/SFTP username and an absolute private-key path; SSH-backed commands and SFTP uploads no longer require RouterOS password authentication when a key is configured.
+
+### Security
+- `ping`, `traceroute`, and `torch` built their RouterOS command by interpolating unvalidated string parameters and running it over SSH, so a value like `127.0.0.1; /system reboot` executed a second command. Because all three tools are read-only, this bypassed `allowedToolPatterns` scoping, the `run_command` allow/deny policy, the destructive-tool confirmation gate, and the audit log. Diagnostic commands are now assembled by a builder that validates command and parameter names, quotes every string value (escaping `\`, `"`, and `$`), and rejects control characters at the input schema as a validation error. Affects every published release; upgrade if any identity can call these tools.
+
 ## [1.10.0] - 2026-08-23
 
 ### Added

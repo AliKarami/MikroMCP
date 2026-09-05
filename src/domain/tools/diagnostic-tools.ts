@@ -3,10 +3,14 @@ import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
+import { buildRouterOsCommand, isRouterOsCommandString } from "../../adapter/routeros-command.js";
 
 import { paginate } from "./pagination.js";
 
 const log = createLogger("diagnostic-tools");
+const routerOsCommandString = z
+  .string()
+  .refine(isRouterOsCommandString, "Must not contain control characters");
 
 // ---------------------------------------------------------------------------
 // ping
@@ -15,7 +19,7 @@ const log = createLogger("diagnostic-tools");
 const pingInputSchema = z
   .object({
     routerId,
-    address: z.string().describe("Target IP address or hostname to ping"),
+    address: routerOsCommandString.describe("Target IP address or hostname to ping"),
     count: z
       .number()
       .int()
@@ -30,7 +34,7 @@ const pingInputSchema = z
       .max(65535)
       .default(56)
       .describe("Packet size in bytes (14–65535)"),
-    routingTable: z.string().optional().describe("Routing table to use for the ping"),
+    routingTable: routerOsCommandString.optional().describe("Routing table to use for the ping"),
   })
   .strict();
 
@@ -54,14 +58,16 @@ const pingTool: ToolDefinition = {
     try {
       // RouterOS 7.x REST API for /tool/ping requires internal permissions that cannot
       // be granted via user policy. Use SSH instead, matching run_command behavior.
-      const parts = [
-        `/tool ping address=${parsed.address}`,
-        `count=${parsed.count}`,
-        `size=${parsed.size}`,
-      ];
-      if (parsed.routingTable !== undefined) parts.push(`routing-table=${parsed.routingTable}`);
+      const parameters: Record<string, string | number> = {
+        address: parsed.address,
+        count: parsed.count,
+        size: parsed.size,
+      };
+      if (parsed.routingTable !== undefined) parameters["routing-table"] = parsed.routingTable;
 
-      const output = await context.sshClient.execute(parts.join(" "));
+      const output = await context.sshClient.execute(
+        buildRouterOsCommand("/tool ping", parameters),
+      );
 
       // Summary line: "sent=N received=N packet-loss=X% min-rtt=Xms avg-rtt=Xms max-rtt=Xms"
       const s = output.match(/sent=(\d+)/)?.[1] ?? String(parsed.count);
@@ -98,7 +104,7 @@ const pingTool: ToolDefinition = {
 const tracerouteInputSchema = z
   .object({
     routerId,
-    address: z.string().describe("Target IP address or hostname to trace"),
+    address: routerOsCommandString.describe("Target IP address or hostname to trace"),
     count: z.number().int().min(1).max(5).default(3).describe("Probes per hop (1–5)"),
     maxHops: z.number().int().min(1).max(30).default(15).describe("Maximum number of hops (1–30)"),
   })
@@ -123,13 +129,13 @@ const tracerouteTool: ToolDefinition = {
 
     try {
       // Same REST API permission issue as ping — use SSH.
-      const parts = [
-        `/tool traceroute address=${parsed.address}`,
-        `count=${parsed.count}`,
-        `max-hops=${parsed.maxHops}`,
-      ];
-
-      const output = await context.sshClient.execute(parts.join(" "));
+      const output = await context.sshClient.execute(
+        buildRouterOsCommand("/tool traceroute", {
+          address: parsed.address,
+          count: parsed.count,
+          "max-hops": parsed.maxHops,
+        }),
+      );
 
       // Each hop line starts with a number: " 1 192.168.1.1  echo reply  1ms …"
       const hopLines = output.split("\n").filter((l) => /^\s*\d+\s+\S+/.test(l));
@@ -170,7 +176,7 @@ const tracerouteTool: ToolDefinition = {
 const torchInputSchema = z
   .object({
     routerId,
-    interface: z.string().describe("Interface name to monitor (e.g. ether1, bridge1)"),
+    interface: routerOsCommandString.describe("Interface name to monitor (e.g. ether1, bridge1)"),
     duration: z
       .number()
       .int()
@@ -178,8 +184,8 @@ const torchInputSchema = z
       .max(30)
       .default(5)
       .describe("Capture duration in seconds (1–30)"),
-    srcAddress: z.string().optional().describe("Filter by source IP address"),
-    dstAddress: z.string().optional().describe("Filter by destination IP address"),
+    srcAddress: routerOsCommandString.optional().describe("Filter by source IP address"),
+    dstAddress: routerOsCommandString.optional().describe("Filter by destination IP address"),
   })
   .strict();
 
@@ -225,12 +231,15 @@ const torchTool: ToolDefinition = {
     log.info({ routerId: context.routerId, interface: parsed.interface }, "Running torch");
 
     try {
-      const parts = [`/tool torch interface=${parsed.interface}`];
-      if (parsed.srcAddress !== undefined) parts.push(`src-address=${parsed.srcAddress}`);
-      if (parsed.dstAddress !== undefined) parts.push(`dst-address=${parsed.dstAddress}`);
+      const parameters: Record<string, string | number> = { interface: parsed.interface };
+      if (parsed.srcAddress !== undefined) parameters["src-address"] = parsed.srcAddress;
+      if (parsed.dstAddress !== undefined) parameters["dst-address"] = parsed.dstAddress;
 
       // RouterOS torch runs indefinitely — force-close after duration + 1s buffer
-      const raw = await context.sshClient.execute(parts.join(" "), (parsed.duration + 1) * 1000);
+      const raw = await context.sshClient.execute(
+        buildRouterOsCommand("/tool torch", parameters),
+        (parsed.duration + 1) * 1000,
+      );
 
       // Strip ANSI escape codes and parse flow rows
       const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");

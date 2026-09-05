@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { Client } from "ssh2";
 import type { RouterConfig } from "../types.js";
 
 /**
  * Uploads a file over SFTP (encrypted, over the SSH channel) — the preferred
- * alternative to plaintext FTP. Honors the router's `sshPort` and
- * `sshFingerprint` exactly like {@link SshClient}.
+ * alternative to plaintext FTP. Honors the router's SSH authentication,
+ * `sshPort`, and `sshFingerprint` settings exactly like {@link SshClient}.
  */
 export class SftpClient {
   constructor(
@@ -14,6 +15,10 @@ export class SftpClient {
   ) {}
 
   async upload(remoteName: string, content: string): Promise<void> {
+    const privateKey = this.config.sshPrivateKeyPath
+      ? readFileSync(this.config.sshPrivateKeyPath)
+      : undefined;
+
     return new Promise((resolve, reject) => {
       const conn = new Client();
       let settled = false;
@@ -43,10 +48,12 @@ export class SftpClient {
       const connectOptions: Record<string, unknown> = {
         host: this.config.host,
         port: this.config.sshPort ?? 22,
-        username: this.credentials.username,
-        password: this.credentials.password,
+        username: this.config.sshUsername ?? this.credentials.username,
         readyTimeout: 10_000,
       };
+
+      if (privateKey) connectOptions.privateKey = privateKey;
+      else connectOptions.password = this.credentials.password;
 
       if (this.config.sshFingerprint) {
         const expected = this.config.sshFingerprint.toLowerCase();

@@ -147,7 +147,7 @@ const uploadFileInputSchema = z
     dryRun: z
       .boolean()
       .default(false)
-      .describe("Validate FTP connectivity without writing the file"),
+      .describe("Validate SFTP or FTP connectivity without writing the target file"),
   })
   .strict();
 

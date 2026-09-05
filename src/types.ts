@@ -34,6 +34,8 @@ export interface RouterConfig {
   tags: string[];
   rosVersion: string;
   sshPort?: number;
+  sshUsername?: string;
+  sshPrivateKeyPath?: string;
   sshFingerprint?: string;
   cmdAllow?: string[];
   cmdDeny?: string[];

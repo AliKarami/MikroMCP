@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import type { DeviceType, RouterConfig } from "../types.js";
@@ -43,6 +44,12 @@ const RouterConfigSchema = z
     tags: z.array(z.string()).default([]),
     rosVersion: z.string().min(1).optional(),
     sshPort: z.number().int().min(1).max(65535).optional(),
+    sshUsername: z.string().min(1).optional(),
+    sshPrivateKeyPath: z
+      .string()
+      .min(1)
+      .refine(isAbsolute, "sshPrivateKeyPath must be absolute")
+      .optional(),
     sshFingerprint: z.string().optional(),
     cmdAllow: z.array(z.string()).optional(),
     cmdDeny: z.array(z.string()).optional(),
