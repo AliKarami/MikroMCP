@@ -174,6 +174,16 @@ Contributed by [@f0086](https://github.com/f0086).
 
 ---
 
+## ✅ v1.11 — SSH Private-Key Authentication
+
+Router entries can now carry an `sshUsername` and an absolute `sshPrivateKeyPath`. When a key is configured, `ping`, `traceroute`, `torch`, `run_command` and SFTP `upload_file` authenticate with it and the REST password is not offered, so operators can disable password SSH on the router and keep REST and SSH credentials separate. An unreadable key fails closed rather than falling back to the password, the path is never returned by `list_routers`, and the Docker guidance mounts a single key read-only. Entries without a key are unchanged.
+
+The release also closes a command-injection vulnerability present in every published version: `ping`, `traceroute` and `torch` interpolated unvalidated parameters into a RouterOS command run over SSH, and because those tools are read-only, an injected command bypassed `allowedToolPatterns`, the `run_command` policy, the confirmation gate and the audit log. Diagnostic commands are now built by a validating, quoting builder. See the security advisory for affected versions.
+
+Contributed by [@anmaxx](https://github.com/anmaxx).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

@@ -10,6 +10,8 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-05
+
 ### Added
 - Router entries can use a separate SSH/SFTP username and an absolute private-key path; SSH-backed commands and SFTP uploads no longer require RouterOS password authentication when a key is configured.
 
