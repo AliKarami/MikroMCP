@@ -366,6 +366,18 @@ The harness was contributed by [@f0086](https://github.com/f0086), along with ev
 
 ---
 
+## ✅ v1.11 — SSH Private-Key Authentication
+
+**Goal:** Let SSH-backed tools authenticate without the REST password, so operators can disable password SSH on the router and keep REST and SSH credentials separate.
+
+- **Per-router key auth.** `sshUsername` and an absolute `sshPrivateKeyPath` on a router entry route `ping`, `traceroute`, `torch`, `run_command` and SFTP `upload_file` through public-key authentication; the REST password is not offered when a key is configured. Entries without a key keep password behaviour unchanged.
+- **Fails closed.** An unreadable key rejects the call rather than falling back to the REST password. The path is never returned by `list_routers` or written to logs. Docker guidance mounts a single key read-only under `/run/secrets` rather than the whole `.ssh` directory.
+- **Diagnostic command injection closed.** `ping`, `traceroute` and `torch` interpolated unvalidated parameters into a RouterOS command run over SSH, so a value like `127.0.0.1; /system reboot` executed a second command. Because the three tools are read-only, the injected command bypassed `allowedToolPatterns` scoping, the `run_command` allow/deny policy, the destructive-tool confirmation gate and the audit log. Diagnostic commands are now assembled by a builder that validates command and parameter names, quotes and escapes every string value, and rejects control characters at the input schema. Affected every published release; see the security advisory.
+
+Contributed by [@anmaxx](https://github.com/anmaxx).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
