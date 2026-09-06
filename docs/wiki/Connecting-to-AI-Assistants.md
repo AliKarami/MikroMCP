@@ -131,7 +131,7 @@ Every HTTP request must include a bearer token:
 Authorization: Bearer <token>
 ```
 
-Tokens are bcrypt hashes configured in `config/identities.yaml`. See the project README for the identities file format.
+Tokens are bcrypt hashes stored in the identities file (`~/.mikromcp/identities.yaml`, or the path in `MIKROMCP_IDENTITIES_PATH`). See [Configuration → Identities](Configuration#identities-http-transport) for the file format and how to generate a token.
 
 ### Configure your MCP client for HTTP
 
@@ -146,6 +146,7 @@ In Claude Code:
 ```bash
 claude mcp add mikromcp \
   --transport http \
+  --header "Authorization: Bearer your-token-here" \
   http://localhost:3000/mcp
 ```
 
@@ -178,6 +179,8 @@ docker run -d \
   -e MIKROMCP_TRANSPORT=http \
   -e MIKROMCP_PORT=3000 \
   -e MIKROMCP_BIND_HOST=0.0.0.0 \
+  -e MIKROMCP_CONFIG_PATH=/app/config/routers.yaml \
+  -e MIKROMCP_IDENTITIES_PATH=/app/config/identities.yaml \
   -e MIKROMCP_CONFIRMATION_SECRET="$(openssl rand -hex 32)" \
   -e ROUTER_CORE01_USER=mcp-api \
   -e ROUTER_CORE01_PASS=your-router-password \
@@ -186,7 +189,7 @@ docker run -d \
   ghcr.io/alikarami/mikromcp:latest
 ```
 
-The config directory must contain a `routers.yaml` (and optionally `identities.yaml`). The container reads router credentials from environment variables as usual.
+The image sets no default config paths, so `MIKROMCP_CONFIG_PATH` and `MIKROMCP_IDENTITIES_PATH` must point into the mounted directory — without them the container looks in `/root/.mikromcp/` and starts with an empty router registry. The directory must contain a `routers.yaml` and an `identities.yaml`: HTTP mode has no anonymous access, so at least one identity is needed before any client can connect (see [Configuration → Identities](Configuration#identities-http-transport)). The container reads router credentials from environment variables as usual.
 
 If a router entry uses `sshPrivateKeyPath`, that path must exist inside the
 container. Mount only the required private key read-only and use the container
@@ -266,7 +269,10 @@ The MCP server did not register or start. Verify with `claude mcp list` (Claude 
 MikroMCP is not running, or it bound to a different address. Check `MIKROMCP_BIND_HOST` — `127.0.0.1` is only reachable from localhost; use `0.0.0.0` if the client is on a different host.
 
 **"401 Unauthorized" in HTTP mode**
-The bearer token in the `Authorization` header does not match any identity in `config/identities.yaml`. Identities are bcrypt hashes — re-generate and update the file if needed.
+The bearer token in the `Authorization` header does not match any identity in the identities file (`MIKROMCP_IDENTITIES_PATH`). Identities store bcrypt hashes, so compare the raw token you send with the one you hashed — re-generate and update the file if needed.
+
+**"Invalid identity config" at startup**
+The identities file does not match the schema — the message names the offending key. Common causes are an array instead of a map, a `tokenHash` field instead of `token`, or a missing `role`. See [Configuration → Identities](Configuration#identities-http-transport) for the expected shape.
 
 **Router errors after connecting**
 MikroMCP connected successfully but the router is unreachable. See the [RouterOS API Setup](RouterOS-API-Setup.md) page and the Troubleshooting section in [Getting-Started.md](Getting-Started.md).

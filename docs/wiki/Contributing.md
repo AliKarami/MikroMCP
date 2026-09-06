@@ -28,7 +28,7 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 3. Export it and add it to `allTools` in `src/domain/tools/index.ts`.
 4. Add unit tests in `test/unit/` covering metadata, input schema, and all handler paths.
 5. Document it in **both** of these files (lockstep tests enforce this — CI fails if either is missing):
-   - `docs/wiki/Available-Tools.md` — add a section with a parameter table and example prompt.
+   - `docs/wiki/Available-Tools.md` — add a section with a parameter table and example prompt. The table must list exactly the schema's parameters — a second lockstep test checks the names.
    - `skills/mikromcp/references/tool-map.md` — add the tool name to the appropriate category row.
 6. Add a line to `CHANGELOG.md` under `[Unreleased] → Added`.
 
@@ -98,7 +98,7 @@ export const myTools: ToolDefinition[] = [myTool];
 ## PR Checklist
 
 - [ ] `npm test` passes (vitest + tsc + eslint + doc-accuracy guards + skill tool-map lockstep)
-- [ ] New tool: `docs/wiki/Available-Tools.md` updated with parameter table and example prompt
+- [ ] New or changed tool: `docs/wiki/Available-Tools.md` updated — the parameter table must match the input schema (lockstep test will fail otherwise)
 - [ ] New tool: `skills/mikromcp/references/tool-map.md` updated (lockstep test will fail otherwise)
 - [ ] New tool: `CHANGELOG.md` `[Unreleased]` section updated
 - [ ] Write tool: `dryRun` supported

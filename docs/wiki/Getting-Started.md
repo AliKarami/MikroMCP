@@ -93,7 +93,7 @@ Once complete, skip to [Step 5](#step-5--connect-to-your-ai-assistant).
 
 ### Manual config (alternative)
 
-If you prefer to configure by hand, create `config/routers.yaml`:
+If you prefer to configure by hand, create `~/.mikromcp/routers.yaml` (or any path, and point `MIKROMCP_CONFIG_PATH` at it):
 
 ```yaml
 routers:
@@ -159,13 +159,14 @@ curl -sk https://10.0.0.1/rest/system/resource \
 
 ## Step 5b — Install the Usage Skill (recommended)
 
-The MikroMCP usage skill teaches your AI assistant how to use all 122 tools safely — dry-run before write, rollback patterns, fleet operations, and more. Install it once in Claude Code:
+The MikroMCP usage skill teaches your AI assistant how to use all 122 tools safely — dry-run before write, rollback patterns, fleet operations, and more. It ships in the repository (not the npm package), so link it into Claude Code from a clone:
 
 ```bash
-/mikromcp
+git clone https://github.com/AliKarami/MikroMCP.git
+ln -s "$PWD/MikroMCP/skills/mikromcp" ~/.claude/skills/mikromcp
 ```
 
-See [Using-the-Skill](Using-the-Skill) for full installation and usage instructions.
+Restart Claude Code; the skill activates automatically when you work with MikroTik routers, and `/mikromcp` invokes it directly. See [Using-the-Skill](Using-the-Skill) for details.
 
 ---
 

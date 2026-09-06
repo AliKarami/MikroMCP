@@ -2,7 +2,7 @@
 
 Milestones are intentionally scoped so each one ships working, testable software on its own. See [ROADMAP.md](https://github.com/AliKarami/MikroMCP/blob/main/ROADMAP.md) in the repository for the authoritative version with full milestone details.
 
-v1.9 is the current release. All milestones v0.1 through v1.9 are shipped — most recently SwOS switch support, which takes MikroMCP beyond RouterOS for the first time.
+Every milestone listed below has shipped; the newest appears last.
 
 ---
 
