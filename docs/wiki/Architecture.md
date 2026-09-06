@@ -150,7 +150,7 @@ HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) o
 - **Read tools** carry automatic exponential-backoff retry (up to 3 attempts). The circuit breaker does not trip on read failures.
 - **Write tools** are idempotent — each checks existing state before acting and returns `already_exists` / `no_change` when nothing needs to be done.
 - **All write tools** support `dryRun: true` to preview the planned change without touching the router.
-- **Destructive tools** (`reboot`, `manage_user`, and others flagged `destructiveHint: true`) require a short-lived HMAC confirmation token from `readonly` and `operator` identities whenever `MIKROMCP_CONFIRMATION_SECRET` is set; `admin` and `superadmin` skip the gate.
+- **Destructive tools** (`reboot`, `manage_user`, and others flagged `destructiveHint: true`) require a short-lived HMAC confirmation token from `readonly` and `operator` identities whenever `MIKROMCP_CONFIRMATION_SECRET` is set; `admin` and `superadmin` skip that per-router gate. Fanning a destructive tool out with `bulk_execute` requires the secret and a fleet token from every role.
 - **Snapshots** are taken of affected RouterOS paths before `apply_plan` runs a write sequence, enabling `rollback_change` to restore previous state.
 - **Audit log** records every write and destructive call with identity, tool name, router, parameters (credentials redacted), and outcome.
 - **SSH private keys** remain local and are never returned by router discovery or written to logs; when a key is configured, the REST password is not offered to SSH or SFTP.

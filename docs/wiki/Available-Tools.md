@@ -1670,7 +1670,7 @@ List the routers configured in the registry (`routers.yaml`) so you can discover
 
 ### `check_router_health` — Read
 
-Probe one device — RouterOS routers via `system/resource`, SwOS switches via `sys.b` — and report health, firmware version, uptime, and (RouterOS only) CPU load and memory. Unlike other tools it never throws: an unreachable device is reported with `healthy: false`. To sweep a fleet, run it through `bulk_execute` with `routerIds` or `tags`.
+Probe one device — RouterOS routers via `system/resource`, SwOS switches via `sys.b` — and report health, firmware version, uptime, and (RouterOS only) CPU load and memory. Unlike other tools it never throws: an unreachable device is reported with `healthy: false`. It is itself a fleet tool, so `bulk_execute` refuses it (`BULK_SELF_REFERENCE`); to sweep a fleet, call `list_routers` and then `check_router_health` once per router.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1678,7 +1678,7 @@ Probe one device — RouterOS routers via `system/resource`, SwOS switches via `
 
 **Example prompt:** "Is core-01 healthy right now?"
 
-**Example prompt (fleet):** "Check the health of all routers tagged 'production' — use `bulk_execute` with `toolName: check_router_health` — and flag any that are unreachable."
+**Example prompt (fleet):** "List the routers tagged 'production', check the health of each one, and flag any that are unreachable."
 
 ---
 

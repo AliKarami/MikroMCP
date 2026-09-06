@@ -160,7 +160,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | Request rate limit in requests per minute (HTTP transport) |
 | `MIKROMCP_IDENTITIES_PATH` | `~/.mikromcp/identities.yaml` | Path to identity/token registry (HTTP transport) |
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport; omit for built-in superadmin |
-| `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the confirmation gate is off |
+| `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the per-router confirmation gate is off and destructive `bulk_execute` fan-outs are refused (`FLEET_CONFIRMATION_UNAVAILABLE`) |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | Path for NDJSON audit log file; omit to disable file sink |
 | `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
 | `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000` | Timeout in milliseconds for SSH commands (`run_command`, `torch`, etc.) |
@@ -207,16 +207,16 @@ The file is validated strictly at startup: `identities` must be a map keyed by i
 
 ### Roles
 
-A role does **not** restrict which tools an identity can call — that is what `allowedToolPatterns` is for, so a `readonly` identity should still carry a pattern list such as `["list_*", "get_*"]`. The role decides whether the destructive-tool confirmation gate applies:
+A role does **not** restrict which tools an identity can call — that is what `allowedToolPatterns` is for, so a `readonly` identity should still carry a pattern list such as `["list_*", "get_*"]`. The role decides whether the per-router confirmation gate for destructive tools applies:
 
-| Role | Confirmation gate for destructive tools | Typical use |
+| Role | Per-router confirmation gate | Typical use |
 |---|---|---|
 | `readonly` | Required | Dashboards and assistants that only read; pair with read-only tool patterns |
 | `operator` | Required | Automation that makes routine changes |
 | `admin` | Skipped | Trusted operators |
 | `superadmin` | Skipped | The built-in stdio identity; equivalent to `admin` |
 
-The gate is active whenever `MIKROMCP_CONFIRMATION_SECRET` is set. In HTTP mode the server refuses to start without that secret if any `readonly` or `operator` identity exists, so those roles are always gated. See [Security](Security#change-safety) for how the two-step confirmation works.
+The gate is active whenever `MIKROMCP_CONFIRMATION_SECRET` is set. In HTTP mode the server refuses to start without that secret if any `readonly` or `operator` identity exists, so those roles are always gated. Destructive `bulk_execute` fan-outs are gated for **every** role, `admin` included: they always need the secret and a fleet confirmation token. See [Security](Security#change-safety) for how the two-step confirmation works.
 
 ### Generating a token
 

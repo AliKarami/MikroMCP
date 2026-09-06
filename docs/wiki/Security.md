@@ -26,7 +26,7 @@ When running with `MIKROMCP_TRANSPORT=http`:
 
 - **Run behind a trusted network boundary** (reverse proxy, VPN, or private network). Bind to `127.0.0.1` unless a proxy terminates TLS in front.
 - **Bearer-token auth is mandatory.** Every request must carry `Authorization: Bearer <token>`. Tokens are stored only as bcrypt hashes in `~/.mikromcp/identities.yaml`.
-- **Set `MIKROMCP_CONFIRMATION_SECRET`.** It signs the confirmation tokens that gate destructive operations. The server refuses to start in HTTP mode without it when any `readonly` or `operator` identity exists; with only `admin` identities it is optional, because those roles skip the gate anyway.
+- **Set `MIKROMCP_CONFIRMATION_SECRET`.** It signs the confirmation tokens that gate destructive operations. The server refuses to start in HTTP mode without it when any `readonly` or `operator` identity exists. With only `admin` identities it is optional for per-router calls, but destructive `bulk_execute` fan-outs require it for every role — without it they fail with `FLEET_CONFIRMATION_UNAVAILABLE`.
 
 ## RBAC identities
 
@@ -43,7 +43,7 @@ Define identities for distinct consumers (a read-only dashboard vs. an automatio
 ## Change safety
 
 - **Dry-run first.** Every write tool supports `dryRun: true` to preview the diff without touching the router.
-- **Confirmation tokens.** When `MIKROMCP_CONFIRMATION_SECRET` is set, `readonly` and `operator` identities must call a destructive tool twice: the first call returns `APPROVAL_REQUIRED` with a single-use token valid for five minutes, the second call carries it as `confirmationToken`. `admin` and `superadmin` (including the built-in stdio identity) skip the gate. `bulk_execute` uses a fleet-wide token the same way.
+- **Confirmation tokens.** When `MIKROMCP_CONFIRMATION_SECRET` is set, `readonly` and `operator` identities must call a destructive tool twice: the first call returns `APPROVAL_REQUIRED` with a single-use token valid for five minutes, the second call carries it as `confirmationToken`. `admin` and `superadmin` (including the built-in stdio identity) skip this per-router gate. Destructive `bulk_execute` fan-outs are gated for every role: they always require the secret and a fleet-wide token obtained the same two-step way.
 - **Maintenance windows.** Routers can declare windows during which destructive operations are permitted; calls outside them are rejected with `PERMISSION_DENIED`.
 - **Snapshots & rollback.** Write tools snapshot affected config and append a journal entry before applying, so a change can be reversed with `rollback_change`.
 
