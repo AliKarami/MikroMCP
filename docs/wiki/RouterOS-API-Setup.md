@@ -79,7 +79,7 @@ See the required policies table below to decide which policies to include.
 | `ping`, `traceroute`, `torch` | `read`, `write`, `test`, `ssh` |
 | `run_command` (guarded SSH execution) | `read`, `write`, `test`, `ssh` |
 | `torch` (traffic monitoring) | `read`, `write`, `test`, `ssh`, `sniff` |
-| `upload_file` | `read`, `write`, `ftp` |
+| `upload_file` | `read`, `write`, `ssh` (SFTP, preferred) — or `ftp` for the plaintext fallback |
 | `reboot` | `read`, `write`, `reboot`, `rest-api` |
 | `manage_package` (install/uninstall) | `read`, `write`, `rest-api` |
 

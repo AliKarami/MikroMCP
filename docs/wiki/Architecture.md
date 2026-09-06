@@ -101,7 +101,7 @@ flowchart TD
     Request["Incoming MCP request"] --> Transport{"Transport"}
     Transport -->|stdio| StdioIdentity["Built-in superadmin\nor MIKROMCP_STDIO_IDENTITY"]
     Transport -->|HTTP| Bearer["Authorization: Bearer token"]
-    Bearer --> TokenHash["bcrypt token verification\nconfig/identities.yaml"]
+    Bearer --> TokenHash["bcrypt token verification\nidentities.yaml"]
     StdioIdentity --> RBAC["RBAC check"]
     TokenHash --> RBAC
     RBAC --> RouterScope["allowedRouters"]
@@ -130,8 +130,11 @@ flowchart TD
 | SwOS protocol | `src/adapter/swos-protocol.ts` | Endpoint schemas and the "broken JSON" wire codec |
 | Snapshot engine | `src/domain/snapshot/snapshot-engine.ts` | Captures RouterOS section state (or the raw SwOS blob) before writes |
 | Write journal | `src/domain/snapshot/write-journal.ts` | Append-only record of writes with rollback metadata |
-| Auth middleware | `src/mcp/authz.ts` | Enforces RBAC at call time |
-| Router registry | `src/config/router-registry.ts` | Loads and validates `config/routers.yaml` |
+| Tool executor | `src/mcp/tool-executor.ts` | Per-call pipeline: auth, RBAC, maintenance window, confirmation, snapshot, journal, retry, circuit breaker, audit |
+| Auth middleware | `src/middleware/auth.ts`, `src/middleware/authz.ts` | Bearer-token authentication and RBAC (`allowedRouters`, `allowedToolPatterns`) |
+| Confirmation gate | `src/middleware/confirmation.ts`, `src/middleware/fleet-confirmation.ts` | HMAC confirmation tokens for destructive tools and `bulk_execute` |
+| Router registry | `src/config/router-registry.ts` | Loads and validates `routers.yaml` |
+| Identity registry | `src/config/identity-registry.ts` | Loads and validates `identities.yaml`; resolves bearer tokens |
 
 ## Transport Options
 
@@ -147,7 +150,7 @@ HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) o
 - **Read tools** carry automatic exponential-backoff retry (up to 3 attempts). The circuit breaker does not trip on read failures.
 - **Write tools** are idempotent — each checks existing state before acting and returns `already_exists` / `no_change` when nothing needs to be done.
 - **All write tools** support `dryRun: true` to preview the planned change without touching the router.
-- **Destructive tools** (`reboot`, `manage_user`, and others flagged `destructiveHint: true`) require a short-lived HMAC confirmation token in HTTP mode.
+- **Destructive tools** (`reboot`, `manage_user`, and others flagged `destructiveHint: true`) require a short-lived HMAC confirmation token from `readonly` and `operator` identities whenever `MIKROMCP_CONFIRMATION_SECRET` is set; `admin` and `superadmin` skip that per-router gate. Fanning a destructive tool out with `bulk_execute` requires the secret and a fleet token from every role.
 - **Snapshots** are taken of affected RouterOS paths before `apply_plan` runs a write sequence, enabling `rollback_change` to restore previous state.
 - **Audit log** records every write and destructive call with identity, tool name, router, parameters (credentials redacted), and outcome.
 - **SSH private keys** remain local and are never returned by router discovery or written to logs; when a key is configured, the REST password is not offered to SSH or SFTP.

@@ -306,7 +306,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         recoverability: {
           retryable: false,
           suggestedAction:
-            "Check the journalId. Only writes recorded since MIKROMCP_JOURNAL_PATH was configured are available.",
+            "Check the journalId. Only writes recorded in the write journal under MIKROMCP_DATA_DIR can be rolled back.",
         },
       });
     }

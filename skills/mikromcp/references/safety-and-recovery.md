@@ -8,7 +8,7 @@
 3. **Confirm if required** (destructive tools): the first real call returns an
    `APPROVAL_REQUIRED` error carrying a `confirmationToken`. Re-issue the same
    call with that `confirmationToken`. Tokens are HMAC-signed and scoped to the
-   tool+router+args; they are required in HTTP mode and for non-admin identities.
+   tool+router+args; `readonly` and `operator` identities need them whenever `MIKROMCP_CONFIRMATION_SECRET` is set, `admin`/`superadmin` skip per-router confirmation, and destructive `bulk_execute` fan-outs always need a fleet token.
 4. **Apply** and read the `action`: `created`, `updated`, or `removed`.
 
 ## Idempotency outcomes (all are SUCCESS unless noted)

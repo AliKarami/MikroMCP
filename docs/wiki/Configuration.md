@@ -5,7 +5,7 @@
 MikroMCP reads router definitions from a YAML file. The default path is `~/.mikromcp/routers.yaml` (set by `mikromcp init`). Override with `MIKROMCP_CONFIG_PATH`.
 
 ```yaml
-# config/routers.yaml
+# ~/.mikromcp/routers.yaml
 routers:
   core-01:
     host: "10.0.0.1"
@@ -13,15 +13,17 @@ routers:
     tls:
       enabled: true
       rejectUnauthorized: false   # set true when using a valid CA cert or Let's Encrypt
-      # fingerprint: "AA:BB:CC:..."  # optional: pin a self-signed cert's SHA-256 fingerprint
+      # ca: "/etc/mikromcp/router-ca.pem"  # optional: trust a private CA instead of the system store
+      # fingerprint: "AA:BB:CC:..."         # optional: pin the cert's SHA-256 fingerprint (colons optional)
     credentials:
       source: "env"
       envPrefix: "ROUTER_CORE01"  # reads ROUTER_CORE01_USER + ROUTER_CORE01_PASS
     tags: ["datacenter", "core"]
     rosVersion: "7.14"
-    sshUsername: "automation"      # optional; defaults to the REST username
-    sshPrivateKeyPath: "/home/mikromcp/.ssh/id_ed25519"
-    sshFingerprint: "aabbcc..."    # optional raw SHA-256 host-key fingerprint (hex)
+    # sshPort: 22                                        # SSH/SFTP port
+    # sshUsername: "automation"                          # optional; defaults to the REST username
+    # sshPrivateKeyPath: "/home/mikromcp/.ssh/id_ed25519" # absolute; must be readable at startup
+    # sshFingerprint: "aabbcc..."                        # optional SHA-256 host-key fingerprint (hex)
 
   edge-01:
     host: "192.168.88.1"
@@ -39,6 +41,43 @@ routers:
 **`rejectUnauthorized: false`** accepts self-signed certificates. Combine with `fingerprint` to pin the exact certificate and prevent MITM attacks.
 
 `tls` and `rosVersion` are **required** for RouterOS devices. They are deliberately not optional: a missing `tls` block would silently downgrade the router to plaintext HTTP and send credentials in the clear, and a missing `rosVersion` would make MikroMCP guess REST paths that differ between releases.
+
+The file is validated strictly at startup — an unknown key or a missing required field aborts with `Invalid router config at <path>` naming the offending field. The shipped [`config/routers.example.yaml`](https://github.com/AliKarami/MikroMCP/blob/main/config/routers.example.yaml) shows every field with comments.
+
+### Router fields
+
+| Field | Required | Description |
+|---|---|---|
+| `host` | yes | IP address or hostname |
+| `port` | yes | REST API port — `443` for `api-ssl`, `80` for plain `api` or SwOS |
+| `deviceType` | no | `routeros` (default) or `swos`; `swos-lite` is accepted as an alias of `swos` |
+| `tls.enabled` | RouterOS | `true` for HTTPS. Must be `false` or omitted for SwOS |
+| `tls.rejectUnauthorized` | with `tls` | Verify the server certificate against the system CA store (or `tls.ca`). `false` only for self-signed certificates |
+| `tls.ca` | no | Path to a PEM file whose certificate(s) are trusted instead of the system store |
+| `tls.fingerprint` | no | SHA-256 fingerprint of the server certificate to pin (hex, colons optional). The connection is refused on mismatch |
+| `credentials.source` | yes | `env` — read `<envPrefix>_USER` / `<envPrefix>_PASS` from the environment. (`vault` passes validation but is rejected at runtime; it is reserved) |
+| `credentials.envPrefix` | with `env` | Prefix for the two credential variables |
+| `tags` | no | Free-form labels; used to target routers in `list_routers` and `bulk_execute` |
+| `rosVersion` | RouterOS | RouterOS version string such as `"7.14"`; selects REST paths that differ between releases |
+| `sshPort` | no | SSH/SFTP port (default `22`) |
+| `sshUsername` | no | Separate SSH/SFTP username; defaults to the REST username |
+| `sshPrivateKeyPath` | no | Absolute path to an unencrypted private key. When set, SSH/SFTP never fall back to the REST password. Checked for readability at startup |
+| `sshFingerprint` | no | SHA-256 fingerprint of the SSH host key to pin (hex) |
+| `cmdAllow` / `cmdDeny` | no | Per-router `run_command` glob policy — see [Per-Router SSH, SFTP, and FTP](#per-router-ssh-sftp-and-ftp) |
+| `maintenanceWindows` | no | Windows outside of which destructive tools are refused — see below |
+
+### Maintenance windows
+
+A router can declare when destructive tools (`reboot`, `manage_user`, and any other tool flagged `destructiveHint`) are allowed to run. Outside every listed window such a call is rejected with `PERMISSION_DENIED`; read and ordinary write tools are unaffected.
+
+```yaml
+# under routers.<id>:
+maintenanceWindows:
+  - days: ["Sat", "Sun"]        # Mon … Sun
+    startTime: "02:00"          # 24-hour HH:MM in `timezone`
+    endTime: "06:00"
+    timezone: "Europe/Helsinki" # IANA zone name
+```
 
 ---
 
@@ -121,7 +160,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | Request rate limit in requests per minute (HTTP transport) |
 | `MIKROMCP_IDENTITIES_PATH` | `~/.mikromcp/identities.yaml` | Path to identity/token registry (HTTP transport) |
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport; omit for built-in superadmin |
-| `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret for confirmation tokens — **required in HTTP mode** |
+| `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the per-router confirmation gate is off and destructive `bulk_execute` fan-outs are refused (`FLEET_CONFIRMATION_UNAVAILABLE`) |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | Path for NDJSON audit log file; omit to disable file sink |
 | `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
 | `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000` | Timeout in milliseconds for SSH commands (`run_command`, `torch`, etc.) |
@@ -139,32 +178,66 @@ When a tool call omits `routerId`, MikroMCP resolves the target router in two st
 
 ## Identities (HTTP transport)
 
-When running in HTTP mode, clients authenticate with a bearer token. Tokens are bcrypt hashes stored in `config/identities.yaml`:
+In HTTP mode every request must carry a bearer token, and each token maps to an **identity**: a role plus the routers and tools it may touch. There is no anonymous access, so HTTP mode needs at least one identity. Identities are read from `~/.mikromcp/identities.yaml`; set `MIKROMCP_IDENTITIES_PATH` to use another location (the Docker examples use `/app/config/identities.yaml`). The shipped [`config/identities.example.yaml`](https://github.com/AliKarami/MikroMCP/blob/main/config/identities.example.yaml) is the reference copy of this format.
 
 ```yaml
-# config/identities.yaml
+# ~/.mikromcp/identities.yaml
 identities:
-  - name: claude-desktop
-    tokenHash: "$2b$10$..."   # bcrypt hash of the bearer token
+  claude-desktop:                   # identity id is the map key — there is no `name` field
+    token: "$2b$12$..."             # bcrypt hash of the bearer token, never the raw token
+    role: operator
     allowedRouters: ["core-01", "edge-01"]
     allowedToolPatterns: ["list_*", "get_*", "ping", "traceroute"]
 
-  - name: automation
-    tokenHash: "$2b$10$..."
-    allowedRouters: ["*"]
-    allowedToolPatterns: ["*"]
+  automation:
+    token: "$2b$12$..."
+    role: admin
+    allowedRouters: []              # empty = every router
+    allowedToolPatterns: []         # empty = every tool
 ```
 
-Generate a token hash:
+The file is validated strictly at startup: `identities` must be a map keyed by identity id, `token` and `role` are required, and any other key (for example `tokenHash` or `name`) aborts startup with `Invalid identity config at <path>`.
+
+| Field | Required | Description |
+|---|---|---|
+| `token` | yes | bcrypt hash of the raw bearer token |
+| `role` | yes | `readonly`, `operator`, `admin`, or `superadmin` — see [Roles](#roles) |
+| `allowedRouters` | no | Router ids this identity may target. **An empty list (the default) means all routers.** Entries are matched exactly — `"*"` is not a wildcard here and would lock the identity out of every router |
+| `allowedToolPatterns` | no | Tool-name globs this identity may call (`*` wildcard, case-insensitive). Empty list means all tools |
+
+### Roles
+
+A role does **not** restrict which tools an identity can call — that is what `allowedToolPatterns` is for, so a `readonly` identity should still carry a pattern list such as `["list_*", "get_*"]`. The role decides whether the per-router confirmation gate for destructive tools applies:
+
+| Role | Per-router confirmation gate | Typical use |
+|---|---|---|
+| `readonly` | Required | Dashboards and assistants that only read; pair with read-only tool patterns |
+| `operator` | Required | Automation that makes routine changes |
+| `admin` | Skipped | Trusted operators |
+| `superadmin` | Skipped | The built-in stdio identity; equivalent to `admin` |
+
+The gate is active whenever `MIKROMCP_CONFIRMATION_SECRET` is set. In HTTP mode the server refuses to start without that secret if any `readonly` or `operator` identity exists, so those roles are always gated. Destructive `bulk_execute` fan-outs are gated for **every** role, `admin` included: they always need the secret and a fleet confirmation token. See [Security](Security#change-safety) for how the two-step confirmation works.
+
+### Generating a token
+
+The setup wizard can create an identity for you: `mikromcp init` prints the raw token once and writes the bcrypt hash into the identities file. To do it by hand:
 
 ```bash
-node -e "const bcrypt = require('bcrypt'); bcrypt.hash('your-token', 10).then(console.log)"
+# 1. Generate a raw token and store it in a password manager
+openssl rand -hex 32
+
+# 2. Hash it (bcrypt cost 12) — from a source checkout, or via a global npm install's own dependencies
+node -e "const b=require('bcryptjs');b.hash(process.argv[1],12).then(console.log)" <raw-token>
+NODE_PATH="$(npm root -g)/mikromcp/node_modules" node -e "const b=require('bcryptjs');b.hash(process.argv[1],12).then(console.log)" <raw-token>
+
+# Docker: the image bundles bcryptjs
+docker run --rm --entrypoint node ghcr.io/alikarami/mikromcp:latest -e "const b=require('bcryptjs');b.hash(process.argv[1],12).then(console.log)" <raw-token>
 ```
 
-Pass the raw token in API requests:
+Paste the hash as `token`, and send the raw token with every request:
 
 ```
-Authorization: Bearer your-token
+Authorization: Bearer <raw-token>
 ```
 
 ---
@@ -184,11 +257,9 @@ export ROUTER_CORE01_PASS=your-password
 mikromcp serve
 ```
 
-MikroMCP listens at:
-- `POST /mcp` — JSON-RPC tool calls
-- `GET /mcp` — SSE event stream for clients that support streaming
+MikroMCP serves the Streamable HTTP transport at `/mcp` (`POST` for calls, `GET` for the event stream), the legacy SSE pair `/sse` + `/messages`, an unauthenticated `GET /healthz`, and `GET /metrics` for Prometheus (bearer token required once any identity is configured). See [Running](Running#http-transport) for the endpoint table.
 
-Every request must carry `Authorization: Bearer <token>`.
+Every MCP request must carry `Authorization: Bearer <token>` matching an [identity](#identities-http-transport).
 
 For Docker and systemd deployment examples, see [Connecting to AI Assistants](Connecting-to-AI-Assistants#using-docker).
 
@@ -221,10 +292,9 @@ REST credentials. Ensure the relevant RouterOS users have the required policies
 Per-router command allow/deny overrides:
 
 ```yaml
-routers:
-  core-01:
-    cmdAllow: ["/ip route print*", "/ip address print*"]
-    cmdDeny: ["/system reset*"]
+# under routers.<id>:
+cmdAllow: ["/ip route print*", "/ip address print*"]
+cmdDeny: ["/system reset*"]
 ```
 
 Per-router overrides take precedence over `MIKROMCP_CMD_ALLOW` / `MIKROMCP_CMD_DENY` env vars.
