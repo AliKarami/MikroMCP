@@ -260,8 +260,8 @@ const manageDnsTool: ToolDefinition = {
             comment,
           };
 
-          // The model sees only the message of an error, not its details, so
-          // the message names the values on both sides.
+          // The message names the values on both sides, so the conflict reads
+          // without parsing details.
           throw new MikroMCPError({
             category: ErrorCategory.CONFLICT,
             code: "DNS_ENTRY_CONFLICT",
