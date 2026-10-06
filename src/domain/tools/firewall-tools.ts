@@ -6,7 +6,8 @@ import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
 import { sameRuleValue } from "./rule-match.js";
-import { limit, offset, routerId } from "./schema-fields.js";
+import { limit, offset, routerId, ruleComment } from "./schema-fields.js";
+import { findRuleByComment, ruleCommentKey } from "./rule-comment.js";
 import { toolError } from "./tool-definition.js";
 import { paginate, listContent, compactFields } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -17,22 +18,6 @@ const log = createLogger("firewall-tools");
 
 function tableToPath(table: "filter" | "nat"): string {
   return table === "filter" ? "ip/firewall/filter" : "ip/firewall/nat";
-}
-
-function sanitizeComment(comment: string | undefined): string | undefined {
-  if (comment === undefined) return undefined;
-  return comment.replace(/[\x00-\x1f\x7f]/g, "");
-}
-
-async function findRuleByComment(
-  context: ToolContext,
-  path: string,
-  comment: string,
-): Promise<Record<string, string> | undefined> {
-  const results = await context.routerClient.get<RouterOSRecord>(path, {
-    filter: { comment },
-  });
-  return results.length > 0 ? (results[0] as Record<string, string>) : undefined;
 }
 
 /** Optional match and NAT-target parameters, mapped to their RouterOS property names. */
@@ -62,6 +47,18 @@ const TO_PORTS_ACTIONS: ReadonlySet<string> = new Set([
 ]);
 
 const CONNECTION_STATE = "(established|related|new|invalid|untracked)";
+
+/** A port 1–65535, or a range `start-end` with start <= end. */
+function isPortOrRange(value: string): boolean {
+  const [start, end = start] = value.split("-").map(Number);
+  return start >= 1 && end <= 65535 && start <= end;
+}
+
+/** True when no state appears twice in a (possibly negated) state list. */
+function hasNoRepeats(value: string): boolean {
+  const items = value.replace(/^!/, "").split(",");
+  return new Set(items).size === items.length;
+}
 
 // ---------------------------------------------------------------------------
 // list_firewall_rules
@@ -195,21 +192,30 @@ const manageFirewallRuleInputSchema = z
       .describe("Action to perform: add, remove, disable, or enable a firewall rule"),
     chain: z.string().describe("Firewall chain (e.g. forward, input, output, srcnat, dstnat)"),
     ruleAction: z.string().describe("RouterOS rule action (e.g. accept, drop, reject, masquerade)"),
-    srcAddress: z.string().optional().describe("Source address or network"),
-    dstAddress: z.string().optional().describe("Destination address or network"),
+    srcAddress: z.string().min(1).optional().describe("Source address or network"),
+    dstAddress: z.string().min(1).optional().describe("Destination address or network"),
     protocol: z
       .enum(["tcp", "udp", "icmp", "gre", "ospf", "all"])
       .optional()
       .describe("Protocol to match"),
-    srcPort: z.string().optional().describe("Source port or range"),
-    dstPort: z.string().optional().describe("Destination port or range"),
-    inInterface: z.string().optional().describe("Incoming interface"),
-    outInterface: z.string().optional().describe("Outgoing interface"),
-    inInterfaceList: z.string().optional().describe("Incoming interface list, e.g. WAN or !LAN"),
-    outInterfaceList: z.string().optional().describe("Outgoing interface list, e.g. WAN or !LAN"),
+    srcPort: z.string().min(1).optional().describe("Source port or range"),
+    dstPort: z.string().min(1).optional().describe("Destination port or range"),
+    inInterface: z.string().min(1).optional().describe("Incoming interface"),
+    outInterface: z.string().min(1).optional().describe("Outgoing interface"),
+    inInterfaceList: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Incoming interface list, e.g. WAN or !LAN"),
+    outInterfaceList: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Outgoing interface list, e.g. WAN or !LAN"),
     connectionState: z
       .string()
       .regex(new RegExp(`^!?${CONNECTION_STATE}(,${CONNECTION_STATE})*$`))
+      .refine(hasNoRepeats, "Each connection state may appear only once")
       .optional()
       .describe(
         "Connection-tracking states, comma-separated, optionally negated: established,related or !invalid",
@@ -221,18 +227,19 @@ const manageFirewallRuleInputSchema = z
       .describe("Connection NAT state to match, e.g. dstnat or !dstnat"),
     toAddresses: z
       .string()
+      .min(1)
       .optional()
       .describe("NAT target address or range (nat table only, e.g. dst-nat)"),
     toPorts: z
       .string()
       .regex(/^\d{1,5}(-\d{1,5})?$/)
+      .refine(isPortOrRange, "Must be a port 1-65535 or an ascending range such as 8000-8100")
       .optional()
       .describe("NAT target port or range (nat table only)"),
-    comment: z
-      .string()
+    comment: ruleComment
       .max(255)
       .optional()
-      .describe("Comment to identify the rule (used as idempotency key)"),
+      .describe("Comment to identify the rule (used as idempotency key); omit for none"),
     disabled: z.boolean().default(false).describe("Whether the rule should be disabled"),
     placeBefore: z.string().optional().describe("Place the new rule before this rule ID"),
     dryRun: z
@@ -246,7 +253,7 @@ const manageFirewallRuleTool: ToolDefinition = {
   name: "manage_firewall_rule",
   title: "Manage Firewall Rule",
   description:
-    "Add, remove, disable, or enable a firewall rule on a MikroTik router. Matches addresses, ports, protocol, interfaces, interface lists, and connection/NAT state; nat rules take toAddresses/toPorts (e.g. a dst-nat port forward). Uses comment as idempotency key for deduplication and identification. Supports dry-run mode.",
+    "Add, remove, disable, or enable a firewall rule on a MikroTik router. Matches addresses, ports, protocol, interfaces, interface lists, and connection/NAT state; nat rules take toAddresses/toPorts (e.g. a dst-nat port forward). Uses comment as idempotency key for deduplication and identification: a repeated add returns already_exists only when the match, NAT targets, and disabled state agree, otherwise CONFLICT (use enable/disable when only the disabled state differs). Supports dry-run mode.",
   inputSchema: manageFirewallRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -257,8 +264,6 @@ const manageFirewallRuleTool: ToolDefinition = {
   snapshotPaths: ["ip/firewall/filter", "ip/firewall/nat"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageFirewallRuleInputSchema.parse(params);
-    const comment = sanitizeComment(parsed.comment);
-
     log.info(
       {
         routerId: context.routerId,
@@ -272,6 +277,8 @@ const manageFirewallRuleTool: ToolDefinition = {
     const path = tableToPath(parsed.table);
 
     try {
+      const comment = parsed.comment === undefined ? undefined : ruleCommentKey(parsed.comment);
+
       // -----------------------------------------------------------------------
       // ADD
       // -----------------------------------------------------------------------
@@ -302,15 +309,16 @@ const manageFirewallRuleTool: ToolDefinition = {
         if (comment !== undefined) {
           const existing = await findRuleByComment(context, path, comment);
           if (existing) {
-            const matches =
+            const sameMatch =
               sameRuleValue("chain", existing.chain, parsed.chain) &&
               existing.action === parsed.ruleAction &&
               sameRuleValue("protocol", existing.protocol, wantProtocol) &&
               RULE_FIELDS.every(([key, property]) =>
                 sameRuleValue(property, existing[property], parsed[key]),
               );
+            const existingDisabled = isTrue(existing.disabled);
 
-            if (matches) {
+            if (sameMatch && existingDisabled === parsed.disabled) {
               return {
                 content: `Firewall ${parsed.table} rule with comment "${comment}" already exists. No changes made.`,
                 structuredContent: { action: "already_exists", rule: existing },
@@ -331,18 +339,30 @@ const manageFirewallRuleTool: ToolDefinition = {
               existingDetails[property] = existing[property];
               requestedDetails[property] = parsed[key];
             }
+            existingDetails.disabled = existingDisabled;
+            requestedDetails.disabled = parsed.disabled;
 
+            // Only the disabled state differs: toggling the rule is enough.
+            const toggle = parsed.disabled ? "disable" : "enable";
             throw new MikroMCPError({
               category: ErrorCategory.CONFLICT,
               code: "FIREWALL_RULE_CONFLICT",
-              message: `Firewall ${parsed.table} rule with comment "${comment}" already exists but with different configuration.`,
+              message: sameMatch
+                ? `Firewall ${parsed.table} rule with comment "${comment}" already exists but is ${existingDisabled ? "disabled" : "enabled"}.`
+                : `Firewall ${parsed.table} rule with comment "${comment}" already exists but with different configuration.`,
               details: { existing: existingDetails, requested: requestedDetails },
-              recoverability: {
-                retryable: false,
-                suggestedAction:
-                  "Remove the existing rule first, then re-add with the desired configuration.",
-                alternativeTools: ["manage_firewall_rule with action=remove"],
-              },
+              recoverability: sameMatch
+                ? {
+                    retryable: false,
+                    suggestedAction: `Use action=${toggle} with the same comment to ${toggle} the existing rule.`,
+                    alternativeTools: [`manage_firewall_rule with action=${toggle}`],
+                  }
+                : {
+                    retryable: false,
+                    suggestedAction:
+                      "Remove the existing rule first, then re-add with the desired configuration.",
+                    alternativeTools: ["manage_firewall_rule with action=remove"],
+                  },
             });
           }
         }

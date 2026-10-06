@@ -1054,7 +1054,7 @@ List firewall rules in evaluation order.
 
 ### `manage_firewall_rule` — Write · Destructive · Idempotent
 
-Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match or NAT-target config; a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
+Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match, NAT-target config, or `disabled` state (when only `disabled` differs, the error points to `action=enable`/`disable`); a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1062,7 +1062,7 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `action` | `add` \| `remove` \| `disable` \| `enable` | — | Operation to perform |
 | `table` | `filter` \| `nat` | `filter` | Firewall table |
 | `chain` | string | — | Chain name (e.g. `input`, `forward`, `output`, `srcnat`) |
-| `comment` | string | — | Comment used as idempotency key |
+| `comment` | string | — | Comment used as idempotency key; at least one printable character, omit for none |
 | `ruleAction` | string | — | RouterOS action (e.g. `accept`, `drop`, `masquerade`) |
 | `srcAddress` | string | — | Source IP or CIDR |
 | `dstAddress` | string | — | Destination IP or CIDR |
@@ -1077,7 +1077,7 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `connectionNatState` | string | — | Connection NAT state: `srcnat`, `dstnat` or both, optionally negated (`!dstnat`) |
 | `toAddresses` | string | — | NAT target address or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same` |
 | `toPorts` | string | — | NAT target port or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same`, `redirect`, `masquerade` |
-| `disabled` | boolean | `false` | Create/update the rule in disabled state |
+| `disabled` | boolean | `false` | Create the rule in disabled state; on `add`, part of the idempotency check |
 | `placeBefore` | string | — | Place the new rule before this rule ID |
 | `dryRun` | boolean | `false` | Preview without applying |
 
@@ -1112,7 +1112,7 @@ Add, remove, enable, or disable a mangle rule. Uses `comment` as the idempotency
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
-| `comment` | string | — | **Idempotency key** — required for all actions |
+| `comment` | string | — | **Idempotency key** — required for all actions, non-empty |
 | `chain` | string | — | Mangle chain (required on `add`): `prerouting`, `input`, `forward`, `output`, `postrouting` |
 | `srcAddress` | string | — | Source IP/CIDR to match |
 | `dstAddress` | string | — | Destination IP/CIDR to match |

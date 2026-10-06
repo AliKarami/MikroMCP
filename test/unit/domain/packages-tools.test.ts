@@ -5,7 +5,6 @@ import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
-import { z } from "zod";
 
 function makeRouterConfig(): RouterConfig {
   return {
@@ -50,15 +49,8 @@ function makeContext(
 const listPackagesTool = packagesTools[0];
 const managePackageTool = packagesTools[1];
 
-const listSchema = z.object({ routerId: z.string(), name: z.string().optional() }).strict();
-const manageSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["enable", "disable"]),
-    name: z.string(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const listSchema = listPackagesTool.inputSchema;
+const manageSchema = managePackageTool.inputSchema;
 
 describe("packages tools", () => {
   describe("metadata", () => {

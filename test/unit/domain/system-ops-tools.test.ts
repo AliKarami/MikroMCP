@@ -6,7 +6,6 @@ import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { MikroMCPError } from "../../../src/domain/errors/error-types.js";
-import { z } from "zod";
 
 function makeRouterConfig(overrides: Partial<RouterConfig> = {}): RouterConfig {
   return {
@@ -89,15 +88,7 @@ describe("system-ops tools", () => {
   });
 
   describe("set_system_clock input schema", () => {
-    const setClockSchema = z
-      .object({
-        routerId: z.string(),
-        date: z.string().optional(),
-        time: z.string().optional(),
-        timeZoneName: z.string().optional(),
-        dryRun: z.boolean().default(false),
-      })
-      .strict();
+    const setClockSchema = setSystemClockTool.inputSchema;
 
     it("accepts minimal input (just routerId)", () => {
       const r = setClockSchema.parse({ routerId: "r" });
@@ -214,13 +205,7 @@ describe("system-ops tools", () => {
   });
 
   describe("reboot input schema", () => {
-    const rebootSchema = z
-      .object({
-        routerId: z.string(),
-        delay: z.number().int().min(0).max(3600).default(0),
-        dryRun: z.boolean().default(false),
-      })
-      .strict();
+    const rebootSchema = systemOpsTools[2].inputSchema;
 
     it("accepts minimal input with defaults", () => {
       const r = rebootSchema.parse({ routerId: "r" });
@@ -279,13 +264,7 @@ describe("system-ops tools", () => {
   });
 
   describe("run_command input schema", () => {
-    const runCommandSchema = z
-      .object({
-        routerId: z.string(),
-        command: z.string().min(1),
-        dryRun: z.boolean().default(false),
-      })
-      .strict();
+    const runCommandSchema = systemOpsTools[3].inputSchema;
 
     it("accepts valid input", () => {
       const r = runCommandSchema.parse({ routerId: "r", command: "/ip/route/print" });

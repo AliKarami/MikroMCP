@@ -80,6 +80,31 @@ describe("enrichError", () => {
     expect(result.recoverability.suggestedAction).toContain("ssh policy");
   });
 
+  it("maps an ssh2 client-timeout error to ROUTER_UNREACHABLE without retry", () => {
+    // Shape emitted by ssh2 when the handshake does not finish within readyTimeout.
+    const sshErr = Object.assign(new Error("Timed out while waiting for handshake"), {
+      level: "client-timeout",
+    });
+    const result = enrichError(sshErr, { routerId: "r1", tool: "ping" });
+    expect(result.category).toBe(ErrorCategory.ROUTER_UNREACHABLE);
+    expect(result.code).toBe("SSH_HANDSHAKE_TIMEOUT");
+    expect(result.message).toContain("Timed out while waiting for handshake");
+    expect(result.details).toMatchObject({ transport: "ssh", routerId: "r1", tool: "ping" });
+    expect(result.recoverability.retryable).toBe(false);
+    expect(result.recoverability.suggestedAction).toContain("/ip service ssh");
+  });
+
+  it("keeps an ssh2 client-socket error classified by its errno code", () => {
+    // ssh2 adds level "client-socket" to socket errors but keeps their errno code.
+    const sshErr = Object.assign(new Error("connect ECONNREFUSED 192.0.2.1:22"), {
+      level: "client-socket",
+      code: "ECONNREFUSED",
+    });
+    const result = enrichError(sshErr);
+    expect(result.category).toBe(ErrorCategory.ROUTER_UNREACHABLE);
+    expect(result.code).toBe("ECONNREFUSED");
+  });
+
   it("keeps an error without a known code or level as INTERNAL", () => {
     const result = enrichError(new Error("boom"));
     expect(result.category).toBe(ErrorCategory.INTERNAL);

@@ -2,53 +2,21 @@ import { describe, it, expect, vi } from "vitest";
 import { mangleTools } from "../../../src/domain/tools/mangle-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
-import { parseRecord } from "../../../src/adapter/response-parser.js";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const listMangleRulesTool = mangleTools[0];
 const manageMangleRuleTool = mangleTools[1];
 
-const listSchema = z
-  .object({
-    routerId: z.string(),
-    chain: z.string().optional(),
-    action: z.string().optional(),
-    disabled: z.boolean().optional(),
-  })
-  .strict();
+const listSchema = listMangleRulesTool.inputSchema;
 
-const manageSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove", "enable", "disable"]),
-    comment: z.string(),
-    chain: z.string().optional(),
-    dryRun: z.boolean().default(false),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    srcAddressList: z.string().optional(),
-    dstAddressList: z.string().optional(),
-    protocol: z.string().optional(),
-    srcPort: z.string().optional(),
-    dstPort: z.string().optional(),
-    inInterface: z.string().optional(),
-    outInterface: z.string().optional(),
-    newRoutingMark: z.string().optional(),
-    newConnectionMark: z.string().optional(),
-    newDscpValue: z.number().int().min(0).max(63).optional(),
-    passthrough: z.boolean().optional(),
-  })
-  .strict();
+const manageSchema = manageMangleRuleTool.inputSchema;
 
-function makeContext(
-  records: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
+function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerClient: {
-      get: vi.fn().mockResolvedValue(records),
+      get: vi.fn().mockResolvedValue(fromWire(records)),
       create: vi.fn().mockResolvedValue(createReturn ?? { ".id": "*1", chain: "prerouting" }),
       remove: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
@@ -344,9 +312,34 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
 
+  it("treats numeric marks from the router as equal to requested strings", async () => {
+    // RouterOS sends "100"; the response parser turns it into the number 100.
+    const existing = {
+      ".id": "*3",
+      chain: "prerouting",
+      "new-connection-mark": "100",
+      "new-routing-mark": "200",
+      comment: "numeric-marks",
+    };
+    const ctx = makeContext([existing]);
+    const result = await manageMangleRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        comment: "numeric-marks",
+        chain: "prerouting",
+        newConnectionMark: "100",
+        newRoutingMark: "200",
+      },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    expect(ctx.routerClient.create).not.toHaveBeenCalled();
+  });
+
   // Real rules from RB5009 (RouterOS 7.24.2, list_mangle_rules, 2026-10-06), written back
-  // as the wire strings REST sends and fed through parseRecord like RouterOSRestClient.get.
-  const MSS_CLAMP_WG = {
+  // as the wire strings REST sends; makeContext parses them like RouterOSRestClient.get.
+  const MSS_CLAMP_WG: WireRecord = {
     ".id": "*A",
     action: "change-mss",
     bytes: "353820",
@@ -362,7 +355,7 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     "tcp-flags": "syn",
   };
   // Dynamic rule: the router reports neither passthrough nor protocol for it.
-  const FASTTRACK_DUMMY = {
+  const FASTTRACK_DUMMY: WireRecord = {
     ".id": "*C",
     action: "passthrough",
     bytes: "593383747678",
@@ -380,7 +373,7 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     protocol: "tcp",
     outInterface: "wg-leg1",
   };
-  const ctxWith = (wire: Record<string, string>) => makeContext([parseRecord(wire)]);
+  const ctxWith = (wire: WireRecord) => makeContext([wire]);
 
   it("returns already_exists for the same rule read back from the router", async () => {
     const result = await manageMangleRuleTool.handler(sameAdd, ctxWith(MSS_CLAMP_WG));
@@ -395,7 +388,7 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     ["out-interface", { outInterface: "ether1" }],
     ["new-routing-mark", { newRoutingMark: "to-leg1" }],
   ])("throws CONFLICT when %s differs, with both values in details", async (property, change) => {
-    const stored: Record<string, unknown> = parseRecord(MSS_CLAMP_WG);
+    const [stored] = fromWire([MSS_CLAMP_WG]);
     await expect(
       manageMangleRuleTool.handler({ ...sameAdd, ...change }, ctxWith(MSS_CLAMP_WG)),
     ).rejects.toMatchObject({
@@ -499,5 +492,52 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
       ctxWith({ ...MSS_CLAMP_WG, passthrough: "false" }),
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+});
+
+describe("manage_mangle_rule - empty comment", () => {
+  it.each(["add", "remove", "enable", "disable"])(
+    "%s with an empty comment fails validation before any router call",
+    async (action) => {
+      const ctx = makeContext([]);
+      expect(
+        manageMangleRuleTool.inputSchema.safeParse({ routerId: "r", action, comment: "" }).success,
+      ).toBe(false);
+      await expect(
+        manageMangleRuleTool.handler(
+          { routerId: "test-router", action, comment: "", chain: "prerouting" },
+          ctx,
+        ),
+      ).rejects.toThrow();
+      expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("manage_mangle_rule - control characters in comment", () => {
+  it("rejects a comment of control characters only, before any router call", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageMangleRuleTool.handler(
+        { routerId: "test-router", action: "remove", comment: "\x01\n" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "COMMENT_EMPTY" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it("looks up and stores the comment without control characters, as manage_firewall_rule does", async () => {
+    const ctx = makeContext([]);
+    await manageMangleRuleTool.handler(
+      { routerId: "test-router", action: "add", comment: "mark\nweb", chain: "prerouting" },
+      ctx,
+    );
+    expect(ctx.routerClient.get).toHaveBeenCalledWith("ip/firewall/mangle", {
+      filter: { comment: "markweb" },
+    });
+    expect(ctx.routerClient.create).toHaveBeenCalledWith(
+      "ip/firewall/mangle",
+      expect.objectContaining({ comment: "markweb" }),
+    );
   });
 });

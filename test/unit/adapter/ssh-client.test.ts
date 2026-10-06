@@ -151,6 +151,20 @@ describe("SshClient", () => {
       expect(conn.end).toHaveBeenCalled();
     });
 
+    it("rejects with the ssh2 error itself, keeping its level for enrichError", async () => {
+      // enrichError maps level "client-authentication" to ROUTER_AUTH_FAILED; wrapping
+      // the error here would drop the field and turn a refused login into INTERNAL.
+      const { conn } = buildMocks();
+      const authError = Object.assign(new Error("All configured authentication methods failed"), {
+        level: "client-authentication",
+      });
+      conn.connect = vi.fn(() => setImmediate(() => conn.emit("error", authError)));
+      const client = new SshClient(routerConfig, credentials);
+
+      await expect(client.execute("test command")).rejects.toBe(authError);
+      expect(conn.end).toHaveBeenCalled();
+    });
+
     it("does not reject twice when error fires after stream close", async () => {
       const { conn, stream } = buildMocks();
       const client = new SshClient(routerConfig, credentials);

@@ -3,21 +3,10 @@ import { dhcpTools } from "../../../src/domain/tools/dhcp-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
-import { z } from "zod";
 
 const listTool = dhcpTools[0];
 
-// Inline schema for isolated validation tests (avoids importing internal implementation detail)
-const listDhcpInputSchema = z
-  .object({
-    routerId: z.string(),
-    server: z.string().optional(),
-    status: z.enum(["bound", "waiting", "offered", "blocked", "all"]).default("all"),
-    macAddress: z.string().optional(),
-    limit: z.number().int().min(1).max(500).default(100),
-    offset: z.number().int().min(0).default(0),
-  })
-  .strict();
+const listDhcpInputSchema = listTool.inputSchema;
 
 function makeContext(leases: Record<string, unknown>[]): ToolContext {
   return {

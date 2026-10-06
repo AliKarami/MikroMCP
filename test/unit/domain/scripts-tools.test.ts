@@ -6,7 +6,6 @@ import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { MikroMCPError } from "../../../src/domain/errors/error-types.js";
-import { z } from "zod";
 
 function makeRouterConfig(): RouterConfig {
   return {
@@ -58,19 +57,9 @@ const listScriptsTool = scriptsTools[0];
 const manageScriptTool = scriptsTools[1];
 const runScriptTool = scriptsTools[2];
 
-const listSchema = z.object({ routerId: z.string(), name: z.string().optional() }).strict();
-const manageSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "update", "remove"]),
-    name: z.string(),
-    source: z.string().optional(),
-    comment: z.string().optional(),
-    dontRequirePermissions: z.boolean().optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
-const runSchema = z.object({ routerId: z.string(), name: z.string() }).strict();
+const listSchema = listScriptsTool.inputSchema;
+const manageSchema = manageScriptTool.inputSchema;
+const runSchema = runScriptTool.inputSchema;
 
 describe("scripts tools", () => {
   describe("metadata", () => {

@@ -2,54 +2,23 @@ import { describe, it, expect, vi } from "vitest";
 import { policyRoutingTools } from "../../../src/domain/tools/policy-routing-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
-import { parseRecord } from "../../../src/adapter/response-parser.js";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const listRoutingRulesTool = policyRoutingTools[0];
 const manageRoutingRuleTool = policyRoutingTools[1];
 const listRoutingTablesTool = policyRoutingTools[2];
 const manageRoutingTableTool = policyRoutingTools[3];
 
-const listRulesSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.string().optional(),
-    disabled: z.boolean().optional(),
-  })
-  .strict();
+const manageRuleSchema = manageRoutingRuleTool.inputSchema;
 
-const manageRuleSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove", "enable", "disable"]),
-    table: z.string(),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    interface: z.string().optional(),
-    priority: z.number().int().min(0).max(4294967295).optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageTableSchema = manageRoutingTableTool.inputSchema;
 
-const manageTableSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove"]),
-    name: z.string(),
-    fib: z.boolean().default(false),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
-
-function makeContext(
-  records: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
+function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerClient: {
-      get: vi.fn().mockResolvedValue(records),
+      get: vi.fn().mockResolvedValue(fromWire(records)),
       create: vi.fn().mockResolvedValue(createReturn ?? { ".id": "*1" }),
       remove: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
@@ -369,7 +338,7 @@ describe("manage_routing_rule - composite key comparison", () => {
 
   // Derived from the real PS5 rule on RB5009 (RouterOS 7.24.2, list_routing_rules,
   // 2026-10-06) with the table renamed to "100", which the response parser turns into 100.
-  const numericTableRule = parseRecord({
+  const numericTableRule: WireRecord = {
     ".id": "*2",
     action: "lookup-only-in-table",
     comment: "PS5 to leg1 fail-closed",
@@ -377,7 +346,7 @@ describe("manage_routing_rule - composite key comparison", () => {
     inactive: "false",
     "src-address": "192.168.1.251/32",
     table: "100",
-  });
+  };
 
   it("finds a rule whose table name is numeric", async () => {
     const ctx = makeContext([numericTableRule]);
