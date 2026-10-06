@@ -21,6 +21,16 @@ const DURATION_RE = /^\d+[wdhms](\d+[wdhms])*$/;
 const FREE_TEXT_KEYS: ReadonlySet<string> = new Set(["comment", "text"]);
 
 /**
+ * Software version and firmware fields (`version`, `minimum-version`,
+ * `latest-version`, `current-firmware`, …). A decimal there is a release,
+ * not a number: `"7.10"` and `"7.20"` would become `7.1` and `7.2`. An integer
+ * (VRRP or IGMP protocol `version: "3"`) still parses as a number.
+ */
+function isVersionKey(key: string): boolean {
+  return key === "version" || key.endsWith("-version") || key.endsWith("-firmware");
+}
+
+/**
  * Parse a single RouterOS string value into an appropriate JS type.
  *
  * RouterOS returns **everything** as strings. This function converts:
@@ -28,6 +38,7 @@ const FREE_TEXT_KEYS: ReadonlySet<string> = new Set(["comment", "text"]);
  * - Numeric strings to numbers
  * - `.id` values stay as strings (e.g. `"*A"`)
  * - Free-text fields (`comment`, `text`) stay as strings
+ * - Decimal values of version and firmware fields stay as strings (`"7.10"`)
  * - Duration strings stay as strings (e.g. `"1d2h3m4s"`)
  * - Everything else stays as string
  */
@@ -50,8 +61,9 @@ export function parseRouterOSValue(key: string, value: string): unknown {
   // rx-byte exceed 2^53 and would lose precision as JS numbers — keep those as
   // strings); decimals keep the finite check.
   if (NUMERIC_RE.test(value)) {
-    const num = Number(value);
     const isInteger = !value.includes(".");
+    if (!isInteger && isVersionKey(key)) return value;
+    const num = Number(value);
     if (isInteger ? Number.isSafeInteger(num) : Number.isFinite(num)) {
       return num;
     }
