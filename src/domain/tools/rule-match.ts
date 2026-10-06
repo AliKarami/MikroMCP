@@ -95,7 +95,8 @@ function canonical(property: string, value: string): string {
  * Compare a rule field as stored by RouterOS with a requested value. The
  * response parser turns numeric strings into numbers (`dst-port: 53`), a
  * missing field equals an empty one, `protocol=all` equals no protocol and a
- * protocol number equals the name RouterOS stores for it, a host `/32` mask is optional, and set and flag fields ignore element order.
+ * protocol number equals the name RouterOS stores for it, a host `/32` mask is
+ * optional, and set and flag fields ignore element order.
  */
 export function sameRuleValue(property: string, stored: unknown, requested: unknown): boolean {
   return (
