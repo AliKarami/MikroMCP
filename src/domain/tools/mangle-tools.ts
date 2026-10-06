@@ -2,7 +2,7 @@ import { z } from "zod";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
-import { sameRuleValue } from "./rule-match.js";
+import { protocolName, ruleActionAddOnly, sameRuleValue } from "./rule-match.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -13,8 +13,8 @@ const log = createLogger("mangle-tools");
 
 const MANGLE_PATH = "ip/firewall/mangle";
 
-/** Match and mark parameters compared on a repeated add, mapped to their RouterOS property names. */
-const MANGLE_RULE_FIELDS = [
+/** Match parameters compared on a repeated add, mapped to their RouterOS property names. */
+const MANGLE_MATCH_FIELDS = [
   ["srcAddress", "src-address"],
   ["dstAddress", "dst-address"],
   ["srcAddressList", "src-address-list"],
@@ -24,16 +24,49 @@ const MANGLE_RULE_FIELDS = [
   ["dstPort", "dst-port"],
   ["inInterface", "in-interface"],
   ["outInterface", "out-interface"],
-  ["newRoutingMark", "new-routing-mark"],
-  ["newConnectionMark", "new-connection-mark"],
+  ["tcpFlags", "tcp-flags"],
+] as const;
+
+/**
+ * Actions `ruleAction` accepts: `accept` (the documented RouterOS default) and
+ * `passthrough` from the common firewall actions, and the mangle actions whose value
+ * this tool can set. A subset of what RouterOS offers; `jump`, `route`, `change-ttl`
+ * and the rest need parameters this tool does not have.
+ */
+const MANGLE_ACTIONS = [
+  "accept",
+  "passthrough",
+  "mark-routing",
+  "mark-connection",
+  "mark-packet",
+  "change-dscp",
+  "change-mss",
+] as const;
+
+type MangleAction = (typeof MANGLE_ACTIONS)[number];
+
+/**
+ * The value parameter each value-setting action takes, with its RouterOS property.
+ * Documented (RouterOS Mangle): each `new-*` property belongs to exactly one action.
+ * Checked on CHR 7.23.2 and 7.24.2: under another action, including the default
+ * `accept`, RouterOS creates the rule without an error and silently drops the value,
+ * and an `accept` rule with `new-connection-mark` left live ICMP traffic unmarked.
+ */
+const ACTION_VALUE_PARAMS = [
+  ["mark-routing", "newRoutingMark", "new-routing-mark"],
+  ["mark-connection", "newConnectionMark", "new-connection-mark"],
+  ["mark-packet", "newPacketMark", "new-packet-mark"],
+  ["change-dscp", "newDscpValue", "new-dscp"],
+  ["change-mss", "newMss", "new-mss"],
 ] as const;
 
 /**
  * Compare a field RouterOS reports only for the actions that use it. `passthrough`
- * reads back as `true` on a rule added without it (the default is yes), but a rule
- * whose action ignores the field, such as the `accept` this tool creates when no
- * action applies, may not report it at all. A field the router does not report
- * cannot differ, so only a reported value is compared.
+ * reads back as `true` on a rule added without it (the documented default is yes),
+ * but a rule whose action ignores the field, such as a dynamic `passthrough` rule,
+ * does not report it at all (seen on RouterOS 7.24.2). A field the router does not
+ * report cannot differ, so only a reported value is compared. This is a choice of the
+ * tool's idempotency check, not RouterOS behaviour.
  */
 function sameActionField(
   property: string,
@@ -43,6 +76,97 @@ function sameActionField(
 ): boolean {
   if (stored === undefined) return true;
   return sameRuleValue(property, stored, requested ?? fallback);
+}
+
+/**
+ * Built-in chains a routing mark cannot take effect in. Documented: "Action
+ * mark-routing can be used only in mangle chain output and prerouting" (RouterOS,
+ * Per connection classifier). RouterOS rejects such a rule as well (HTTP 400
+ * "routing-mark allowed only in output and prerouting chains", CHR 7.23.2 and
+ * 7.24.2); checking here first lets a dry run report it. A custom chain is let
+ * through, since the chain that jumps to it is unknown here.
+ */
+const NO_ROUTING_MARK_CHAINS: ReadonlySet<string> = new Set(["input", "forward", "postrouting"]);
+
+function validationError(
+  code: string,
+  message: string,
+  details: Record<string, unknown>,
+  suggestedAction: string,
+): MikroMCPError {
+  return new MikroMCPError({
+    category: ErrorCategory.VALIDATION,
+    code,
+    message,
+    details,
+    recoverability: { retryable: false, suggestedAction },
+  });
+}
+
+/**
+ * Check an add before any router call, so a dry run reports what the add would hit.
+ * Some checks repeat a RouterOS rejection; the others are stricter than RouterOS and
+ * turn a rule it would create and never apply into a VALIDATION error. Each check
+ * says which it is (CHR 7.23.2 and 7.24.2).
+ */
+function checkAddParams(parsed: z.infer<typeof manageMangleRuleInputSchema>): MangleAction {
+  const ruleAction = parsed.ruleAction ?? "accept";
+  for (const [action, param, property] of ACTION_VALUE_PARAMS) {
+    const given = parsed[param] !== undefined;
+    // Stricter than RouterOS, which creates the rule and drops the value.
+    if (given && action !== ruleAction) {
+      throw validationError(
+        "MANGLE_FIELD_NOT_APPLICABLE",
+        `${param} (${property}) applies only to ruleAction ${action}, not to ${ruleAction}.`,
+        { ruleAction, param, requiredRuleAction: action },
+        parsed.ruleAction === undefined
+          ? `Set ruleAction to ${action}; without it the rule is accept and RouterOS drops ${property}.`
+          : `Drop ${param}, or set ruleAction to ${action}.`,
+      );
+    }
+    // Stricter than RouterOS, which creates a mark or dscp action without its value
+    // (change-mss it rejects anyway, below); such a rule has nothing to set.
+    if (!given && action === ruleAction) {
+      throw validationError(
+        "MANGLE_ACTION_VALUE_REQUIRED",
+        `ruleAction ${action} needs ${param} (${property}).`,
+        { ruleAction, param },
+        `Provide ${param}.`,
+      );
+    }
+  }
+
+  if (ruleAction === "mark-routing" && NO_ROUTING_MARK_CHAINS.has(parsed.chain!)) {
+    throw validationError(
+      "MANGLE_CHAIN_NOT_APPLICABLE",
+      `A routing mark set in chain ${parsed.chain} takes no effect; mark-routing works only in prerouting and output.`,
+      { ruleAction, chain: parsed.chain },
+      "Use chain prerouting for forwarded traffic or output for the router's own traffic.",
+    );
+  }
+
+  // Repeats RouterOS, which answers HTTP 400 "tcp-flags works only with tcp" and, for
+  // change-mss without protocol=tcp and tcp-flags=syn, "tcp mss change works only on
+  // tcp syn packets". RouterOS takes protocol 6 and stores it as tcp.
+  const tcp = parsed.protocol !== undefined && protocolName(parsed.protocol) === "tcp";
+  const syn = (parsed.tcpFlags ?? "").split(",").includes("syn");
+  if (ruleAction === "change-mss" && !(tcp && syn)) {
+    throw validationError(
+      "MANGLE_TCP_REQUIRED",
+      "change-mss works only on TCP SYN packets; RouterOS rejects it without protocol tcp and tcpFlags syn.",
+      { protocol: parsed.protocol, tcpFlags: parsed.tcpFlags },
+      'Set protocol to "tcp" and tcpFlags to "syn".',
+    );
+  }
+  if (parsed.tcpFlags !== undefined && !tcp) {
+    throw validationError(
+      "MANGLE_TCP_REQUIRED",
+      `tcpFlags works only with TCP, but protocol is ${parsed.protocol ?? "not set"}.`,
+      { protocol: parsed.protocol, tcpFlags: parsed.tcpFlags },
+      'Set protocol to "tcp".',
+    );
+  }
+  return ruleAction;
 }
 
 async function findMangleRuleByComment(
@@ -154,9 +278,50 @@ const manageMangleRuleInputSchema = z
     dstPort: z.string().optional().describe("Destination port or range"),
     inInterface: z.string().optional().describe("Incoming interface to match"),
     outInterface: z.string().optional().describe("Outgoing interface to match"),
-    newRoutingMark: z.string().optional().describe("Routing mark to set"),
-    newConnectionMark: z.string().optional().describe("Connection mark to set"),
-    newDscpValue: z.number().int().min(0).max(63).optional().describe("DSCP value to set (0–63)"),
+    tcpFlags: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'TCP flags to match, comma-separated, ! negates one (e.g. "syn"); needs protocol tcp',
+      ),
+    ruleAction: z
+      .enum(MANGLE_ACTIONS)
+      .optional()
+      .describe(
+        "Mangle action, add only; default accept, as in RouterOS. Each new* value needs its action: newRoutingMark → mark-routing, newConnectionMark → mark-connection, newPacketMark → mark-packet, newDscpValue → change-dscp, newMss → change-mss",
+      ),
+    newRoutingMark: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Routing mark to set (ruleAction mark-routing, chain prerouting or output)"),
+    newConnectionMark: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Connection mark to set (ruleAction mark-connection)"),
+    newPacketMark: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Packet mark to set (ruleAction mark-packet)"),
+    newDscpValue: z
+      .number()
+      .int()
+      .min(0)
+      .max(63)
+      .optional()
+      .describe("DSCP value to set, 0–63 (ruleAction change-dscp)"),
+    // RouterOS documents new-mss as an integer with no range; 0–65535 is the size of
+    // the TCP MSS option, and how RouterOS bounds it was not checked. clamp-to-pmtu is
+    // named in the docs and stored as such (RB5009, RouterOS 7.24.2).
+    newMss: z
+      .union([z.number().int().min(0).max(65535), z.literal("clamp-to-pmtu")])
+      .optional()
+      .describe(
+        "MSS to set: a number or clamp-to-pmtu (ruleAction change-mss, with protocol tcp and tcpFlags syn)",
+      ),
     passthrough: z.boolean().optional().describe("Whether to continue matching subsequent rules"),
   })
   .strict();
@@ -165,7 +330,7 @@ const manageMangleRuleTool: ToolDefinition = {
   name: "manage_mangle_rule",
   title: "Manage Mangle Rule",
   description:
-    "Add, remove, enable, or disable a firewall mangle rule. Uses comment as idempotency key: a repeated add returns already_exists only when the chain, match fields, marks, DSCP, and passthrough agree, otherwise CONFLICT. Supports dry-run mode.",
+    "Add, remove, enable, or disable a firewall mangle rule. ruleAction sets the action (default accept); each new* value is accepted only with its action, e.g. newRoutingMark with mark-routing. Uses comment as idempotency key: a repeated add returns already_exists only when the chain, match fields, marks, DSCP, MSS, passthrough, and an explicit ruleAction agree, otherwise CONFLICT. Supports dry-run mode.",
   inputSchema: manageMangleRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -182,6 +347,16 @@ const manageMangleRuleTool: ToolDefinition = {
     );
 
     try {
+      if (parsed.action !== "add" && parsed.ruleAction !== undefined) {
+        // The rule is found by comment alone, so a ruleAction here would not narrow
+        // which rule is removed or toggled.
+        throw ruleActionAddOnly(
+          parsed.action,
+          parsed.ruleAction,
+          "Drop ruleAction; the rule is identified by its comment.",
+        );
+      }
+
       if (parsed.action === "add") {
         if (parsed.chain === undefined) {
           throw new MikroMCPError({
@@ -195,15 +370,28 @@ const manageMangleRuleTool: ToolDefinition = {
           });
         }
 
+        const ruleAction = checkAddParams(parsed);
         const existing = await findMangleRuleByComment(context, parsed.comment);
 
         if (existing) {
+          // Only an explicit ruleAction is compared, so a repeated add without one still
+          // finds a rule with any action, such as one added in WinBox. A value parameter
+          // always comes with its explicit action, so comparing a value only when the
+          // router reports it misses nothing: a rule of another action differs in action.
+          const compareAction = parsed.ruleAction !== undefined;
+          // A rule created without an action, as earlier versions of this tool did, has no
+          // `action` field at all (CHR 7.23.2 and 7.24.2); it is the documented default
+          // accept. Without this, such a rule would never differ in action.
+          const existingAction = existing.action ?? "accept";
           const matches =
+            (!compareAction || sameRuleValue("action", existingAction, parsed.ruleAction)) &&
             sameRuleValue("chain", existing.chain, parsed.chain) &&
-            MANGLE_RULE_FIELDS.every(([key, property]) =>
+            MANGLE_MATCH_FIELDS.every(([key, property]) =>
               sameRuleValue(property, existing[property], parsed[key]),
             ) &&
-            sameActionField("new-dscp", existing["new-dscp"], parsed.newDscpValue) &&
+            ACTION_VALUE_PARAMS.every(([, param, property]) =>
+              sameActionField(property, existing[property], parsed[param]),
+            ) &&
             sameActionField("passthrough", existing.passthrough, parsed.passthrough, true);
 
           if (matches) {
@@ -213,14 +401,21 @@ const manageMangleRuleTool: ToolDefinition = {
             };
           }
 
-          const existingDetails: Record<string, unknown> = { chain: existing.chain };
-          const requestedDetails: Record<string, unknown> = { chain: parsed.chain };
-          for (const [key, property] of MANGLE_RULE_FIELDS) {
+          // The action is listed only when it was compared.
+          const existingDetails: Record<string, unknown> = compareAction
+            ? { action: existingAction, chain: existing.chain }
+            : { chain: existing.chain };
+          const requestedDetails: Record<string, unknown> = compareAction
+            ? { action: parsed.ruleAction, chain: parsed.chain }
+            : { chain: parsed.chain };
+          for (const [key, property] of MANGLE_MATCH_FIELDS) {
             existingDetails[property] = existing[property];
             requestedDetails[property] = parsed[key];
           }
-          existingDetails["new-dscp"] = existing["new-dscp"];
-          requestedDetails["new-dscp"] = parsed.newDscpValue;
+          for (const [, param, property] of ACTION_VALUE_PARAMS) {
+            existingDetails[property] = existing[property];
+            requestedDetails[property] = parsed[param];
+          }
           existingDetails.passthrough = existing.passthrough;
           // The effective value: an omitted passthrough means the RouterOS default yes.
           requestedDetails.passthrough = parsed.passthrough ?? true;
@@ -241,6 +436,7 @@ const manageMangleRuleTool: ToolDefinition = {
 
         const body: Record<string, string> = {
           chain: parsed.chain!,
+          action: ruleAction,
           comment: parsed.comment,
         };
 
@@ -253,10 +449,11 @@ const manageMangleRuleTool: ToolDefinition = {
         if (parsed.dstPort !== undefined) body["dst-port"] = parsed.dstPort;
         if (parsed.inInterface !== undefined) body["in-interface"] = parsed.inInterface;
         if (parsed.outInterface !== undefined) body["out-interface"] = parsed.outInterface;
-        if (parsed.newRoutingMark !== undefined) body["new-routing-mark"] = parsed.newRoutingMark;
-        if (parsed.newConnectionMark !== undefined)
-          body["new-connection-mark"] = parsed.newConnectionMark;
-        if (parsed.newDscpValue !== undefined) body["new-dscp"] = String(parsed.newDscpValue);
+        if (parsed.tcpFlags !== undefined) body["tcp-flags"] = parsed.tcpFlags;
+        for (const [, param, property] of ACTION_VALUE_PARAMS) {
+          const value = parsed[param];
+          if (value !== undefined) body[property] = String(value);
+        }
         if (parsed.passthrough !== undefined) body.passthrough = parsed.passthrough ? "yes" : "no";
 
         if (parsed.dryRun) {
