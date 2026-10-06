@@ -4,6 +4,7 @@ import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 import { buildRouterOsCommand, isRouterOsCommandString } from "../../adapter/routeros-command.js";
+import { parseRecord } from "../../adapter/response-parser.js";
 
 import { paginate } from "./pagination.js";
 
@@ -11,6 +12,19 @@ const log = createLogger("diagnostic-tools");
 const routerOsCommandString = z
   .string()
   .refine(isRouterOsCommandString, "Must not contain control characters");
+
+// Command results are parsed like REST records (numbers, booleans); `.section` and
+// other dot-prefixed bookkeeping fields are dropped.
+function commandFields(record: Record<string, string>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(parseRecord(record))
+      .filter(([key]) => !key.startsWith("."))
+      .map(([key, value]) => [
+        key.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase()),
+        value,
+      ]),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // ping
@@ -110,12 +124,24 @@ const tracerouteInputSchema = z
   })
   .strict();
 
+// RouterOS closes a REST session after 60 s; wait past that so its own error arrives.
+const TRACEROUTE_TIMEOUT_MS = 65_000;
+
+interface TracerouteHop {
+  hop: number;
+  address: string | null;
+  [field: string]: unknown;
+}
+
 const tracerouteTool: ToolDefinition = {
   name: "traceroute",
   title: "Traceroute",
   description:
-    "Trace the network path from the router to a target address. Returns an ordered hop list with RTT per hop. Timeouts and partial results are valid responses.",
+    "Trace the network path from the router to a target address. Returns an ordered hop list with RTT per hop. Timeouts and partial results are valid responses. Not auto-retried.",
   inputSchema: tracerouteInputSchema,
+  // A run can take up to RouterOS's 60 s REST limit; a silent retry would multiply
+  // the wait, so opt out of auto-retry.
+  retryable: false,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -128,31 +154,35 @@ const tracerouteTool: ToolDefinition = {
     log.info({ routerId: context.routerId, address: parsed.address }, "Tracerouting");
 
     try {
-      // Same REST API permission issue as ping — use SSH.
-      const output = await context.sshClient.execute(
-        buildRouterOsCommand("/tool traceroute", {
+      const records = await context.routerClient.executeFinal(
+        "tool/traceroute",
+        {
           address: parsed.address,
-          count: parsed.count,
-          "max-hops": parsed.maxHops,
+          count: String(parsed.count),
+          "max-hops": String(parsed.maxHops),
+        },
+        { timeoutMs: TRACEROUTE_TIMEOUT_MS },
+      );
+
+      const hops = records.map(
+        (record, i): TracerouteHop => ({
+          ...commandFields(record),
+          hop: i + 1,
+          address: record.address || null,
         }),
       );
 
-      // Each hop line starts with a number: " 1 192.168.1.1  echo reply  1ms …"
-      const hopLines = output.split("\n").filter((l) => /^\s*\d+\s+\S+/.test(l));
-      const hops = hopLines.map((line) => {
-        const cols = line.trim().split(/\s+/);
-        return {
-          hop: Number(cols[0]),
-          address: cols[1] ?? "???",
-          status: cols[2] ?? "",
-          rtt1: cols[3] ?? null,
-          rtt2: cols[4] ?? null,
-          rtt3: cols[5] ?? null,
-        };
-      });
-
       const lines = [`Traceroute to ${parsed.address} from ${context.routerId}:`];
-      hops.forEach((h) => lines.push(`  ${h.hop}  ${h.address}  ${h.rtt1 ?? "?"}`));
+      for (const h of hops) {
+        const last = typeof h.last === "number" ? `${h.last}ms` : String(h.last ?? "?");
+        const loss = typeof h.loss === "number" ? `${h.loss}%` : "?";
+        const status = typeof h.status === "string" && h.status !== "" ? `  ${h.status}` : "";
+        lines.push(`  ${h.hop}  ${h.address ?? "???"}  ${last}  loss=${loss}${status}`);
+      }
+      const routerError = hops.find((h) => typeof h.error === "string" && h.error !== "")?.error;
+      if (routerError !== undefined) {
+        lines.push(`  RouterOS: ${routerError} — ${parsed.address} was not reached`);
+      }
 
       return {
         content: lines.join("\n"),
@@ -160,7 +190,6 @@ const tracerouteTool: ToolDefinition = {
           routerId: context.routerId,
           address: parsed.address,
           hops,
-          raw: output,
         },
       };
     } catch (err) {
@@ -189,36 +218,35 @@ const torchInputSchema = z
   })
   .strict();
 
-interface TorchFlow {
-  src: string;
-  dst: string;
-  txBytes: string;
-  rxBytes: string;
+const TORCH_TIMEOUT_MARGIN_S = 5;
+const BPS_UNITS = ["bps", "kbps", "Mbps", "Gbps"];
+
+export function formatBps(bps: number): string {
+  let value = bps;
+  let unit = 0;
+  // Compare after rounding so 999950 bps reads 1Mbps, not 1000kbps.
+  while (unit < BPS_UNITS.length - 1 && Number(value.toFixed(1)) >= 1000) {
+    value /= 1000;
+    unit++;
+  }
+  return `${Number(value.toFixed(1))}${BPS_UNITS[unit]}`;
 }
 
-function parseTorchOutput(output: string): TorchFlow[] {
-  const flows: TorchFlow[] = [];
-  for (const line of output.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || /^(SRC|src|-{3})/i.test(trimmed)) continue;
-    const cols = trimmed.split(/\s+/);
-    if (cols.length < 4) continue;
-    flows.push({
-      src: cols[0] ?? "?",
-      dst: cols[1] ?? "?",
-      txBytes: cols[2] ?? "?",
-      rxBytes: cols[3] ?? "?",
-    });
-  }
-  return flows;
+function torchEndpoint(address: unknown, port: unknown): string {
+  if (!address) return "*";
+  if (!port) return String(address);
+  return String(address).includes(":") ? `[${address}]:${port}` : `${address}:${port}`;
 }
 
 const torchTool: ToolDefinition = {
   name: "torch",
   title: "Torch",
   description:
-    "Capture a real-time traffic snapshot on a router interface. The tool call blocks for the duration (seconds) and returns top flows by bytes. readOnlyHint true — auto-retry enabled.",
+    "Capture a real-time traffic snapshot on a router interface. RouterOS runs the capture for `duration` seconds; the tool returns the flows of the final update with their TX/RX rates in bits per second and packets per second. Not auto-retried.",
   inputSchema: torchInputSchema,
+  // Each run captures for `duration` seconds; a silent retry would repeat the
+  // capture, so opt out of auto-retry.
+  retryable: false,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -231,25 +259,25 @@ const torchTool: ToolDefinition = {
     log.info({ routerId: context.routerId, interface: parsed.interface }, "Running torch");
 
     try {
-      const parameters: Record<string, string | number> = { interface: parsed.interface };
-      if (parsed.srcAddress !== undefined) parameters["src-address"] = parsed.srcAddress;
-      if (parsed.dstAddress !== undefined) parameters["dst-address"] = parsed.dstAddress;
+      const data: Record<string, string> = {
+        interface: parsed.interface,
+        duration: `${parsed.duration}s`,
+      };
+      if (parsed.srcAddress !== undefined) data["src-address"] = parsed.srcAddress;
+      if (parsed.dstAddress !== undefined) data["dst-address"] = parsed.dstAddress;
 
-      // RouterOS torch runs indefinitely — force-close after duration + 1s buffer
-      const raw = await context.sshClient.execute(
-        buildRouterOsCommand("/tool torch", parameters),
-        (parsed.duration + 1) * 1000,
-      );
-
-      // Strip ANSI escape codes and parse flow rows
-      const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
-      const flows = parseTorchOutput(clean);
+      const records = await context.routerClient.executeFinal("tool/torch", data, {
+        timeoutMs: (parsed.duration + TORCH_TIMEOUT_MARGIN_S) * 1000,
+      });
+      const flows = records.map(commandFields);
 
       const lines = [
         `Torch on ${parsed.interface} (${parsed.duration}s) from ${context.routerId}: ${flows.length} flows`,
       ];
       for (const flow of flows.slice(0, 10)) {
-        lines.push(`  ${flow.src} → ${flow.dst}  tx=${flow.txBytes} rx=${flow.rxBytes}`);
+        lines.push(
+          `  ${flow.ipProtocol || flow.macProtocol || "?"}  ${torchEndpoint(flow.srcAddress, flow.srcPort)} → ${torchEndpoint(flow.dstAddress, flow.dstPort)}  tx=${formatBps(Number(flow.tx ?? 0))}  rx=${formatBps(Number(flow.rx ?? 0))}`,
+        );
       }
 
       return {
@@ -259,7 +287,6 @@ const torchTool: ToolDefinition = {
           interface: parsed.interface,
           duration: parsed.duration,
           flows,
-          raw,
         },
       };
     } catch (err) {

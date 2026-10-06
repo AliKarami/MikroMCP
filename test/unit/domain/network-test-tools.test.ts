@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { networkTestTools } from "../../../src/domain/tools/network-test-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { lastSection } from "../../../src/adapter/response-parser.js";
 import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
@@ -40,7 +41,11 @@ function makeContext(executeResult: unknown = {}, getResult: unknown[] = []) {
       allowedToolPatterns: [],
     },
     routerClient: {
-      execute: vi.fn().mockResolvedValue(executeResult),
+      // Progress-reporting commands must go through executeFinal, never raw execute.
+      execute: vi.fn().mockRejectedValue(new Error("unexpected raw execute() call")),
+      executeFinal: vi.fn(async () =>
+        lastSection(executeResult as Record<string, string> | Array<Record<string, string>>),
+      ),
       get: vi.fn().mockResolvedValue(getResult),
     } as unknown as RouterOSRestClient,
   } as unknown as ToolContext;
@@ -124,15 +129,44 @@ describe("networkTestTools", () => {
       expect(sc.txMbps).toBeDefined();
       expect(sc.rxMbps).toBeDefined();
       expect(sc.lostPackets).toBe("0");
-      expect(ctx.routerClient.execute).toHaveBeenCalledWith(
+      expect(ctx.routerClient.executeFinal).toHaveBeenCalledWith(
         "tool/bandwidth-test",
         expect.objectContaining({ address: "10.0.0.2", protocol: "tcp", direction: "both" }),
       );
     });
 
+    it("reads throughput from the final section of the REST result", async () => {
+      // Shape documented for POST /rest/tool/bandwidth-test: one record per update.
+      const ctx = makeContext([
+        { ".section": "0", status: "connecting", "tx-current": "0", "rx-current": "0" },
+        { ".section": "1", status: "running", "tx-current": "50000000", "rx-current": "0" },
+        {
+          ".section": "2",
+          status: "done testing",
+          "tx-current": "100000000",
+          "rx-current": "50000000",
+          "lost-packets": "3",
+        },
+      ]);
+      const result = await bandwidthTestTool.handler(
+        { routerId: "test-router", address: "10.0.0.2" },
+        ctx,
+      );
+      expect(result.structuredContent).toMatchObject({ txMbps: 100, rxMbps: 50, lostPackets: "3" });
+    });
+
+    it("fails instead of reporting 0 Mbps when RouterOS returns no result", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        bandwidthTestTool.handler({ routerId: "test-router", address: "10.0.0.2" }, ctx),
+      ).rejects.toMatchObject({ code: "BANDWIDTH_TEST_NO_RESULT" });
+    });
+
     it("propagates errors", async () => {
       const ctx = makeContext();
-      (ctx.routerClient.execute as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("net"));
+      (ctx.routerClient.executeFinal as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error("net"),
+      );
       await expect(
         bandwidthTestTool.handler({ routerId: "test-router", address: "10.0.0.2" }, ctx),
       ).rejects.toThrow();
@@ -163,7 +197,7 @@ describe("networkTestTools", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.statusCode).toBe("200");
       expect(sc.body).toBe("Hello World");
-      expect(ctx.routerClient.execute).toHaveBeenCalledWith(
+      expect(ctx.routerClient.executeFinal).toHaveBeenCalledWith(
         "tool/fetch",
         expect.objectContaining({
           url: "http://example.com",
@@ -182,11 +216,35 @@ describe("networkTestTools", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.outputFile).toBe("flash/response.txt");
       expect(sc.body).toBeUndefined();
-      expect(ctx.routerClient.execute).toHaveBeenCalledWith(
+      expect(ctx.routerClient.executeFinal).toHaveBeenCalledWith(
         "tool/fetch",
         expect.objectContaining({ output: "file", "dst-path": "flash/response.txt" }),
       );
     });
+
+    it('reports the final update even when it is not "finished"', async () => {
+      const ctx = makeContext([
+        { ".section": "0", status: "connecting" },
+        { ".section": "1", status: "failed", code: "500" },
+      ]);
+      const result = await fetchUrlTool.handler(
+        { routerId: "test-router", url: "http://example.com" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).statusCode).toBe("500");
+    });
+
+    it.each(["007", "true", "1d2h", "3.14"])(
+      "returns a body of %s verbatim, without value parsing",
+      async (body) => {
+        const ctx = makeContext([{ ".section": "1", status: "finished", code: "200", data: body }]);
+        const result = await fetchUrlTool.handler(
+          { routerId: "test-router", url: "http://example.com" },
+          ctx,
+        );
+        expect((result.structuredContent as Record<string, unknown>).body).toBe(body);
+      },
+    );
 
     it("truncates body over 64KB", async () => {
       const bigBody = "x".repeat(70000);

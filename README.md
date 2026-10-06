@@ -148,7 +148,7 @@ The RouterOS REST/API exposes raw endpoints. MikroMCP wraps them in schema-valid
 
 ### MikroMCP vs SSH automation
 
-Instead of brittle SSH scripts that screen-scrape CLI output, MikroMCP returns structured, typed results with confirmation gates and per-router circuit breakers. SSH is used only where REST can't reach — `ping`, `traceroute`, `torch`, and guarded `run_command`.
+Instead of brittle SSH scripts that screen-scrape CLI output, MikroMCP returns structured, typed results with confirmation gates and per-router circuit breakers. SSH is used only where REST can't reach — `ping` and guarded `run_command`.
 
 ### MikroMCP for Claude Code
 

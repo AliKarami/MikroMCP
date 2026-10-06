@@ -76,12 +76,15 @@ See the required policies table below to decide which policies to include.
 |---|---|
 | All read/list tools (`get_system_status`, `list_interfaces`, `list_routes`, etc.) | `read`, `rest-api` |
 | Write tools (`manage_firewall_rule`, `manage_route`, `manage_dns_entry`, `manage_ip_address`, etc.) | `read`, `write`, `rest-api` |
-| `ping`, `traceroute`, `torch` | `read`, `write`, `test`, `ssh` |
+| `ping` | `read`, `write`, `test`, `ssh` |
+| `traceroute` | `read`, `write`, `test`, `rest-api` |
 | `run_command` (guarded SSH execution) | `read`, `write`, `test`, `ssh` |
-| `torch` (traffic monitoring) | `read`, `write`, `test`, `ssh`, `sniff` |
+| `torch` (traffic monitoring) | `read`, `write`, `test`, `rest-api`, `sniff` |
 | `upload_file` | `read`, `write`, `ssh` (SFTP, preferred) — or `ftp` for the plaintext fallback |
 | `reboot` | `read`, `write`, `reboot`, `rest-api` |
 | `manage_package` (install/uninstall) | `read`, `write`, `rest-api` |
+
+`traceroute` and `torch` run through the REST user. Earlier releases ran them through the SSH user; if you granted `test`/`sniff` only to a separate SSH user, add them to the REST user's group.
 
 The simplest all-in-one policy set for full coverage:
 

@@ -1,0 +1,93 @@
+{
+  "_comment": "Real POST /rest/tool/torch response from RouterOS 7.23 (NetMetal ax, ether1, duration 3s). Addresses replaced with private and documentation ranges.",
+  "request": {
+    "interface": "ether1",
+    "duration": "3s"
+  },
+  "response": [
+    {
+      ".section": "1",
+      "dscp": "0",
+      "dst-address": "192.168.88.255",
+      "dst-port": "32412",
+      "ip-protocol": "udp",
+      "mac-protocol": "ip",
+      "rx": "504",
+      "rx-packets": "1",
+      "src-address": "192.168.88.12",
+      "src-port": "35207",
+      "tx": "0",
+      "tx-packets": "0"
+    },
+    {
+      ".section": "1",
+      "dscp": "0",
+      "dst-address": "192.168.88.255",
+      "dst-port": "32414",
+      "ip-protocol": "udp",
+      "mac-protocol": "ip",
+      "rx": "504",
+      "rx-packets": "1",
+      "src-address": "192.168.88.12",
+      "src-port": "40583",
+      "tx": "0",
+      "tx-packets": "0"
+    },
+    {
+      ".section": "1",
+      "dscp": "0",
+      "dst-address": "224.0.0.224",
+      "dst-port": "7447",
+      "ip-protocol": "udp",
+      "mac-protocol": "ip",
+      "rx": "552",
+      "rx-packets": "1",
+      "src-address": "192.168.88.11",
+      "src-port": "37158",
+      "tx": "0",
+      "tx-packets": "0"
+    },
+    {
+      ".section": "2",
+      "dscp": "0",
+      "dst-address": "192.168.88.255",
+      "dst-port": "32412",
+      "ip-protocol": "udp",
+      "mac-protocol": "ip",
+      "rx": "0",
+      "rx-packets": "0",
+      "src-address": "192.168.88.12",
+      "src-port": "35207",
+      "tx": "0",
+      "tx-packets": "0"
+    },
+    {
+      ".section": "2",
+      "dscp": "0",
+      "dst-address": "192.168.88.255",
+      "dst-port": "32414",
+      "ip-protocol": "udp",
+      "mac-protocol": "ip",
+      "rx": "0",
+      "rx-packets": "0",
+      "src-address": "192.168.88.12",
+      "src-port": "40583",
+      "tx": "0",
+      "tx-packets": "0"
+    },
+    {
+      ".section": "2",
+      "dscp": "0",
+      "dst-address": "224.0.0.224",
+      "dst-port": "7447",
+      "ip-protocol": "udp",
+      "mac-protocol": "ip",
+      "rx": "0",
+      "rx-packets": "0",
+      "src-address": "192.168.88.11",
+      "src-port": "37158",
+      "tx": "0",
+      "tx-packets": "0"
+    }
+  ]
+}

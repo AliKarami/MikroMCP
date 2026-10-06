@@ -5,7 +5,7 @@
 import { request, Agent } from "undici";
 import type { RouterConfig, QueryOptions, RouterOSRecord } from "../types.js";
 import { buildAgentOptions } from "./tls-manager.js";
-import { parseRecord, parseRecords } from "./response-parser.js";
+import { lastSection, parseRecord, parseRecords } from "./response-parser.js";
 import { buildListQuery, applyPagination } from "./query-builder.js";
 
 // ---------------------------------------------------------------------------
@@ -122,10 +122,35 @@ export class RouterOSRestClient {
     await this.doRequest("DELETE", `${this.baseUrl}/${path}/${id}`);
   }
 
-  /** Execute a command (POST), e.g. `/ip/firewall/filter/print`. */
-  async execute<T = unknown>(path: string, data?: Record<string, unknown>): Promise<T> {
-    const result = await this.doRequest("POST", `${this.baseUrl}/${path}`, data);
+  /**
+   * Execute a command (POST), e.g. `/ip/firewall/filter/print`. `timeoutMs` overrides
+   * the request timeout for commands that run for a set `duration`.
+   */
+  async execute<T = unknown>(
+    path: string,
+    data?: Record<string, unknown>,
+    options: { timeoutMs?: number } = {},
+  ): Promise<T> {
+    const result = await this.doRequest("POST", `${this.baseUrl}/${path}`, data, options.timeoutMs);
     return result as T;
+  }
+
+  /**
+   * Execute a command that reports progress and return the unparsed records of its
+   * final update (see {@link lastSection}).
+   */
+  async executeFinal(
+    path: string,
+    data?: Record<string, unknown>,
+    options: { timeoutMs?: number } = {},
+  ): Promise<Array<Record<string, string>>> {
+    return lastSection(
+      await this.execute<Array<Record<string, string>> | Record<string, string>>(
+        path,
+        data,
+        options,
+      ),
+    );
   }
 
   // ---------- lifecycle ----------
@@ -145,7 +170,12 @@ export class RouterOSRestClient {
    * - Throws `HttpError` on non-2xx status codes.
    * - Returns parsed JSON (or `undefined` for empty bodies).
    */
-  private async doRequest(method: string, url: string, body?: unknown): Promise<unknown> {
+  private async doRequest(
+    method: string,
+    url: string,
+    body?: unknown,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ): Promise<unknown> {
     const headers: Record<string, string> = {
       Accept: "application/json",
       Authorization: this.authHeader,
@@ -163,8 +193,8 @@ export class RouterOSRestClient {
       headers,
       body: requestBody,
       dispatcher: this.agent,
-      bodyTimeout: REQUEST_TIMEOUT_MS,
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      bodyTimeout: timeoutMs,
+      headersTimeout: timeoutMs,
     });
 
     const text = await response.body.text();

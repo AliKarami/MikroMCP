@@ -6,6 +6,7 @@ import {
   isTrue,
   sameValue,
   normalizeWireValue,
+  lastSection,
 } from "../../../src/adapter/response-parser.js";
 
 describe("isTrue", () => {
@@ -148,5 +149,55 @@ describe("normalizeWireValue", () => {
     expect(normalizeWireValue(443)).toBe("443");
     expect(normalizeWireValue(undefined)).toBe("");
     expect(normalizeWireValue(null)).toBe("");
+  });
+});
+
+describe("lastSection", () => {
+  it("keeps only the records of the highest .section", () => {
+    expect(
+      lastSection([
+        { ".section": "0", address: "a" },
+        { ".section": "1", address: "b" },
+        { ".section": "1", address: "c" },
+      ]),
+    ).toEqual([
+      { ".section": "1", address: "b" },
+      { ".section": "1", address: "c" },
+    ]);
+  });
+
+  it("compares sections numerically", () => {
+    const records = [{ ".section": "9" }, { ".section": "10" }];
+    expect(lastSection(records)).toEqual([{ ".section": "10" }]);
+  });
+
+  it("returns every record when none carries a .section", () => {
+    expect(lastSection([{ a: "1" }, { a: "2" }])).toEqual([{ a: "1" }, { a: "2" }]);
+  });
+
+  it("does not depend on the order of the records", () => {
+    expect(
+      lastSection([
+        { ".section": "2", a: "x" },
+        { ".section": "1", a: "y" },
+      ]),
+    ).toEqual([{ ".section": "2", a: "x" }]);
+  });
+
+  it("treats a missing or non-numeric .section as section 0 instead of emptying the result", () => {
+    expect(lastSection([{ ".section": "x", a: "1" }])).toEqual([{ ".section": "x", a: "1" }]);
+    expect(lastSection([{ a: "untagged" }, { ".section": "0", a: "tagged" }])).toEqual([
+      { a: "untagged" },
+      { ".section": "0", a: "tagged" },
+    ]);
+    expect(lastSection([{ a: "untagged" }, { ".section": "1", a: "final" }])).toEqual([
+      { ".section": "1", a: "final" },
+    ]);
+  });
+
+  it("wraps a single record and handles an empty result", () => {
+    expect(lastSection({ a: "1" })).toEqual([{ a: "1" }]);
+    expect(lastSection([])).toEqual([]);
+    expect(lastSection(undefined)).toEqual([]);
   });
 });

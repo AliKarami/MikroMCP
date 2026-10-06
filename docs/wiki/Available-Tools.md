@@ -1504,7 +1504,7 @@ List ARP table entries with IP address, MAC, interface, and status.
 
 ## Diagnostics
 
-> **SSH policy required.** `ping`, `traceroute`, `torch`, and `run_command` connect via SSH because the RouterOS 7.x REST API returns a permission error for tool commands regardless of user policy. The RouterOS user must have the `ssh` policy in its group in addition to the standard policies.
+> **SSH policy required for `ping` and `run_command`.** They connect via SSH, so the RouterOS user must have the `ssh` policy in its group in addition to the standard policies. `traceroute` and `torch` use the REST API (`POST /rest/tool/traceroute`, `/rest/tool/torch`) and need `test` and `rest-api` instead.
 >
 > **`torch` also requires the `sniff` policy.** RouterOS enforces packet-capture permissions separately.
 
@@ -1526,7 +1526,7 @@ Send ICMP echo requests from the router to a target. 100% packet loss is a valid
 
 ### `traceroute` — Read
 
-Trace the network path from the router to a destination. Timeouts and partial hops are valid results.
+Trace the network path from the router to a destination. Returns one entry per hop, numbered from 1, from RouterOS's final result: `address` (`null` when the hop did not answer), `loss` (%), `sent`, and `last`/`avg`/`best`/`worst`/`stdDev` in milliseconds (`last` is `"timeout"` for a lost probe). If the target is not reached within `maxHops`, each hop carries `error: "Too many hops"` and the text output says so. Timeouts and partial hops are valid results. RouterOS ends a REST command after 60 seconds; a trace that runs longer fails with `ROUTER_TIMEOUT` (`REST_SESSION_CLOSED`) — lower `count` or `maxHops`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1541,7 +1541,7 @@ Trace the network path from the router to a destination. Timeouts and partial ho
 
 ### `torch` — Read
 
-Capture a real-time traffic snapshot on an interface. The call blocks for `duration` seconds, then returns the top flows by bytes.
+Capture a real-time traffic snapshot on an interface. RouterOS runs the capture for `duration` seconds; the call then returns the flows of the final update: addresses, ports, protocols, and `tx`/`rx` in bits per second and `txPackets`/`rxPackets` in packets per second.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1551,7 +1551,7 @@ Capture a real-time traffic snapshot on an interface. The call blocks for `durat
 | `srcAddress` | string | — | Filter flows by source IP |
 | `dstAddress` | string | — | Filter flows by destination IP |
 
-**Requires `ssh` and `sniff` policies** on the RouterOS user group.
+**Requires `test`, `rest-api` and `sniff` policies** on the RouterOS user group.
 
 **Example prompt:** "Show me the top traffic flows on ether1 of core-01 for 10 seconds."
 

@@ -10,10 +10,9 @@
 #   /user group set <group> policy=...,ftp,...
 # FTP service must also be enabled on the router (/ip service enable ftp).
 #
-# The `ssh` policy is required for ping, traceroute, torch, and run_command —
-# those tools execute via SSH because RouterOS 7.x REST API blocks tool commands
-# regardless of other policy settings.
-# The `sniff` policy is additionally required for torch (packet-capture access).
+# The `ssh` policy is required for ping, run_command, and export_config, which
+# execute via SSH. traceroute and torch use the REST API and need `test`;
+# torch additionally needs `sniff` (packet-capture access).
 #
 # run_command policy modes
 # ─────────────────────────
