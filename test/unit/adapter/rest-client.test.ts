@@ -113,6 +113,47 @@ describe("RouterOSRestClient write methods", () => {
     });
   });
 
+  it("execute uses the default request timeout unless the call overrides it", async () => {
+    requestMock.mockResolvedValue(jsonResponse([]));
+    await makeClient().execute("tool/torch", { interface: "ether1" });
+    await makeClient().execute("tool/torch", { interface: "ether1" }, { timeoutMs: 45_000 });
+    expect(requestMock.mock.calls[0][1]).toMatchObject({
+      bodyTimeout: 30_000,
+      headersTimeout: 30_000,
+    });
+    expect(requestMock.mock.calls[1][1]).toMatchObject({
+      bodyTimeout: 45_000,
+      headersTimeout: 45_000,
+    });
+  });
+
+  it("executeFinal returns the records of the last .section", async () => {
+    requestMock.mockResolvedValue(
+      jsonResponse([
+        { ".section": "0", status: "connecting" },
+        { ".section": "1", status: "finished", code: "200" },
+      ]),
+    );
+    const records = await makeClient().executeFinal("tool/fetch", { url: "https://x" });
+    expect(records).toEqual([{ ".section": "1", status: "finished", code: "200" }]);
+  });
+
+  it.each([
+    ["an empty body", emptyResponse(), []],
+    ["a single object", jsonResponse({ status: "finished" }), [{ status: "finished" }]],
+    [
+      "sections out of order",
+      jsonResponse([
+        { ".section": "1", status: "finished" },
+        { ".section": "0", status: "connecting" },
+      ]),
+      [{ ".section": "1", status: "finished" }],
+    ],
+  ])("executeFinal handles %s", async (_label, response, expected) => {
+    requestMock.mockResolvedValue(response);
+    expect(await makeClient().executeFinal("tool/fetch", {})).toEqual(expected);
+  });
+
   it("update PATCHes the record path by .id", async () => {
     requestMock.mockResolvedValue(emptyResponse());
     await makeClient().update("interface/vlan", "*1", { disabled: "true" });

@@ -76,7 +76,7 @@ src/
 │
 ├── adapter/
 │   ├── rest-client.ts             # RouterOS REST client — get, getOne, create, update, remove, execute
-│   ├── ssh-client.ts              # SSH adapter — ping, traceroute, torch, run_command
+│   ├── ssh-client.ts              # SSH adapter — ping, run_command
 │   ├── sftp-client.ts             # Preferred encrypted upload_file transport
 │   ├── ftp-client.ts              # Plaintext upload_file fallback
 │   ├── routeros-command.ts        # Builds and quotes RouterOS CLI commands for the SSH adapter

@@ -17,6 +17,11 @@ function isTransientFailure(error: unknown): boolean {
   if (!(error instanceof MikroMCPError)) {
     return false;
   }
+  // The router answered: the command ran past RouterOS's 60 s REST limit, which says
+  // nothing about the router's health.
+  if (error.code === "REST_SESSION_CLOSED") {
+    return false;
+  }
   return TRANSIENT_CATEGORIES.has(error.category);
 }
 

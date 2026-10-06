@@ -1,9 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
-import { diagnosticTools } from "../../../src/domain/tools/diagnostic-tools.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { diagnosticTools, formatBps } from "../../../src/domain/tools/diagnostic-tools.js";
+import { withRetry } from "../../../src/adapter/retry-engine.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
-import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { HttpError, type RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { lastSection } from "../../../src/adapter/response-parser.js";
 import type { RouterConfig } from "../../../src/types.js";
 import { enrichError } from "../../../src/domain/errors/error-enricher.js";
 import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
@@ -11,6 +15,22 @@ import { z } from "zod";
 
 const pingTool = diagnosticTools[0];
 const tracerouteTool = diagnosticTools[1];
+const torchTool = diagnosticTools[2];
+
+type RestRecord = Record<string, string>;
+
+// Real RouterOS REST responses; see the `_comment` in each file.
+function restFixture(name: string): { request: RestRecord; response: RestRecord[] } {
+  const path = join(import.meta.dirname, "../../fixtures/routeros-rest", `${name}.json`);
+  return JSON.parse(readFileSync(path, "utf8")) as { request: RestRecord; response: RestRecord[] };
+}
+
+function sessionClosedError(): HttpError {
+  return new HttpError(
+    400,
+    JSON.stringify({ detail: "Session closed", error: 400, message: "Bad Request" }),
+  );
+}
 
 function makeRouterConfig(): RouterConfig {
   return {
@@ -24,7 +44,7 @@ function makeRouterConfig(): RouterConfig {
   };
 }
 
-function makeContext(sshOutput = ""): ToolContext {
+function makeContext(sshOutput = "", restResult: unknown = []): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
@@ -41,7 +61,9 @@ function makeContext(sshOutput = ""): ToolContext {
       connect: vi.fn().mockResolvedValue(undefined),
     } as unknown as FtpClient,
     routerClient: {
-      execute: vi.fn().mockResolvedValue([]),
+      // Progress-reporting commands must go through executeFinal, never raw execute.
+      execute: vi.fn().mockRejectedValue(new Error("unexpected raw execute() call")),
+      executeFinal: vi.fn(async () => lastSection(restResult as RestRecord[])),
       get: vi.fn().mockResolvedValue([]),
     } as unknown as RouterOSRestClient,
   };
@@ -54,15 +76,6 @@ const pingInputSchema = z
     count: z.number().int().min(1).max(20).default(4),
     size: z.number().int().min(14).max(65535).default(56),
     routingTable: z.string().optional(),
-  })
-  .strict();
-
-const tracerouteInputSchema = z
-  .object({
-    routerId: z.string(),
-    address: z.string(),
-    count: z.number().int().min(1).max(5).default(3),
-    maxHops: z.number().int().min(1).max(30).default(15),
   })
   .strict();
 
@@ -95,7 +108,7 @@ describe("diagnostic tools", () => {
         diagnosticTools[2],
         { routerId: "test-router", interface: "ether1", dstAddress: "10.0.0.1\u007fowned" },
       ],
-    ])("classifies %s as validation before SSH", async (_label, tool, params) => {
+    ])("classifies %s as validation before any router call", async (_label, tool, params) => {
       const ctx = makeContext();
       let thrown: unknown;
 
@@ -110,6 +123,7 @@ describe("diagnostic tools", () => {
         code: "VALIDATION_ERROR",
       });
       expect(ctx.sshClient.execute).not.toHaveBeenCalled();
+      expect(ctx.routerClient.executeFinal).not.toHaveBeenCalled();
     });
   });
 
@@ -129,6 +143,11 @@ describe("diagnostic tools", () => {
     it("traceroute has correct annotations", () => {
       expect(tracerouteTool.annotations.readOnlyHint).toBe(true);
       expect(tracerouteTool.annotations.destructiveHint).toBe(false);
+    });
+
+    it("traceroute and torch opt out of auto-retry (each run can take up to a minute)", () => {
+      expect(tracerouteTool.retryable).toBe(false);
+      expect(torchTool.retryable).toBe(false);
     });
   });
 
@@ -158,23 +177,35 @@ describe("diagnostic tools", () => {
     });
   });
 
-  describe("traceroute input schema", () => {
-    it("accepts minimal input with defaults", () => {
-      const r = tracerouteInputSchema.parse({ routerId: "r", address: "8.8.8.8" });
-      expect(r.count).toBe(3);
-      expect(r.maxHops).toBe(15);
+  describe("traceroute input schema (the tool's real schema)", () => {
+    const schema = tracerouteTool.inputSchema;
+    const base = { routerId: "r", address: "8.8.8.8" };
+
+    it("defaults count to 3 and maxHops to 15", () => {
+      expect(schema.parse(base)).toMatchObject({ count: 3, maxHops: 15 });
     });
 
-    it("rejects maxHops > 30", () => {
-      expect(() =>
-        tracerouteInputSchema.parse({ routerId: "r", address: "8.8.8.8", maxHops: 31 }),
-      ).toThrow();
+    it.each([
+      ["count", 1],
+      ["count", 5],
+      ["maxHops", 1],
+      ["maxHops", 30],
+    ])("accepts %s = %i (inclusive bound)", (field, value) => {
+      expect(schema.safeParse({ ...base, [field]: value }).success).toBe(true);
+    });
+
+    it.each([
+      ["count", 0],
+      ["count", 6],
+      ["count", 2.5],
+      ["maxHops", 0],
+      ["maxHops", 31],
+    ])("rejects %s = %s", (field, value) => {
+      expect(schema.safeParse({ ...base, [field]: value }).success).toBe(false);
     });
 
     it("rejects extra fields", () => {
-      expect(() =>
-        tracerouteInputSchema.parse({ routerId: "r", address: "8.8.8.8", extra: 1 }),
-      ).toThrow();
+      expect(schema.safeParse({ ...base, extra: 1 }).success).toBe(false);
     });
   });
 
@@ -234,52 +265,108 @@ describe("diagnostic tools", () => {
   });
 
   describe("traceroute handler", () => {
-    const TRACE_SSH_OUTPUT =
-      " # ADDRESS       STATUS     RTT1   RTT2   RTT3\n" +
-      " 1 192.168.1.1  echo reply  1ms    1ms    1ms\n" +
-      " 2 10.0.0.1     echo reply  5ms    5ms    5ms\n";
+    const redrawn = restFixture("traceroute-redrawn");
+    const tooManyHops = restFixture("traceroute-too-many-hops");
 
-    it("returns hop list", async () => {
-      const ctx = makeContext(TRACE_SSH_OUTPUT);
-      const result = await tracerouteTool.handler(
-        { routerId: "test-router", address: "8.8.8.8" },
+    async function trace(result: unknown, params: Record<string, unknown> = {}) {
+      const ctx = makeContext("", result);
+      const out = await tracerouteTool.handler(
+        { routerId: "test-router", address: "1.1.1.1", ...params },
         ctx,
       );
-      expect(result.isError).toBeFalsy();
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.hops as unknown[]).length).toBe(2);
+      const hops = (out.structuredContent as Record<string, unknown>).hops as Record<
+        string,
+        unknown
+      >[];
+      return { ctx, out, hops };
+    }
+
+    it("returns each hop of the final redraw once, numbered from 1", async () => {
+      const { hops, out } = await trace(redrawn.response);
+      // 99 records over 9 sections; the last section has the 13 final hops.
+      expect(hops).toHaveLength(13);
+      expect(hops.map((h) => h.hop)).toEqual(Array.from({ length: 13 }, (_, i) => i + 1));
+      expect(hops[12]).toMatchObject({ hop: 13, address: "1.1.1.1", loss: 0, last: 49.2 });
+      expect(out.content).not.toContain("was not reached");
     });
 
-    it("sends address, count, and max-hops in the SSH command", async () => {
-      const ctx = makeContext(TRACE_SSH_OUTPUT);
-      await tracerouteTool.handler(
-        { routerId: "test-router", address: "8.8.8.8", count: 2, maxHops: 10 },
-        ctx,
-      );
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(
-        '/tool traceroute address="8.8.8.8" count=2 max-hops=10',
-      );
+    it('parses metrics as numbers and keeps a lost probe as "timeout"', async () => {
+      const { hops } = await trace(redrawn.response);
+      expect(hops[0]).toMatchObject({ address: "192.168.88.1", last: 0.3, loss: 0, sent: 2 });
+      expect(hops[1]).toMatchObject({ address: null, last: "timeout", loss: 100 });
+      // A partly answering hop: RouterOS keeps its address and averages, last is a timeout.
+      expect(hops[7]).toMatchObject({ address: "10.0.0.5", last: "timeout", loss: 50 });
+      expect(hops.every((h) => !(".section" in h))).toBe(true);
     });
 
-    it("treats partial hop list (some timeouts shown as ???) as valid response", async () => {
-      const ctx = makeContext(
-        " # ADDRESS       STATUS     RTT1\n" +
-          " 1 192.168.1.1  echo reply  1ms\n" +
-          " 2 ???          timeout\n",
+    it("renders each hop with units and reports an unreached target", async () => {
+      const { out } = await trace(tooManyHops.response, { maxHops: 4 });
+      expect(out.content).toContain("  1  192.168.88.1  0.4ms  loss=0%");
+      expect(out.content).toContain("  2  ???  timeout  loss=100%");
+      expect(out.content).toContain("RouterOS: Too many hops — 1.1.1.1 was not reached");
+    });
+
+    it("POSTs address, count and max-hops with a timeout past RouterOS's 60 s limit", async () => {
+      const { ctx } = await trace(redrawn.response, {
+        address: "one.one.one.one",
+        count: 2,
+        maxHops: 10,
+      });
+      expect(ctx.routerClient.executeFinal).toHaveBeenCalledWith(
+        "tool/traceroute",
+        { address: "one.one.one.one", count: "2", "max-hops": "10" },
+        { timeoutMs: 65_000 },
       );
-      const result = await tracerouteTool.handler(
-        { routerId: "test-router", address: "8.8.8.8" },
-        ctx,
-      );
-      expect(result.isError).toBeFalsy();
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.hops as unknown[]).length).toBe(2);
+      expect(ctx.sshClient.execute).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["missing address key", { ".section": "0", last: "1", loss: "0" }, "  1  ???  1ms  loss=0%"],
+      [
+        "missing last and loss",
+        { ".section": "0", address: "192.0.2.1" },
+        "  1  192.0.2.1  ?  loss=?",
+      ],
+      [
+        "a RouterOS status",
+        { ".section": "0", address: "192.0.2.1", last: "1", loss: "0", status: "<MPLS:L=16>" },
+        "  1  192.0.2.1  1ms  loss=0%  <MPLS:L=16>",
+      ],
+    ])("renders a hop with %s", async (_label, record, line) => {
+      const { out } = await trace([record]);
+      expect(out.content.split("\n")).toContain(line);
+    });
+
+    it("reports any RouterOS error on the final hops, not only Too many hops", async () => {
+      const { out } = await trace([
+        { ".section": "0", address: "", last: "timeout", loss: "100", error: "no route to host" },
+      ]);
+      expect(out.content).toContain("RouterOS: no route to host — 1.1.1.1 was not reached");
+    });
+
+    it("returns no hops for an empty result", async () => {
+      const { hops } = await trace([]);
+      expect(hops).toEqual([]);
+    });
+
+    it("fails once, without retries, when RouterOS closes the 60 s REST session", async () => {
+      const ctx = makeContext();
+      const executeFinal = ctx.routerClient.executeFinal as ReturnType<typeof vi.fn>;
+      executeFinal.mockRejectedValue(sessionClosedError());
+      await expect(
+        withRetry(
+          () => tracerouteTool.handler({ routerId: "test-router", address: "192.0.2.1" }, ctx),
+          { maxRetries: 3, baseDelayMs: 1, maxDelayMs: 1 },
+        ),
+      ).rejects.toMatchObject({
+        category: ErrorCategory.ROUTER_TIMEOUT,
+        code: "REST_SESSION_CLOSED",
+      });
+      expect(executeFinal).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("torch metadata and schema", () => {
-    const torchTool = diagnosticTools[2];
-
     it("torch is the third tool", () => {
       expect(torchTool.name).toBe("torch");
     });
@@ -289,85 +376,183 @@ describe("diagnostic tools", () => {
     });
   });
 
-  describe("torch input schema", () => {
-    const torchInputSchema = z
-      .object({
-        routerId: z.string(),
-        interface: z.string(),
-        duration: z.number().int().min(1).max(30).default(5),
-        srcAddress: z.string().optional(),
-        dstAddress: z.string().optional(),
-      })
-      .strict();
+  describe("torch input schema (the tool's real schema)", () => {
+    const schema = torchTool.inputSchema;
+    const base = { routerId: "r", interface: "ether1" };
 
-    it("accepts minimal input with defaults", () => {
-      const r = torchInputSchema.parse({ routerId: "r", interface: "ether1" });
-      expect(r.duration).toBe(5);
+    it("defaults duration to 5", () => {
+      expect(schema.parse(base)).toMatchObject({ duration: 5 });
     });
 
-    it("rejects duration > 30", () => {
-      expect(() =>
-        torchInputSchema.parse({ routerId: "r", interface: "ether1", duration: 31 }),
-      ).toThrow();
+    it.each([1, 30])("accepts duration = %i (inclusive bound)", (duration) => {
+      expect(schema.safeParse({ ...base, duration }).success).toBe(true);
     });
 
-    it("rejects duration < 1", () => {
-      expect(() =>
-        torchInputSchema.parse({ routerId: "r", interface: "ether1", duration: 0 }),
-      ).toThrow();
+    it.each([0, 31, 2.5])("rejects duration = %s", (duration) => {
+      expect(schema.safeParse({ ...base, duration }).success).toBe(false);
     });
 
-    it("rejects missing interface", () => {
-      expect(() => torchInputSchema.parse({ routerId: "r" })).toThrow();
-    });
-
-    it("rejects extra fields", () => {
-      expect(() =>
-        torchInputSchema.parse({ routerId: "r", interface: "ether1", unknown: 1 }),
-      ).toThrow();
+    it("rejects a missing interface and extra fields", () => {
+      expect(schema.safeParse({ routerId: "r" }).success).toBe(false);
+      expect(schema.safeParse({ ...base, unknown: 1 }).success).toBe(false);
     });
   });
 
   describe("torch handler", () => {
-    const TORCH_SSH_OUTPUT =
-      "SRC             DST             TX         RX\n" +
-      "192.168.1.10    8.8.8.8         1000       500\n" +
-      "192.168.1.11    1.1.1.1         2000       100\n";
+    const wan = restFixture("torch-wan-two-sections");
+    const lan = restFixture("torch-lan-two-sections");
 
-    it("returns flows from SSH output", async () => {
-      const torchTool = diagnosticTools[2];
-      const ctx = makeContext(TORCH_SSH_OUTPUT);
-      const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
-      expect(result.isError).toBeFalsy();
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.flows as unknown[]).length).toBe(2);
-    });
-
-    it("sends interface in the SSH command and uses duration as timeout", async () => {
-      const torchTool = diagnosticTools[2];
-      const ctx = makeContext(TORCH_SSH_OUTPUT);
-      await torchTool.handler(
-        {
-          routerId: "test-router",
-          interface: "ether1",
-          duration: 10,
-          srcAddress: "192.168.1.0/24",
-          dstAddress: "8.8.8.8",
-        },
+    async function capture(result: unknown, params: Record<string, unknown> = {}) {
+      const ctx = makeContext("", result);
+      const out = await torchTool.handler(
+        { routerId: "test-router", interface: "ether1", ...params },
         ctx,
       );
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(
-        '/tool torch interface="ether1" src-address="192.168.1.0/24" dst-address="8.8.8.8"',
-        11_000,
-      );
+      const flows = (out.structuredContent as Record<string, unknown>).flows as Record<
+        string,
+        unknown
+      >[];
+      return { ctx, out, flows };
+    }
+
+    it("returns the flows of the final section only", async () => {
+      // Real capture: section 1 holds 6 flows, the final section 2 holds 16.
+      const { flows } = await capture(wan.response);
+      expect(flows).toHaveLength(16);
+      expect(flows.every((f) => !(".section" in f))).toBe(true);
     });
 
-    it("returns empty flows for empty output", async () => {
-      const torchTool = diagnosticTools[2];
-      const ctx = makeContext("");
-      const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.flows as unknown[]).length).toBe(0);
+    it("parses rates, packet rates, DSCP, VLAN and plain ports as numbers", async () => {
+      const { flows } = await capture(wan.response);
+      expect(flows[0]).toEqual({
+        dscp: 0,
+        dstAddress: "192.168.88.10",
+        dstPort: 48595,
+        ipProtocol: "udp",
+        macProtocol: "ip",
+        rx: 0,
+        rxPackets: 0,
+        srcAddress: "224.0.0.224",
+        srcPort: 7447,
+        tx: 584,
+        txPackets: 1,
+        vlanId: 99,
+      });
+    });
+
+    it("keeps a port that RouterOS names as a string", async () => {
+      const { flows, out } = await capture([
+        {
+          ".section": "0",
+          "dst-address": "1.1.1.1",
+          "dst-port": "443 (https)",
+          "ip-protocol": "tcp",
+          rx: "1000000",
+          tx: "0",
+        },
+      ]);
+      expect(flows[0]).toMatchObject({ dstPort: "443 (https)", rx: 1000000 });
+      expect(out.content).toContain("tcp  * → 1.1.1.1:443 (https)  tx=0bps  rx=1Mbps");
+    });
+
+    it.each([
+      ["IPv6 with a port", "fe80::1", "5353", "[fe80::1]:5353"],
+      ["IPv6 without a port", "ff02::16", undefined, "ff02::16"],
+      ["IPv4 without a port", "192.0.2.1", undefined, "192.0.2.1"],
+    ])("formats an endpoint: %s", async (_label, address, port, rendered) => {
+      const record: RestRecord = {
+        ".section": "0",
+        "ip-protocol": "udp",
+        "dst-address": address,
+        tx: "0",
+        rx: "0",
+      };
+      if (port !== undefined) record["dst-port"] = port;
+      const { out } = await capture([record]);
+      expect(out.content).toContain(`→ ${rendered}  tx=`);
+    });
+
+    it("lists ten flows in the text but returns all of them", async () => {
+      const { flows, out } = await capture(wan.response);
+      expect(out.content).toContain(": 16 flows");
+      expect(out.content.split("\n").filter((l) => l.includes(" → "))).toHaveLength(10);
+      expect(flows).toHaveLength(16);
+    });
+
+    it("handles a LAN capture from RouterOS 7.23", async () => {
+      const { flows } = await capture(lan.response);
+      expect(flows).toHaveLength(3);
+    });
+
+    it.each([
+      [1, 6_000],
+      [10, 15_000],
+      [30, 35_000],
+    ])("asks RouterOS for %is and waits %i ms", async (duration, timeoutMs) => {
+      const { ctx } = await capture(wan.response, {
+        duration,
+        srcAddress: "192.168.88.0/24",
+        dstAddress: "8.8.8.8",
+      });
+      expect(ctx.routerClient.executeFinal).toHaveBeenCalledWith(
+        "tool/torch",
+        {
+          interface: "ether1",
+          duration: `${duration}s`,
+          "src-address": "192.168.88.0/24",
+          "dst-address": "8.8.8.8",
+        },
+        { timeoutMs },
+      );
+      expect(ctx.sshClient.execute).not.toHaveBeenCalled();
+    });
+
+    it("returns empty flows for an empty result (no traffic)", async () => {
+      const { flows } = await capture([]);
+      expect(flows).toEqual([]);
+    });
+
+    it.each([
+      [
+        "an unknown interface",
+        new HttpError(
+          400,
+          JSON.stringify({ error: 400, detail: "input does not match any value of interface" }),
+        ),
+        { category: ErrorCategory.VALIDATION, code: "HTTP_400" },
+      ],
+      [
+        "a missing sniff policy",
+        new HttpError(500, JSON.stringify({ error: 500, detail: "not enough permissions (9)" })),
+        { category: ErrorCategory.PERMISSION_DENIED, code: "HTTP_500" },
+      ],
+      [
+        "RouterOS closing the REST session",
+        sessionClosedError(),
+        { category: ErrorCategory.ROUTER_TIMEOUT, code: "REST_SESSION_CLOSED" },
+      ],
+    ])("surfaces %s as a typed error", async (_label, error, expected) => {
+      const ctx = makeContext();
+      (ctx.routerClient.executeFinal as ReturnType<typeof vi.fn>).mockRejectedValue(error);
+      await expect(
+        torchTool.handler({ routerId: "test-router", interface: "ether9" }, ctx),
+      ).rejects.toMatchObject(expected);
+    });
+  });
+
+  describe("formatBps", () => {
+    it.each([
+      [0, "0bps"],
+      [999, "999bps"],
+      [1000, "1kbps"],
+      [1050, "1.1kbps"],
+      [999_949, "999.9kbps"],
+      [999_950, "1Mbps"],
+      [10_800, "10.8kbps"],
+      [1_000_000_000, "1Gbps"],
+      [2_500_000_000_000, "2500Gbps"],
+    ])("%i bps → %s", (bps, expected) => {
+      expect(formatBps(bps)).toBe(expected);
     });
   });
 

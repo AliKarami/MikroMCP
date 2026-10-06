@@ -24,6 +24,10 @@ const UNREACHABLE_CODES = new Set([
   "ERR_SOCKET_CONNECTION_TIMEOUT",
 ]);
 
+// undici's own request timeouts: the router accepted the connection but did not
+// answer within the request timeout.
+const TIMEOUT_CODES = new Set(["UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]);
+
 // ssh2 sets this `level` on the error it emits when every auth method was refused.
 const SSH_AUTH_LEVEL = "client-authentication";
 
@@ -131,6 +135,15 @@ function buildDetails(
   return details;
 }
 
+function responseDetail(body: unknown): unknown {
+  if (typeof body !== "string") return undefined;
+  try {
+    return (JSON.parse(body) as Record<string, unknown>).detail;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Enrich an unknown thrown value into a structured MikroMCPError.
  *
@@ -193,16 +206,32 @@ export function enrichError(error: unknown, context?: EnrichContext): MikroMCPEr
     const statusCode = raw.statusCode as number;
     let category = categoryFromStatus(statusCode);
 
+    const detail = responseDetail(raw.responseBody);
+
     // RouterOS returns 500 for permission errors — detect and reclassify.
-    if (statusCode >= 500 && typeof raw.responseBody === "string") {
-      try {
-        const body = JSON.parse(raw.responseBody) as Record<string, unknown>;
-        if (typeof body.detail === "string" && body.detail.startsWith("not enough permissions")) {
-          category = ErrorCategory.PERMISSION_DENIED;
-        }
-      } catch {
-        // non-JSON body — leave category as-is
-      }
+    if (
+      statusCode >= 500 &&
+      typeof detail === "string" &&
+      detail.startsWith("not enough permissions")
+    ) {
+      category = ErrorCategory.PERMISSION_DENIED;
+    }
+
+    // RouterOS closes a REST session after 60 s; rerunning the same command hits the
+    // same limit, so this is a timeout the caller must shorten, not a retry.
+    if (statusCode === 400 && detail === "Session closed") {
+      return new MikroMCPError({
+        category: ErrorCategory.ROUTER_TIMEOUT,
+        code: "REST_SESSION_CLOSED",
+        message: "RouterOS closed the REST session: the command ran longer than 60 seconds",
+        details: buildDetails({ statusCode }, context),
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "Shorten the command so it finishes within 60 seconds (lower count, hops or duration).",
+        },
+        cause: error,
+      });
     }
 
     return new MikroMCPError({
@@ -220,6 +249,18 @@ export function enrichError(error: unknown, context?: EnrichContext): MikroMCPEr
     typeof raw === "object" && raw !== null && typeof raw.code === "string"
       ? (raw.code as string)
       : undefined;
+
+  if (errorCode && TIMEOUT_CODES.has(errorCode)) {
+    const category = ErrorCategory.ROUTER_TIMEOUT;
+    return new MikroMCPError({
+      category,
+      code: errorCode,
+      message: rawMessage || `Request timed out: ${errorCode}`,
+      details: buildDetails({ errorCode }, context),
+      recoverability: defaultRecoverability(category),
+      cause: error,
+    });
+  }
 
   if (errorCode && UNREACHABLE_CODES.has(errorCode)) {
     const category = ErrorCategory.ROUTER_UNREACHABLE;

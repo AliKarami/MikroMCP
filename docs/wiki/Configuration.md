@@ -163,7 +163,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the per-router confirmation gate is off, and `bulk_execute` write fan-outs are still gated with tokens signed by a random per-process secret (valid only until restart, and only on the instance that issued them) |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | Path for NDJSON audit log file; omit to disable file sink |
 | `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
-| `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000` | Timeout in milliseconds for SSH commands (`run_command`, `torch`, etc.) |
+| `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000` | Timeout in milliseconds for SSH commands (`run_command`, `ping`, etc.) |
 | `MIKROMCP_SSH_MAX_OUTPUT_BYTES` | `524288` (512 KB) | Maximum output size captured from SSH commands |
 | `MIKROMCP_CMD_ALLOW` | — | Global command allowlist for `run_command` (comma-separated patterns) |
 | `MIKROMCP_CMD_DENY` | — | Global command denylist for `run_command` (comma-separated patterns) |
@@ -267,7 +267,7 @@ For Docker and systemd deployment examples, see [Connecting to AI Assistants](Co
 
 ## Per-Router SSH, SFTP, and FTP
 
-By default, the SSH adapter (`ping`, `traceroute`, `torch`, `run_command`) and
+By default, the SSH adapter (`ping`, `run_command`, `export_config`) and
 the SFTP path used by `upload_file` use the same username and password as the
 REST API. A router can instead use a separate SSH/SFTP username and private
 key:
