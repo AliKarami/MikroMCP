@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { isTrue } from "../../adapter/response-parser.js";
+import { isTrue, normalizeWireValue } from "../../adapter/response-parser.js";
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { paginate, listContent, compactFields } from "./pagination.js";
@@ -172,8 +172,8 @@ const manageIpAddressTool: ToolDefinition = {
         if (existing) {
           const rec = existing as Record<string, unknown>;
           const sameDisabled = isTrue(rec.disabled) === parsed.disabled;
-          const sameComment = (rec.comment ?? "") === (comment ?? "");
-          const sameNetwork = !parsed.network || rec.network === parsed.network;
+          const sameComment = normalizeWireValue(rec.comment) === normalizeWireValue(comment);
+          const sameNetwork = !parsed.network || normalizeWireValue(rec.network) === parsed.network;
 
           if (sameDisabled && sameComment && sameNetwork) {
             return {
@@ -282,11 +282,11 @@ const manageIpAddressTool: ToolDefinition = {
             after: disabledStr,
           });
         }
-        if (comment !== undefined && (rec.comment ?? "") !== comment) {
+        if (comment !== undefined && normalizeWireValue(rec.comment) !== comment) {
           changes.comment = comment;
           diff.push({ property: "comment", before: rec.comment ?? null, after: comment });
         }
-        if (parsed.network && rec.network !== parsed.network) {
+        if (parsed.network && normalizeWireValue(rec.network) !== parsed.network) {
           changes.network = parsed.network;
           diff.push({ property: "network", before: rec.network ?? null, after: parsed.network });
         }

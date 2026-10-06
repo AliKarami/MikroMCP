@@ -585,8 +585,8 @@ describe("firewall tools", () => {
 });
 
 describe("manage_firewall_rule - interface lists, connection state and NAT targets", () => {
-  // A defconf-style dst-nat rule as the REST response parser returns it:
-  // single ports arrive as numbers, sets as comma-separated strings.
+  // A dst-nat rule as the REST response parser returns it: single ports
+  // arrive as numbers, sets as comma-separated strings.
   const portForward = {
     ".id": "*4",
     chain: "dstnat",
@@ -625,7 +625,7 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
         chain: "forward",
         ruleAction: "drop",
         inInterfaceList: "WAN",
-        connectionState: ["new"],
+        connectionState: "new",
         connectionNatState: "!dstnat",
         comment: "drop-wan-not-dstnat",
       },
@@ -673,7 +673,7 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
         action: "add",
         chain: "forward",
         ruleAction: "accept",
-        connectionState: ["untracked", "established", "related"],
+        connectionState: "untracked,established,related",
         comment: "accept-est",
       },
       ctx,
@@ -709,7 +709,7 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
         },
         ctx,
       ),
-    ).rejects.toMatchObject({ code: "NAT_TARGET_REQUIRES_NAT_TABLE" });
+    ).rejects.toMatchObject({ code: "NAT_TARGET_NOT_APPLICABLE" });
     expect(ctx.routerClient.get).not.toHaveBeenCalled();
   });
 
@@ -732,9 +732,125 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
     const base = { routerId: "r", action: "add", chain: "forward", ruleAction: "accept" };
     expect(() => schema.parse({ ...base, connectionNatState: "!dstnat" })).not.toThrow();
     expect(() => schema.parse({ ...base, connectionNatState: "masquerade" })).toThrow();
-    expect(() => schema.parse({ ...base, connectionState: ["established", "bogus"] })).toThrow();
-    expect(() => schema.parse({ ...base, connectionState: [] })).toThrow();
+    expect(() => schema.parse({ ...base, connectionNatState: "dstnat,dstnat" })).toThrow();
+    expect(() => schema.parse({ ...base, connectionNatState: "!srcnat,dstnat" })).not.toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "established,bogus" })).toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "" })).toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "!invalid" })).not.toThrow();
     expect(() => schema.parse({ ...base, toPorts: "8000-8100" })).not.toThrow();
     expect(() => schema.parse({ ...base, toPorts: "https" })).toThrow();
+  });
+  it("treats a /32 host address as equal to the bare address", async () => {
+    const existing = {
+      ".id": "*C",
+      chain: "dstnat",
+      action: "dst-nat",
+      "dst-address": "192.168.1.1",
+      "to-addresses": "192.168.1.5",
+      comment: "host-32",
+    };
+    const ctx = makeContext([existing]);
+    const result = await manageFirewallRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        table: "nat",
+        chain: "dstnat",
+        ruleAction: "dst-nat",
+        dstAddress: "192.168.1.1/32",
+        toAddresses: "192.168.1.5/32",
+        comment: "host-32",
+      },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("compares connection-nat-state as a set", async () => {
+    const existing = {
+      ".id": "*D",
+      chain: "forward",
+      action: "accept",
+      "connection-nat-state": "srcnat,dstnat",
+      comment: "nat-set",
+    };
+    const ctx = makeContext([existing]);
+    const result = await manageFirewallRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        chain: "forward",
+        ruleAction: "accept",
+        connectionNatState: "dstnat,srcnat",
+        comment: "nat-set",
+      },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("matches a negated connection-state and keeps the negation in the body", async () => {
+    const existing = {
+      ".id": "*E",
+      chain: "input",
+      action: "accept",
+      "connection-state": "!invalid",
+      comment: "not-invalid",
+    };
+    const params = {
+      routerId: "test-router",
+      action: "add",
+      chain: "input",
+      ruleAction: "accept",
+      connectionState: "!invalid",
+      comment: "not-invalid",
+    };
+    const same = await manageFirewallRuleTool.handler(params, makeContext([existing]));
+    expect((same.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    const ctx = makeContext([]);
+    await manageFirewallRuleTool.handler(params, ctx);
+    expect(createMock(ctx).mock.calls[0][1]).toMatchObject({ "connection-state": "!invalid" });
+
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...params, connectionState: "invalid" },
+        makeContext([existing]),
+      ),
+    ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
+  });
+
+  it("rejects NAT targets that the rule action does not accept", async () => {
+    const nat = { routerId: "test-router", action: "add", table: "nat", dryRun: true };
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...nat, chain: "srcnat", ruleAction: "masquerade", toAddresses: "203.0.113.1" },
+        makeContext([]),
+      ),
+    ).rejects.toMatchObject({ code: "NAT_TARGET_NOT_APPLICABLE" });
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...nat, chain: "dstnat", ruleAction: "accept", toPorts: "443" },
+        makeContext([]),
+      ),
+    ).rejects.toMatchObject({ code: "NAT_TARGET_NOT_APPLICABLE" });
+  });
+
+  it("accepts to-ports on masquerade and redirect", async () => {
+    for (const ruleAction of ["masquerade", "redirect"]) {
+      const result = await manageFirewallRuleTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          table: "nat",
+          chain: ruleAction === "masquerade" ? "srcnat" : "dstnat",
+          ruleAction,
+          toPorts: "8080",
+          dryRun: true,
+        },
+        makeContext([]),
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+    }
   });
 });

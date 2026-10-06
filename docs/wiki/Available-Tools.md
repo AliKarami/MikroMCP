@@ -1054,7 +1054,7 @@ List firewall rules in evaluation order.
 
 ### `manage_firewall_rule` — Write · Idempotent
 
-Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match or NAT-target config. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
+Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match or NAT-target config; a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1073,10 +1073,10 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `outInterface` | string | — | Outgoing interface |
 | `inInterfaceList` | string | — | Incoming interface list (e.g. `WAN`, `!LAN`) |
 | `outInterfaceList` | string | — | Outgoing interface list |
-| `connectionState` | array of `established` \| `related` \| `new` \| `invalid` \| `untracked` | — | Connection-tracking states to match |
-| `connectionNatState` | string | — | Connection NAT state: `srcnat`, `dstnat`, optionally negated (`!dstnat`) |
-| `toAddresses` | string | — | NAT target address or range (`nat` table only) |
-| `toPorts` | string | — | NAT target port or range (`nat` table only) |
+| `connectionState` | string | — | Comma-separated states from `established`, `related`, `new`, `invalid`, `untracked`; optionally negated as a whole (`!invalid`) |
+| `connectionNatState` | string | — | Connection NAT state: `srcnat`, `dstnat` or both, optionally negated (`!dstnat`) |
+| `toAddresses` | string | — | NAT target address or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same` |
+| `toPorts` | string | — | NAT target port or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same`, `redirect`, `masquerade` |
 | `disabled` | boolean | `false` | Create/update the rule in disabled state |
 | `placeBefore` | string | — | Place the new rule before this rule ID |
 | `dryRun` | boolean | `false` | Preview without applying |

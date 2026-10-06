@@ -71,6 +71,18 @@ export function isTrue(v: unknown): boolean {
 }
 
 /**
+ * Normalize a (possibly parsed) RouterOS record value to its canonical wire
+ * string: `yes`/`true` and `no`/`false` become `"true"`/`"false"`, numbers become
+ * strings, and a missing value becomes `""`. Use it where an absent field must
+ * equal an empty one (idempotency checks, snapshot diffs).
+ */
+export function normalizeWireValue(v: unknown): string {
+  if (v === true || v === "true" || v === "yes") return "true";
+  if (v === false || v === "false" || v === "no") return "false";
+  return v === undefined || v === null ? "" : String(v);
+}
+
+/**
  * Compare a (possibly parsed) record value against a desired value by
  * normalising both to their wire-string form. The parser turns numeric wire
  * strings into numbers, so `record.port === String(desired)` silently never

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
+import { sameRuleValue } from "./rule-match.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -112,9 +113,9 @@ function findRoutingRule(
   return rules.find((r) => {
     const rec = r as Record<string, string>;
     return (
-      (rec["src-address"] ?? "") === (srcAddress ?? "") &&
-      (rec["dst-address"] ?? "") === (dstAddress ?? "") &&
-      (rec["interface"] ?? "") === (iface ?? "") &&
+      sameRuleValue("src-address", rec["src-address"], srcAddress) &&
+      sameRuleValue("dst-address", rec["dst-address"], dstAddress) &&
+      sameRuleValue("interface", rec["interface"], iface) &&
       rec.table === table
     );
   }) as Record<string, string> | undefined;

@@ -319,3 +319,27 @@ describe("mangle tools", () => {
     });
   });
 });
+
+describe("manage_mangle_rule - field comparison on repeated add", () => {
+  it("treats a /32 host address as equal to the bare address", async () => {
+    const existing = {
+      ".id": "*2",
+      chain: "prerouting",
+      "src-address": "192.168.1.251",
+      "new-routing-mark": "to-leg1",
+      comment: "mark-ps5",
+    };
+    const result = await manageMangleRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        comment: "mark-ps5",
+        chain: "prerouting",
+        srcAddress: "192.168.1.251/32",
+        newRoutingMark: "to-leg1",
+      },
+      makeContext([existing]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+});

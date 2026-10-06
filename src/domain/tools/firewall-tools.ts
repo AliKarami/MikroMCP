@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
+import { sameRuleValue } from "./rule-match.js";
 import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { paginate, listContent, compactFields } from "./pagination.js";
@@ -50,33 +51,17 @@ const RULE_FIELDS = [
   ["toPorts", "to-ports"],
 ] as const;
 
-type RuleFieldKey = (typeof RULE_FIELDS)[number][0];
+/** NAT actions that accept `to-addresses` (help.mikrotik.com, NAT page). */
+const TO_ADDRESSES_ACTIONS: ReadonlySet<string> = new Set(["dst-nat", "src-nat", "netmap", "same"]);
 
-/** Properties RouterOS stores as an unordered comma-separated set. */
-const SET_PROPERTIES = new Set<string>(["connection-state"]);
+/** NAT actions that accept `to-ports`. */
+const TO_PORTS_ACTIONS: ReadonlySet<string> = new Set([
+  ...TO_ADDRESSES_ACTIONS,
+  "redirect",
+  "masquerade",
+]);
 
-/** The RouterOS string value requested for a field, or undefined when it was not given. */
-function requestedValue(
-  parsed: Partial<Record<RuleFieldKey, string | string[]>>,
-  key: RuleFieldKey,
-): string | undefined {
-  const value = parsed[key];
-  if (value === undefined) return undefined;
-  return Array.isArray(value) ? value.join(",") : value;
-}
-
-/**
- * Compare a stored property with a requested value. The response parser turns
- * numeric strings into numbers (`dst-port: 53`), so both sides are compared as
- * strings; set-valued properties ignore element order.
- */
-function sameProperty(property: string, stored: unknown, requested: string | undefined): boolean {
-  const have = stored === undefined || stored === null ? "" : String(stored);
-  const want = requested ?? "";
-  if (!SET_PROPERTIES.has(property)) return have === want;
-  const norm = (s: string) => s.split(",").filter(Boolean).sort().join(",");
-  return norm(have) === norm(want);
-}
+const CONNECTION_STATE = "(established|related|new|invalid|untracked)";
 
 // ---------------------------------------------------------------------------
 // list_firewall_rules
@@ -223,13 +208,15 @@ const manageFirewallRuleInputSchema = z
     inInterfaceList: z.string().optional().describe("Incoming interface list, e.g. WAN or !LAN"),
     outInterfaceList: z.string().optional().describe("Outgoing interface list, e.g. WAN or !LAN"),
     connectionState: z
-      .array(z.enum(["established", "related", "new", "invalid", "untracked"]))
-      .min(1)
+      .string()
+      .regex(new RegExp(`^!?${CONNECTION_STATE}(,${CONNECTION_STATE})*$`))
       .optional()
-      .describe("Connection-tracking states to match"),
+      .describe(
+        "Connection-tracking states, comma-separated, optionally negated: established,related or !invalid",
+      ),
     connectionNatState: z
       .string()
-      .regex(/^!?(srcnat|dstnat)(,(srcnat|dstnat))?$/)
+      .regex(/^!?(srcnat|dstnat|srcnat,dstnat|dstnat,srcnat)$/)
       .optional()
       .describe("Connection NAT state to match, e.g. dstnat or !dstnat"),
     toAddresses: z
@@ -289,20 +276,24 @@ const manageFirewallRuleTool: ToolDefinition = {
       // ADD
       // -----------------------------------------------------------------------
       if (parsed.action === "add") {
-        if (
-          parsed.table !== "nat" &&
-          (parsed.toAddresses !== undefined || parsed.toPorts !== undefined)
-        ) {
-          throw new MikroMCPError({
-            category: ErrorCategory.VALIDATION,
-            code: "NAT_TARGET_REQUIRES_NAT_TABLE",
-            message: "toAddresses and toPorts apply only to rules in the nat table.",
-            details: { table: parsed.table },
-            recoverability: {
-              retryable: false,
-              suggestedAction: "Set table=nat, or drop toAddresses/toPorts for a filter rule.",
-            },
-          });
+        const natTargets = [
+          ["toAddresses", parsed.toAddresses, TO_ADDRESSES_ACTIONS],
+          ["toPorts", parsed.toPorts, TO_PORTS_ACTIONS],
+        ] as const;
+        for (const [param, value, actions] of natTargets) {
+          if (value === undefined) continue;
+          if (parsed.table !== "nat" || !actions.has(parsed.ruleAction)) {
+            throw new MikroMCPError({
+              category: ErrorCategory.VALIDATION,
+              code: "NAT_TARGET_NOT_APPLICABLE",
+              message: `${param} applies only to nat rules with ruleAction ${[...actions].join(", ")}.`,
+              details: { param, table: parsed.table, ruleAction: parsed.ruleAction },
+              recoverability: {
+                retryable: false,
+                suggestedAction: `Use table=nat with one of: ${[...actions].join(", ")}; or drop ${param}.`,
+              },
+            });
+          }
         }
 
         const wantProtocol =
@@ -314,9 +305,9 @@ const manageFirewallRuleTool: ToolDefinition = {
             const matches =
               existing.chain === parsed.chain &&
               existing.action === parsed.ruleAction &&
-              sameProperty("protocol", existing.protocol, wantProtocol) &&
+              sameRuleValue("protocol", existing.protocol, wantProtocol) &&
               RULE_FIELDS.every(([key, property]) =>
-                sameProperty(property, existing[property], requestedValue(parsed, key)),
+                sameRuleValue(property, existing[property], parsed[key]),
               );
 
             if (matches) {
@@ -338,7 +329,7 @@ const manageFirewallRuleTool: ToolDefinition = {
             };
             for (const [key, property] of RULE_FIELDS) {
               existingDetails[property] = existing[property];
-              requestedDetails[property] = requestedValue(parsed, key);
+              requestedDetails[property] = parsed[key];
             }
 
             throw new MikroMCPError({
@@ -365,7 +356,7 @@ const manageFirewallRuleTool: ToolDefinition = {
         if (comment !== undefined) body.comment = comment;
         if (wantProtocol) body.protocol = wantProtocol;
         for (const [key, property] of RULE_FIELDS) {
-          const value = requestedValue(parsed, key);
+          const value = parsed[key];
           if (value !== undefined) body[property] = value;
         }
         if (parsed.placeBefore !== undefined) body["place-before"] = parsed.placeBefore;
