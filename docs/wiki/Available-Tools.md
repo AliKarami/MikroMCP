@@ -1107,7 +1107,7 @@ List firewall mangle rules in evaluation order. Supports filtering by chain, act
 
 ### `manage_mangle_rule` — Write · Destructive · Idempotent
 
-Add, remove, enable, or disable a mangle rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different chain, match fields (addresses, address lists, protocol, ports, interfaces), marks, `newDscpValue`, or `passthrough`. `newDscpValue` and `passthrough` are compared only when the router reports them for the rule's action; an omitted `passthrough` counts as the RouterOS default `yes`.
+Add, remove, enable, or disable a mangle rule. Each `new*` value belongs to one action: `newRoutingMark` → `mark-routing`, `newConnectionMark` → `mark-connection`, `newPacketMark` → `mark-packet`, `newDscpValue` → `change-dscp`, `newMss` → `change-mss`. `ruleAction` sets the rule's action; when it is omitted, the one `new*` value given implies its action, and with no value the action is `accept`, the RouterOS default. A `new*` value under another action, values of two different actions, and one of these actions without its value are rejected. `mark-routing` is rejected in the built-in chains `input`, `forward`, and `postrouting`, as RouterOS does (custom chains are allowed). `change-mss` needs `protocol: tcp` and `tcpFlags` with `syn`, and `tcpFlags` needs `protocol: tcp`, as RouterOS requires. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different chain, match fields (addresses, address lists, protocol, ports, interfaces, TCP flags), marks, `newDscpValue`, `newMss`, `passthrough`, or the given or implied action. With neither `ruleAction` nor a `new*` value, the existing rule's action is not compared. `newDscpValue`, `newMss`, and `passthrough` are compared only when the router reports them for the rule's action; an omitted `passthrough` counts as the RouterOS default `yes`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1115,22 +1115,26 @@ Add, remove, enable, or disable a mangle rule. Uses `comment` as the idempotency
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
 | `comment` | string | — | **Idempotency key** — required for all actions, non-empty |
 | `chain` | string | — | Mangle chain (required on `add`): `prerouting`, `input`, `forward`, `output`, `postrouting` |
+| `ruleAction` | `accept` \| `passthrough` \| `mark-routing` \| `mark-connection` \| `mark-packet` \| `change-dscp` \| `change-mss` | implied by the `new*` value, else `accept` | Rule action, `add` only (rejected otherwise) |
 | `srcAddress` | string | — | Source IP/CIDR to match |
 | `dstAddress` | string | — | Destination IP/CIDR to match |
 | `srcAddressList` | string | — | Source address list name to match |
 | `dstAddressList` | string | — | Destination address list name to match |
-| `protocol` | string | — | Protocol to match (e.g. `tcp`, `udp`) |
+| `protocol` | string | — | Protocol to match, by name or number (e.g. `tcp` or `6`); a number matches the name RouterOS stores for it |
 | `srcPort` | string | — | Source port or range |
 | `dstPort` | string | — | Destination port or range |
 | `inInterface` | string | — | Incoming interface to match |
 | `outInterface` | string | — | Outgoing interface to match |
-| `newRoutingMark` | string | — | Routing mark to set |
-| `newConnectionMark` | string | — | Connection mark to set |
-| `newDscpValue` | integer | — | DSCP value to set (0–63) |
+| `tcpFlags` | string | — | TCP flags to match, comma-separated, `!` negates one (e.g. `syn`); needs `protocol: tcp` |
+| `newRoutingMark` | string | — | Routing mark to set (`ruleAction: mark-routing`, chain `prerouting` or `output`) |
+| `newConnectionMark` | string | — | Connection mark to set (`ruleAction: mark-connection`) |
+| `newPacketMark` | string | — | Packet mark to set (`ruleAction: mark-packet`) |
+| `newDscpValue` | integer | — | DSCP value to set, 0–63 (`ruleAction: change-dscp`) |
+| `newMss` | integer \| `clamp-to-pmtu` | — | MSS to set, 0–65535 or `clamp-to-pmtu` (`ruleAction: change-mss`, `protocol: tcp`, `tcpFlags: syn`) |
 | `passthrough` | boolean | — | Whether to continue matching subsequent rules |
 | `dryRun` | boolean | `false` | Preview without applying |
 
-**Example prompt:** "Add a mangle rule on core-01 that marks traffic from 10.10.0.0/24 with routing-mark 'vpn' in the prerouting chain."
+**Example prompt:** "Add a mangle rule on core-01 that marks traffic from 10.10.0.0/24 with routing-mark 'vpn' in the prerouting chain." (`newRoutingMark: vpn`, which implies `ruleAction: mark-routing`)
 
 ---
 

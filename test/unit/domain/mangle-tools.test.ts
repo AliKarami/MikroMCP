@@ -148,6 +148,7 @@ describe("mangle tools", () => {
           action: "add",
           comment: "mark-web",
           chain: "prerouting",
+          ruleAction: "mark-routing",
           newRoutingMark: "isp1",
         },
         ctx,
@@ -156,13 +157,19 @@ describe("mangle tools", () => {
       const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
         typeof vi.fn
       >;
-      expect(mockCreate).toHaveBeenCalled();
+      expect(mockCreate).toHaveBeenCalledWith("ip/firewall/mangle", {
+        chain: "prerouting",
+        action: "mark-routing",
+        comment: "mark-web",
+        "new-routing-mark": "isp1",
+      });
     });
 
     it("returns already_exists when comment matches with same config", async () => {
       const existing = {
         ".id": "*1",
         chain: "prerouting",
+        action: "mark-routing",
         "new-routing-mark": "isp1",
         comment: "mark-web",
         disabled: "false",
@@ -174,6 +181,7 @@ describe("mangle tools", () => {
           action: "add",
           comment: "mark-web",
           chain: "prerouting",
+          ruleAction: "mark-routing",
           newRoutingMark: "isp1",
         },
         ctx,
@@ -185,6 +193,7 @@ describe("mangle tools", () => {
       const existing = {
         ".id": "*1",
         chain: "prerouting",
+        action: "mark-routing",
         "new-routing-mark": "isp1",
         comment: "mark-web",
         disabled: "false",
@@ -196,12 +205,13 @@ describe("mangle tools", () => {
             routerId: "test-router",
             action: "add",
             comment: "mark-web",
-            chain: "forward",
+            chain: "output",
+            ruleAction: "mark-routing",
             newRoutingMark: "isp2",
           },
           ctx,
         ),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "MANGLE_RULE_CONFLICT" });
     });
 
     it("returns dry_run and does not call create", async () => {
@@ -294,6 +304,7 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     const existing = {
       ".id": "*2",
       chain: "prerouting",
+      action: "mark-routing",
       "src-address": "192.168.1.251",
       "new-routing-mark": "to-leg1",
       comment: "mark-ps5",
@@ -305,6 +316,7 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
         comment: "mark-ps5",
         chain: "prerouting",
         srcAddress: "192.168.1.251/32",
+        ruleAction: "mark-routing",
         newRoutingMark: "to-leg1",
       },
       makeContext([existing]),
@@ -312,30 +324,37 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
 
-  it("treats numeric marks from the router as equal to requested strings", async () => {
-    // RouterOS sends "100"; the response parser turns it into the number 100.
-    const existing = {
-      ".id": "*3",
-      chain: "prerouting",
-      "new-connection-mark": "100",
-      "new-routing-mark": "200",
-      comment: "numeric-marks",
-    };
-    const ctx = makeContext([existing]);
-    const result = await manageMangleRuleTool.handler(
-      {
-        routerId: "test-router",
-        action: "add",
-        comment: "numeric-marks",
+  it.each([
+    ["mark-routing", "newRoutingMark", "new-routing-mark"],
+    ["mark-connection", "newConnectionMark", "new-connection-mark"],
+    ["mark-packet", "newPacketMark", "new-packet-mark"],
+  ])(
+    "treats a numeric %s mark from the router as equal to the requested string",
+    async (ruleAction, param, property) => {
+      // RouterOS sends "100"; the response parser turns it into the number 100.
+      const existing = {
+        ".id": "*3",
+        action: ruleAction,
         chain: "prerouting",
-        newConnectionMark: "100",
-        newRoutingMark: "200",
-      },
-      ctx,
-    );
-    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
-    expect(ctx.routerClient.create).not.toHaveBeenCalled();
-  });
+        [property]: "100",
+        comment: "numeric-marks",
+      };
+      const ctx = makeContext([existing]);
+      const result = await manageMangleRuleTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          comment: "numeric-marks",
+          chain: "prerouting",
+          ruleAction,
+          [param]: "100",
+        },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+      expect(ctx.routerClient.create).not.toHaveBeenCalled();
+    },
+  );
 
   // Real rules from RB5009 (RouterOS 7.24.2, list_mangle_rules, 2026-10-06), written back
   // as the wire strings REST sends; makeContext parses them like RouterOSRestClient.get.
@@ -370,8 +389,11 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     action: "add",
     comment: "MSS clamp wg-leg1",
     chain: "forward",
+    ruleAction: "change-mss",
     protocol: "tcp",
     outInterface: "wg-leg1",
+    tcpFlags: "syn",
+    newMss: "clamp-to-pmtu",
   };
   const ctxWith = (wire: WireRecord) => makeContext([wire]);
 
@@ -381,12 +403,12 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
   });
 
   it.each([
-    ["protocol", { protocol: "udp" }],
     ["dst-port", { dstPort: "443" }],
     ["src-port", { srcPort: "1024" }],
     ["in-interface", { inInterface: "bridge1" }],
     ["out-interface", { outInterface: "ether1" }],
-    ["new-routing-mark", { newRoutingMark: "to-leg1" }],
+    ["tcp-flags", { tcpFlags: "syn,!ack" }],
+    ["new-mss", { newMss: 1360 }],
   ])("throws CONFLICT when %s differs, with both values in details", async (property, change) => {
     const [stored] = fromWire([MSS_CLAMP_WG]);
     await expect(
@@ -400,17 +422,131 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     });
   });
 
+  it("throws CONFLICT when protocol differs, and lists the action only when it was compared", async () => {
+    // A udp request cannot keep change-mss, so it omits the action and its value.
+    const add = { ...sameAdd, ruleAction: undefined, newMss: undefined, tcpFlags: undefined };
+    const err = await manageMangleRuleTool
+      .handler({ ...add, protocol: "udp" }, ctxWith(MSS_CLAMP_WG))
+      .catch((e: unknown) => e as { code: string; details: Record<string, object> });
+    expect(err).toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: { existing: { protocol: "tcp" }, requested: { protocol: "udp" } },
+    });
+    expect(err.details.existing).not.toHaveProperty("action");
+    expect(err.details.requested).not.toHaveProperty("action");
+  });
+
+  // Derived from *A in two fields, because no single-field change gives a change-dscp
+  // rule: action change-mss -> change-dscp, new-mss -> new-dscp. The CHR integration
+  // test reads back a real change-dscp rule with the same keys.
+  const { "new-mss": _mss, ...MSS_CLAMP_WG_WITHOUT_MSS } = MSS_CLAMP_WG;
+  const CHANGE_DSCP = { ...MSS_CLAMP_WG_WITHOUT_MSS, action: "change-dscp", "new-dscp": "46" };
+  const dscpAdd = { ...sameAdd, ruleAction: "change-dscp", newMss: undefined };
+
+  it("returns already_exists for a change-dscp rule with the same new-dscp", async () => {
+    const result = await manageMangleRuleTool.handler(
+      { ...dscpAdd, newDscpValue: 46 },
+      ctxWith(CHANGE_DSCP),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
   it("throws CONFLICT when a reported new-dscp differs", async () => {
-    // Derived: the same rule with new-dscp set; RB5009 has no rule that sets it.
     await expect(
-      manageMangleRuleTool.handler(
-        { ...sameAdd, newDscpValue: 10 },
-        ctxWith({ ...MSS_CLAMP_WG, "new-dscp": "46" }),
-      ),
+      manageMangleRuleTool.handler({ ...dscpAdd, newDscpValue: 10 }, ctxWith(CHANGE_DSCP)),
     ).rejects.toMatchObject({
       code: "MANGLE_RULE_CONFLICT",
       details: { existing: { "new-dscp": 46 }, requested: { "new-dscp": 10 } },
     });
+  });
+
+  // Real record from CHR 7.24.2 (same on 7.23.2): a rule added over REST with
+  // new-connection-mark and no action, as earlier versions of this tool did. RouterOS
+  // stored it without an action field and dropped the mark. Counters left out.
+  const NO_ACTION_RULE = {
+    ".id": "*2",
+    chain: "prerouting",
+    comment: "mikromcp-probe-no-action-connection-mark",
+    dynamic: "false",
+    invalid: "true",
+  };
+  const noActionAdd = {
+    routerId: "test-router",
+    action: "add",
+    comment: NO_ACTION_RULE.comment,
+    chain: "prerouting",
+  };
+
+  it("treats a record without an action as the default accept", async () => {
+    const result = await manageMangleRuleTool.handler(
+      { ...noActionAdd, ruleAction: "accept" },
+      ctxWith(NO_ACTION_RULE),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("throws CONFLICT for a rule added without an action when its mark action is given", async () => {
+    await expect(
+      manageMangleRuleTool.handler(
+        { ...noActionAdd, ruleAction: "mark-connection", newConnectionMark: "probe" },
+        ctxWith(NO_ACTION_RULE),
+      ),
+    ).rejects.toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: {
+        existing: { action: "accept", "new-connection-mark": undefined },
+        requested: { action: "mark-connection", "new-connection-mark": "probe" },
+      },
+    });
+  });
+
+  it("throws CONFLICT when an explicit ruleAction differs, with both actions in details", async () => {
+    await expect(
+      manageMangleRuleTool.handler(
+        { ...sameAdd, ruleAction: "mark-packet", newMss: undefined, newPacketMark: "wg" },
+        ctxWith(MSS_CLAMP_WG),
+      ),
+    ).rejects.toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: {
+        existing: { action: "change-mss", "new-packet-mark": undefined },
+        requested: { action: "mark-packet", "new-packet-mark": "wg" },
+      },
+    });
+  });
+
+  it("compares an explicit ruleAction against a rule without new-* values", async () => {
+    const add = {
+      routerId: "test-router",
+      action: "add",
+      comment: FASTTRACK_DUMMY.comment,
+      chain: "forward",
+    };
+    const same = await manageMangleRuleTool.handler(
+      { ...add, ruleAction: "passthrough" },
+      ctxWith(FASTTRACK_DUMMY),
+    );
+    expect((same.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    await expect(
+      manageMangleRuleTool.handler({ ...add, ruleAction: "accept" }, ctxWith(FASTTRACK_DUMMY)),
+    ).rejects.toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: { existing: { action: "passthrough" }, requested: { action: "accept" } },
+    });
+  });
+
+  it("does not compare the action when ruleAction is omitted", async () => {
+    const result = await manageMangleRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        comment: FASTTRACK_DUMMY.comment,
+        chain: "forward",
+      },
+      ctxWith(FASTTRACK_DUMMY),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
 
   it("lists every compared field, with the effective passthrough, in CONFLICT details", async () => {
@@ -443,7 +579,7 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     ).rejects.toMatchObject({ code: "MANGLE_RULE_CONFLICT" });
   });
 
-  it("does not compare passthrough or new-dscp when the router does not report them", async () => {
+  it("does not compare passthrough when the router does not report it", async () => {
     const result = await manageMangleRuleTool.handler(
       {
         routerId: "test-router",
@@ -451,9 +587,16 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
         comment: FASTTRACK_DUMMY.comment,
         chain: "forward",
         passthrough: false,
-        newDscpValue: 10,
       },
       ctxWith(FASTTRACK_DUMMY),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("matches a protocol number against the name RouterOS stores", async () => {
+    const result = await manageMangleRuleTool.handler(
+      { ...sameAdd, protocol: "6" },
+      ctxWith(MSS_CLAMP_WG),
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
@@ -492,6 +635,243 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
       ctxWith({ ...MSS_CLAMP_WG, passthrough: "false" }),
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+});
+
+describe("manage_mangle_rule - action and its value parameter", () => {
+  const add = {
+    routerId: "test-router",
+    action: "add",
+    comment: "MSS clamp wg-leg1",
+    chain: "prerouting",
+  };
+
+  const createdBody = async (params: Record<string, unknown>) => {
+    const ctx = makeContext([]);
+    await manageMangleRuleTool.handler({ ...add, ...params }, ctx);
+    const create = (ctx.routerClient as Record<string, unknown>).create as ReturnType<typeof vi.fn>;
+    return create.mock.calls[0][1] as Record<string, string>;
+  };
+
+  it("sends action accept, the RouterOS default, when ruleAction is omitted", async () => {
+    expect(await createdBody({ protocol: "tcp" })).toMatchObject({ action: "accept" });
+  });
+
+  it.each([
+    ["mark-routing", { newRoutingMark: "to-leg1" }, { "new-routing-mark": "to-leg1" }],
+    ["mark-connection", { newConnectionMark: "ps5" }, { "new-connection-mark": "ps5" }],
+    ["mark-packet", { newPacketMark: "ps5" }, { "new-packet-mark": "ps5" }],
+    ["change-dscp", { newDscpValue: 46 }, { "new-dscp": "46" }],
+    [
+      "change-mss",
+      { protocol: "tcp", tcpFlags: "syn", newMss: "clamp-to-pmtu" },
+      { "tcp-flags": "syn", "new-mss": "clamp-to-pmtu" },
+    ],
+    ["change-mss", { protocol: "tcp", tcpFlags: "syn", newMss: 1360 }, { "new-mss": "1360" }],
+  ])("sends action %s with its value", async (ruleAction, value, wire) => {
+    expect(await createdBody({ ruleAction, ...value })).toMatchObject({
+      action: ruleAction,
+      ...wire,
+    });
+  });
+
+  it("shows the action in the dry-run diff", async () => {
+    const result = await manageMangleRuleTool.handler(
+      {
+        ...add,
+        ruleAction: "change-mss",
+        protocol: "tcp",
+        tcpFlags: "syn",
+        newMss: "clamp-to-pmtu",
+        dryRun: true,
+      },
+      makeContext([]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).diff).toContainEqual({
+      property: "action",
+      before: null,
+      after: "change-mss",
+    });
+  });
+
+  it.each([
+    ["mark-routing", { newRoutingMark: "to-leg1" }, { "new-routing-mark": "to-leg1" }],
+    ["mark-connection", { newConnectionMark: "ps5" }, { "new-connection-mark": "ps5" }],
+    ["mark-packet", { newPacketMark: "ps5" }, { "new-packet-mark": "ps5" }],
+    ["change-dscp", { newDscpValue: 46 }, { "new-dscp": "46" }],
+    [
+      "change-mss",
+      { protocol: "tcp", tcpFlags: "syn", newMss: "clamp-to-pmtu" },
+      { "new-mss": "clamp-to-pmtu" },
+    ],
+  ])(
+    "infers action %s from its value when ruleAction is omitted",
+    async (ruleAction, value, wire) => {
+      expect(await createdBody(value)).toMatchObject({ action: ruleAction, ...wire });
+    },
+  );
+
+  it("rejects values of two actions without ruleAction, before any router call", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageMangleRuleTool.handler({ ...add, newConnectionMark: "c", newRoutingMark: "r" }, ctx),
+    ).rejects.toMatchObject({
+      code: "MANGLE_FIELD_NOT_APPLICABLE",
+      details: {
+        params: ["newRoutingMark", "newConnectionMark"],
+        actions: ["mark-routing", "mark-connection"],
+      },
+    });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["newDscpValue", "accept", { newDscpValue: 46 }, "change-dscp"],
+    [
+      "newRoutingMark",
+      "mark-connection",
+      { newConnectionMark: "c", newRoutingMark: "r" },
+      "mark-routing",
+    ],
+  ])(
+    "rejects %s with ruleAction %s before any router call",
+    async (param, ruleAction, values, requiredRuleAction) => {
+      const ctx = makeContext([]);
+      await expect(
+        manageMangleRuleTool.handler({ ...add, ruleAction, ...values }, ctx),
+      ).rejects.toMatchObject({
+        code: "MANGLE_FIELD_NOT_APPLICABLE",
+        details: { ruleAction, param, requiredRuleAction },
+      });
+      expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    },
+  );
+
+  it("compares an inferred action on a repeated add", async () => {
+    const markRule = {
+      ".id": "*5",
+      action: "mark-connection",
+      chain: "prerouting",
+      comment: "MSS clamp wg-leg1",
+      "new-connection-mark": "ps5",
+    };
+    const same = await manageMangleRuleTool.handler(
+      { ...add, newConnectionMark: "ps5" },
+      makeContext([markRule]),
+    );
+    expect((same.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    // What earlier versions created for the same call: no action field, mark dropped.
+    const { action: _action, "new-connection-mark": _mark, ...noActionRule } = markRule;
+    await expect(
+      manageMangleRuleTool.handler(
+        { ...add, newConnectionMark: "ps5" },
+        makeContext([noActionRule]),
+      ),
+    ).rejects.toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: { existing: { action: "accept" }, requested: { action: "mark-connection" } },
+    });
+  });
+
+  it.each([
+    ["mark-routing", "newRoutingMark"],
+    ["mark-connection", "newConnectionMark"],
+    ["mark-packet", "newPacketMark"],
+    ["change-dscp", "newDscpValue"],
+    ["change-mss", "newMss"],
+  ])("rejects ruleAction %s without %s before any router call", async (ruleAction, param) => {
+    const ctx = makeContext([]);
+    await expect(manageMangleRuleTool.handler({ ...add, ruleAction }, ctx)).rejects.toMatchObject({
+      code: "MANGLE_ACTION_VALUE_REQUIRED",
+      details: { ruleAction, param },
+    });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it.each(["remove", "enable", "disable"])(
+    "rejects ruleAction on %s before any router call",
+    async (action) => {
+      const ctx = makeContext([]);
+      await expect(
+        manageMangleRuleTool.handler(
+          { routerId: "test-router", action, comment: "MSS clamp wg-leg1", ruleAction: "accept" },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ code: "RULE_ACTION_ADD_ONLY" });
+      expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["forward", "MANGLE_CHAIN_NOT_APPLICABLE"],
+    ["postrouting", "MANGLE_CHAIN_NOT_APPLICABLE"],
+    ["input", "MANGLE_CHAIN_NOT_APPLICABLE"],
+  ])("rejects mark-routing in chain %s before any router call", async (chain, code) => {
+    const ctx = makeContext([]);
+    await expect(
+      manageMangleRuleTool.handler(
+        { ...add, chain, ruleAction: "mark-routing", newRoutingMark: "to-leg1" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code, details: { chain } });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it.each(["prerouting", "output", "to-leg1-marks"])(
+    "allows mark-routing in chain %s",
+    async (chain) => {
+      expect(
+        await createdBody({ chain, ruleAction: "mark-routing", newRoutingMark: "to-leg1" }),
+      ).toMatchObject({ chain, action: "mark-routing" });
+    },
+  );
+
+  it.each([
+    ["change-mss without protocol", { ruleAction: "change-mss", newMss: "clamp-to-pmtu" }],
+    [
+      "change-mss with protocol udp",
+      { ruleAction: "change-mss", protocol: "udp", newMss: "clamp-to-pmtu" },
+    ],
+    [
+      "change-mss without tcpFlags syn",
+      { ruleAction: "change-mss", protocol: "tcp", newMss: "clamp-to-pmtu" },
+    ],
+    [
+      "change-mss with tcpFlags !syn",
+      { ruleAction: "change-mss", protocol: "tcp", tcpFlags: "!syn", newMss: "clamp-to-pmtu" },
+    ],
+    ["tcpFlags without protocol", { tcpFlags: "syn" }],
+    ["tcpFlags with protocol udp", { protocol: "udp", tcpFlags: "syn" }],
+  ])("rejects %s before any router call", async (_label, params) => {
+    const ctx = makeContext([]);
+    await expect(manageMangleRuleTool.handler({ ...add, ...params }, ctx)).rejects.toMatchObject({
+      code: "MANGLE_TCP_REQUIRED",
+    });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it("takes protocol 6 as TCP", async () => {
+    expect(
+      await createdBody({
+        ruleAction: "change-mss",
+        protocol: "6",
+        tcpFlags: "syn",
+        newMss: "clamp-to-pmtu",
+      }),
+    ).toMatchObject({ protocol: "6", action: "change-mss" });
+  });
+
+  it.each([
+    ["ruleAction jump", { ruleAction: "jump" }],
+    ["an empty newRoutingMark", { ruleAction: "mark-routing", newRoutingMark: "" }],
+    ["an empty newConnectionMark", { ruleAction: "mark-connection", newConnectionMark: "" }],
+    ["an empty newPacketMark", { ruleAction: "mark-packet", newPacketMark: "" }],
+    ["an empty tcpFlags", { protocol: "tcp", tcpFlags: "" }],
+    ["newMss auto", { newMss: "auto" }],
+    ["newMss 65536", { newMss: 65536 }],
+  ])("schema rejects %s", (_label, value) => {
+    expect(manageMangleRuleTool.inputSchema.safeParse({ ...add, ...value }).success).toBe(false);
   });
 });
 
