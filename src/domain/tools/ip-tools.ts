@@ -173,7 +173,9 @@ const manageIpAddressTool: ToolDefinition = {
           const rec = existing as Record<string, unknown>;
           const sameDisabled = isTrue(rec.disabled) === parsed.disabled;
           const sameComment = normalizeWireValue(rec.comment) === normalizeWireValue(comment);
-          const sameNetwork = !parsed.network || normalizeWireValue(rec.network) === parsed.network;
+          const sameNetwork =
+            !parsed.network ||
+            normalizeWireValue(rec.network) === normalizeWireValue(parsed.network);
 
           if (sameDisabled && sameComment && sameNetwork) {
             return {
@@ -282,11 +284,17 @@ const manageIpAddressTool: ToolDefinition = {
             after: disabledStr,
           });
         }
-        if (comment !== undefined && normalizeWireValue(rec.comment) !== comment) {
+        if (
+          comment !== undefined &&
+          normalizeWireValue(rec.comment) !== normalizeWireValue(comment)
+        ) {
           changes.comment = comment;
           diff.push({ property: "comment", before: rec.comment ?? null, after: comment });
         }
-        if (parsed.network && normalizeWireValue(rec.network) !== parsed.network) {
+        if (
+          parsed.network &&
+          normalizeWireValue(rec.network) !== normalizeWireValue(parsed.network)
+        ) {
           changes.network = parsed.network;
           diff.push({ property: "network", before: rec.network ?? null, after: parsed.network });
         }

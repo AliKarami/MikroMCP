@@ -182,6 +182,18 @@ describe("ip tools", () => {
       expect((ctx.routerClient as Record<string, unknown>).update).not.toHaveBeenCalled();
     });
 
+    it("returns no_change for a comment of yes, which normalizes like a boolean", async () => {
+      // Both sides go through normalizeWireValue; normalizing only the stored side
+      // turned "yes" into "true" and reported an update on every call.
+      const ctx = makeContext([{ ...sampleAddress, comment: "yes" }]);
+      const result = await manageIpAddressTool.handler(
+        { ...baseParams, action: "update", comment: "yes", disabled: false },
+        ctx,
+      );
+      expect(result.structuredContent).toHaveProperty("action", "no_change");
+      expect((ctx.routerClient as Record<string, unknown>).update).not.toHaveBeenCalled();
+    });
+
     it("updates when disabled actually differs", async () => {
       const ctx = makeContext([{ ...sampleAddress, disabled: false }]);
       const result = await manageIpAddressTool.handler(
