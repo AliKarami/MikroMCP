@@ -10,7 +10,7 @@ Every error MikroMCP returns includes a machine-readable `category`, `code`, and
 | `NOT_FOUND` | Resource does not exist on the router |
 | `CONFLICT` | Resource exists but with different configuration |
 | `PERMISSION_DENIED` | Identity lacks the required role or the call is outside a maintenance window |
-| `APPROVAL_REQUIRED` | Destructive operation requires a two-step confirmation token |
+| `APPROVAL_REQUIRED` | Destructive operation or `bulk_execute` write fan-out requires a two-step confirmation token |
 | `ROUTER_UNREACHABLE` | Network or TLS connectivity failure to the router |
 | `ROUTER_AUTH_FAILED` | Bad credentials or insufficient RouterOS API policy |
 | `ROUTER_TIMEOUT` | Request timed out waiting for a RouterOS response |

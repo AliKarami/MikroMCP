@@ -78,7 +78,7 @@ const setSystemClockTool: ToolDefinition = {
   inputSchema: setSystemClockInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
