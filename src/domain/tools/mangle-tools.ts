@@ -235,7 +235,7 @@ const manageMangleRuleTool: ToolDefinition = {
 
         const body: Record<string, string> = {
           chain: parsed.chain!,
-          comment: comment,
+          comment,
         };
 
         if (parsed.srcAddress !== undefined) body["src-address"] = parsed.srcAddress;
@@ -266,7 +266,7 @@ const manageMangleRuleTool: ToolDefinition = {
         }
 
         const created = await context.routerClient.create(MANGLE_PATH, body);
-        log.info({ comment: comment, id: created[".id"] }, "Mangle rule added");
+        log.info({ comment, id: created[".id"] }, "Mangle rule added");
 
         return {
           content: `Added mangle rule in chain "${parsed.chain}" with comment "${comment}".`,
@@ -279,7 +279,7 @@ const manageMangleRuleTool: ToolDefinition = {
         if (!existing) {
           return {
             content: `Mangle rule with comment "${comment}" does not exist. No changes made.`,
-            structuredContent: { action: "already_removed", comment: comment },
+            structuredContent: { action: "already_removed", comment },
           };
         }
 
@@ -288,16 +288,16 @@ const manageMangleRuleTool: ToolDefinition = {
         if (parsed.dryRun) {
           return {
             content: `Dry run: Would remove mangle rule with comment "${comment}".`,
-            structuredContent: { action: "dry_run", id, comment: comment },
+            structuredContent: { action: "dry_run", id, comment },
           };
         }
 
         await context.routerClient.remove(MANGLE_PATH, id);
-        log.info({ id, comment: comment }, "Mangle rule removed");
+        log.info({ id, comment }, "Mangle rule removed");
 
         return {
           content: `Removed mangle rule with comment "${comment}".`,
-          structuredContent: { action: "removed", id, comment: comment },
+          structuredContent: { action: "removed", id, comment },
         };
       }
 
@@ -310,7 +310,7 @@ const manageMangleRuleTool: ToolDefinition = {
             category: ErrorCategory.NOT_FOUND,
             code: "MANGLE_RULE_NOT_FOUND",
             message: `No mangle rule found with comment "${comment}".`,
-            details: { comment: comment },
+            details: { comment },
             recoverability: {
               retryable: false,
               suggestedAction: "Verify the comment using list_mangle_rules.",
@@ -325,7 +325,7 @@ const manageMangleRuleTool: ToolDefinition = {
         if (isDisabled === wantDisabled) {
           return {
             content: `Mangle rule with comment "${comment}" is already ${wantDisabled ? "disabled" : "enabled"}. No changes made.`,
-            structuredContent: { action: "no_change", id, comment: comment },
+            structuredContent: { action: "no_change", id, comment },
           };
         }
 
@@ -342,11 +342,11 @@ const manageMangleRuleTool: ToolDefinition = {
         await context.routerClient.update(MANGLE_PATH, id, {
           disabled: wantDisabled ? "true" : "false",
         });
-        log.info({ id, comment: comment, action: parsed.action }, "Mangle rule toggled");
+        log.info({ id, comment, action: parsed.action }, "Mangle rule toggled");
 
         return {
           content: `${parsed.action === "disable" ? "Disabled" : "Enabled"} mangle rule with comment "${comment}".`,
-          structuredContent: { action: "updated", id, comment: comment },
+          structuredContent: { action: "updated", id, comment },
         };
       }
 
