@@ -12,6 +12,32 @@ Multi-tool patterns:
 - **New subnet on a port** = `manage_ip_address` + `manage_dhcp_server` (+ pool
   via `manage_ip_pool`) + a firewall rule.
 
+## Contents
+- Firewall & NAT
+- System
+- Interfaces & Bridges
+- IP, DNS & Addressing
+- DHCP
+- Routing
+- VPN — WireGuard
+- VPN — OpenVPN
+- VPN — IPSec
+- VPN — PPP & PPPoE
+- Wireless (WiFi)
+- Queues
+- Users & Access
+- Files, Scripts & Scheduler
+- Containers
+- Diagnostics
+- Change Management & Fleet
+- Logging
+- Certificates
+- Packages & Upgrade
+- Network Services & Monitoring
+- VRRP
+- VLAN
+- SwOS
+
 ## Firewall & NAT
 | Intent | Tool | REST path | Class |
 |---|---|---|---|

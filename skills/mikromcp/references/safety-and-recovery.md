@@ -46,7 +46,7 @@ Write tools take a config snapshot and write a journal entry before applying.
 | `PERMISSION_DENIED` | Identity lacks rights, or outside maintenance window | Use an allowed identity; wait for the window; check `details` |
 | `APPROVAL_REQUIRED` | Destructive op or fleet write needs confirmation | Show the user the change, then re-issue with the returned `confirmationToken` |
 | `ROUTER_UNREACHABLE` | Network/TLS failure to the router | Check host/port/TLS in `routers.yaml`; verify the router is up |
-| `ROUTER_AUTH_FAILED` | Bad credentials | Fix `ROUTER_<PREFIX>_USER`/`_PASS`; pooled client is evicted automatically. Code `SSH_AUTH_FAILED`: only SSH-backed tools fail — check the `ssh` policy, `/user ssh-keys` vs `/ip ssh password-authentication`, `sshPrivateKeyPath`, then restart the server |
+| `ROUTER_AUTH_FAILED` | Bad credentials | Fix `ROUTER_<PREFIX>_USER`/`_PASS`; pooled client is evicted automatically. Code `SSH_AUTH_FAILED` (message `The router rejected the SSH login`): only SSH-backed tools fail — `get_log` with `prefix: "login failure"` on that router names the user and transport; check the `ssh` policy, `/user ssh-keys` vs `/ip ssh password-authentication`, `sshPrivateKeyPath`, then restart the server. Don't invent the missing output: read the same data with REST `list_*`/`get_*` and say so |
 | `ROUTER_TIMEOUT` | Router too slow to respond | Retry; check router load |
 | `ROUTER_ERROR` | RouterOS rejected the request | Read the message; verify the operation is valid for this ROS version |
 | `ROUTER_BUSY` / `CIRCUIT_OPEN` | Breaker open after failures | Wait for cooldown, then retry |

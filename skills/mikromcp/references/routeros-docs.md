@@ -33,5 +33,15 @@ If a deep link 404s, start from the RouterOS space root and search:
 
 - Field names are **kebab-case**: `dst-address`, `routing-table`, `mac-address`.
 - The id field is `.id` (e.g. `*1`).
-- Booleans come back as the **strings** `"true"`/`"false"`, not JSON booleans.
+- RouterOS sends every value as a string; MikroMCP's response parser turns
+  `"true"`/`"false"` into JSON booleans and numeric strings into numbers, so a
+  table named `100` comes back as the number `100`. `.id`, `comment`, TXT `text`,
+  `yes`/`no`, durations (`1d2h3m`) and 64-bit counters above 2^53 stay strings.
 - WiFi lives at `interface/wifi` on ROS 7.13+, `interface/wireless` on older.
+- Version-dependent work (syntax that changed in 7.x, a result that contradicts
+  the docs, an upgrade): take the exact version from `get_system_status` —
+  `rosVersion` in `list_routers` comes from `routers.yaml` and may lag — then read
+  that release's thread in https://forum.mikrotik.com/c/announcements/5 (titled
+  like "7.24.2 [stable] is released!"): the first post is the changelog, replies
+  report regressions. Do this for upgrade advice too: the router's own update
+  check can report "already up to date" while newer patch releases are out.
