@@ -45,7 +45,9 @@ const listRoutingRulesTool: ToolDefinition = {
       });
 
       if (parsed.table !== undefined) {
-        rules = rules.filter((r) => (r as Record<string, string>).table === parsed.table);
+        rules = rules.filter((r) =>
+          sameRuleValue("table", (r as Record<string, unknown>).table, parsed.table),
+        );
       }
       if (parsed.disabled !== undefined) {
         rules = rules.filter((r) => {
@@ -125,7 +127,7 @@ function findRoutingRule(
       sameRuleValue("src-address", rec["src-address"], srcAddress) &&
       sameRuleValue("dst-address", rec["dst-address"], dstAddress) &&
       sameRuleValue("interface", rec["interface"], iface) &&
-      rec.table === table
+      sameRuleValue("table", rec.table, table)
     );
   }) as Record<string, string> | undefined;
 }

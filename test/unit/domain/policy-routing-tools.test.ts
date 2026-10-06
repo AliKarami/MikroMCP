@@ -2,54 +2,23 @@ import { describe, it, expect, vi } from "vitest";
 import { policyRoutingTools } from "../../../src/domain/tools/policy-routing-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
-import { parseRecord } from "../../../src/adapter/response-parser.js";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const listRoutingRulesTool = policyRoutingTools[0];
 const manageRoutingRuleTool = policyRoutingTools[1];
 const listRoutingTablesTool = policyRoutingTools[2];
 const manageRoutingTableTool = policyRoutingTools[3];
 
-const listRulesSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.string().optional(),
-    disabled: z.boolean().optional(),
-  })
-  .strict();
+const manageRuleSchema = manageRoutingRuleTool.inputSchema;
 
-const manageRuleSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove", "enable", "disable"]),
-    table: z.string(),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    interface: z.string().optional(),
-    priority: z.number().int().min(0).max(4294967295).optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageTableSchema = manageRoutingTableTool.inputSchema;
 
-const manageTableSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove"]),
-    name: z.string(),
-    fib: z.boolean().default(false),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
-
-function makeContext(
-  records: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
+function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerClient: {
-      get: vi.fn().mockResolvedValue(records),
+      get: vi.fn().mockResolvedValue(fromWire(records)),
       create: vi.fn().mockResolvedValue(createReturn ?? { ".id": "*1" }),
       remove: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
@@ -370,12 +339,45 @@ describe("manage_routing_rule - composite key comparison", () => {
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
+
+  // Derived from the real PS5 rule on RB5009 (RouterOS 7.24.2, list_routing_rules,
+  // 2026-10-06) with the table renamed to "100", which the response parser turns into 100.
+  const numericTableRule: WireRecord = {
+    ".id": "*2",
+    action: "lookup-only-in-table",
+    comment: "PS5 to leg1 fail-closed",
+    disabled: "false",
+    inactive: "false",
+    "src-address": "192.168.1.251/32",
+    table: "100",
+  };
+
+  it("finds a rule whose table name is numeric", async () => {
+    const ctx = makeContext([numericTableRule]);
+    const result = await manageRoutingRuleTool.handler(
+      { routerId: "test-router", action: "add", table: "100", srcAddress: "192.168.1.251/32" },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+      typeof vi.fn
+    >;
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("list_routing_rules filters by a numeric table name", async () => {
+    const result = await listRoutingRulesTool.handler(
+      { routerId: "test-router", table: "100" },
+      makeContext([numericTableRule]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
+  });
 });
 
 describe("manage_routing_rule - rule action", () => {
   // The real PS5 rule on RB5009 (RouterOS 7.24.2, list_routing_rules, 2026-10-06), written
-  // back as wire strings and fed through parseRecord like RouterOSRestClient.get.
-  const PS5_RULE = {
+  // back as wire strings; makeContext parses them like RouterOSRestClient.get.
+  const PS5_RULE: WireRecord = {
     ".id": "*2",
     action: "lookup-only-in-table",
     comment: "PS5 to leg1 fail-closed",
@@ -386,7 +388,7 @@ describe("manage_routing_rule - rule action", () => {
   };
   // A rule added without an action, as RouterOS reads it back (CHR 7.23.2, raw REST GET):
   // inactive, and without the table it was added with.
-  const NO_ACTION_RULE = {
+  const NO_ACTION_RULE: WireRecord = {
     ".about": "action must be specified",
     ".id": "*1",
     inactive: "true",
@@ -429,7 +431,7 @@ describe("manage_routing_rule - rule action", () => {
   });
 
   it("returns already_exists when the stored action matches", async () => {
-    const ctx = makeContext([parseRecord(PS5_RULE)]);
+    const ctx = makeContext([PS5_RULE]);
     const result = await manageRoutingRuleTool.handler(
       { ...add, ruleAction: "lookup-only-in-table" },
       ctx,
@@ -439,16 +441,13 @@ describe("manage_routing_rule - rule action", () => {
   });
 
   it("returns already_exists without ruleAction, whatever the stored action", async () => {
-    const result = await manageRoutingRuleTool.handler(add, makeContext([parseRecord(PS5_RULE)]));
+    const result = await manageRoutingRuleTool.handler(add, makeContext([PS5_RULE]));
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
 
   it("throws ROUTING_RULE_CONFLICT when an explicit ruleAction differs from the stored one", async () => {
     await expect(
-      manageRoutingRuleTool.handler(
-        { ...add, ruleAction: "lookup" },
-        makeContext([parseRecord(PS5_RULE)]),
-      ),
+      manageRoutingRuleTool.handler({ ...add, ruleAction: "lookup" }, makeContext([PS5_RULE])),
     ).rejects.toMatchObject({
       code: "ROUTING_RULE_CONFLICT",
       details: {
@@ -459,7 +458,7 @@ describe("manage_routing_rule - rule action", () => {
   });
 
   it("does not match a rule an earlier version added without an action (no table on it)", async () => {
-    const ctx = makeContext([parseRecord(NO_ACTION_RULE)]);
+    const ctx = makeContext([NO_ACTION_RULE]);
     const result = await manageRoutingRuleTool.handler(
       { ...add, table: "100", srcAddress: "203.0.113.0/24" },
       ctx,
@@ -470,7 +469,7 @@ describe("manage_routing_rule - rule action", () => {
   it.each(["remove", "enable", "disable"])(
     "rejects ruleAction on %s before any router call",
     async (action) => {
-      const ctx = makeContext([parseRecord(PS5_RULE)]);
+      const ctx = makeContext([PS5_RULE]);
       await expect(
         manageRoutingRuleTool.handler({ ...add, action, ruleAction: "lookup" }, ctx),
       ).rejects.toMatchObject({ code: "RULE_ACTION_ADD_ONLY" });
@@ -481,7 +480,7 @@ describe("manage_routing_rule - rule action", () => {
   it("list_routing_rules shows an action-less rule as inactive in its text", async () => {
     const result = await listRoutingRulesTool.handler(
       { routerId: "test-router" },
-      makeContext([parseRecord(NO_ACTION_RULE)]),
+      makeContext([NO_ACTION_RULE]),
     );
     expect(result.content).toContain("inactive=true");
   });
