@@ -36,24 +36,22 @@ const checkHealthInputSchema = z
   })
   .strict();
 
+const fanOutFields = {
+  routerIds: z.array(z.string()).optional().describe("Explicit list of router IDs to target"),
+  tags: z
+    .array(z.string())
+    .optional()
+    .describe("Target all routers with ALL of these tags (mutually exclusive with routerIds)"),
+  params: z
+    .record(z.string(), z.unknown())
+    .describe("Params to pass to the tool (omit routerId — injected per router)"),
+  concurrency: z.number().int().min(1).max(20).default(5).describe("Max simultaneous router calls"),
+};
+
 const bulkExecuteInputSchema = z
   .object({
     toolName: z.string().describe("Name of the tool to fan out (must be a single-router tool)"),
-    routerIds: z.array(z.string()).optional().describe("Explicit list of router IDs to target"),
-    tags: z
-      .array(z.string())
-      .optional()
-      .describe("Target all routers with ALL of these tags (mutually exclusive with routerIds)"),
-    params: z
-      .record(z.string(), z.unknown())
-      .describe("Params to pass to the tool (omit routerId — injected per router)"),
-    concurrency: z
-      .number()
-      .int()
-      .min(1)
-      .max(20)
-      .default(5)
-      .describe("Max simultaneous router calls"),
+    ...fanOutFields,
     confirmationToken: z
       .string()
       .optional()
@@ -62,6 +60,18 @@ const bulkExecuteInputSchema = z
       ),
   })
   .strict();
+
+const bulkReadInputSchema = z
+  .object({
+    toolName: z
+      .string()
+      .describe("Name of the read-only single-router tool to fan out (e.g. list_interfaces)"),
+    ...fanOutFields,
+  })
+  .strict();
+
+type FanOutInput = z.infer<typeof bulkReadInputSchema>;
+type FleetToolName = "bulk_execute" | "bulk_read";
 
 interface BulkResult {
   routerId: string;
@@ -84,7 +94,7 @@ const listRoutersTool: ToolDefinition = {
   name: "list_routers",
   title: "List Routers",
   description:
-    "List the routers configured in the registry (routers.yaml): id, host, port, TLS status, tags, ROS version, and which is the default. Read-only reflection of local config — no RouterOS API call, no credentials in the response. Use it to discover valid routerId values and tags for targeting other tools (including bulk_execute).",
+    "List the routers configured in the registry (routers.yaml): id, host, port, TLS status, tags, ROS version, and which is the default. Read-only reflection of local config — no RouterOS API call, no credentials in the response. Use it to discover valid routerId values and tags for targeting other tools (including bulk_read and bulk_execute).",
   inputSchema: listRoutersInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -145,6 +155,306 @@ const listRoutersTool: ToolDefinition = {
     };
   },
 };
+
+/** Fleet tools are not in the base tool map; named here so fanning one out fails with a clear code. */
+const FLEET_TOOL_NAMES = new Set(["bulk_execute", "bulk_read", "check_router_health"]);
+
+/**
+ * Annotated read-only, yet each call sends traffic from the router (ping, traceroute,
+ * bandwidth_test) or loads it for the sampling window (torch). A fleet-wide run of these
+ * stays an explicit bulk_execute call, so allowing bulk_read never allows them.
+ */
+const BULK_READ_EXCLUDED_TOOLS = new Set(["ping", "traceroute", "torch", "bandwidth_test"]);
+
+// Treat empty arrays as not provided — MCP Inspector defaults optional arrays to []
+function hasItems(list: string[] | undefined): list is string[] {
+  return Array.isArray(list) && list.length > 0;
+}
+
+function assertSingleTarget(input: FanOutInput): void {
+  if (hasItems(input.routerIds) === hasItems(input.tags)) {
+    throw new MikroMCPError({
+      category: ErrorCategory.VALIDATION,
+      code: "BULK_TARGET_REQUIRED",
+      message: "Provide exactly one of routerIds or tags, not both and not neither.",
+      recoverability: {
+        retryable: false,
+        suggestedAction: "Supply either routerIds (array of IDs) or tags (array of tag strings).",
+      },
+    });
+  }
+}
+
+function resolveInnerTool(
+  fleetTool: FleetToolName,
+  toolName: string,
+  toolMap: Map<string, ToolDefinition>,
+): ToolDefinition {
+  if (FLEET_TOOL_NAMES.has(toolName)) {
+    throw new MikroMCPError({
+      category: ErrorCategory.VALIDATION,
+      code: "BULK_SELF_REFERENCE",
+      message: `Cannot use ${fleetTool} to fan out fleet tools ("${toolName}").`,
+      recoverability: {
+        retryable: false,
+        suggestedAction: "Choose a single-router tool as the toolName.",
+      },
+    });
+  }
+  const tool = toolMap.get(toolName);
+  if (!tool) {
+    throw new MikroMCPError({
+      category: ErrorCategory.NOT_FOUND,
+      code: "TOOL_NOT_FOUND",
+      message: `Tool "${toolName}" not found. Available tools: ${[...toolMap.keys()].join(", ")}`,
+      recoverability: {
+        retryable: false,
+        suggestedAction: "Check the tool name and try again.",
+      },
+    });
+  }
+  return tool;
+}
+
+function assertBulkReadable(tool: ToolDefinition): void {
+  const readOnly = tool.annotations.readOnlyHint === true;
+  if (readOnly && !BULK_READ_EXCLUDED_TOOLS.has(tool.name)) return;
+  throw new MikroMCPError({
+    category: ErrorCategory.VALIDATION,
+    code: "BULK_READ_TOOL_NOT_READ_ONLY",
+    message: readOnly
+      ? `bulk_read does not fan out "${tool.name}": it generates traffic or load on every targeted router.`
+      : `bulk_read only fans out read-only tools; "${tool.name}" can change router state.`,
+    details: { toolName: tool.name },
+    recoverability: {
+      retryable: false,
+      suggestedAction: `Use bulk_execute to fan out "${tool.name}".`,
+      alternativeTools: ["bulk_execute"],
+    },
+  });
+}
+
+/** Unknown router IDs become per-router error results instead of failing the whole call. */
+function resolveRouters(
+  fleetTool: FleetToolName,
+  input: FanOutInput,
+  context: ToolContext,
+): { routers: RouterConfig[]; preErrors: BulkResult[] } {
+  const preErrors: BulkResult[] = [];
+  if (hasItems(input.routerIds)) {
+    const routers: RouterConfig[] = [];
+    for (const id of input.routerIds) {
+      try {
+        routers.push(context.routerRegistry!.getRouter(id));
+      } catch {
+        log.warn({ routerId: id }, `${fleetTool}: router not found`);
+        preErrors.push({
+          routerId: id,
+          status: "error",
+          error: `Router "${id}" not found in registry`,
+          durationMs: 0,
+        });
+      }
+    }
+    return { routers, preErrors };
+  }
+  // ALL-tag targeting (schema documents "ALL of these tags"): a router must
+  // carry every requested tag. listRouters() matches ANY tag, so filter here.
+  const tags = input.tags ?? [];
+  const routers = context
+    .routerRegistry!.listRouters()
+    .filter((r) => tags.every((t) => r.tags.includes(t)));
+  return { routers, preErrors };
+}
+
+function fleetAudit(
+  context: ToolContext,
+  fleetTool: FleetToolName,
+  phase: "attempt" | "success",
+  params: Record<string, unknown>,
+): void {
+  auditLog(
+    {
+      type: "audit",
+      ts: new Date().toISOString(),
+      correlationId: context.correlationId,
+      identityId: context.identity.id,
+      role: context.identity.role,
+      tool: fleetTool,
+      routerId: "(fleet)",
+      phase,
+      params,
+    },
+    context.appConfig.auditLogPath,
+  );
+}
+
+interface FanOutRequest {
+  fleetTool: FleetToolName;
+  input: FanOutInput;
+  targetTool: ToolDefinition;
+  routers: RouterConfig[];
+  preErrors: BulkResult[];
+  context: ToolContext;
+  /** Audit the fan-out and each router call. Off for bulk_read, matching direct read-only calls. */
+  audit: boolean;
+}
+
+/**
+ * Run the inner tool on every router through the same per-router safety stack as a direct
+ * call: authz, platform check, maintenance window, circuit breaker, and retry for read tools.
+ * Write tools additionally get a snapshot and a journal entry per router.
+ */
+async function fanOut(req: FanOutRequest): Promise<ToolResult> {
+  const { fleetTool, input, targetTool, context } = req;
+  const isWrite = !targetTool.annotations.readOnlyHint;
+  const snapshotDir = context.appConfig.snapshotDir;
+  const journalPath = context.appConfig.journalPath;
+
+  async function runForRouter(router: RouterConfig): Promise<BulkResult> {
+    const start = Date.now();
+    let journalId: string | undefined;
+    try {
+      checkAuthz(context.identity, input.toolName, router.id);
+      // Authz first, so an unauthorized caller cannot learn a router's
+      // device type from the platform error.
+      assertPlatformMatch(targetTool, router);
+      assertMaintenanceWindow(targetTool.annotations.destructiveHint, router, router.id);
+      const routerContext = buildRouterToolContext({
+        routerConfig: router,
+        correlationId: context.correlationId,
+        identity: context.identity,
+        pool: context.connectionPool!,
+        config: context.appConfig,
+        registry: context.routerRegistry,
+      });
+      const toolParams = { ...input.params, routerId: router.id };
+
+      const snapshotIds: string[] = [];
+      if (isWrite) {
+        for (const path of snapshotPathsFor(targetTool, toolParams as Record<string, unknown>)) {
+          try {
+            const meta = await takeSnapshot(
+              routerContext.deviceClient,
+              router.id,
+              path,
+              snapshotDir,
+            );
+            snapshotIds.push(meta.id);
+          } catch (err) {
+            log.warn(
+              { err, path, routerId: router.id },
+              `${fleetTool} snapshot failed — proceeding without snapshot`,
+            );
+          }
+        }
+      }
+
+      if (isWrite && journalPath) {
+        journalId = recordAttempt({
+          journalPath,
+          identityId: context.identity.id,
+          role: context.identity.role,
+          tool: input.toolName,
+          routerId: router.id,
+          params: toolParams as Record<string, unknown>,
+          snapshotIds,
+        });
+      }
+
+      const cb = getOrCreateBreaker(context.circuitBreakers!, router.id, context.appConfig);
+      routerContext.circuitBreaker = cb;
+      const runOnce = () =>
+        targetTool.handler(toolParams as Record<string, unknown>, routerContext);
+      const shouldRetry = targetTool.annotations.readOnlyHint && targetTool.retryable !== false;
+      const result = await cb.execute(
+        shouldRetry ? () => withRetry(runOnce, context.appConfig.retry) : runOnce,
+      );
+      const elapsed = Date.now() - start;
+      if (journalId) {
+        recordOutcome({
+          journalPath: journalPath!,
+          journalId,
+          phase: "success",
+          durationMs: elapsed,
+        });
+      }
+      if (req.audit) {
+        auditLog(
+          {
+            type: "audit",
+            ts: new Date().toISOString(),
+            correlationId: context.correlationId,
+            identityId: context.identity.id,
+            role: context.identity.role,
+            tool: input.toolName,
+            routerId: router.id,
+            phase: "success",
+            params: input.params as Record<string, unknown>,
+            durationMs: elapsed,
+          },
+          context.appConfig.auditLogPath,
+        );
+      }
+      return { routerId: router.id, status: "ok", result, durationMs: elapsed };
+    } catch (err) {
+      const elapsed = Date.now() - start;
+      const message = err instanceof Error ? err.message : String(err);
+      if (journalId) {
+        recordOutcome({
+          journalPath: journalPath!,
+          journalId,
+          phase: "failure",
+          outcome: message,
+          durationMs: elapsed,
+        });
+      }
+      if (req.audit) {
+        auditLog(
+          {
+            type: "audit",
+            ts: new Date().toISOString(),
+            correlationId: context.correlationId,
+            identityId: context.identity.id,
+            role: context.identity.role,
+            tool: input.toolName,
+            routerId: router.id,
+            phase: "failure",
+            params: input.params as Record<string, unknown>,
+            outcome: message,
+            durationMs: elapsed,
+          },
+          context.appConfig.auditLogPath,
+        );
+      }
+      return { routerId: router.id, status: "error", error: message, durationMs: elapsed };
+    }
+  }
+
+  const results: BulkResult[] = [...req.preErrors];
+  for (let i = 0; i < req.routers.length; i += input.concurrency) {
+    const batch = req.routers.slice(i, i + input.concurrency);
+    results.push(...(await Promise.all(batch.map(runForRouter))));
+  }
+
+  const succeeded = results.filter((r) => r.status === "ok").length;
+  const failed = results.filter((r) => r.status === "error").length;
+
+  if (req.audit) {
+    fleetAudit(context, fleetTool, "success", { toolName: input.toolName, succeeded, failed });
+  }
+
+  return {
+    content: `Executed ${input.toolName} on ${results.length} routers: ${succeeded} succeeded, ${failed} failed`,
+    structuredContent: {
+      toolName: input.toolName,
+      totalRouters: results.length,
+      succeeded,
+      failed,
+      results,
+    },
+  };
+}
 
 export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] {
   const toolMap = new Map(baseTools.map((t) => [t.name, t]));
@@ -208,7 +518,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     name: "bulk_execute",
     title: "Bulk Execute",
     description:
-      "Fan out a single-router tool to many routers in parallel (up to `concurrency`), targeted by routerIds or tag. Write tools need two-step confirmation for every role: call without `confirmationToken` to get a fleet token, then re-call with it. Read-only tools fan out immediately. Writes snapshot+journal each router for rollback. Returns per-router results with succeeded/failed counts.",
+      "Fan out a single-router tool to many routers in parallel (up to `concurrency`), targeted by routerIds or tag. Write tools need two-step confirmation for every role: call without `confirmationToken` to get a fleet token, then re-call with it. Read-only tools fan out immediately. Writes snapshot+journal each router for rollback. Returns per-router results with succeeded/failed counts. To fan out a read-only tool, prefer bulk_read.",
     inputSchema: bulkExecuteInputSchema,
     annotations: {
       readOnlyHint: false,
@@ -219,97 +529,21 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     skipRouterContext: true,
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       const parsed = bulkExecuteInputSchema.parse(params);
-
-      // Treat empty arrays as not provided — MCP Inspector defaults optional arrays to []
-      const hasRouterIds = Array.isArray(parsed.routerIds) && parsed.routerIds.length > 0;
-      const hasTags = Array.isArray(parsed.tags) && parsed.tags.length > 0;
-
-      if (hasRouterIds === hasTags) {
-        throw new MikroMCPError({
-          category: ErrorCategory.VALIDATION,
-          code: "BULK_TARGET_REQUIRED",
-          message: "Provide exactly one of routerIds or tags, not both and not neither.",
-          recoverability: {
-            retryable: false,
-            suggestedAction:
-              "Supply either routerIds (array of IDs) or tags (array of tag strings).",
-          },
-        });
-      }
+      assertSingleTarget(parsed);
 
       log.info(
         { toolName: parsed.toolName, concurrency: parsed.concurrency },
         "bulk_execute invoked",
       );
 
-      auditLog(
-        {
-          type: "audit",
-          ts: new Date().toISOString(),
-          correlationId: context.correlationId,
-          identityId: context.identity.id,
-          role: context.identity.role,
-          tool: "bulk_execute",
-          routerId: "(fleet)",
-          phase: "attempt",
-          params: { toolName: parsed.toolName, routerIds: parsed.routerIds, tags: parsed.tags },
-        },
-        context.appConfig.auditLogPath,
-      );
+      fleetAudit(context, "bulk_execute", "attempt", {
+        toolName: parsed.toolName,
+        routerIds: parsed.routerIds,
+        tags: parsed.tags,
+      });
 
-      if (parsed.toolName === "bulk_execute" || parsed.toolName === "check_router_health") {
-        throw new MikroMCPError({
-          category: ErrorCategory.VALIDATION,
-          code: "BULK_SELF_REFERENCE",
-          message: `Cannot use bulk_execute to fan out fleet tools ("${parsed.toolName}").`,
-          recoverability: {
-            retryable: false,
-            suggestedAction: "Choose a single-router tool as the toolName.",
-          },
-        });
-      }
-
-      const foundTool = toolMap.get(parsed.toolName);
-      if (!foundTool) {
-        throw new MikroMCPError({
-          category: ErrorCategory.NOT_FOUND,
-          code: "TOOL_NOT_FOUND",
-          message: `Tool "${parsed.toolName}" not found. Available tools: ${[...toolMap.keys()].join(", ")}`,
-          recoverability: {
-            retryable: false,
-            suggestedAction: "Check the tool name and try again.",
-          },
-        });
-      }
-      const targetTool: ToolDefinition = foundTool;
-
-      // Pre-resolution errors (unknown IDs) become immediate error results
-      const preErrors: BulkResult[] = [];
-      let routers: RouterConfig[];
-      if (hasRouterIds) {
-        const resolved: RouterConfig[] = [];
-        for (const id of parsed.routerIds!) {
-          try {
-            resolved.push(context.routerRegistry!.getRouter(id));
-          } catch {
-            log.warn({ routerId: id }, "bulk_execute: router not found");
-            preErrors.push({
-              routerId: id,
-              status: "error",
-              error: `Router "${id}" not found in registry`,
-              durationMs: 0,
-            });
-          }
-        }
-        routers = resolved;
-      } else {
-        // ALL-tag targeting (schema documents "ALL of these tags"): a router must
-        // carry every requested tag. listRouters() matches ANY tag, so filter here.
-        const tags = parsed.tags!;
-        routers = context
-          .routerRegistry!.listRouters()
-          .filter((r) => tags.every((t) => r.tags.includes(t)));
-      }
+      const targetTool = resolveInnerTool("bulk_execute", parsed.toolName, toolMap);
+      const { routers, preErrors } = resolveRouters("bulk_execute", parsed, context);
 
       const isWrite = !targetTool.annotations.readOnlyHint;
 
@@ -329,192 +563,52 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         );
       }
 
-      if (routers.length === 0 && preErrors.length === 0) {
-        auditLog(
-          {
-            type: "audit",
-            ts: new Date().toISOString(),
-            correlationId: context.correlationId,
-            identityId: context.identity.id,
-            role: context.identity.role,
-            tool: "bulk_execute",
-            routerId: "(fleet)",
-            phase: "success",
-            params: { toolName: parsed.toolName, succeeded: 0, failed: 0 },
-          },
-          context.appConfig.auditLogPath,
-        );
-        return {
-          content: `Executed ${parsed.toolName} on 0 routers: 0 succeeded, 0 failed`,
-          structuredContent: {
-            toolName: parsed.toolName,
-            totalRouters: 0,
-            succeeded: 0,
-            failed: 0,
-            results: [],
-          },
-        };
-      }
-
-      const snapshotDir = context.appConfig.snapshotDir;
-      const journalPath = context.appConfig.journalPath;
-
-      async function runForRouter(router: RouterConfig): Promise<BulkResult> {
-        const start = Date.now();
-        let journalId: string | undefined;
-        try {
-          checkAuthz(context.identity, parsed.toolName, router.id);
-          // Authz first, so an unauthorized caller cannot learn a router's
-          // device type from the platform error.
-          assertPlatformMatch(targetTool, router);
-          assertMaintenanceWindow(targetTool.annotations.destructiveHint, router, router.id);
-          const routerContext = buildRouterToolContext({
-            routerConfig: router,
-            correlationId: context.correlationId,
-            identity: context.identity,
-            pool: context.connectionPool!,
-            config: context.appConfig,
-            registry: context.routerRegistry,
-          });
-          const toolParams = { ...parsed.params, routerId: router.id };
-
-          const snapshotIds: string[] = [];
-          if (isWrite) {
-            for (const path of snapshotPathsFor(
-              targetTool,
-              toolParams as Record<string, unknown>,
-            )) {
-              try {
-                const meta = await takeSnapshot(
-                  routerContext.deviceClient,
-                  router.id,
-                  path,
-                  snapshotDir,
-                );
-                snapshotIds.push(meta.id);
-              } catch (err) {
-                log.warn(
-                  { err, path, routerId: router.id },
-                  "bulk_execute snapshot failed — proceeding without snapshot",
-                );
-              }
-            }
-          }
-
-          if (isWrite && journalPath) {
-            journalId = recordAttempt({
-              journalPath,
-              identityId: context.identity.id,
-              role: context.identity.role,
-              tool: parsed.toolName,
-              routerId: router.id,
-              params: toolParams as Record<string, unknown>,
-              snapshotIds,
-            });
-          }
-
-          const cb = getOrCreateBreaker(context.circuitBreakers!, router.id, context.appConfig);
-          routerContext.circuitBreaker = cb;
-          const runOnce = () =>
-            targetTool.handler(toolParams as Record<string, unknown>, routerContext);
-          const shouldRetry = targetTool.annotations.readOnlyHint && targetTool.retryable !== false;
-          const result = await cb.execute(
-            shouldRetry ? () => withRetry(runOnce, context.appConfig.retry) : runOnce,
-          );
-          const elapsed = Date.now() - start;
-          if (journalId) {
-            recordOutcome({
-              journalPath: journalPath!,
-              journalId,
-              phase: "success",
-              durationMs: elapsed,
-            });
-          }
-          auditLog(
-            {
-              type: "audit",
-              ts: new Date().toISOString(),
-              correlationId: context.correlationId,
-              identityId: context.identity.id,
-              role: context.identity.role,
-              tool: parsed.toolName,
-              routerId: router.id,
-              phase: "success",
-              params: parsed.params as Record<string, unknown>,
-              durationMs: elapsed,
-            },
-            context.appConfig.auditLogPath,
-          );
-          return { routerId: router.id, status: "ok", result, durationMs: elapsed };
-        } catch (err) {
-          const elapsed = Date.now() - start;
-          const message = err instanceof Error ? err.message : String(err);
-          if (journalId) {
-            recordOutcome({
-              journalPath: journalPath!,
-              journalId,
-              phase: "failure",
-              outcome: message,
-              durationMs: elapsed,
-            });
-          }
-          auditLog(
-            {
-              type: "audit",
-              ts: new Date().toISOString(),
-              correlationId: context.correlationId,
-              identityId: context.identity.id,
-              role: context.identity.role,
-              tool: parsed.toolName,
-              routerId: router.id,
-              phase: "failure",
-              params: parsed.params as Record<string, unknown>,
-              outcome: message,
-              durationMs: elapsed,
-            },
-            context.appConfig.auditLogPath,
-          );
-          return { routerId: router.id, status: "error", error: message, durationMs: elapsed };
-        }
-      }
-
-      const results: BulkResult[] = [...preErrors];
-      for (let i = 0; i < routers.length; i += parsed.concurrency) {
-        const batch = routers.slice(i, i + parsed.concurrency);
-        const batchResults = await Promise.all(batch.map(runForRouter));
-        results.push(...batchResults);
-      }
-
-      const succeeded = results.filter((r) => r.status === "ok").length;
-      const failed = results.filter((r) => r.status === "error").length;
-
-      auditLog(
-        {
-          type: "audit",
-          ts: new Date().toISOString(),
-          correlationId: context.correlationId,
-          identityId: context.identity.id,
-          role: context.identity.role,
-          tool: "bulk_execute",
-          routerId: "(fleet)",
-          phase: "success",
-          params: { toolName: parsed.toolName, succeeded, failed },
-        },
-        context.appConfig.auditLogPath,
-      );
-
-      return {
-        content: `Executed ${parsed.toolName} on ${results.length} routers: ${succeeded} succeeded, ${failed} failed`,
-        structuredContent: {
-          toolName: parsed.toolName,
-          totalRouters: results.length,
-          succeeded,
-          failed,
-          results,
-        },
-      };
+      return fanOut({
+        fleetTool: "bulk_execute",
+        input: parsed,
+        targetTool,
+        routers,
+        preErrors,
+        context,
+        audit: true,
+      });
     },
   };
 
-  return [checkRouterHealthTool, bulkExecuteTool, listRoutersTool];
+  const bulkReadTool: ToolDefinition = {
+    name: "bulk_read",
+    title: "Bulk Read",
+    description:
+      "Fan out a read-only single-router tool (list_*, get_* and others annotated read-only) to many routers in parallel (up to `concurrency`), targeted by routerIds or tag. Unlike bulk_execute, the server refuses every write tool and the traffic-generating diagnostics (ping, traceroute, torch, bandwidth_test) with BULK_READ_TOOL_NOT_READ_ONLY, and never needs a confirmation token, snapshot or journal — so an MCP client can allow bulk_read without allowing fleet-wide writes. Use bulk_execute for anything else. Returns per-router results with succeeded/failed counts.",
+    inputSchema: bulkReadInputSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    skipRouterContext: true,
+    async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+      const parsed = bulkReadInputSchema.parse(params);
+      assertSingleTarget(parsed);
+
+      log.info({ toolName: parsed.toolName, concurrency: parsed.concurrency }, "bulk_read invoked");
+
+      const targetTool = resolveInnerTool("bulk_read", parsed.toolName, toolMap);
+      assertBulkReadable(targetTool);
+      const { routers, preErrors } = resolveRouters("bulk_read", parsed, context);
+
+      return fanOut({
+        fleetTool: "bulk_read",
+        input: parsed,
+        targetTool,
+        routers,
+        preErrors,
+        context,
+        audit: false,
+      });
+    },
+  };
+
+  return [checkRouterHealthTool, bulkExecuteTool, bulkReadTool, listRoutersTool];
 }

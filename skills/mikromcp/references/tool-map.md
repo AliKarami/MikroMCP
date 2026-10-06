@@ -173,6 +173,7 @@ Multi-tool patterns:
 | Execute a previewed plan | `apply_plan` | (orchestration) | destructive |
 | Roll back a previous change | `rollback_change` | (orchestration) | destructive |
 | Run the same tool against multiple routers | `bulk_execute` | (orchestration) | destructive |
+| Run the same read-only tool against multiple routers | `bulk_read` | (orchestration) | read |
 | Check health of a router | `check_router_health` | `system/resource` | read |
 | Discover configured routers, tags, and the default | `list_routers` | (local config) | read |
 | Create a config backup/snapshot | `create_backup` | `system/backup/save` | destructive |

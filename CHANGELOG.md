@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- `bulk_read` fleet tool — fans a read-only tool out across routers by id or tag, like `bulk_execute`, but the server refuses any inner tool that is not annotated read-only, plus the traffic-generating `ping`, `traceroute`, `torch`, and `bandwidth_test` (`BULK_READ_TOOL_NOT_READ_ONLY`). Clients that approve tools by name can now allow fleet-wide reads without allowing `bulk_execute`, which can fan out writes. `bulk_execute` and `bulk_read` share one per-router execution path. Closes #79.
+
 ### Changed
 - Every write tool that can remove, overwrite, or reconfigure router state, or run RouterOS script, is now annotated `destructiveHint: true` — every write tool except the preview-only `plan_changes`. Newly destructive: `bulk_execute`, `create_backup`, `export_config`, `fetch_url`, `manage_container_config`, `manage_container_env`, `manage_container_mount`, `manage_dhcp_lease`, `manage_ip_pool`, `manage_log_action`, `manage_log_rule`, `manage_netwatch_entry`, `manage_ntp_client`, `manage_ppp_profile`, `manage_queue`, `manage_scheduled_job`, `set_system_clock`, and `upload_file`. When `MIKROMCP_CONFIRMATION_SECRET` is set, `readonly` and `operator` identities now confirm these with a token. On routers with `maintenanceWindows` they run only inside a window, dry runs included. A unit test enforces the rule for new tools.
 - `bulk_execute` requires a fleet confirmation token for every write tool it fans out, not only destructive ones, from every role. Without `MIKROMCP_CONFIRMATION_SECRET` the token is signed with a random per-process secret instead of failing with `FLEET_CONFIRMATION_UNAVAILABLE` (removed); such tokens stop working after a restart.

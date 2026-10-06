@@ -1,6 +1,6 @@
 # Available Tools
 
-All 122 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 123 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -1670,7 +1670,7 @@ List the routers configured in the registry (`routers.yaml`) so you can discover
 
 ### `check_router_health` — Read
 
-Probe one device — RouterOS routers via `system/resource`, SwOS switches via `sys.b` — and report health, firmware version, uptime, and (RouterOS only) CPU load and memory. Unlike other tools it never throws: an unreachable device is reported with `healthy: false`. It is itself a fleet tool, so `bulk_execute` refuses it (`BULK_SELF_REFERENCE`); to sweep a fleet, call `list_routers` and then `check_router_health` once per router.
+Probe one device — RouterOS routers via `system/resource`, SwOS switches via `sys.b` — and report health, firmware version, uptime, and (RouterOS only) CPU load and memory. Unlike other tools it never throws: an unreachable device is reported with `healthy: false`. It is itself a fleet tool, so `bulk_execute` and `bulk_read` refuse it (`BULK_SELF_REFERENCE`); to sweep a fleet, call `list_routers` and then `check_router_health` once per router.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1684,7 +1684,7 @@ Probe one device — RouterOS routers via `system/resource`, SwOS switches via `
 
 ### `bulk_execute` — Write · Destructive
 
-Fan out any single-router tool call to multiple routers by ID or tag with configurable concurrency. Fleet tools cannot be used as the inner tool. Read-only tools fan out immediately. Write tools require a two-step confirmation flow from every role (see below).
+Fan out any single-router tool call to multiple routers by ID or tag with configurable concurrency. Fleet tools cannot be used as the inner tool. Read-only tools fan out immediately. Write tools require a two-step confirmation flow from every role (see below). To fan out a read-only tool, prefer `bulk_read` (below): it cannot run writes, so a client can allow it without allowing `bulk_execute`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1709,6 +1709,26 @@ Each per-router call runs through the same safety layers as a direct call: autho
 **Example prompt (read-only):** "Run `list_interfaces` on all routers tagged 'branch' and summarize the results."
 
 **Example prompt (write):** "Reboot all routers with tag 'maintenance-window'. First call `bulk_execute` with `toolName: reboot` to get a confirmation token, then re-submit with that token."
+
+---
+
+### `bulk_read` — Read
+
+Fan out a read-only single-router tool to multiple routers by ID or tag — the same targeting, concurrency, and per-router safety layers as `bulk_execute`, restricted to reads. The server accepts an inner tool only if it is annotated `readOnlyHint: true` and is not one of the traffic-generating diagnostics `ping`, `traceroute`, `torch`, or `bandwidth_test`; anything else fails before any router is contacted with `BULK_READ_TOOL_NOT_READ_ONLY`, pointing at `bulk_execute`. Fleet tools are refused with `BULK_SELF_REFERENCE`. There is no confirmation token, snapshot, or journal entry, and, like a direct read, no audit record.
+
+Because the restriction is enforced by the server, a client that approves tools by name (for example a Claude Code permission rule for `mcp__mikromcp__bulk_read`) can allow fleet-wide reads without prompting, while `bulk_execute` stays behind a prompt.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `toolName` | string | — | Name of the read-only single-router tool to fan out (e.g. `list_interfaces`) |
+| `routerIds` | string[] | — | List of router IDs to target (use `tags` or `routerIds`, not both) |
+| `tags` | string[] | — | Target all routers with ALL of these tags (mutually exclusive with `routerIds`) |
+| `params` | object | — | Parameters for the tool call (omit `routerId` — injected per router) |
+| `concurrency` | integer | `5` | Maximum simultaneous calls (1–20) |
+
+Each per-router call goes through authorization, the platform check, the per-router circuit breaker, and automatic retry. A failure on one router does not stop the others; results are aggregated with per-router status and succeeded/failed counts.
+
+**Example prompt:** "Use bulk_read to run `list_ip_addresses` on every router tagged 'home' and flag any subnet configured on more than one router."
 
 ---
 
