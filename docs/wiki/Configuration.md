@@ -23,7 +23,7 @@ routers:
     # sshPort: 22                                        # SSH/SFTP port
     # sshUsername: "automation"                          # optional; defaults to the REST username
     # sshPrivateKeyPath: "/home/mikromcp/.ssh/id_ed25519" # absolute; must be readable at startup
-    # sshFingerprint: "aabbcc..."                        # optional SHA-256 host-key fingerprint (hex)
+    # sshFingerprint: "SHA256:..."                       # optional: pin the SSH host key (SHA256:<base64> or hex)
 
   edge-01:
     host: "192.168.88.1"
@@ -62,7 +62,7 @@ The file is validated strictly at startup — an unknown key or a missing requir
 | `sshPort` | no | SSH/SFTP port (default `22`) |
 | `sshUsername` | no | Separate SSH/SFTP username; defaults to the REST username |
 | `sshPrivateKeyPath` | no | Absolute path to an unencrypted private key. When set, SSH/SFTP never fall back to the REST password. Checked for readability at startup |
-| `sshFingerprint` | no | SHA-256 fingerprint of the SSH host key to pin (hex) |
+| `sshFingerprint` | no | SHA-256 fingerprint of the SSH host key to pin: `SHA256:<base64>` as `ssh-keygen -l` prints it, or hex (colons optional). Checked at startup; SSH and SFTP refuse any other key — see [Pinning the SSH host key](#pinning-the-ssh-host-key) |
 | `cmdAllow` / `cmdDeny` | no | Per-router `run_command` glob policy — see [Per-Router SSH, SFTP, and FTP](#per-router-ssh-sftp-and-ftp) |
 | `maintenanceWindows` | no | Windows outside of which destructive tools are refused — see below |
 
@@ -283,6 +283,31 @@ either client. The file stays local: the registry stores only its path, and
 `list_routers` does not return the path or key contents. Protect the file with
 owner-only permissions such as `0600`. Encrypted private keys are not supported
 by these fields.
+
+### Pinning the SSH host key
+
+With `sshFingerprint` set, the SSH and SFTP clients refuse any host key but the
+pinned one. The value is the `SHA256:<base64>` form that `ssh-keygen -l` prints,
+or the same SHA-256 digest as 64 hex characters (either case, colons optional).
+Any other value fails at startup.
+
+Read the fingerprint over a path you trust, such as a direct cable or the
+management network:
+
+```bash
+ssh-keyscan -p 22 192.168.88.1 2>/dev/null | ssh-keygen -lf -
+```
+
+On a mismatch, every SSH-backed tool fails with `ROUTER_AUTH_FAILED` and code
+`SSH_HOST_KEY_MISMATCH`, and `details` carries the pinned (`expected`) and
+presented (`actual`) fingerprints. A reset, Netinstall or
+`/ip ssh regenerate-host-key` changes the key, and so does another device on that
+address or an intercepted connection. Confirm the new key over a trusted path
+before you put it in `routers.yaml`: the value in the error is only what the other
+end presented. If `ssh-keyscan` lists several keys, the error's `SHA256:` value
+tells you which one MikroMCP was shown. On the router, `/ip ssh export-host-key`
+also writes the private host key to a file (seen on 7.24.2), so delete both
+files right after using it.
 
 If SFTP is unavailable, `upload_file` can fall back to plaintext FTP using the
 REST credentials. Ensure the relevant RouterOS users have the required policies

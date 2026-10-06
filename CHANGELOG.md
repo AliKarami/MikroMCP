@@ -15,6 +15,8 @@ Each release section covers changes **since the previous release only**.
 
 ### Fixed
 - The REST response parser turned a version with a single dot into a number, so a release ending in `0` lost it: `get_upgrade_status` showed RouterOS 7.20 as `7.2` and 7.10 as `7.1`, in both its text and `installedVersion`/`latestVersion`. The same applied to `minimum-version` and the routerboard `*-firmware` fields in `get_system_status`, so one field was a number or a string depending on the value (`7.8` vs `"7.14.2"`). Decimal values of `version`, `*-version` and `*-firmware` fields now stay strings. Integers there, such as a VRRP or IGMP protocol `version` of `3`, still parse as numbers. Closes #101.
+- An SSH host key that did not match `sshFingerprint` made every SSH-backed tool (`run_command`, `export_config`, `ping`, SFTP uploads) fail as `INTERNAL` with ssh2's "Host denied (verification failed)" and the advice to check the server logs. The error did not say which key the router presented. It is now `ROUTER_AUTH_FAILED` with code `SSH_HOST_KEY_MISMATCH`. The message and `details` (`expected`, `actual`) name both fingerprints, in hex and in the `SHA256:` form. The hint says to confirm the router's key over a trusted path instead of copying the presented one. Closes #103.
+- `sshFingerprint` also accepts the `SHA256:<base64>` form that `ssh-keygen -l` prints and hex with colons, like `tls.fingerprint`. Both used to fail every SSH call. A value in neither form now stops the server at startup and names the router, instead of failing each SSH call as `INTERNAL`.
 
 ## [1.13.0] - 2026-10-06
 
