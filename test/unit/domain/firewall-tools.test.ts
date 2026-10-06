@@ -706,8 +706,57 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
     expect(() => schema.parse({ ...base, connectionState: "established,bogus" })).toThrow();
     expect(() => schema.parse({ ...base, connectionState: "" })).toThrow();
     expect(() => schema.parse({ ...base, connectionState: "!invalid" })).not.toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "new,new" })).toThrow(/only once/);
+    expect(() => schema.parse({ ...base, connectionState: "!new,related,new" })).toThrow();
     expect(() => schema.parse({ ...base, toPorts: "8000-8100" })).not.toThrow();
     expect(() => schema.parse({ ...base, toPorts: "https" })).toThrow();
+  });
+
+  it.each([
+    "srcAddress",
+    "dstAddress",
+    "srcPort",
+    "dstPort",
+    "inInterface",
+    "outInterface",
+    "inInterfaceList",
+    "outInterfaceList",
+    "toAddresses",
+  ])("rejects an empty %s", (field) => {
+    // An empty string reached the request body as "" while the idempotency check
+    // treated it as an absent field.
+    const base = { routerId: "r", action: "add", table: "nat", chain: "dstnat" };
+    const parsed = manageFirewallRuleTool.inputSchema.safeParse({
+      ...base,
+      ruleAction: "dst-nat",
+      [field]: "",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects toAddresses "" before touching the router', async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...portForwardParams, toAddresses: "" }, ctx),
+    ).rejects.toMatchObject({ name: "ZodError" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    expect(createMock(ctx)).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["1", true],
+    ["65535", true],
+    ["80-80", true],
+    ["8000-8100", true],
+    ["0", false],
+    ["65536", false],
+    ["99999", false],
+    ["9000-80", false],
+    ["0-80", false],
+    ["80-65536", false],
+  ])("toPorts %s is accepted: %s", (toPorts, valid) => {
+    const base = { routerId: "r", action: "add", chain: "dstnat", ruleAction: "dst-nat" };
+    expect(manageFirewallRuleTool.inputSchema.safeParse({ ...base, toPorts }).success).toBe(valid);
   });
   it("treats a /32 host address as equal to the bare address", async () => {
     const existing = {
@@ -787,6 +836,54 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
         makeContext([existing]),
       ),
     ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
+  });
+
+  it("throws CONFLICT pointing to enable when only the disabled state differs", async () => {
+    // RouterOS sends disabled as a string; the parser turns it into a boolean.
+    const existing = { ...portForward, disabled: "true" };
+    await expect(
+      manageFirewallRuleTool.handler(portForwardParams, makeContext([existing])),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      message: expect.stringContaining("already exists but is disabled"),
+      details: { existing: { disabled: true }, requested: { disabled: false } },
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=enable"] },
+    });
+  });
+
+  it("throws CONFLICT pointing to disable when add asks for a disabled rule", async () => {
+    const existing = { ...portForward, disabled: "false" };
+    const ctx = makeContext([existing]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...portForwardParams, disabled: true }, ctx),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=disable"] },
+    });
+    expect(createMock(ctx)).not.toHaveBeenCalled();
+  });
+
+  it("returns already_exists when the disabled state also matches", async () => {
+    const existing = { ...portForward, disabled: "true" };
+    const result = await manageFirewallRuleTool.handler(
+      { ...portForwardParams, disabled: true },
+      makeContext([existing]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("suggests remove when the match differs as well as the disabled state", async () => {
+    const existing = { ...portForward, disabled: "true" };
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...portForwardParams, toAddresses: "192.168.88.20" },
+        makeContext([existing]),
+      ),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      message: expect.stringContaining("different configuration"),
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=remove"] },
+    });
   });
 
   it("treats protocol all as no protocol match", async () => {

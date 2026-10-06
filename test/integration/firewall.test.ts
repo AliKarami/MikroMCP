@@ -124,6 +124,15 @@ describe("manage_firewall_rule lifecycle against live CHR", () => {
     expect(result.structuredContent.action).toBe("no_change");
   });
 
+  it("add on the disabled rule throws CONFLICT pointing to enable", async () => {
+    await expect(
+      runTool(harness.context, "manage_firewall_rule", { action: "add", ...RULE }),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=enable"] },
+    });
+  });
+
   it("enable toggles the rule back on", async () => {
     const result = await runTool(harness.context, "manage_firewall_rule", {
       action: "enable",
