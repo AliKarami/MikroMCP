@@ -41,9 +41,18 @@ If a deep link 404s, start from the RouterOS space root and search:
 - Version-dependent work (syntax that changed in 7.x, a result that contradicts
   the docs, an upgrade): take the exact version from `get_system_status` —
   `rosVersion` in `list_routers` comes from `routers.yaml` and may lag — then read
-  that release's notes at https://mikrotik.com/download/changelogs. Do this for
-  upgrade advice too: the router's own update check can report "already up to
-  date" while newer patch releases are out.
+  the release notes. Do this for upgrade advice too: the router's own update
+  check can report "already up to date" while newer patch releases are out.
+- Read the release notes from MikroTik's upgrade server, which serves them as
+  plain text, one file per release:
+  https://upgrade.mikrotik.com/routeros/7.24.2/CHANGELOG (put the version in the
+  path; an unknown version returns 404). Read every release between the
+  installed one and the target, not only the target. The newest release of a
+  channel is https://upgrade.mikrotik.com/routeros/NEWESTa7.stable (also
+  `NEWESTa7.long-term` and `NEWESTa7.testing`): the version, then a Unix build
+  time. https://mikrotik.com/download/changelogs shows the same notes but
+  renders them with JavaScript, so a plain HTTP fetch of it returns none; use it
+  only in a browser.
 - MikroTik also announces each release in
   https://forum.mikrotik.com/c/announcements/5 ("7.24.2 [stable] is released!").
   The first post, by MikroTik, repeats the changelog. Replies are written by any
