@@ -13,6 +13,9 @@ Each release section covers changes **since the previous release only**.
 ### Changed
 - `manage_mangle_rule` `add` compared only the chain, addresses, address lists, and routing/connection marks of an existing rule with the same comment. A rule that differed in `protocol`, `srcPort`/`dstPort`, `inInterface`/`outInterface`, `newDscpValue`, or `passthrough` returned `already_exists` and was left as it was. These fields now take part in the check, so such an `add` throws `MANGLE_RULE_CONFLICT`, and the CONFLICT `existing`/`requested` details list every compared field. An omitted `passthrough` counts as `yes` on both sides, because RouterOS reports `passthrough=true` on a rule added without it.
 
+### Fixed
+- `manage_routing_rule` compared the table name with strict equality, while the REST response parser turns a numeric name such as `100` into a number. A rule in a table with a numeric name was never found: a repeated `add` created a duplicate, and `remove`/`enable`/`disable` reported it missing. `list_routing_rules` filtered such tables out for the same reason. Both now compare the table with `sameRuleValue`.
+
 ## [1.12.0] - 2026-10-06
 
 This release is largely the work of [@akuzin87](https://github.com/akuzin87) (Alex). He privately reported the confirmation-gate gap fixed under Security, and contributed `bulk_read`, the REST-based `traceroute` and `torch`, three new list tools, NAT and connection-state matching in `manage_firewall_rule`, and the filter-encoding and SSH-login fixes. Each came with a clear write-up and live verification against real routers. Thank you, Alex.

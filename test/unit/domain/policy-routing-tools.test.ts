@@ -3,6 +3,7 @@ import { policyRoutingTools } from "../../../src/domain/tools/policy-routing-too
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { z } from "zod";
+import { parseRecord } from "../../../src/adapter/response-parser.js";
 
 const listRoutingRulesTool = policyRoutingTools[0];
 const manageRoutingRuleTool = policyRoutingTools[1];
@@ -364,5 +365,35 @@ describe("manage_routing_rule - composite key comparison", () => {
       makeContext([existing]),
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  // RouterOS allows a numeric table name; the response parser turns "100" into 100.
+  const numericTableRule = parseRecord({
+    ".id": "*5",
+    action: "lookup",
+    disabled: "false",
+    "src-address": "192.168.1.0/24",
+    table: "100",
+  });
+
+  it("finds a rule whose table name is numeric", async () => {
+    const ctx = makeContext([numericTableRule]);
+    const result = await manageRoutingRuleTool.handler(
+      { routerId: "test-router", action: "add", table: "100", srcAddress: "192.168.1.0/24" },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+      typeof vi.fn
+    >;
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("list_routing_rules filters by a numeric table name", async () => {
+    const result = await listRoutingRulesTool.handler(
+      { routerId: "test-router", table: "100" },
+      makeContext([numericTableRule]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
   });
 });
