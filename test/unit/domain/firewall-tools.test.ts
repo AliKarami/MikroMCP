@@ -789,6 +789,24 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
     ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
   });
 
+  it("treats protocol all as no protocol match", async () => {
+    const base = {
+      routerId: "test-router",
+      action: "add",
+      chain: "forward",
+      ruleAction: "accept",
+      protocol: "all",
+      comment: "any-proto",
+    };
+    const unset = { ".id": "*F", chain: "forward", action: "accept", comment: "any-proto" };
+    const same = await manageFirewallRuleTool.handler(base, makeContext([unset]));
+    expect((same.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    await expect(
+      manageFirewallRuleTool.handler(base, makeContext([{ ...unset, protocol: "tcp" }])),
+    ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
+  });
+
   it("rejects NAT targets that the rule action does not accept", async () => {
     const nat = { routerId: "test-router", action: "add", table: "nat", dryRun: true };
     await expect(
