@@ -3,6 +3,7 @@ import { z } from "zod";
 import { enrichError } from "../../../src/domain/errors/error-enricher.js";
 import { errors as undiciErrors } from "undici";
 import { HttpError } from "../../../src/adapter/rest-client.js";
+import { pinHostKey } from "../../../src/adapter/ssh-host-key.js";
 import { ErrorCategory, MikroMCPError } from "../../../src/domain/errors/error-types.js";
 
 describe("enrichError", () => {
@@ -92,6 +93,40 @@ describe("enrichError", () => {
     expect(result.details).toMatchObject({ transport: "ssh", routerId: "r1", tool: "ping" });
     expect(result.recoverability.retryable).toBe(false);
     expect(result.recoverability.suggestedAction).toContain("/ip service ssh");
+  });
+
+  it("maps a refused SSH host key to ROUTER_AUTH_FAILED with both fingerprints", () => {
+    const pin = pinHostKey("ab".repeat(32));
+    pin.hostVerifier(Buffer.from("router-host-key"));
+    const refused = pin.connectionError(
+      Object.assign(new Error("Host denied (verification failed)"), { level: "handshake" }),
+    );
+
+    const result = enrichError(refused, { routerId: "r1", tool: "run_command" });
+
+    expect(result.category).toBe(ErrorCategory.ROUTER_AUTH_FAILED);
+    expect(result.code).toBe("SSH_HOST_KEY_MISMATCH");
+    expect(result.message).toContain(`Expected: ${"ab".repeat(32)}, got: `);
+    expect(result.details).toMatchObject({
+      transport: "ssh",
+      expected: "ab".repeat(32),
+      actual: (refused as Error & { actual: string }).actual,
+      routerId: "r1",
+      tool: "run_command",
+    });
+    expect(result.recoverability.retryable).toBe(false);
+    expect(result.recoverability.suggestedAction).toContain("unverified");
+  });
+
+  it("keeps an ssh2 handshake error without a refused host key INTERNAL", () => {
+    // ssh2 uses level "handshake" for algorithm negotiation failures as well.
+    const sshErr = Object.assign(
+      new Error("Handshake failed: no matching key exchange algorithm"),
+      {
+        level: "handshake",
+      },
+    );
+    expect(enrichError(sshErr).category).toBe(ErrorCategory.INTERNAL);
   });
 
   it("keeps an ssh2 client-socket error classified by its errno code", () => {

@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { DeviceType, RouterConfig } from "../types.js";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 import { createLogger } from "../observability/logger.js";
-import { privateKeyIsShared, privateKeyReadError } from "./ssh-key.js";
+import { privateKeyIsShared, privateKeyReadError, sshFingerprintHex } from "./ssh-key.js";
 
 const log = createLogger("router-registry");
 
@@ -51,7 +51,22 @@ const RouterConfigSchema = z
       .min(1)
       .refine(isAbsolute, "sshPrivateKeyPath must be absolute")
       .optional(),
-    sshFingerprint: z.string().optional(),
+    // Stored as lowercase hex, the form SshClient compares. A malformed value can
+    // never match a host key, so it fails here instead of on every SSH call.
+    sshFingerprint: z
+      .string()
+      .transform((value, ctx) => {
+        const hex = sshFingerprintHex(value);
+        if (hex !== null) return hex;
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "sshFingerprint must be a SHA-256 host-key fingerprint: 64 hex characters " +
+            "(colons allowed) or SHA256:<base64> as ssh-keygen -l prints it",
+        });
+        return z.NEVER;
+      })
+      .optional(),
     cmdAllow: z.array(z.string()).optional(),
     cmdDeny: z.array(z.string()).optional(),
     maintenanceWindows: z

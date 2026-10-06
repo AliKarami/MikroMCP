@@ -70,7 +70,7 @@ Add `MIKROMCP_LOG_LEVEL=debug` to any of the commands above for verbose output.
 
 | Symptom | Likely cause |
 |---|---|
-| `ROUTER_AUTH_FAILED` | Wrong credentials or RouterOS user lacks `api` / `rest-api` policy; code `SSH_AUTH_FAILED` — the router refused the SSH login (no `ssh` policy, a key in `/user ssh-keys` blocking password login, wrong `sshPrivateKeyPath`) |
+| `ROUTER_AUTH_FAILED` | Wrong credentials or RouterOS user lacks `api` / `rest-api` policy; code `SSH_AUTH_FAILED` — the router refused the SSH login (no `ssh` policy, a key in `/user ssh-keys` blocking password login, wrong `sshPrivateKeyPath`); code `SSH_HOST_KEY_MISMATCH` — the router presented a different SSH host key than `sshFingerprint` pins (re-keyed router or an intercepted connection; see [Pinning the SSH host key](Configuration#pinning-the-ssh-host-key)) |
 | `ROUTER_UNREACHABLE` | Router IP or port unreachable — check firewall and `/ip service` on the router |
 | `CONFIGURATION` error on startup | `MIKROMCP_CONFIG_PATH` is wrong, file missing, or YAML is invalid |
 | No tools visible in AI client | Restart the client after updating `mcpServers` config; check server logs for startup errors |

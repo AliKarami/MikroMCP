@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Client } from "ssh2";
 import type { RouterConfig } from "../types.js";
+import { pinHostKey } from "./ssh-host-key.js";
 
 export interface SshClientOptions {
   commandTimeoutMs?: number;
@@ -30,6 +30,7 @@ export class SshClient {
 
     return new Promise((resolve, reject) => {
       const conn = new Client();
+      const pin = this.config.sshFingerprint ? pinHostKey(this.config.sshFingerprint) : undefined;
       const chunks: Buffer[] = [];
       let outputSize = 0;
       let truncated = false;
@@ -98,7 +99,7 @@ export class SshClient {
         });
       });
 
-      conn.on("error", (err) => cleanup(err));
+      conn.on("error", (err) => cleanup(pin ? pin.connectionError(err) : err));
 
       const connectOptions: Record<string, unknown> = {
         host: this.config.host,
@@ -110,13 +111,7 @@ export class SshClient {
       if (privateKey) connectOptions.privateKey = privateKey;
       else connectOptions.password = this.credentials.password;
 
-      if (this.config.sshFingerprint) {
-        const expected = this.config.sshFingerprint.toLowerCase();
-        connectOptions.hostVerifier = (key: Buffer): boolean => {
-          const actual = createHash("sha256").update(key).digest("hex");
-          return actual === expected;
-        };
-      }
+      if (pin) connectOptions.hostVerifier = pin.hostVerifier;
 
       conn.connect(connectOptions as Parameters<Client["connect"]>[0]);
     });

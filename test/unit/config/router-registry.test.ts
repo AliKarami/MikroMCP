@@ -123,8 +123,13 @@ routers:
     expect(registry.getRouter("home").tls.fingerprint).toBe("aabbccddeeff001122334455");
   });
 
-  it("accepts optional sshFingerprint field", () => {
-    const path = tempYaml(`
+  describe("sshFingerprint", () => {
+    // One host key's SHA-256 fingerprint, as `ssh-keygen -l` printed it and in hex.
+    const OPENSSH = "SHA256:/pFuF0JSInnDoxpZCoxNshKSHQQDXZk5iP8pWAjiTyA";
+    const HEX = "fe916e1742522279c3a31a590a8c4db212921d04035d993988ff295808e24f20";
+
+    function yamlWithFingerprint(value: string): string {
+      return `
 routers:
   home:
     host: 192.168.1.1
@@ -137,10 +142,30 @@ routers:
       envPrefix: ROUTER_HOME
     tags: []
     rosVersion: "7"
-    sshFingerprint: "sha256hexvalue"
-`);
-    const registry = new RouterRegistry(path);
-    expect(registry.getRouter("home").sshFingerprint).toBe("sha256hexvalue");
+    sshFingerprint: "${value}"
+`;
+    }
+
+    it.each([
+      ["lowercase hex", HEX],
+      ["uppercase hex", HEX.toUpperCase()],
+      ["hex with colons", HEX.match(/../g)!.join(":")],
+      ["the SHA256:<base64> form of ssh-keygen -l", OPENSSH],
+    ])("accepts %s and stores lowercase hex", (_label, value) => {
+      const registry = new RouterRegistry(tempYaml(yamlWithFingerprint(value)));
+      expect(registry.getRouter("home").sshFingerprint).toBe(HEX);
+    });
+
+    it.each([
+      ["a short hex value", "sha256hexvalue"],
+      ["hex one character short", HEX.slice(0, -1)],
+      ["an MD5 fingerprint", "MD5:16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48"],
+      ["a truncated SHA256 form", OPENSSH.slice(0, -1)],
+    ])("rejects %s at load, naming the router and the accepted formats", (_label, value) => {
+      expect(() => new RouterRegistry(tempYaml(yamlWithFingerprint(value)))).toThrow(
+        /routers\.home\.sshFingerprint: sshFingerprint must be a SHA-256 host-key fingerprint/,
+      );
+    });
   });
 
   it("accepts a separate SSH username and absolute private-key path", () => {
