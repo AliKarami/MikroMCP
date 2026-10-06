@@ -201,18 +201,26 @@ const manageFirewallRuleInputSchema = z
       .describe("Action to perform: add, remove, disable, or enable a firewall rule"),
     chain: z.string().describe("Firewall chain (e.g. forward, input, output, srcnat, dstnat)"),
     ruleAction: z.string().describe("RouterOS rule action (e.g. accept, drop, reject, masquerade)"),
-    srcAddress: z.string().optional().describe("Source address or network"),
-    dstAddress: z.string().optional().describe("Destination address or network"),
+    srcAddress: z.string().min(1).optional().describe("Source address or network"),
+    dstAddress: z.string().min(1).optional().describe("Destination address or network"),
     protocol: z
       .enum(["tcp", "udp", "icmp", "gre", "ospf", "all"])
       .optional()
       .describe("Protocol to match"),
-    srcPort: z.string().optional().describe("Source port or range"),
-    dstPort: z.string().optional().describe("Destination port or range"),
-    inInterface: z.string().optional().describe("Incoming interface"),
-    outInterface: z.string().optional().describe("Outgoing interface"),
-    inInterfaceList: z.string().optional().describe("Incoming interface list, e.g. WAN or !LAN"),
-    outInterfaceList: z.string().optional().describe("Outgoing interface list, e.g. WAN or !LAN"),
+    srcPort: z.string().min(1).optional().describe("Source port or range"),
+    dstPort: z.string().min(1).optional().describe("Destination port or range"),
+    inInterface: z.string().min(1).optional().describe("Incoming interface"),
+    outInterface: z.string().min(1).optional().describe("Outgoing interface"),
+    inInterfaceList: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Incoming interface list, e.g. WAN or !LAN"),
+    outInterfaceList: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Outgoing interface list, e.g. WAN or !LAN"),
     connectionState: z
       .string()
       .regex(new RegExp(`^!?${CONNECTION_STATE}(,${CONNECTION_STATE})*$`))
@@ -227,6 +235,7 @@ const manageFirewallRuleInputSchema = z
       .describe("Connection NAT state to match, e.g. dstnat or !dstnat"),
     toAddresses: z
       .string()
+      .min(1)
       .optional()
       .describe("NAT target address or range (nat table only, e.g. dst-nat)"),
     toPorts: z

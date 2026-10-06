@@ -742,6 +742,37 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
   });
 
   it.each([
+    "srcAddress",
+    "dstAddress",
+    "srcPort",
+    "dstPort",
+    "inInterface",
+    "outInterface",
+    "inInterfaceList",
+    "outInterfaceList",
+    "toAddresses",
+  ])("rejects an empty %s", (field) => {
+    // An empty string reached the request body as "" while the idempotency check
+    // treated it as an absent field.
+    const base = { routerId: "r", action: "add", table: "nat", chain: "dstnat" };
+    const parsed = manageFirewallRuleTool.inputSchema.safeParse({
+      ...base,
+      ruleAction: "dst-nat",
+      [field]: "",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects toAddresses "" before touching the router', async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...portForwardParams, toAddresses: "" }, ctx),
+    ).rejects.toMatchObject({ name: "ZodError" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    expect(createMock(ctx)).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ["1", true],
     ["65535", true],
     ["80-80", true],
