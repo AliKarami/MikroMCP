@@ -58,7 +58,7 @@ const bulkExecuteInputSchema = z
       .string()
       .optional()
       .describe(
-        "Fleet confirmation token from a prior APPROVAL_REQUIRED response. Required to fan out a destructive tool.",
+        "Fleet confirmation token from a prior APPROVAL_REQUIRED response. Required to fan out any write tool.",
       ),
   })
   .strict();
@@ -208,11 +208,11 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
     name: "bulk_execute",
     title: "Bulk Execute",
     description:
-      "Fan out a single-router tool to many routers in parallel (up to `concurrency`), targeted by routerIds or tag. Destructive tools need two-step confirmation: call without `confirmationToken` to get a fleet token (needs MIKROMCP_CONFIRMATION_SECRET), then re-call with it. Writes snapshot+journal each router for rollback. Returns per-router results with succeeded/failed counts.",
+      "Fan out a single-router tool to many routers in parallel (up to `concurrency`), targeted by routerIds or tag. Write tools need two-step confirmation for every role: call without `confirmationToken` to get a fleet token, then re-call with it. Read-only tools fan out immediately. Writes snapshot+journal each router for rollback. Returns per-router results with succeeded/failed counts.",
     inputSchema: bulkExecuteInputSchema,
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: false,
     },
@@ -311,20 +311,11 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           .filter((r) => tags.every((t) => r.tags.includes(t)));
       }
 
-      if (targetTool.annotations.destructiveHint) {
-        const secret = context.appConfig.confirmationSecret;
-        if (!secret) {
-          throw new MikroMCPError({
-            category: ErrorCategory.CONFIGURATION,
-            code: "FLEET_CONFIRMATION_UNAVAILABLE",
-            message:
-              "Fanning out a destructive tool requires MIKROMCP_CONFIRMATION_SECRET to be configured.",
-            recoverability: {
-              retryable: false,
-              suggestedAction: "Set MIKROMCP_CONFIRMATION_SECRET, or call the tool per-router.",
-            },
-          });
-        }
+      const isWrite = !targetTool.annotations.readOnlyHint;
+
+      // Every write is gated, not only destructive ones: a fan-out multiplies the
+      // blast radius of any write, and an annotation slip must not open the fleet.
+      if (isWrite) {
         const routerIdList = routers.map((r) => r.id);
         checkFleetConfirmation(
           {
@@ -334,7 +325,7 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             identityId: context.identity.id,
             submittedToken: parsed.confirmationToken,
           },
-          secret,
+          context.appConfig.confirmationSecret,
         );
       }
 
@@ -365,7 +356,6 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
         };
       }
 
-      const isWrite = !targetTool.annotations.readOnlyHint;
       const snapshotDir = context.appConfig.snapshotDir;
       const journalPath = context.appConfig.journalPath;
 

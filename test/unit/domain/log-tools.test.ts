@@ -57,9 +57,9 @@ describe("logTools", () => {
       expect(manageRuleTool.annotations.readOnlyHint).toBe(false);
       expect(manageActionTool.annotations.readOnlyHint).toBe(false);
     });
-    it("manage tools are not destructive", () => {
-      expect(manageRuleTool.annotations.destructiveHint).toBe(false);
-      expect(manageActionTool.annotations.destructiveHint).toBe(false);
+    it("manage tools are destructive (removing a rule or action silences logging)", () => {
+      expect(manageRuleTool.annotations.destructiveHint).toBe(true);
+      expect(manageActionTool.annotations.destructiveHint).toBe(true);
     });
   });
 

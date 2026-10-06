@@ -155,11 +155,11 @@ const uploadFileTool: ToolDefinition = {
   name: "upload_file",
   title: "Upload File",
   description:
-    "Upload a text file to a router, overwriting any existing file of the same name. Prefers SFTP (encrypted, over SSH) and falls back to plaintext FTP if SFTP is unavailable. Requires SSH (or FTP) access for the router user. Dry-run tests connectivity only.",
+    "Upload a text file to a router, overwriting any existing file of the same name. Prefers SFTP (encrypted, over SSH) and falls back to plaintext FTP if SFTP is unavailable. Requires SSH (or FTP) access for the router user. RouterOS runs a file named *.auto.rsc as a script when it arrives over FTP. Dry-run tests connectivity only.",
   inputSchema: uploadFileInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

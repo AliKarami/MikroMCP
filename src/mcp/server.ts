@@ -19,7 +19,7 @@ import { VERSION } from "../version.js";
 export const SERVER_INSTRUCTIONS = [
   "MikroMCP manages MikroTik RouterOS routers and SwOS switches.",
   "Reads are safe; treat writes as consequential — preview a write with dryRun:true and review the diff before applying.",
-  "Destructive operations may require a two-step confirmation token.",
+  "Destructive operations and fleet writes need a two-step confirmation token: on APPROVAL_REQUIRED, tell the user what will change before re-submitting with it.",
   "Writes are idempotent: already_exists and no_change are success, not errors.",
   "Prefer dedicated tools over run_command.",
   "routerId is optional when a default router is configured.",

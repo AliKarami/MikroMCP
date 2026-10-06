@@ -33,7 +33,7 @@ Read the current date, time, and timezone from the router.
 
 ---
 
-### `set_system_clock` — Write · Idempotent
+### `set_system_clock` — Write · Destructive · Idempotent
 
 Set the system date, time, and/or timezone. Returns `already_set` if no change is needed.
 
@@ -127,7 +127,7 @@ Check available RouterOS/firmware upgrades, current channel, and routerboard fir
 
 ---
 
-### `manage_upgrade` — Destructive
+### `manage_upgrade` — Write · Destructive
 
 Trigger a RouterOS package update check or start an upgrade installation. The `install` action causes a router reboot.
 
@@ -143,7 +143,7 @@ Trigger a RouterOS package update check or start an upgrade installation. The `i
 
 ## Backup & Config Export
 
-### `create_backup` — Write
+### `create_backup` — Write · Destructive
 
 Create a binary RouterOS configuration backup file on the router filesystem. Optionally encrypt with a password.
 
@@ -158,7 +158,7 @@ Create a binary RouterOS configuration backup file on the router filesystem. Opt
 
 ---
 
-### `export_config` — Write
+### `export_config` — Write · Destructive
 
 Export the running RouterOS configuration as a RouterOS script (equivalent to `/export`). Returns the full config text inline, or saves to a router file.
 
@@ -233,7 +233,7 @@ List RouterOS scheduler entries with next-run time, interval, and disabled state
 
 ---
 
-### `manage_scheduled_job` — Write · Idempotent
+### `manage_scheduled_job` — Write · Destructive · Idempotent
 
 Add, update, remove, enable, or disable a RouterOS scheduler entry. `add` throws `CONFLICT` if the name already exists; `update` throws `NOT_FOUND` if it does not.
 
@@ -282,7 +282,7 @@ Read a text file's contents from a MikroTik router. Only suitable for text files
 
 ---
 
-### `upload_file` — Write
+### `upload_file` — Write · Destructive
 
 Upload a text file to a MikroTik router. Overwrites if the file already exists. Prefers **SFTP** (encrypted, over SSH) and falls back to plaintext **FTP** only if SFTP is unavailable; the result's `structuredContent.transport` reports which was used.
 
@@ -355,7 +355,7 @@ List network interfaces with optional filtering and pagination.
 
 ---
 
-### `manage_vlan` — Write · Idempotent
+### `manage_vlan` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable a VLAN sub-interface. Idempotent by `name`. `add` returns `already_exists` when the interface already exists with matching config; throws `CONFLICT` if it exists with different config.
 
@@ -391,7 +391,7 @@ List bridge interfaces and their port members.
 
 ---
 
-### `manage_bridge` — Write · Idempotent
+### `manage_bridge` — Write · Destructive · Idempotent
 
 Create or remove a bridge interface. Returns `already_exists` if the bridge already exists.
 
@@ -408,7 +408,7 @@ Create or remove a bridge interface. Returns `already_exists` if the bridge alre
 
 ---
 
-### `manage_bridge_port` — Write · Idempotent
+### `manage_bridge_port` — Write · Destructive · Idempotent
 
 Add or remove an interface as a bridge port. Returns `already_exists` if the interface is already a member.
 
@@ -520,7 +520,7 @@ List WireGuard peers with last handshake time and transfer statistics.
 
 ---
 
-### `manage_wireguard_peer` — Write · Idempotent
+### `manage_wireguard_peer` — Write · Destructive · Idempotent
 
 Add or remove a WireGuard peer. Idempotent by public key: `add` returns `already_exists` if a peer with the same public key already exists on the interface.
 
@@ -557,7 +557,7 @@ List IPv4 addresses assigned to interfaces, including dynamic ones (DHCP client,
 
 ---
 
-### `manage_ip_address` — Write · Idempotent
+### `manage_ip_address` — Write · Destructive · Idempotent
 
 Add, update, or remove an IP address on an interface.
 
@@ -594,7 +594,7 @@ List static DNS entries with optional filtering by hostname and record type.
 
 ---
 
-### `manage_dns_entry` — Write · Idempotent
+### `manage_dns_entry` — Write · Destructive · Idempotent
 
 Add or remove a static DNS entry. Idempotent by name+type.
 
@@ -697,7 +697,7 @@ List IP address pools and their ranges. Pools serve any subsystem (DHCP, PPP, ho
 
 ---
 
-### `manage_ip_pool` — Write · Idempotent
+### `manage_ip_pool` — Write · Destructive · Idempotent
 
 Add or remove an IP address pool. Idempotent by `name`.
 
@@ -714,7 +714,7 @@ Add or remove an IP address pool. Idempotent by `name`.
 
 ---
 
-### `manage_dhcp_lease` — Write · Idempotent
+### `manage_dhcp_lease` — Write · Destructive · Idempotent
 
 Convert a dynamic DHCP lease to static or remove a lease. Idempotent by MAC address — `make-static` is a no-op when the lease is already static.
 
@@ -745,7 +745,7 @@ List DHCP client configurations — which interfaces obtain their IP address via
 
 ---
 
-### `manage_dhcp_client` — Write · Idempotent
+### `manage_dhcp_client` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable a DHCP client on an interface. Idempotent by `interface`.
 
@@ -780,7 +780,7 @@ List RouterOS IP services with their port, enabled/disabled status, and allowed 
 
 ---
 
-### `manage_ip_service` — Write · Idempotent
+### `manage_ip_service` — Write · Destructive · Idempotent
 
 Enable or disable a RouterOS IP service. Port changes are intentionally excluded to prevent accidental lockout. Returns `no_change` when the service is already in the requested state.
 
@@ -813,7 +813,7 @@ List PPPoE client interfaces on a MikroTik router with connection state, assigne
 
 ---
 
-### `manage_pppoe_client` — Write · Idempotent
+### `manage_pppoe_client` — Write · Destructive · Idempotent
 
 Add, update, or remove a PPPoE client interface. Idempotent by name: add returns `already_exists` when the same name, interface, and user already exist. Update returns `no_change` when all specified fields already match. Password is always written when provided (RouterOS does not expose it in GET).
 
@@ -848,7 +848,7 @@ List OpenVPN client interfaces on a MikroTik router with connection state and re
 
 ---
 
-### `manage_ovpn_client` — Write · Idempotent
+### `manage_ovpn_client` — Write · Destructive · Idempotent
 
 Add, update, or remove an OpenVPN client interface. Idempotent by name: add returns `already_exists` when the same name and `connectTo` already exist. Update returns `no_change` when all specified fields already match. Password is always written when provided.
 
@@ -922,7 +922,7 @@ List the routing table with optional filtering.
 
 ---
 
-### `manage_route` — Write · Idempotent
+### `manage_route` — Write · Destructive · Idempotent
 
 Add or remove a static route. Plain IP addresses without a prefix are auto-converted to `/32`.
 
@@ -1052,7 +1052,7 @@ List firewall rules in evaluation order.
 
 ---
 
-### `manage_firewall_rule` — Write · Idempotent
+### `manage_firewall_rule` — Write · Destructive · Idempotent
 
 Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match or NAT-target config; a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
 
@@ -1198,7 +1198,7 @@ List IPSec policy entries (traffic selectors).
 
 ---
 
-### `manage_ipsec_peer` — Write · Idempotent
+### `manage_ipsec_peer` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable an IPSec peer. Idempotent by `name`. Throws `CONFLICT` if the peer exists with different config.
 
@@ -1235,7 +1235,7 @@ List router certificates with validity, fingerprint, and usage flags.
 
 ---
 
-### `manage_certificate` — Write · Idempotent
+### `manage_certificate` — Write · Destructive · Idempotent
 
 Trust, untrust, or remove a certificate. Idempotent by `name`.
 
@@ -1335,7 +1335,7 @@ List simple queue entries with their targets, limits, and current rates.
 
 ---
 
-### `manage_queue` — Write · Idempotent
+### `manage_queue` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable a simple queue. Idempotent by `name`.
 
@@ -1417,7 +1417,7 @@ Read NTP client configuration: enabled state, primary and secondary server addre
 
 ---
 
-### `manage_ntp_client` — Write
+### `manage_ntp_client` — Write · Destructive
 
 Configure the RouterOS NTP client: enable/disable, set server addresses, mode, and optional VLAN source interface. Idempotent — no-op when values already match. Complements `get_ntp_settings`.
 
@@ -1451,7 +1451,7 @@ List Netwatch monitoring entries with their target hosts, probe intervals, and c
 
 ---
 
-### `manage_netwatch_entry` — Write · Idempotent
+### `manage_netwatch_entry` — Write · Destructive · Idempotent
 
 Add, remove, enable, or disable a Netwatch monitoring entry. Idempotent by `host`.
 
@@ -1591,7 +1591,7 @@ List RouterOS system logging rules with topics, action target, and enabled statu
 
 ---
 
-### `manage_log_rule` — Write
+### `manage_log_rule` — Write · Destructive
 
 Add, remove, enable, or disable a RouterOS system logging rule. Idempotent by topics+action composite key.
 
@@ -1622,7 +1622,7 @@ List RouterOS log action targets (memory, disk, remote syslog, etc.).
 
 ---
 
-### `manage_log_action` — Write
+### `manage_log_action` — Write · Destructive
 
 Add or remove a RouterOS log action target. Idempotent by name. `type` is required when adding.
 
@@ -1722,9 +1722,9 @@ Probe one device — RouterOS routers via `system/resource`, SwOS switches via `
 
 ---
 
-### `bulk_execute` — Write
+### `bulk_execute` — Write · Destructive
 
-Fan out any single-router tool call to multiple routers by ID or tag with configurable concurrency. Fleet tools cannot be used as the inner tool. Non-destructive tools fan out immediately. Destructive tools require a two-step confirmation flow (see below).
+Fan out any single-router tool call to multiple routers by ID or tag with configurable concurrency. Fleet tools cannot be used as the inner tool. Read-only tools fan out immediately. Write tools require a two-step confirmation flow from every role (see below).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1733,11 +1733,11 @@ Fan out any single-router tool call to multiple routers by ID or tag with config
 | `tags` | string[] | — | Target all routers with ALL of these tags (mutually exclusive with `routerIds`) |
 | `params` | object | — | Parameters for the tool call (omit `routerId` — injected per router) |
 | `concurrency` | integer | `5` | Maximum simultaneous calls (1–20) |
-| `confirmationToken` | string | — | Fleet confirmation token from a prior `APPROVAL_REQUIRED` response. Required to fan out a destructive tool. |
+| `confirmationToken` | string | — | Fleet confirmation token from a prior `APPROVAL_REQUIRED` response. Required to fan out any write tool. |
 
-#### Fanning out destructive tools (two-step confirmation)
+#### Fanning out write tools (two-step confirmation)
 
-Destructive tools (those with `destructiveHint: true`) require `MIKROMCP_CONFIRMATION_SECRET` to be configured on the server. The flow is:
+Any inner tool that is not read-only needs a fleet token. Tokens are signed with `MIKROMCP_CONFIRMATION_SECRET`, or with a random per-process secret when it is unset (such tokens stop working after a restart). The flow is:
 
 1. Call `bulk_execute` with the desired `toolName`, `routerIds`/`tags`, and `params` — **without** `confirmationToken`. The server returns an `APPROVAL_REQUIRED` error containing a `confirmationToken` in its `details`.
 2. Re-submit the **identical** call with `confirmationToken` set to the value from step 1. The tool fans out to all resolved routers.
@@ -1746,9 +1746,9 @@ Tokens expire after 5 minutes and are single-use. If the router set or params ch
 
 Each per-router call runs through the same safety layers as a direct call: authorization, maintenance-window enforcement (destructive tools are blocked per-router outside a configured window and reported as that router's error), the per-router circuit breaker, and automatic retry for read-only inner tools. A failure or blocked window on one router does not stop the others — results are aggregated with per-router status.
 
-**Example prompt (non-destructive):** "Run `list_interfaces` on all routers tagged 'branch' and summarize the results."
+**Example prompt (read-only):** "Run `list_interfaces` on all routers tagged 'branch' and summarize the results."
 
-**Example prompt (destructive):** "Reboot all routers with tag 'maintenance-window'. First call `bulk_execute` with `toolName: reboot` to get a confirmation token, then re-submit with that token."
+**Example prompt (write):** "Reboot all routers with tag 'maintenance-window'. First call `bulk_execute` with `toolName: reboot` to get a confirmation token, then re-submit with that token."
 
 ---
 
@@ -1774,7 +1774,7 @@ Update DNS resolver settings. Idempotent — returns `no_change` if nothing diff
 
 ## Files
 
-### `delete_file` — Write
+### `delete_file` — Write · Destructive
 
 Delete a file from the router filesystem by name. Idempotent — returns `not_found` gracefully if the file does not exist.
 
@@ -1845,7 +1845,7 @@ Read global container configuration: registry URL, RAM high-water mark, and veth
 
 ---
 
-### `manage_container_config` — Write · Idempotent
+### `manage_container_config` — Write · Destructive · Idempotent
 
 Update global container settings (registry URL, RAM high-water mark, veth interface). Idempotent — returns `no_change` if nothing differs.
 
@@ -1875,7 +1875,7 @@ List container environment variable entries, optionally filtered by container na
 
 ---
 
-### `manage_container_env` — Write · Idempotent
+### `manage_container_env` — Write · Destructive · Idempotent
 
 Add or remove a container environment variable. Idempotent by `name`+`key`. `add` returns `already_exists` if the entry matches; throws `CONFLICT` if the key exists with a different value.
 
@@ -1906,7 +1906,7 @@ List container volume mount definitions with source path, destination path, and 
 
 ---
 
-### `manage_container_mount` — Write · Idempotent
+### `manage_container_mount` — Write · Destructive · Idempotent
 
 Add or remove a container volume mount. Idempotent by `name`. `add` returns `already_exists` if mount exists with matching paths; throws `CONFLICT` if name exists with different paths.
 
@@ -1941,7 +1941,7 @@ Run a RouterOS bandwidth test from the router to a remote host running a RouterO
 
 ---
 
-### `fetch_url` — Write
+### `fetch_url` — Write · Destructive
 
 Send an HTTP/HTTPS GET or POST request from the router. Response body returned inline (capped at 64 KB). Use `outputFile` to save to the router filesystem instead.
 
@@ -2053,7 +2053,7 @@ List PPP profiles including the built-in `default` and `default-encryption` prof
 
 ---
 
-### `manage_ppp_profile` — Write · Idempotent
+### `manage_ppp_profile` — Write · Destructive · Idempotent
 
 Add, update, or remove a PPP profile. Idempotent by name. `update` returns `no_change` when values already match. Built-in profiles cannot be removed.
 

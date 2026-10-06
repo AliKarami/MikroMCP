@@ -205,7 +205,7 @@ const manageNetwatchEntryTool: ToolDefinition = {
   inputSchema: manageNetwatchEntryInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
@@ -527,7 +527,7 @@ const manageNtpClientTool: ToolDefinition = {
   inputSchema: manageNtpClientInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

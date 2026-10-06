@@ -81,9 +81,9 @@ describe("system-ops tools", () => {
       expect(getSystemClockTool.annotations.destructiveHint).toBe(false);
     });
 
-    it("set_system_clock has readOnlyHint false and idempotentHint true", () => {
+    it("set_system_clock is a destructive, idempotent write", () => {
       expect(setSystemClockTool.annotations.readOnlyHint).toBe(false);
-      expect(setSystemClockTool.annotations.destructiveHint).toBe(false);
+      expect(setSystemClockTool.annotations.destructiveHint).toBe(true);
       expect(setSystemClockTool.annotations.idempotentHint).toBe(true);
     });
   });

@@ -26,7 +26,7 @@ When running with `MIKROMCP_TRANSPORT=http`:
 
 - **Run behind a trusted network boundary** (reverse proxy, VPN, or private network). Bind to `127.0.0.1` unless a proxy terminates TLS in front.
 - **Bearer-token auth is mandatory.** Every request must carry `Authorization: Bearer <token>`. Tokens are stored only as bcrypt hashes in `~/.mikromcp/identities.yaml`.
-- **Set `MIKROMCP_CONFIRMATION_SECRET`.** It signs the confirmation tokens that gate destructive operations. The server refuses to start in HTTP mode without it when any `readonly` or `operator` identity exists. With only `admin` identities it is optional for per-router calls, but destructive `bulk_execute` fan-outs require it for every role — without it they fail with `FLEET_CONFIRMATION_UNAVAILABLE`.
+- **Set `MIKROMCP_CONFIRMATION_SECRET`.** It signs the confirmation tokens that gate destructive operations. The server refuses to start in HTTP mode without it when any `readonly` or `operator` identity exists. With only `admin` identities it is optional for per-router calls. `bulk_execute` write fan-outs are gated for every role either way: without a configured secret the server signs fleet tokens with a random per-process secret, so those tokens stop working after a restart and do not verify on a sibling instance.
 
 ## RBAC identities
 
@@ -34,7 +34,7 @@ Each identity declares the smallest practical scope:
 
 - `role` — `readonly` and `operator` must confirm destructive tools; `admin` and `superadmin` skip the gate. The role does not limit which tools can be called — use the pattern list for that.
 - `allowedRouters` — which routers this identity may touch. An empty list means all; entries are exact router ids, not globs.
-- `allowedToolPatterns` — which tools it may call, as `*` globs (e.g. `list_*`, `get_*`, `ping` for a read-only identity). An empty list means all.
+- `allowedToolPatterns` — which tools it may call, as `*` globs (e.g. `list_*`, `get_*`, `ping` for a read-only identity). An empty list means all. A broad pattern such as `manage_*` includes `manage_script` and `manage_scheduled_job`, which run arbitrary RouterOS script — see [Change safety](#change-safety).
 
 See [Configuration → Identities](Configuration#identities-http-transport) for the file format.
 
@@ -43,7 +43,9 @@ Define identities for distinct consumers (a read-only dashboard vs. an automatio
 ## Change safety
 
 - **Dry-run first.** Every write tool supports `dryRun: true` to preview the diff without touching the router.
-- **Confirmation tokens.** When `MIKROMCP_CONFIRMATION_SECRET` is set, `readonly` and `operator` identities must call a destructive tool twice: the first call returns `APPROVAL_REQUIRED` with a single-use token valid for five minutes, the second call carries it as `confirmationToken`. `admin` and `superadmin` (including the built-in stdio identity) skip this per-router gate. Destructive `bulk_execute` fan-outs are gated for every role: they always require the secret and a fleet-wide token obtained the same two-step way.
+- **Confirmation tokens.** When `MIKROMCP_CONFIRMATION_SECRET` is set, `readonly` and `operator` identities must call a destructive tool twice: the first call returns `APPROVAL_REQUIRED` with a single-use token valid for five minutes, the second call carries it as `confirmationToken`. `admin` and `superadmin` (including the built-in stdio identity) skip this per-router gate. Every `bulk_execute` fan-out of a write tool, destructive or not, is gated for every role with a fleet-wide token obtained the same two-step way.
+- **What a confirmation token is — and is not.** The token is returned to the caller that asked for it. It binds the second call to the exact tool, router(s), parameters, and identity of the first, and stops one-shot mistakes and runaway loops; it is **not** a human approval. An LLM client can complete the round-trip on its own. MikroMCP's server instructions and usage skill tell the assistant to show the user what will change before re-submitting, but for an enforced human in the loop rely on your MCP client's per-tool approval prompts (clients typically key them off the `destructiveHint` annotation) and scope identities with `allowedToolPatterns`.
+- **Which tools are destructive.** Every write tool that can remove, overwrite, or reconfigure router state, or run RouterOS script, is annotated `destructiveHint: true` — in practice every write tool except `plan_changes`, which only previews. A unit test enforces this for new tools. Treat these as equivalent to arbitrary script execution with the RouterOS user's policies: `run_command`, `run_script`, `manage_script`, `manage_scheduled_job` (its `onEvent` is script), and `upload_file` (RouterOS runs a file named `*.auto.rsc` as soon as it arrives over FTP, which `upload_file` falls back to when SFTP is unavailable). The `run_command` deny-list applies only to `run_command`.
 - **Maintenance windows.** Routers can declare windows during which destructive operations are permitted; calls outside them are rejected with `PERMISSION_DENIED`.
 - **Snapshots & rollback.** Write tools snapshot affected config and append a journal entry before applying, so a change can be reversed with `rollback_change`.
 

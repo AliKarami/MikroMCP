@@ -83,11 +83,11 @@ const manageScheduledJobTool: ToolDefinition = {
   name: "manage_scheduled_job",
   title: "Manage Scheduled Job",
   description:
-    "Add, update, remove, enable, or disable a RouterOS scheduler entry. Idempotent by name. add throws CONFLICT if name exists; update throws NOT_FOUND if it does not. Supports dry-run.",
+    "Add, update, remove, enable, or disable a RouterOS scheduler entry. onEvent is arbitrary RouterOS script run with the router user's policies, so this tool is destructive. Idempotent by name. add throws CONFLICT if name exists; update throws NOT_FOUND if it does not. Supports dry-run.",
   inputSchema: manageScheduledJobInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

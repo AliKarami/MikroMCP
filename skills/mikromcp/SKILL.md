@@ -81,7 +81,8 @@ Full enumeration of every tool by family: `references/tool-map.md`.
 ### Fleet rollout
 1. Validate the change on ONE router first (dry-run → apply).
 2. `bulk_execute` with the tool + params, targeting routerIds or a tag.
-3. For destructive tools, complete the fleet confirmation-token step.
+3. For any write tool, complete the fleet confirmation-token step: tell the user which
+   routers and what change the token covers, and re-submit only after they agree.
 4. Review per-router succeeded/failed counts; `rollback_change` per-router if needed.
 
 ### Recover from an error
