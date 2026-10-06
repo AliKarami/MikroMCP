@@ -8,9 +8,19 @@ const harness = createHarness();
 const NAME = "itest.mikromcp.invalid";
 const ADDRESS = "192.0.2.10";
 
-const { find: findOnRouter, removeLeftover } = liveResource(harness.context, "ip/dns/static", {
+const { find: findOnRouter } = liveResource(harness.context, "ip/dns/static", {
   name: NAME,
 });
+
+// A test below adds a second record with the same name, so remove them all.
+async function removeLeftover(): Promise<void> {
+  const records = await harness.context.routerClient.get<RouterOSRecord>("ip/dns/static", {
+    filter: { name: NAME },
+  });
+  for (const record of records) {
+    await harness.context.routerClient.remove("ip/dns/static", record[".id"]);
+  }
+}
 
 beforeAll(removeLeftover);
 
@@ -77,6 +87,41 @@ describe("manage_dns_entry lifecycle against live CHR", () => {
     expect(error).toBeInstanceOf(MikroMCPError);
     expect((error as MikroMCPError).code).toBe("DNS_ENTRY_CONFLICT");
     expect((await findOnRouter())!.address).toBe(ADDRESS);
+  });
+
+  it("add finds the record whatever the case of the name", async () => {
+    const result = await runTool(harness.context, "manage_dns_entry", {
+      action: "add",
+      name: NAME.toUpperCase(),
+      address: ADDRESS,
+    });
+
+    expect(result.structuredContent.action).toBe("already_exists");
+  });
+
+  it("remove picks one of several records by address", async () => {
+    // add never creates a second record with one name, so make it directly.
+    const SECOND = "192.0.2.12";
+    await harness.context.routerClient.create("ip/dns/static", { name: NAME, address: SECOND });
+
+    const ambiguous = await runTool(harness.context, "manage_dns_entry", {
+      action: "remove",
+      name: NAME,
+    }).catch((err: unknown) => err);
+    expect(ambiguous).toBeInstanceOf(MikroMCPError);
+    expect((ambiguous as MikroMCPError).code).toBe("DNS_ENTRY_AMBIGUOUS");
+
+    const removed = await runTool(harness.context, "manage_dns_entry", {
+      action: "remove",
+      name: NAME,
+      address: SECOND,
+    });
+    expect(removed.structuredContent.action).toBe("removed");
+
+    const left = await harness.context.routerClient.get<RouterOSRecord>("ip/dns/static", {
+      filter: { name: NAME },
+    });
+    expect(left.map((r) => r.address)).toEqual([ADDRESS]);
   });
 
   it("an A record without an address is rejected before touching the router", async () => {

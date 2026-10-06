@@ -81,11 +81,31 @@ const manageDnsInputSchema = z
   .object({
     routerId,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
-    name: z.string().min(1).describe("Hostname for the DNS record (e.g. server.example.com)"),
+    name: z
+      .string()
+      .min(1)
+      .describe(
+        "Hostname for the DNS record (e.g. server.example.com); matched case-insensitively",
+      ),
     type: z.enum(["A", "CNAME", "TXT"]).default("A").describe("DNS record type"),
-    address: z.string().optional().describe("IP address (required for A records)"),
-    cname: z.string().optional().describe("Target hostname (required for CNAME records)"),
-    text: z.string().optional().describe("Text value (required for TXT records)"),
+    address: z
+      .string()
+      .optional()
+      .describe(
+        "IP address (required for A records; on remove, picks the record when several share the name)",
+      ),
+    cname: z
+      .string()
+      .optional()
+      .describe(
+        "Target hostname (required for CNAME records; on remove, picks the record when several share the name)",
+      ),
+    text: z
+      .string()
+      .optional()
+      .describe(
+        "Text value (required for TXT records; on remove, picks the record when several share the name)",
+      ),
     ttl: z.string().optional().describe("TTL value (e.g. 1d, 00:05:00)"),
     comment: z.string().max(255).optional().describe("Optional comment"),
     disabled: z.boolean().default(false).describe("Whether the entry should be disabled"),
@@ -96,47 +116,57 @@ const manageDnsInputSchema = z
 /** The record field that carries the value of each supported record type. */
 const VALUE_FIELD = { A: "address", CNAME: "cname", TXT: "text" } as const;
 
-const TTL_RE =
-  /^(?:(\d+)w)?\s*(?:(\d+)d)?\s*(?:(\d+):(\d{1,2}):(\d{1,2})|(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s?)?)$/;
+const TIME_UNIT_MS: Record<string, number> = {
+  w: 604_800_000,
+  d: 86_400_000,
+  h: 3_600_000,
+  m: 60_000,
+  s: 1_000,
+  ms: 1,
+};
 
 /**
- * Seconds in a RouterOS time value: `1d`, `24h`, `1d 00:00:00`, `00:05:00`,
- * `5m30s`, or plain seconds (`300`, which the parser may turn into a number).
- * RouterOS stores a TTL in its own canonical form (`00:05:00` reads back as
- * `5m`), so TTLs are compared in seconds. Undefined when the value does not
- * parse.
+ * Milliseconds in a RouterOS time value: unit groups in any order (`1d`,
+ * `24h`, `1w2d`, `2d1w`, `5m30s`, `500ms`), an optional trailing clock
+ * (`00:05:00`, `1d 02:00:00`, `00:00:01.500`), or plain seconds (`300`, which
+ * the parser turns into a number). RouterOS stores a TTL in its own canonical
+ * form (`00:05:00` reads back as `5m`), so TTLs are compared by duration.
+ * Undefined when the value does not parse.
  */
-function ttlSeconds(value: unknown): number | undefined {
-  if (typeof value === "number") return Number.isSafeInteger(value) ? value : undefined;
+function ttlMillis(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value * 1_000 : undefined;
   if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  const m = TTL_RE.exec(trimmed);
-  if (!trimmed || !m) return undefined;
-  const n = (i: number) => Number(m[i] ?? 0);
-  return n(1) * 604800 + n(2) * 86400 + (n(3) + n(6)) * 3600 + (n(4) + n(7)) * 60 + n(5) + n(8);
+  let rest = value.trim();
+  if (/^\d+$/.test(rest)) return Number(rest) * 1_000;
+
+  let total = 0;
+  const clock = /(\d+):(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?$/.exec(rest);
+  if (clock) {
+    const [, h, m, s, frac = ""] = clock;
+    total += ((Number(h) * 60 + Number(m)) * 60 + Number(s)) * 1_000 + Number(frac.padEnd(3, "0"));
+    rest = rest.slice(0, clock.index).trim();
+  }
+  if (rest === "") return clock ? total : undefined;
+  if (!/^(?:\d+(?:ms|[wdhms])\s*)+$/.test(rest)) return undefined;
+  for (const [, amount, unit] of rest.matchAll(/(\d+)(ms|[wdhms])/g)) {
+    total += Number(amount) * TIME_UNIT_MS[unit];
+  }
+  return total;
 }
 
 function sameTtl(stored: unknown, requested: string): boolean {
-  const a = ttlSeconds(stored);
-  const b = ttlSeconds(requested);
+  const a = ttlMillis(stored);
+  const b = ttlMillis(requested);
   return a !== undefined && b !== undefined
     ? a === b
     : normalizeWireValue(stored) === normalizeWireValue(requested);
-}
-
-/** `address=10.0.0.1 disabled=false ttl=1d` — for CONFLICT messages. */
-function describeEntry(fields: Record<string, unknown>): string {
-  return Object.entries(fields)
-    .filter(([, v]) => v !== undefined)
-    .map(([k, v]) => `${k}=${normalizeWireValue(v)}`)
-    .join(" ");
 }
 
 const manageDnsTool: ToolDefinition = {
   name: "manage_dns_entry",
   title: "Manage DNS Entry",
   description:
-    "Add or remove a static DNS entry. Idempotent by name+type: add returns already_exists if a record with that name and type already has the requested value and disabled state (and ttl/comment, when given), and throws CONFLICT if it differs. add never creates a second record with the same name and type.",
+    "Add or remove a static DNS entry, found by name (case-insensitive) and type. add returns already_exists if such a record already has the requested value and disabled state (and ttl/comment, when given), and throws CONFLICT if it differs; add never creates a second record with the same name and type. remove deletes the one matching record; when several share the name (round-robin), pass address/cname/text to pick one.",
   inputSchema: manageDnsInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -152,53 +182,68 @@ const manageDnsTool: ToolDefinition = {
       "Managing DNS entry",
     );
     try {
-      const existing = await context.routerClient.get<RouterOSRecord>("ip/dns/static", {
-        filter: { name: parsed.name, type: parsed.type },
+      const valueField = VALUE_FIELD[parsed.type];
+      const value = parsed[valueField];
+      const comment = parsed.comment?.replace(/[\x00-\x1f\x7f]/g, "");
+      const valueFields = ["address", "cname", "text"] as const;
+
+      for (const field of valueFields) {
+        if (field !== valueField && parsed[field] !== undefined) {
+          throw new MikroMCPError({
+            category: ErrorCategory.VALIDATION,
+            code: "DNS_FIELD_NOT_APPLICABLE",
+            message: `${field} does not apply to ${parsed.type} records; ${parsed.type} uses ${valueField}.`,
+            details: { field, type: parsed.type },
+            recoverability: {
+              retryable: false,
+              suggestedAction: `Drop ${field}, or set type to the record type it belongs to.`,
+            },
+          });
+        }
+      }
+      if (parsed.action === "add" && !value) {
+        throw new MikroMCPError({
+          category: ErrorCategory.VALIDATION,
+          code: `DNS_MISSING_${valueField.toUpperCase()}`,
+          message: `${valueField} is required for ${parsed.type} records.`,
+          recoverability: {
+            retryable: false,
+            suggestedAction: `Provide the ${valueField} parameter.`,
+          },
+        });
+      }
+
+      // DNS names are case-insensitive, while the REST filter matches exactly:
+      // filter by type on the router and compare the name here, so Router.LAN
+      // finds router.lan.
+      const wantName = parsed.name.toLowerCase();
+      const existing = (
+        await context.routerClient.get<RouterOSRecord>("ip/dns/static", {
+          filter: { type: parsed.type },
+        })
+      ).filter((entry) => String(entry.name ?? "").toLowerCase() === wantName);
+
+      const detailsOf = (entry: RouterOSRecord) => ({
+        [valueField]: entry[valueField],
+        disabled: entry.disabled,
+        ttl: entry.ttl,
+        comment: entry.comment,
       });
+      const describe = (fields: Record<string, unknown>) =>
+        compactFields(fields, [valueField, "disabled", "ttl", "comment"]);
 
       if (parsed.action === "add") {
-        if (parsed.type === "A" && !parsed.address) {
-          throw new MikroMCPError({
-            category: ErrorCategory.VALIDATION,
-            code: "DNS_MISSING_ADDRESS",
-            message: "address is required for A records.",
-            recoverability: { retryable: false, suggestedAction: "Provide the address parameter." },
-          });
-        }
-        if (parsed.type === "CNAME" && !parsed.cname) {
-          throw new MikroMCPError({
-            category: ErrorCategory.VALIDATION,
-            code: "DNS_MISSING_CNAME",
-            message: "cname is required for CNAME records.",
-            recoverability: { retryable: false, suggestedAction: "Provide the cname parameter." },
-          });
-        }
-        if (parsed.type === "TXT" && !parsed.text) {
-          throw new MikroMCPError({
-            category: ErrorCategory.VALIDATION,
-            code: "DNS_MISSING_TEXT",
-            message: "text is required for TXT records.",
-            recoverability: { retryable: false, suggestedAction: "Provide the text parameter." },
-          });
-        }
-
-        const valueField = VALUE_FIELD[parsed.type];
-        const value = parsed[valueField];
-        const comment = parsed.comment?.replace(/[\x00-\x1f\x7f]/g, "");
-
         if (existing.length > 0) {
           // RouterOS allows several records with one name (round-robin A), so
           // any record that matches the request counts as already present.
-          const match = existing.find((entry) => {
-            const rec = entry as Record<string, unknown>;
-            return (
+          const match = existing.find(
+            (rec) =>
               normalizeWireValue(rec[valueField]) === normalizeWireValue(value) &&
               isTrue(rec.disabled) === parsed.disabled &&
               (parsed.ttl === undefined || sameTtl(rec.ttl, parsed.ttl)) &&
               (comment === undefined ||
-                normalizeWireValue(rec.comment) === normalizeWireValue(comment))
-            );
-          });
+                normalizeWireValue(rec.comment) === normalizeWireValue(comment)),
+          );
 
           if (match) {
             return {
@@ -207,15 +252,7 @@ const manageDnsTool: ToolDefinition = {
             };
           }
 
-          const existingDetails = existing.map((entry) => {
-            const rec = entry as Record<string, unknown>;
-            return {
-              [valueField]: rec[valueField],
-              disabled: rec.disabled,
-              ttl: rec.ttl,
-              comment: rec.comment,
-            };
-          });
+          const existingDetails = existing.map(detailsOf);
           const requestedDetails: Record<string, unknown> = {
             [valueField]: value,
             disabled: parsed.disabled ? "true" : "false",
@@ -230,13 +267,15 @@ const manageDnsTool: ToolDefinition = {
             code: "DNS_ENTRY_CONFLICT",
             message:
               `DNS entry "${parsed.name}" (${parsed.type}) already exists but with different configuration. ` +
-              `Existing: ${existingDetails.map(describeEntry).join("; ")}. ` +
-              `Requested: ${describeEntry(requestedDetails)}.`,
+              `Existing: ${existingDetails.map(describe).join("; ")}. ` +
+              `Requested: ${describe(requestedDetails)}.`,
             details: { existing: existingDetails, requested: requestedDetails },
             recoverability: {
               retryable: false,
               suggestedAction:
-                "Remove the existing entry first, then re-add it with the desired values. add does not create a second record with the same name and type.",
+                existing.length > 1
+                  ? `${existing.length} records share this name. Remove each one with action=remove and its ${valueField}, then re-add. add does not create a second record with the same name and type.`
+                  : "Remove the existing entry with action=remove, then re-add it with the desired values. add does not create a second record with the same name and type.",
               alternativeTools: ["manage_dns_entry with action=remove"],
             },
           });
@@ -259,10 +298,8 @@ const manageDnsTool: ToolDefinition = {
           name: parsed.name,
           type: parsed.type,
           disabled: parsed.disabled ? "true" : "false",
+          [valueField]: value!,
         };
-        if (parsed.address) body.address = parsed.address;
-        if (parsed.cname) body.cname = parsed.cname;
-        if (parsed.text) body.text = parsed.text;
         if (parsed.ttl) body.ttl = parsed.ttl;
         if (comment) body.comment = comment;
 
@@ -274,12 +311,24 @@ const manageDnsTool: ToolDefinition = {
         };
       }
 
-      if (existing.length === 0) {
+      const candidates =
+        value === undefined
+          ? existing
+          : existing.filter(
+              (rec) => normalizeWireValue(rec[valueField]) === normalizeWireValue(value),
+            );
+
+      if (candidates.length === 0) {
+        const label = value === undefined ? "" : ` with ${valueField}=${value}`;
         throw new MikroMCPError({
           category: ErrorCategory.NOT_FOUND,
           code: "DNS_ENTRY_NOT_FOUND",
-          message: `DNS entry "${parsed.name}" (${parsed.type}) not found.`,
-          details: { name: parsed.name, type: parsed.type },
+          message:
+            `DNS entry "${parsed.name}" (${parsed.type})${label} not found.` +
+            (existing.length > 0
+              ? ` Existing: ${existing.map((rec) => describe(detailsOf(rec))).join("; ")}.`
+              : ""),
+          details: { name: parsed.name, type: parsed.type, [valueField]: value },
           recoverability: {
             retryable: false,
             suggestedAction: "Verify the entry with list_dns_entries.",
@@ -287,7 +336,23 @@ const manageDnsTool: ToolDefinition = {
         });
       }
 
-      const rec = existing[0] as Record<string, string>;
+      if (candidates.length > 1) {
+        throw new MikroMCPError({
+          category: ErrorCategory.VALIDATION,
+          code: "DNS_ENTRY_AMBIGUOUS",
+          message:
+            `${candidates.length} DNS entries "${parsed.name}" (${parsed.type}) match: ` +
+            `${candidates.map((rec) => describe(detailsOf(rec))).join("; ")}.`,
+          details: { name: parsed.name, type: parsed.type, entries: candidates.map(detailsOf) },
+          recoverability: {
+            retryable: false,
+            suggestedAction: `Pass ${valueField} to pick the record to remove.`,
+          },
+        });
+      }
+
+      const rec = candidates[0];
+      const id = rec[".id"];
       if (parsed.dryRun) {
         return {
           content: `Dry run: Would remove DNS entry "${parsed.name}" (${parsed.type}).`,
@@ -298,7 +363,7 @@ const manageDnsTool: ToolDefinition = {
         };
       }
 
-      await context.routerClient.remove("ip/dns/static", rec[".id"]);
+      await context.routerClient.remove("ip/dns/static", id);
       log.info({ name: parsed.name, type: parsed.type }, "DNS entry removed");
       return {
         content: `Removed DNS entry "${parsed.name}" (${parsed.type}).`,
@@ -306,7 +371,7 @@ const manageDnsTool: ToolDefinition = {
           action: "removed",
           name: parsed.name,
           type: parsed.type,
-          id: rec[".id"],
+          id,
         },
       };
     } catch (err) {
