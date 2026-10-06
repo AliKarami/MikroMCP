@@ -391,6 +391,19 @@ Contributed by [@akuzin87](https://github.com/akuzin87), who also reported the c
 
 ---
 
+## ✅ v1.13 — Write Tools That Do What They Report (126 tools)
+
+**Goal:** Make every rule and DNS write tool either do what was asked or say why not, and let text-only clients complete confirmations.
+
+- **Rules that take effect.** `manage_routing_rule` and `manage_mangle_rule` sent no `action`, so RouterOS kept routing rules inactive and created mangle rules as `accept` with their marks dropped. Both now send an action: routing rules default to `lookup`, and a mangle `new*` value implies its own action (`newRoutingMark` → `mark-routing`). New mangle parameters `newPacketMark`, `newMss` and `tcpFlags` cover packet marks and MSS clamping.
+- **Honest idempotency.** A repeated `add` returned `already_exists` for a firewall rule that differed in `disabled`, a mangle rule that differed in most fields, and a DNS record that pointed elsewhere. These now report a `CONFLICT` naming both values. Numeric chain and table names, protocol numbers and free-text comments now compare correctly.
+- **Input that can't work is refused.** Empty comments, empty match fields, out-of-range NAT ports and `priority` on routing rules are rejected before any router call.
+- **Confirmations from any client.** An error's text now carries its code and details, including the confirmation token, so clients that show the model only the text, such as Claude Code, can complete fleet writes again.
+
+Contributed by [@akuzin87](https://github.com/akuzin87).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

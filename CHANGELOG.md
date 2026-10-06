@@ -10,6 +10,15 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-06
+
+This release is again largely the work of [@akuzin87](https://github.com/akuzin87) (Alex). After 1.12.0 he ran a QA pass over the rule tools and their tests, and checked each fix against real routers and a CHR. He found that the firewall, mangle, routing-rule and DNS tools could report success for changes they had not made, that `manage_routing_rule` and `manage_mangle_rule` created rules that did nothing, and that Claude Code could not complete the fleet confirmation 1.12.0 introduced. Thank you again, Alex.
+
+**Upgrading from 1.12.** Several write tools now refuse input, or report a conflict, where they used to report success without doing what was asked:
+- **Repeated adds compare more.** `manage_firewall_rule` compares `disabled`, `manage_mangle_rule` compares every match field and the action, and `manage_dns_entry` compares the record's value. A repeated `add` that used to return `already_exists` for a rule or record that differs now throws `CONFLICT`.
+- **Stricter input.** These are now `VALIDATION` errors: an empty `comment` on firewall and mangle rules, empty match fields and out-of-range `toPorts` on firewall rules, a mangle `new*` value under another action, and `priority` on routing rules. `manage_dns_entry` `remove` needs the value when several records share a name.
+- **Rules from earlier versions.** Routing rules and mangle rules that 1.12 and earlier created have no action and do nothing. For mangle rules a repeated `add` now throws `CONFLICT`; routing rules show in `list_routing_rules` as `inactive=true`. Remove such rules and add them again.
+
 ### Changed
 - `manage_firewall_rule` `add` now compares `disabled` in its comment-keyed idempotency check, as `manage_ip_address` already does. Before, `add` with `disabled: true` on an enabled rule (or the default `disabled: false` on a rule disabled by hand) returned `already_exists` and left the rule as it was. It now throws `FIREWALL_RULE_CONFLICT`; when only `disabled` differs, the message says so and the suggested action is `action=enable` or `action=disable` instead of remove and re-add. `disabled` is added to the CONFLICT `existing`/`requested` details.
 - `manage_mangle_rule` `add` compared only the chain, addresses, address lists, and routing/connection marks of an existing rule with the same comment. A rule that differed in `protocol`, `srcPort`/`dstPort`, `inInterface`/`outInterface`, `newDscpValue`, or `passthrough` returned `already_exists` and was left as it was. These fields now take part in the check, so such an `add` throws `MANGLE_RULE_CONFLICT`, and the CONFLICT `existing`/`requested` details list every compared field. `newDscpValue` and `passthrough` are compared only when the router reports them: RouterOS reports them only for actions that use them. An omitted `passthrough` counts as the RouterOS default `yes`, and the details show that effective value.
