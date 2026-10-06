@@ -121,7 +121,7 @@ describe("ip tools", () => {
       expect((ctx.routerClient as Record<string, unknown>).create).not.toHaveBeenCalled();
     });
 
-    it("returns already_exists for a numeric comment, which the parser turns into a number", async () => {
+    it("returns already_exists for a numeric comment", async () => {
       const ctx = makeContext([{ ...sampleAddress, comment: "2024" }]);
       const result = await manageIpAddressTool.handler(
         { ...baseParams, action: "add", comment: "2024" },
