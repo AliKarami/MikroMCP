@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Changed
+- `manage_firewall_rule` `add` now compares `disabled` in its comment-keyed idempotency check, as `manage_ip_address` already does. Before, `add` with `disabled: true` on an enabled rule (or the default `disabled: false` on a rule disabled by hand) returned `already_exists` and left the rule as it was. It now throws `FIREWALL_RULE_CONFLICT`; when only `disabled` differs, the message says so and the suggested action is `action=enable` or `action=disable` instead of remove and re-add. `disabled` is added to the CONFLICT `existing`/`requested` details.
+
 ### Fixed
 - `manage_firewall_rule` validated `toPorts` with a pattern only, so `99999`, `0`, and a descending range such as `9000-80` passed the schema and were sent to RouterOS as is. It now accepts a port 1–65535 or a range whose start is not above its end, and rejects anything else with a `VALIDATION` error before any router call.
 - `manage_firewall_rule` accepted empty strings in its match and NAT-target fields. `toAddresses: ""` was sent to RouterOS as `to-addresses=""`, while the idempotency check treated the empty value as an absent field. `srcAddress`, `dstAddress`, `srcPort`, `dstPort`, `inInterface`, `outInterface`, `inInterfaceList`, `outInterfaceList`, and `toAddresses` now require at least one character. Omit a field to leave it unset.

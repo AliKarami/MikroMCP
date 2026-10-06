@@ -269,7 +269,7 @@ const manageFirewallRuleTool: ToolDefinition = {
   name: "manage_firewall_rule",
   title: "Manage Firewall Rule",
   description:
-    "Add, remove, disable, or enable a firewall rule on a MikroTik router. Matches addresses, ports, protocol, interfaces, interface lists, and connection/NAT state; nat rules take toAddresses/toPorts (e.g. a dst-nat port forward). Uses comment as idempotency key for deduplication and identification. Supports dry-run mode.",
+    "Add, remove, disable, or enable a firewall rule on a MikroTik router. Matches addresses, ports, protocol, interfaces, interface lists, and connection/NAT state; nat rules take toAddresses/toPorts (e.g. a dst-nat port forward). Uses comment as idempotency key for deduplication and identification: a repeated add returns already_exists only when the match, NAT targets, and disabled state agree, otherwise CONFLICT (use enable/disable when only the disabled state differs). Supports dry-run mode.",
   inputSchema: manageFirewallRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -325,15 +325,16 @@ const manageFirewallRuleTool: ToolDefinition = {
         if (comment !== undefined) {
           const existing = await findRuleByComment(context, path, comment);
           if (existing) {
-            const matches =
+            const sameMatch =
               existing.chain === parsed.chain &&
               existing.action === parsed.ruleAction &&
               sameRuleValue("protocol", existing.protocol, wantProtocol) &&
               RULE_FIELDS.every(([key, property]) =>
                 sameRuleValue(property, existing[property], parsed[key]),
               );
+            const existingDisabled = isTrue(existing.disabled);
 
-            if (matches) {
+            if (sameMatch && existingDisabled === parsed.disabled) {
               return {
                 content: `Firewall ${parsed.table} rule with comment "${comment}" already exists. No changes made.`,
                 structuredContent: { action: "already_exists", rule: existing },
@@ -354,18 +355,30 @@ const manageFirewallRuleTool: ToolDefinition = {
               existingDetails[property] = existing[property];
               requestedDetails[property] = parsed[key];
             }
+            existingDetails.disabled = existingDisabled;
+            requestedDetails.disabled = parsed.disabled;
 
+            // Only the disabled state differs: toggling the rule is enough.
+            const toggle = parsed.disabled ? "disable" : "enable";
             throw new MikroMCPError({
               category: ErrorCategory.CONFLICT,
               code: "FIREWALL_RULE_CONFLICT",
-              message: `Firewall ${parsed.table} rule with comment "${comment}" already exists but with different configuration.`,
+              message: sameMatch
+                ? `Firewall ${parsed.table} rule with comment "${comment}" already exists but is ${existingDisabled ? "disabled" : "enabled"}.`
+                : `Firewall ${parsed.table} rule with comment "${comment}" already exists but with different configuration.`,
               details: { existing: existingDetails, requested: requestedDetails },
-              recoverability: {
-                retryable: false,
-                suggestedAction:
-                  "Remove the existing rule first, then re-add with the desired configuration.",
-                alternativeTools: ["manage_firewall_rule with action=remove"],
-              },
+              recoverability: sameMatch
+                ? {
+                    retryable: false,
+                    suggestedAction: `Use action=${toggle} with the same comment to ${toggle} the existing rule.`,
+                    alternativeTools: [`manage_firewall_rule with action=${toggle}`],
+                  }
+                : {
+                    retryable: false,
+                    suggestedAction:
+                      "Remove the existing rule first, then re-add with the desired configuration.",
+                    alternativeTools: ["manage_firewall_rule with action=remove"],
+                  },
             });
           }
         }

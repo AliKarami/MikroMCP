@@ -869,6 +869,54 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
     ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
   });
 
+  it("throws CONFLICT pointing to enable when only the disabled state differs", async () => {
+    // RouterOS sends disabled as a string; the parser turns it into a boolean.
+    const existing = { ...portForward, disabled: "true" };
+    await expect(
+      manageFirewallRuleTool.handler(portForwardParams, makeContext([existing])),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      message: expect.stringContaining("already exists but is disabled"),
+      details: { existing: { disabled: true }, requested: { disabled: false } },
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=enable"] },
+    });
+  });
+
+  it("throws CONFLICT pointing to disable when add asks for a disabled rule", async () => {
+    const existing = { ...portForward, disabled: "false" };
+    const ctx = makeContext([existing]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...portForwardParams, disabled: true }, ctx),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=disable"] },
+    });
+    expect(createMock(ctx)).not.toHaveBeenCalled();
+  });
+
+  it("returns already_exists when the disabled state also matches", async () => {
+    const existing = { ...portForward, disabled: "true" };
+    const result = await manageFirewallRuleTool.handler(
+      { ...portForwardParams, disabled: true },
+      makeContext([existing]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("suggests remove when the match differs as well as the disabled state", async () => {
+    const existing = { ...portForward, disabled: "true" };
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...portForwardParams, toAddresses: "192.168.88.20" },
+        makeContext([existing]),
+      ),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      message: expect.stringContaining("different configuration"),
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=remove"] },
+    });
+  });
+
   it("rejects NAT targets that the rule action does not accept", async () => {
     const nat = { routerId: "test-router", action: "add", table: "nat", dryRun: true };
     await expect(
