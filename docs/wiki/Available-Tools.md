@@ -596,7 +596,7 @@ List static DNS entries with optional filtering by hostname and record type.
 
 ### `manage_dns_entry` — Write · Destructive · Idempotent
 
-Add or remove a static DNS entry. Idempotent by name+type.
+Add or remove a static DNS entry. Idempotent by name+type: `add` returns `already_exists` if a record with that name and type has the requested value and `disabled` state (and `ttl`/`comment`, when given; TTLs are compared in seconds, so `24h` equals `1d`), and throws `CONFLICT` if it differs. `add` never creates a second record with the same name and type.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -607,9 +607,9 @@ Add or remove a static DNS entry. Idempotent by name+type.
 | `address` | string | — | IP address — required for A records |
 | `cname` | string | — | Target hostname — required for CNAME records |
 | `text` | string | — | Text value — required for TXT records |
-| `ttl` | string | — | TTL value (e.g. `1d`, `00:05:00`) |
-| `comment` | string | — | Optional comment |
-| `disabled` | boolean | `false` | Create the entry in disabled state |
+| `ttl` | string | — | TTL value (e.g. `1d`, `00:05:00`); on `add`, part of the idempotency check when given |
+| `comment` | string | — | Optional comment; on `add`, part of the idempotency check when given |
+| `disabled` | boolean | `false` | Create the entry in disabled state; on `add`, part of the idempotency check |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a static DNS A record for printer.lan pointing to 192.168.1.50 on core-01."

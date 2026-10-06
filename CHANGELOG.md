@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Changed
+- `manage_dns_entry` `add` found an existing record by `name` and `type` and returned `already_exists` without comparing its value. With `router.lan A 192.168.1.1` on the router, `add router.lan A 192.168.1.2` answered `already_exists`, dry run included, and the caller believed the requested record was in place. `add` now compares `address`/`cname`/`text` and `disabled`, plus `ttl` and `comment` when given (a TTL is compared in seconds, so `24h` matches the stored `1d` and `00:05:00` matches `5m`). If none of the records with that name and type matches, it throws `DNS_ENTRY_CONFLICT` with `existing` (one entry per record) and `requested` in the details, and the message names the values on both sides. When several records share a name (round-robin A), any matching one counts as `already_exists`; `add` still never creates a second record with the same name and type. A missing `address`/`cname`/`text` is now rejected before the lookup, so it no longer returns `already_exists` when the name exists.
+
 ## [1.12.0] - 2026-10-06
 
 This release is largely the work of [@akuzin87](https://github.com/akuzin87) (Alex). He privately reported the confirmation-gate gap fixed under Security, and contributed `bulk_read`, the REST-based `traceroute` and `torch`, three new list tools, NAT and connection-state matching in `manage_firewall_rule`, and the filter-encoding and SSH-login fixes. Each came with a clear write-up and live verification against real routers. Thank you, Alex.

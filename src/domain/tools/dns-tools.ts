@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isTrue, sameValue } from "../../adapter/response-parser.js";
+import { isTrue, normalizeWireValue, sameValue } from "../../adapter/response-parser.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -93,11 +93,50 @@ const manageDnsInputSchema = z
   })
   .strict();
 
+/** The record field that carries the value of each supported record type. */
+const VALUE_FIELD = { A: "address", CNAME: "cname", TXT: "text" } as const;
+
+const TTL_RE =
+  /^(?:(\d+)w)?\s*(?:(\d+)d)?\s*(?:(\d+):(\d{1,2}):(\d{1,2})|(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s?)?)$/;
+
+/**
+ * Seconds in a RouterOS time value: `1d`, `24h`, `1d 00:00:00`, `00:05:00`,
+ * `5m30s`, or plain seconds (`300`, which the parser may turn into a number).
+ * RouterOS stores a TTL in its own canonical form (`00:05:00` reads back as
+ * `5m`), so TTLs are compared in seconds. Undefined when the value does not
+ * parse.
+ */
+function ttlSeconds(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isSafeInteger(value) ? value : undefined;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  const m = TTL_RE.exec(trimmed);
+  if (!trimmed || !m) return undefined;
+  const n = (i: number) => Number(m[i] ?? 0);
+  return n(1) * 604800 + n(2) * 86400 + (n(3) + n(6)) * 3600 + (n(4) + n(7)) * 60 + n(5) + n(8);
+}
+
+function sameTtl(stored: unknown, requested: string): boolean {
+  const a = ttlSeconds(stored);
+  const b = ttlSeconds(requested);
+  return a !== undefined && b !== undefined
+    ? a === b
+    : normalizeWireValue(stored) === normalizeWireValue(requested);
+}
+
+/** `address=10.0.0.1 disabled=false ttl=1d` — for CONFLICT messages. */
+function describeEntry(fields: Record<string, unknown>): string {
+  return Object.entries(fields)
+    .filter(([, v]) => v !== undefined)
+    .map(([k, v]) => `${k}=${normalizeWireValue(v)}`)
+    .join(" ");
+}
+
 const manageDnsTool: ToolDefinition = {
   name: "manage_dns_entry",
   title: "Manage DNS Entry",
   description:
-    "Add or remove a static DNS entry. Idempotent by name+type: add returns already_exists if the same record already exists.",
+    "Add or remove a static DNS entry. Idempotent by name+type: add returns already_exists if a record with that name and type already has the requested value and disabled state (and ttl/comment, when given), and throws CONFLICT if it differs. add never creates a second record with the same name and type.",
   inputSchema: manageDnsInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -118,13 +157,6 @@ const manageDnsTool: ToolDefinition = {
       });
 
       if (parsed.action === "add") {
-        if (existing.length > 0) {
-          return {
-            content: `DNS entry "${parsed.name}" (${parsed.type}) already exists. No changes made.`,
-            structuredContent: { action: "already_exists", entry: existing[0] },
-          };
-        }
-
         if (parsed.type === "A" && !parsed.address) {
           throw new MikroMCPError({
             category: ErrorCategory.VALIDATION,
@@ -150,8 +182,67 @@ const manageDnsTool: ToolDefinition = {
           });
         }
 
+        const valueField = VALUE_FIELD[parsed.type];
+        const value = parsed[valueField];
+        const comment = parsed.comment?.replace(/[\x00-\x1f\x7f]/g, "");
+
+        if (existing.length > 0) {
+          // RouterOS allows several records with one name (round-robin A), so
+          // any record that matches the request counts as already present.
+          const match = existing.find((entry) => {
+            const rec = entry as Record<string, unknown>;
+            return (
+              normalizeWireValue(rec[valueField]) === normalizeWireValue(value) &&
+              isTrue(rec.disabled) === parsed.disabled &&
+              (parsed.ttl === undefined || sameTtl(rec.ttl, parsed.ttl)) &&
+              (comment === undefined ||
+                normalizeWireValue(rec.comment) === normalizeWireValue(comment))
+            );
+          });
+
+          if (match) {
+            return {
+              content: `DNS entry "${parsed.name}" (${parsed.type}) already exists. No changes made.`,
+              structuredContent: { action: "already_exists", entry: match },
+            };
+          }
+
+          const existingDetails = existing.map((entry) => {
+            const rec = entry as Record<string, unknown>;
+            return {
+              [valueField]: rec[valueField],
+              disabled: rec.disabled,
+              ttl: rec.ttl,
+              comment: rec.comment,
+            };
+          });
+          const requestedDetails: Record<string, unknown> = {
+            [valueField]: value,
+            disabled: parsed.disabled ? "true" : "false",
+            ttl: parsed.ttl,
+            comment,
+          };
+
+          // The model sees only the message of an error, not its details, so
+          // the message names the values on both sides.
+          throw new MikroMCPError({
+            category: ErrorCategory.CONFLICT,
+            code: "DNS_ENTRY_CONFLICT",
+            message:
+              `DNS entry "${parsed.name}" (${parsed.type}) already exists but with different configuration. ` +
+              `Existing: ${existingDetails.map(describeEntry).join("; ")}. ` +
+              `Requested: ${describeEntry(requestedDetails)}.`,
+            details: { existing: existingDetails, requested: requestedDetails },
+            recoverability: {
+              retryable: false,
+              suggestedAction:
+                "Remove the existing entry first, then re-add it with the desired values. add does not create a second record with the same name and type.",
+              alternativeTools: ["manage_dns_entry with action=remove"],
+            },
+          });
+        }
+
         if (parsed.dryRun) {
-          const value = parsed.address ?? parsed.cname ?? parsed.text ?? "";
           return {
             content: `Dry run: Would add DNS entry "${parsed.name}" ${parsed.type} → ${value}.`,
             structuredContent: {
@@ -173,7 +264,7 @@ const manageDnsTool: ToolDefinition = {
         if (parsed.cname) body.cname = parsed.cname;
         if (parsed.text) body.text = parsed.text;
         if (parsed.ttl) body.ttl = parsed.ttl;
-        if (parsed.comment) body.comment = parsed.comment.replace(/[\x00-\x1f\x7f]/g, "");
+        if (comment) body.comment = comment;
 
         const created = await context.routerClient.create("ip/dns/static", body);
         log.info({ name: parsed.name, id: created[".id"] }, "DNS entry created");

@@ -55,6 +55,30 @@ describe("manage_dns_entry lifecycle against live CHR", () => {
     expect(result.structuredContent.action).toBe("already_exists");
   });
 
+  it("add with the default TTL written another way is still already_exists", async () => {
+    // RouterOS stores the default TTL in its own form; 24h must match it.
+    const result = await runTool(harness.context, "manage_dns_entry", {
+      action: "add",
+      name: NAME,
+      address: ADDRESS,
+      ttl: "24h",
+    });
+
+    expect(result.structuredContent.action).toBe("already_exists");
+  });
+
+  it("add with another address is a CONFLICT and leaves the record as it was", async () => {
+    const error = await runTool(harness.context, "manage_dns_entry", {
+      action: "add",
+      name: NAME,
+      address: "192.0.2.11",
+    }).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(MikroMCPError);
+    expect((error as MikroMCPError).code).toBe("DNS_ENTRY_CONFLICT");
+    expect((await findOnRouter())!.address).toBe(ADDRESS);
+  });
+
   it("an A record without an address is rejected before touching the router", async () => {
     const error = await runTool(harness.context, "manage_dns_entry", {
       action: "add",
