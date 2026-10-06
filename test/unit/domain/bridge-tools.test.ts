@@ -50,8 +50,8 @@ const [listBridgesTool, manageBridgeTool, manageBridgePortTool] = bridgeTools;
 
 describe("bridgeTools", () => {
   describe("metadata", () => {
-    it("exports 3 tools", () => {
-      expect(bridgeTools).toHaveLength(3);
+    it("exports 4 tools", () => {
+      expect(bridgeTools).toHaveLength(4);
     });
     it("list_bridges is readOnly", () => {
       expect(listBridgesTool.annotations.readOnlyHint).toBe(true);
@@ -141,5 +141,52 @@ describe("bridgeTools", () => {
         schema.parse({ routerId: "r", action: "add", bridge: "b", interface: "e", extra: 1 }),
       ).toThrow();
     });
+  });
+});
+
+describe("list_bridge_ports", () => {
+  const listBridgePortsTool = bridgeTools.find((t) => t.name === "list_bridge_ports")!;
+  const ports = [
+    {
+      ".id": "*0",
+      bridge: "bridge1",
+      interface: "ether1",
+      pvid: 1,
+      status: "in-bridge",
+      "debug-info": " prio 0x80 num 1\n role:Designated",
+    },
+    { ".id": "*7", bridge: "bridge1", interface: "wifi1", pvid: 1, status: "in-bridge" },
+  ];
+
+  it("is a read-only tool", () => {
+    expect(listBridgePortsTool.annotations.readOnlyHint).toBe(true);
+  });
+
+  it("returns ports without the debug-info STP dump", async () => {
+    const ctx = makeContext(ports);
+    const result = await listBridgePortsTool.handler({ routerId: "test-router" }, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    const rows = sc.ports as Array<Record<string, unknown>>;
+    expect(sc.total).toBe(2);
+    expect(rows[0]).not.toHaveProperty("debug-info");
+    expect(rows[0].interface).toBe("ether1");
+    expect(result.content).toContain("interface=wifi1");
+  });
+
+  it("passes bridge and interface filters to the router query", async () => {
+    const ctx = makeContext([ports[0]]);
+    await listBridgePortsTool.handler(
+      { routerId: "test-router", bridge: "bridge1", interface: "ether1" },
+      ctx,
+    );
+    expect(ctx.routerClient.get).toHaveBeenCalledWith("interface/bridge/port", {
+      filter: { bridge: "bridge1", interface: "ether1" },
+    });
+  });
+
+  it("queries without a filter when none is given", async () => {
+    const ctx = makeContext(ports);
+    await listBridgePortsTool.handler({ routerId: "test-router" }, ctx);
+    expect(ctx.routerClient.get).toHaveBeenCalledWith("interface/bridge/port", {});
   });
 });

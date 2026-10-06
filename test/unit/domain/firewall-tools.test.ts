@@ -583,3 +583,274 @@ describe("firewall tools", () => {
     });
   });
 });
+
+describe("manage_firewall_rule - interface lists, connection state and NAT targets", () => {
+  // A dst-nat rule as the REST response parser returns it: single ports
+  // arrive as numbers, sets as comma-separated strings.
+  const portForward = {
+    ".id": "*4",
+    chain: "dstnat",
+    action: "dst-nat",
+    protocol: "tcp",
+    "dst-port": 8443,
+    "in-interface-list": "WAN",
+    "to-addresses": "192.168.88.10",
+    "to-ports": 443,
+    comment: "fwd-nas-https",
+  };
+  const portForwardParams = {
+    routerId: "test-router",
+    action: "add",
+    table: "nat",
+    chain: "dstnat",
+    ruleAction: "dst-nat",
+    protocol: "tcp",
+    dstPort: "8443",
+    inInterfaceList: "WAN",
+    toAddresses: "192.168.88.10",
+    toPorts: "443",
+    comment: "fwd-nas-https",
+  };
+
+  function createMock(ctx: ToolContext): ReturnType<typeof vi.fn> {
+    return (ctx.routerClient as unknown as Record<string, ReturnType<typeof vi.fn>>).create;
+  }
+
+  it("sends the new fields with their RouterOS names", async () => {
+    const ctx = makeContext([]);
+    await manageFirewallRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        chain: "forward",
+        ruleAction: "drop",
+        inInterfaceList: "WAN",
+        connectionState: "new",
+        connectionNatState: "!dstnat",
+        comment: "drop-wan-not-dstnat",
+      },
+      ctx,
+    );
+    expect(createMock(ctx).mock.calls[0][1]).toMatchObject({
+      "in-interface-list": "WAN",
+      "connection-state": "new",
+      "connection-nat-state": "!dstnat",
+    });
+  });
+
+  it("creates a dst-nat port forward with to-addresses and to-ports", async () => {
+    const ctx = makeContext([]);
+    await manageFirewallRuleTool.handler(portForwardParams, ctx);
+    const [path, body] = createMock(ctx).mock.calls[0];
+    expect(path).toBe("ip/firewall/nat");
+    expect(body).toMatchObject({
+      action: "dst-nat",
+      "dst-port": "8443",
+      "to-addresses": "192.168.88.10",
+      "to-ports": "443",
+    });
+  });
+
+  it("treats numeric ports from the router as equal to requested strings", async () => {
+    const ctx = makeContext([portForward]);
+    const result = await manageFirewallRuleTool.handler(portForwardParams, ctx);
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    expect(createMock(ctx)).not.toHaveBeenCalled();
+  });
+
+  it("compares connection-state as a set, ignoring order", async () => {
+    const existing = {
+      ".id": "*9",
+      chain: "forward",
+      action: "accept",
+      "connection-state": "established,related,untracked",
+      comment: "accept-est",
+    };
+    const ctx = makeContext([existing]);
+    const result = await manageFirewallRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        chain: "forward",
+        ruleAction: "accept",
+        connectionState: "untracked,established,related",
+        comment: "accept-est",
+      },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("throws CONFLICT with to-addresses in details when the NAT target differs", async () => {
+    const ctx = makeContext([portForward]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...portForwardParams, toAddresses: "192.168.88.20" }, ctx),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      details: {
+        existing: { "to-addresses": "192.168.88.10" },
+        requested: { "to-addresses": "192.168.88.20" },
+      },
+    });
+  });
+
+  it("rejects toAddresses/toPorts on the filter table before touching the router", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageFirewallRuleTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          table: "filter",
+          chain: "forward",
+          ruleAction: "accept",
+          toPorts: "443",
+          dryRun: true,
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "NAT_TARGET_NOT_APPLICABLE" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it("includes the new fields in the dry-run diff", async () => {
+    const ctx = makeContext([]);
+    const result = await manageFirewallRuleTool.handler(
+      { ...portForwardParams, dryRun: true },
+      ctx,
+    );
+    const diff = (result.structuredContent as Record<string, unknown>).diff as Array<
+      Record<string, unknown>
+    >;
+    expect(diff).toContainEqual({ property: "to-ports", before: null, after: "443" });
+    expect(diff).toContainEqual({ property: "in-interface-list", before: null, after: "WAN" });
+    expect(createMock(ctx)).not.toHaveBeenCalled();
+  });
+
+  it("validates connectionNatState, connectionState and toPorts formats", () => {
+    const schema = manageFirewallRuleTool.inputSchema;
+    const base = { routerId: "r", action: "add", chain: "forward", ruleAction: "accept" };
+    expect(() => schema.parse({ ...base, connectionNatState: "!dstnat" })).not.toThrow();
+    expect(() => schema.parse({ ...base, connectionNatState: "masquerade" })).toThrow();
+    expect(() => schema.parse({ ...base, connectionNatState: "dstnat,dstnat" })).toThrow();
+    expect(() => schema.parse({ ...base, connectionNatState: "!srcnat,dstnat" })).not.toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "established,bogus" })).toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "" })).toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "!invalid" })).not.toThrow();
+    expect(() => schema.parse({ ...base, toPorts: "8000-8100" })).not.toThrow();
+    expect(() => schema.parse({ ...base, toPorts: "https" })).toThrow();
+  });
+  it("treats a /32 host address as equal to the bare address", async () => {
+    const existing = {
+      ".id": "*C",
+      chain: "dstnat",
+      action: "dst-nat",
+      "dst-address": "192.168.1.1",
+      "to-addresses": "192.168.1.5",
+      comment: "host-32",
+    };
+    const ctx = makeContext([existing]);
+    const result = await manageFirewallRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        table: "nat",
+        chain: "dstnat",
+        ruleAction: "dst-nat",
+        dstAddress: "192.168.1.1/32",
+        toAddresses: "192.168.1.5/32",
+        comment: "host-32",
+      },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("compares connection-nat-state as a set", async () => {
+    const existing = {
+      ".id": "*D",
+      chain: "forward",
+      action: "accept",
+      "connection-nat-state": "srcnat,dstnat",
+      comment: "nat-set",
+    };
+    const ctx = makeContext([existing]);
+    const result = await manageFirewallRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        chain: "forward",
+        ruleAction: "accept",
+        connectionNatState: "dstnat,srcnat",
+        comment: "nat-set",
+      },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("matches a negated connection-state and keeps the negation in the body", async () => {
+    const existing = {
+      ".id": "*E",
+      chain: "input",
+      action: "accept",
+      "connection-state": "!invalid",
+      comment: "not-invalid",
+    };
+    const params = {
+      routerId: "test-router",
+      action: "add",
+      chain: "input",
+      ruleAction: "accept",
+      connectionState: "!invalid",
+      comment: "not-invalid",
+    };
+    const same = await manageFirewallRuleTool.handler(params, makeContext([existing]));
+    expect((same.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    const ctx = makeContext([]);
+    await manageFirewallRuleTool.handler(params, ctx);
+    expect(createMock(ctx).mock.calls[0][1]).toMatchObject({ "connection-state": "!invalid" });
+
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...params, connectionState: "invalid" },
+        makeContext([existing]),
+      ),
+    ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
+  });
+
+  it("rejects NAT targets that the rule action does not accept", async () => {
+    const nat = { routerId: "test-router", action: "add", table: "nat", dryRun: true };
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...nat, chain: "srcnat", ruleAction: "masquerade", toAddresses: "203.0.113.1" },
+        makeContext([]),
+      ),
+    ).rejects.toMatchObject({ code: "NAT_TARGET_NOT_APPLICABLE" });
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...nat, chain: "dstnat", ruleAction: "accept", toPorts: "443" },
+        makeContext([]),
+      ),
+    ).rejects.toMatchObject({ code: "NAT_TARGET_NOT_APPLICABLE" });
+  });
+
+  it("accepts to-ports on masquerade and redirect", async () => {
+    for (const ruleAction of ["masquerade", "redirect"]) {
+      const result = await manageFirewallRuleTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          table: "nat",
+          chain: ruleAction === "masquerade" ? "srcnat" : "dstnat",
+          ruleAction,
+          toPorts: "8080",
+          dryRun: true,
+        },
+        makeContext([]),
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+    }
+  });
+});

@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { listContent, compactFields } from "./pagination.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { dryRun, limit, routerId } from "./schema-fields.js";
+import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
@@ -48,6 +48,69 @@ const listInterfaceListsTool: ToolDefinition = {
       };
     } catch (err) {
       throw toolError(err, context, "list_interface_lists");
+    }
+  },
+};
+
+const listInterfaceListMembersInputSchema = z
+  .object({
+    routerId,
+    list: z.string().optional().describe("Only members of this interface list"),
+    interface: z.string().optional().describe("Only memberships of this interface"),
+    limit,
+    offset,
+  })
+  .strict();
+
+const listInterfaceListMembersTool: ToolDefinition = {
+  name: "list_interface_list_members",
+  title: "List Interface List Members",
+  description:
+    "List interface list memberships (which interface belongs to which list, e.g. WAN/LAN) on a MikroTik router. Supports filtering by list and interface, with pagination.",
+  inputSchema: listInterfaceListMembersInputSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = listInterfaceListMembersInputSchema.parse(params);
+    log.info(
+      { routerId: context.routerId, list: parsed.list, interface: parsed.interface },
+      "Listing interface list members",
+    );
+    try {
+      const filter: Record<string, string> = {};
+      if (parsed.list !== undefined) filter.list = parsed.list;
+      if (parsed.interface !== undefined) filter.interface = parsed.interface;
+
+      const members = await context.routerClient.get<RouterOSRecord>(
+        "interface/list/member",
+        Object.keys(filter).length > 0 ? { filter } : {},
+      );
+      const { items, total, hasMore } = paginate(members, parsed.offset, parsed.limit);
+
+      return {
+        content: listContent(
+          "Interface list members",
+          context.routerId,
+          items,
+          total,
+          parsed.offset,
+          (m) => compactFields(m, ["list", "interface", "dynamic", "disabled", "comment"]),
+        ),
+        structuredContent: {
+          routerId: context.routerId,
+          members: items,
+          total,
+          hasMore,
+          offset: parsed.offset,
+          limit: parsed.limit,
+        },
+      };
+    } catch (err) {
+      throw toolError(err, context, "list_interface_list_members");
     }
   },
 };
@@ -263,4 +326,5 @@ export const interfaceListTools: ToolDefinition[] = [
   listInterfaceListsTool,
   manageInterfaceListTool,
   manageInterfaceListMemberTool,
+  listInterfaceListMembersTool,
 ];

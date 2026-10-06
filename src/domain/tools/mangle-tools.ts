@@ -2,6 +2,7 @@ import { z } from "zod";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
+import { sameRuleValue } from "./rule-match.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -164,16 +165,36 @@ const manageMangleRuleTool: ToolDefinition = {
 
         if (existing) {
           const sameChain = existing.chain === parsed.chain;
-          const sameSrcAddress = (existing["src-address"] ?? "") === (parsed.srcAddress ?? "");
-          const sameDstAddress = (existing["dst-address"] ?? "") === (parsed.dstAddress ?? "");
-          const sameSrcAddressList =
-            (existing["src-address-list"] ?? "") === (parsed.srcAddressList ?? "");
-          const sameDstAddressList =
-            (existing["dst-address-list"] ?? "") === (parsed.dstAddressList ?? "");
-          const sameNewRoutingMark =
-            (existing["new-routing-mark"] ?? "") === (parsed.newRoutingMark ?? "");
-          const sameNewConnectionMark =
-            (existing["new-connection-mark"] ?? "") === (parsed.newConnectionMark ?? "");
+          const sameSrcAddress = sameRuleValue(
+            "src-address",
+            existing["src-address"],
+            parsed.srcAddress,
+          );
+          const sameDstAddress = sameRuleValue(
+            "dst-address",
+            existing["dst-address"],
+            parsed.dstAddress,
+          );
+          const sameSrcAddressList = sameRuleValue(
+            "src-address-list",
+            existing["src-address-list"],
+            parsed.srcAddressList,
+          );
+          const sameDstAddressList = sameRuleValue(
+            "dst-address-list",
+            existing["dst-address-list"],
+            parsed.dstAddressList,
+          );
+          const sameNewRoutingMark = sameRuleValue(
+            "new-routing-mark",
+            existing["new-routing-mark"],
+            parsed.newRoutingMark,
+          );
+          const sameNewConnectionMark = sameRuleValue(
+            "new-connection-mark",
+            existing["new-connection-mark"],
+            parsed.newConnectionMark,
+          );
 
           if (
             sameChain &&

@@ -182,6 +182,18 @@ describe("ip tools", () => {
       expect((ctx.routerClient as Record<string, unknown>).update).not.toHaveBeenCalled();
     });
 
+    it("returns no_change for a comment of yes, which normalizes like a boolean", async () => {
+      // Both sides go through normalizeWireValue; normalizing only the stored side
+      // turned "yes" into "true" and reported an update on every call.
+      const ctx = makeContext([{ ...sampleAddress, comment: "yes" }]);
+      const result = await manageIpAddressTool.handler(
+        { ...baseParams, action: "update", comment: "yes", disabled: false },
+        ctx,
+      );
+      expect(result.structuredContent).toHaveProperty("action", "no_change");
+      expect((ctx.routerClient as Record<string, unknown>).update).not.toHaveBeenCalled();
+    });
+
     it("updates when disabled actually differs", async () => {
       const ctx = makeContext([{ ...sampleAddress, disabled: false }]);
       const result = await manageIpAddressTool.handler(
@@ -245,5 +257,55 @@ describe("ip tools", () => {
       expect(error).toBeInstanceOf(MikroMCPError);
       expect((error as MikroMCPError).code).toBe("IP_ADDRESS_NOT_FOUND");
     });
+  });
+});
+
+describe("list_ip_addresses", () => {
+  const listIpAddressesTool = ipTools.find((t) => t.name === "list_ip_addresses")!;
+  const rows = [
+    { ".id": "*1", address: "192.168.1.1/24", interface: "bridge1", disabled: false },
+    { ".id": "*2", address: "10.0.0.1/24", interface: "ether2", disabled: true },
+    { ".id": "*3", address: "100.64.20.10/22", interface: "ether1", dynamic: true },
+  ];
+
+  it("is a read-only tool", () => {
+    expect(listIpAddressesTool.annotations.readOnlyHint).toBe(true);
+    expect(listIpAddressesTool.annotations.destructiveHint).toBe(false);
+  });
+
+  it("returns all addresses with pagination metadata", async () => {
+    const ctx = makeContext(rows);
+    const result = await listIpAddressesTool.handler({ routerId: "test-router" }, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.total).toBe(3);
+    expect(sc.addresses).toHaveLength(3);
+    expect(sc.hasMore).toBe(false);
+    expect(result.content).toContain("address=192.168.1.1/24");
+  });
+
+  it("passes the interface filter to the router query", async () => {
+    const ctx = makeContext([rows[0]]);
+    await listIpAddressesTool.handler({ routerId: "test-router", interface: "bridge1" }, ctx);
+    expect(ctx.routerClient.get).toHaveBeenCalledWith("ip/address", {
+      filter: { interface: "bridge1" },
+    });
+  });
+
+  it("filters by disabled state", async () => {
+    const ctx = makeContext(rows);
+    const result = await listIpAddressesTool.handler(
+      { routerId: "test-router", disabled: "true" },
+      ctx,
+    );
+    const addresses = (result.structuredContent as Record<string, unknown>).addresses as Array<
+      Record<string, unknown>
+    >;
+    expect(addresses.map((a) => a.address)).toEqual(["10.0.0.1/24"]);
+  });
+
+  it("rejects unknown parameters", () => {
+    expect(() =>
+      listIpAddressesTool.inputSchema.parse({ routerId: "r", address: "192.0.2.1/24" }),
+    ).toThrow();
   });
 });

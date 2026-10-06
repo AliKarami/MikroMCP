@@ -1,6 +1,6 @@
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
 import type { RouterOSRecord, RouterOSValue, RestorePlan } from "../../types.js";
-import { isTrue } from "../../adapter/response-parser.js";
+import { isTrue, normalizeWireValue } from "../../adapter/response-parser.js";
 
 /**
  * Volatile/read-only fields that RouterOS reports but that are not part of a
@@ -91,21 +91,15 @@ export const SEMANTIC_KEYS: Record<string, readonly string[]> = {
   user: ["name"],
 };
 
-function normalizeValue(v: RouterOSValue | undefined): string {
-  if (v === true || v === "true" || v === "yes") return "true";
-  if (v === false || v === "false" || v === "no") return "false";
-  return String(v ?? "");
-}
-
 function semanticKey(record: RouterOSRecord, keys: readonly string[]): string {
-  return keys.map((k) => normalizeValue(record[k] ?? "")).join("|");
+  return keys.map((k) => normalizeWireValue(record[k] ?? "")).join("|");
 }
 
 function recordSignature(record: RouterOSRecord): string {
   return Object.entries(record)
     .filter(([k]) => k !== ".id")
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${normalizeValue(v)}`)
+    .map(([k, v]) => `${k}=${normalizeWireValue(v)}`)
     .join(";");
 }
 
@@ -113,7 +107,7 @@ function recordsAreEqual(a: RouterOSRecord, b: RouterOSRecord): boolean {
   const keysA = Object.keys(a).filter((k) => k !== ".id");
   const keysB = Object.keys(b).filter((k) => k !== ".id");
   if (keysA.length !== keysB.length) return false;
-  return keysA.every((k) => normalizeValue(a[k]) === normalizeValue(b[k] ?? ""));
+  return keysA.every((k) => normalizeWireValue(a[k]) === normalizeWireValue(b[k] ?? ""));
 }
 
 function hasDuplicateKeys(records: RouterOSRecord[], keys: readonly string[]): boolean {

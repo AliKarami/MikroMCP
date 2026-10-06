@@ -51,7 +51,7 @@ Never use the `admin` account for automation. Create a named user so you can rev
 /user add name=mcp-api group=read password=choose-a-strong-password
 ```
 
-### Full tool access (all 123 tools including write, diagnostics, and reboot)
+### Full tool access (all 126 tools including write, diagnostics, and reboot)
 
 ```
 /user add name=mcp-api group=full password=choose-a-strong-password

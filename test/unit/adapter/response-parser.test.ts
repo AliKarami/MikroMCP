@@ -5,6 +5,7 @@ import {
   parseRecords,
   isTrue,
   sameValue,
+  normalizeWireValue,
   lastSection,
 } from "../../../src/adapter/response-parser.js";
 
@@ -134,6 +135,20 @@ describe("sameValue", () => {
 
   it("treats a missing record field as not matching", () => {
     expect(sameValue(undefined, "10")).toBe(false);
+  });
+});
+
+describe("normalizeWireValue", () => {
+  it("maps RouterOS booleans to true/false", () => {
+    expect(normalizeWireValue(true)).toBe("true");
+    expect(normalizeWireValue("yes")).toBe("true");
+    expect(normalizeWireValue("no")).toBe("false");
+  });
+
+  it("stringifies numbers and maps a missing value to an empty string", () => {
+    expect(normalizeWireValue(443)).toBe("443");
+    expect(normalizeWireValue(undefined)).toBe("");
+    expect(normalizeWireValue(null)).toBe("");
   });
 });
 

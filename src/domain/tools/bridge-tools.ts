@@ -79,6 +79,88 @@ const listBridgesTool: ToolDefinition = {
   },
 };
 
+const listBridgePortsInputSchema = z
+  .object({
+    routerId,
+    bridge: z.string().optional().describe("Only ports of this bridge"),
+    interface: z.string().optional().describe("Only the port entry for this interface"),
+    limit,
+    offset,
+  })
+  .strict();
+
+const listBridgePortsTool: ToolDefinition = {
+  name: "list_bridge_ports",
+  title: "List Bridge Ports",
+  description:
+    "List bridge port entries (interface membership, PVID, STP role and status) on a MikroTik router. Supports filtering by bridge and interface, with pagination.",
+  inputSchema: listBridgePortsInputSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = listBridgePortsInputSchema.parse(params);
+    log.info(
+      { routerId: context.routerId, bridge: parsed.bridge, interface: parsed.interface },
+      "Listing bridge ports",
+    );
+    try {
+      const filter: Record<string, string> = {};
+      if (parsed.bridge !== undefined) filter.bridge = parsed.bridge;
+      if (parsed.interface !== undefined) filter.interface = parsed.interface;
+
+      const ports = await context.routerClient.get<RouterOSRecord>(
+        "interface/bridge/port",
+        Object.keys(filter).length > 0 ? { filter } : {},
+      );
+
+      // debug-info is a multi-line STP state dump (~1.5 KB per port) with no
+      // configuration value; drop it to keep the response small.
+      const trimmed = ports.map((p) => {
+        const { "debug-info": _debug, ...rest } = p as Record<string, unknown>;
+        return rest as RouterOSRecord;
+      });
+
+      const { items: paginated, total, hasMore } = paginate(trimmed, parsed.offset, parsed.limit);
+
+      return {
+        content: listContent(
+          "Bridge ports",
+          context.routerId,
+          paginated,
+          total,
+          parsed.offset,
+          (p) =>
+            compactFields(p, [
+              "interface",
+              "bridge",
+              "pvid",
+              "frame-types",
+              "status",
+              "role",
+              "hw",
+              "disabled",
+              "comment",
+            ]),
+        ),
+        structuredContent: {
+          routerId: context.routerId,
+          ports: paginated,
+          total,
+          hasMore,
+          offset: parsed.offset,
+          limit: parsed.limit,
+        },
+      };
+    } catch (err) {
+      throw toolError(err, context, "list_bridge_ports");
+    }
+  },
+};
+
 const manageBridgeInputSchema = z
   .object({
     routerId,
@@ -296,4 +378,5 @@ export const bridgeTools: ToolDefinition[] = [
   listBridgesTool,
   manageBridgeTool,
   manageBridgePortTool,
+  listBridgePortsTool,
 ];

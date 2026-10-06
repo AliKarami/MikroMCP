@@ -350,3 +350,19 @@ describe("policy routing tools", () => {
     });
   });
 });
+
+describe("manage_routing_rule - composite key comparison", () => {
+  it("finds the rule when the requested address has a /32 mask", async () => {
+    const existing = {
+      ".id": "*3",
+      table: "to-leg1",
+      "src-address": "192.168.1.251",
+      disabled: "false",
+    };
+    const result = await manageRoutingRuleTool.handler(
+      { routerId: "test-router", action: "add", table: "to-leg1", srcAddress: "192.168.1.251/32" },
+      makeContext([existing]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+});

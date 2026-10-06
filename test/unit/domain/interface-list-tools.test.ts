@@ -43,7 +43,7 @@ const [listListsTool, manageListTool, manageMemberTool] = interfaceListTools;
 
 describe("interfaceListTools", () => {
   describe("metadata", () => {
-    it("exports 3 tools", () => expect(interfaceListTools).toHaveLength(3));
+    it("exports 4 tools", () => expect(interfaceListTools).toHaveLength(4));
     it("has correct names", () => {
       expect(listListsTool.name).toBe("list_interface_lists");
       expect(manageListTool.name).toBe("manage_interface_list");
@@ -250,5 +250,45 @@ describe("interfaceListTools", () => {
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
       expect(ctx.routerClient.remove).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("list_interface_list_members", () => {
+  const listMembersTool = interfaceListTools.find((t) => t.name === "list_interface_list_members")!;
+  const MEMBER2 = { ".id": "*B", list: "LAN", interface: "bridge1", dynamic: false };
+
+  it("is a read-only tool", () => {
+    expect(listMembersTool.annotations.readOnlyHint).toBe(true);
+  });
+
+  it("returns memberships with pagination metadata", async () => {
+    const ctx = makeContext([], [MEMBER1, MEMBER2]);
+    const result = await listMembersTool.handler({ routerId: "test-router" }, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.total).toBe(2);
+    expect(sc.members).toHaveLength(2);
+    expect(result.content).toContain("list=WAN interface=ether1");
+  });
+
+  it("passes list and interface filters to the router query", async () => {
+    const ctx = makeContext([], [MEMBER1]);
+    await listMembersTool.handler(
+      { routerId: "test-router", list: "WAN", interface: "ether1" },
+      ctx,
+    );
+    expect(ctx.routerClient.get).toHaveBeenCalledWith("interface/list/member", {
+      filter: { list: "WAN", interface: "ether1" },
+    });
+  });
+
+  it("paginates with limit and offset", async () => {
+    const ctx = makeContext([], [MEMBER1, MEMBER2]);
+    const result = await listMembersTool.handler(
+      { routerId: "test-router", limit: 1, offset: 1 },
+      ctx,
+    );
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.members).toEqual([MEMBER2]);
+    expect(sc.hasMore).toBe(false);
   });
 });
