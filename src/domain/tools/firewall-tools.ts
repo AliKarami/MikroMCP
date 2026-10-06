@@ -6,7 +6,8 @@ import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
 import { sameRuleValue } from "./rule-match.js";
-import { limit, offset, routerId } from "./schema-fields.js";
+import { limit, offset, routerId, ruleComment } from "./schema-fields.js";
+import { findRuleByComment, ruleCommentKey } from "./rule-comment.js";
 import { toolError } from "./tool-definition.js";
 import { paginate, listContent, compactFields } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -17,22 +18,6 @@ const log = createLogger("firewall-tools");
 
 function tableToPath(table: "filter" | "nat"): string {
   return table === "filter" ? "ip/firewall/filter" : "ip/firewall/nat";
-}
-
-function sanitizeComment(comment: string | undefined): string | undefined {
-  if (comment === undefined) return undefined;
-  return comment.replace(/[\x00-\x1f\x7f]/g, "");
-}
-
-async function findRuleByComment(
-  context: ToolContext,
-  path: string,
-  comment: string,
-): Promise<Record<string, string> | undefined> {
-  const results = await context.routerClient.get<RouterOSRecord>(path, {
-    filter: { comment },
-  });
-  return results.length > 0 ? (results[0] as Record<string, string>) : undefined;
 }
 
 /** Optional match and NAT-target parameters, mapped to their RouterOS property names. */
@@ -251,11 +236,10 @@ const manageFirewallRuleInputSchema = z
       .refine(isPortOrRange, "Must be a port 1-65535 or an ascending range such as 8000-8100")
       .optional()
       .describe("NAT target port or range (nat table only)"),
-    comment: z
-      .string()
+    comment: ruleComment
       .max(255)
       .optional()
-      .describe("Comment to identify the rule (used as idempotency key)"),
+      .describe("Comment to identify the rule (used as idempotency key); omit for none"),
     disabled: z.boolean().default(false).describe("Whether the rule should be disabled"),
     placeBefore: z.string().optional().describe("Place the new rule before this rule ID"),
     dryRun: z
@@ -280,8 +264,6 @@ const manageFirewallRuleTool: ToolDefinition = {
   snapshotPaths: ["ip/firewall/filter", "ip/firewall/nat"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageFirewallRuleInputSchema.parse(params);
-    const comment = sanitizeComment(parsed.comment);
-
     log.info(
       {
         routerId: context.routerId,
@@ -295,6 +277,8 @@ const manageFirewallRuleTool: ToolDefinition = {
     const path = tableToPath(parsed.table);
 
     try {
+      const comment = parsed.comment === undefined ? undefined : ruleCommentKey(parsed.comment);
+
       // -----------------------------------------------------------------------
       // ADD
       // -----------------------------------------------------------------------
