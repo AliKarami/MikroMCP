@@ -870,7 +870,7 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
   });
 
   it("throws CONFLICT pointing to enable when only the disabled state differs", async () => {
-    // RouterOS sends disabled as a string; the parser turns it into a boolean.
+    // RouterOS sends disabled as the string "true"; isTrue also accepts a parsed boolean.
     const existing = { ...portForward, disabled: "true" };
     await expect(
       manageFirewallRuleTool.handler(portForwardParams, makeContext([existing])),
