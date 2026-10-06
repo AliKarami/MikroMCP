@@ -486,7 +486,7 @@ describe("networkServicesTools", () => {
 
     it("has correct name", () => expect(manageTool.name).toBe("manage_ntp_client"));
     it("is not readOnly", () => expect(manageTool.annotations.readOnlyHint).toBe(false));
-    it("is not destructive", () => expect(manageTool.annotations.destructiveHint).toBe(false));
+    it("is destructive", () => expect(manageTool.annotations.destructiveHint).toBe(true));
     it("is idempotent", () => expect(manageTool.annotations.idempotentHint).toBe(true));
 
     describe("input schema", () => {
