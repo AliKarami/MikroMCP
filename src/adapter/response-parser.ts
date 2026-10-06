@@ -15,18 +15,25 @@ const NUMERIC_RE = /^-?\d+(\.\d+)?$/;
 const DURATION_RE = /^\d+[wdhms](\d+[wdhms])*$/;
 
 /**
+ * Free-text fields. Their value is whatever the user typed, so `"0123"` must
+ * not become `123` and `"true"` must not become a boolean.
+ */
+const FREE_TEXT_KEYS: ReadonlySet<string> = new Set(["comment", "text"]);
+
+/**
  * Parse a single RouterOS string value into an appropriate JS type.
  *
  * RouterOS returns **everything** as strings. This function converts:
  * - `"true"` / `"false"` to booleans
  * - Numeric strings to numbers
  * - `.id` values stay as strings (e.g. `"*A"`)
+ * - Free-text fields (`comment`, `text`) stay as strings
  * - Duration strings stay as strings (e.g. `"1d2h3m4s"`)
  * - Everything else stays as string
  */
 export function parseRouterOSValue(key: string, value: string): unknown {
-  // .id values are always kept as-is
-  if (key === ".id") {
+  // .id values and free text are always kept as-is
+  if (key === ".id" || FREE_TEXT_KEYS.has(key)) {
     return value;
   }
 
