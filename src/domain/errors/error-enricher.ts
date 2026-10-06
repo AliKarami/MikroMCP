@@ -35,6 +35,10 @@ const SSH_AUTH_LEVEL = "client-authentication";
 // within readyTimeout.
 const SSH_TIMEOUT_LEVEL = "client-timeout";
 
+// SshClient and SftpClient set this `code`, with `expected` and `actual` fingerprints,
+// when the router's host key is not the one sshFingerprint pins.
+const SSH_HOST_KEY_MISMATCH = "SSH_HOST_KEY_MISMATCH";
+
 /**
  * Default recoverability hints keyed by error category.
  */
@@ -154,6 +158,7 @@ function responseDetail(body: unknown): unknown {
  * - If the value is already a MikroMCPError it is returned unchanged.
  * - SSH login rejections (ssh2 `level: "client-authentication"`) become ROUTER_AUTH_FAILED.
  * - SSH handshake timeouts (ssh2 `level: "client-timeout"`) become ROUTER_UNREACHABLE.
+ * - SSH host keys that do not match sshFingerprint become ROUTER_AUTH_FAILED.
  * - HTTP-style errors (with a numeric `statusCode`) are mapped by status.
  * - Network errors (ECONNREFUSED, etc.) become ROUTER_UNREACHABLE.
  * - Everything else becomes INTERNAL.
@@ -219,6 +224,31 @@ export function enrichError(error: unknown, context?: EnrichContext): MikroMCPEr
         suggestedAction:
           "Check that the router's SSH service is enabled and reachable from this host on " +
           "sshPort (default 22): /ip service ssh, its available-from list, and input firewall rules.",
+      },
+      cause: error,
+    });
+  }
+
+  // --- SSH host key not the pinned one ---
+  // Only the operator can tell a re-keyed router from an interception, so the hint
+  // warns against trusting the key the router presented.
+  if (typeof raw === "object" && raw !== null && raw.code === SSH_HOST_KEY_MISMATCH) {
+    return new MikroMCPError({
+      category: ErrorCategory.ROUTER_AUTH_FAILED,
+      code: SSH_HOST_KEY_MISMATCH,
+      message: rawMessage,
+      details: buildDetails(
+        { transport: "ssh", expected: raw.expected, actual: raw.actual },
+        context,
+      ),
+      recoverability: {
+        retryable: false,
+        suggestedAction:
+          "A reset, Netinstall or /ip ssh regenerate-host-key changes the router's host key; so " +
+          "does another device on that address, or an intercepted connection. Do not copy the " +
+          "presented fingerprint into routers.yaml unverified: have the operator confirm the " +
+          "router's key over a channel they trust, then update sshFingerprint and restart the " +
+          "server.",
       },
       cause: error,
     });

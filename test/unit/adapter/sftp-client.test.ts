@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -107,5 +108,38 @@ describe("SftpClient authentication", () => {
     expect(options).toMatchObject({ username: "rest-user", password: "rest-password" });
     expect(options.privateKey).toBeUndefined();
     await promise;
+  });
+});
+
+describe("SftpClient host key pinning", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("rejects with SSH_HOST_KEY_MISMATCH when the router presents another key", async () => {
+    const { conn, sftp } = buildMocks();
+    const hostKey = Buffer.from("router-host-key");
+    conn.connect = vi.fn((opts: { hostVerifier: (key: Buffer) => boolean }) =>
+      setImmediate(() => {
+        // ssh2 ends the key exchange with this error once hostVerifier returns false.
+        if (!opts.hostVerifier(hostKey)) {
+          conn.emit(
+            "error",
+            Object.assign(new Error("Host denied (verification failed)"), { level: "handshake" }),
+          );
+        }
+      }),
+    );
+    const client = new SftpClient(
+      { ...routerConfig, sshFingerprint: "ab".repeat(32) },
+      credentials,
+    );
+
+    await expect(client.upload("test.rsc", ":log info")).rejects.toMatchObject({
+      code: "SSH_HOST_KEY_MISMATCH",
+      expected: "ab".repeat(32),
+      actual: createHash("sha256").update(hostKey).digest("hex"),
+    });
+    expect(sftp.writeFile).not.toHaveBeenCalled();
   });
 });
