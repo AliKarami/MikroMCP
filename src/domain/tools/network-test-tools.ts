@@ -106,7 +106,7 @@ const fetchUrlTool: ToolDefinition = {
   // file on the router. openWorld: reaches arbitrary external hosts.
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
     openWorldHint: true,
   },

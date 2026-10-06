@@ -85,7 +85,7 @@ const manageQueueTool: ToolDefinition = {
   inputSchema: manageQueueInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

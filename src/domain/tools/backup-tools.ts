@@ -23,7 +23,7 @@ const createBackupTool: ToolDefinition = {
   inputSchema: createBackupInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
     openWorldHint: false,
   },
@@ -86,7 +86,7 @@ const exportConfigTool: ToolDefinition = {
   // Not read-only: with a `file` argument it writes a file on the router.
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

@@ -130,6 +130,16 @@ function makeContext(overrides: Partial<ToolContext> = {}): ToolContext {
   };
 }
 
+/** Two-step fleet confirmation: returns the token from the APPROVAL_REQUIRED first call. */
+async function fleetToken(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
+  try {
+    await bulkTool.handler(args, ctx);
+  } catch (err) {
+    return (err as MikroMCPError).details!.confirmationToken as string;
+  }
+  throw new Error("expected APPROVAL_REQUIRED");
+}
+
 function makeFleetContext(overrides: Partial<ToolContext> = {}): ToolContext {
   const mockRegistry = {
     getRouter: vi.fn().mockImplementation((id: string) => makeRouterConfig(id)),
@@ -170,9 +180,9 @@ describe("fleet-tools", () => {
       expect(healthTool.annotations.destructiveHint).toBe(false);
     });
 
-    it("bulk_execute has readOnlyHint: false", () => {
+    it("bulk_execute is a destructive write", () => {
       expect(bulkTool.annotations.readOnlyHint).toBe(false);
-      expect(bulkTool.annotations.destructiveHint).toBe(false);
+      expect(bulkTool.annotations.destructiveHint).toBe(true);
     });
 
     it("list_routers is read-only and fleet-scoped", () => {
@@ -385,16 +395,6 @@ describe("fleet-tools", () => {
       ).rejects.toMatchObject({
         category: ErrorCategory.VALIDATION,
         code: "BULK_SELF_REFERENCE",
-      });
-    });
-
-    it("throws CONFIGURATION when destructive tool is used and confirmationSecret is not configured", async () => {
-      const ctx = makeFleetContext();
-      await expect(
-        bulkTool.handler({ toolName: "reboot", routerIds: ["r1"], params: {} }, ctx),
-      ).rejects.toMatchObject({
-        category: ErrorCategory.CONFIGURATION,
-        code: "FLEET_CONFIRMATION_UNAVAILABLE",
       });
     });
 
@@ -733,10 +733,13 @@ describe("fleet-tools", () => {
 
     it("snapshots and journals each router for a write tool", async () => {
       const ctx = writeFleetContext();
-      await bulkTool.handler(
-        { toolName: "manage_route", routerIds: ["r1", "r2"], params: {}, concurrency: 5 },
-        ctx,
-      );
+      const args = {
+        toolName: "manage_route",
+        routerIds: ["r1", "r2"],
+        params: {},
+        concurrency: 5,
+      };
+      await bulkTool.handler({ ...args, confirmationToken: await fleetToken(args, ctx) }, ctx);
 
       expect(vi.mocked(takeSnapshot)).toHaveBeenCalledTimes(2);
       expect(vi.mocked(recordAttempt)).toHaveBeenCalledTimes(2);
@@ -747,10 +750,8 @@ describe("fleet-tools", () => {
     it("records a failure outcome when the write tool throws", async () => {
       vi.mocked(mockWriteTool.handler).mockRejectedValueOnce(new Error("boom"));
       const ctx = writeFleetContext();
-      await bulkTool.handler(
-        { toolName: "manage_route", routerIds: ["r1"], params: {}, concurrency: 5 },
-        ctx,
-      );
+      const args = { toolName: "manage_route", routerIds: ["r1"], params: {}, concurrency: 5 };
+      await bulkTool.handler({ ...args, confirmationToken: await fleetToken(args, ctx) }, ctx);
 
       expect(vi.mocked(recordOutcome)).toHaveBeenCalledWith(
         expect.objectContaining({ phase: "failure", outcome: "boom" }),
@@ -817,7 +818,7 @@ describe("fleet-tools", () => {
     });
   });
 
-  describe("handler — bulk_execute destructive confirmation", () => {
+  describe("handler — bulk_execute write confirmation", () => {
     function makeFleetContextWithSecret(secret: string | undefined): ToolContext {
       return makeFleetContext({
         appConfig: {
@@ -873,14 +874,44 @@ describe("fleet-tools", () => {
       expect(mockDestructiveTool.handler).toHaveBeenCalledTimes(2);
     });
 
-    it("returns FLEET_CONFIRMATION_UNAVAILABLE when confirmationSecret is not configured", async () => {
-      const ctx = makeFleetContextWithSecret(undefined);
-      await expect(
-        bulkTool.handler({ toolName: "reboot", routerIds: ["r1"], params: {} }, ctx),
-      ).rejects.toMatchObject({
-        category: ErrorCategory.CONFIGURATION,
-        code: "FLEET_CONFIRMATION_UNAVAILABLE",
+    it("still gates a fan-out when confirmationSecret is not configured", async () => {
+      vi.mocked(mockDestructiveTool.handler).mockResolvedValue({
+        content: "ok",
+        structuredContent: {},
       });
+      const ctx = makeFleetContextWithSecret(undefined);
+      const args = { toolName: "reboot", routerIds: ["r1"], params: {} };
+
+      await expect(bulkTool.handler(args, ctx)).rejects.toMatchObject({
+        category: ErrorCategory.APPROVAL_REQUIRED,
+        code: "FLEET_CONFIRMATION_REQUIRED",
+      });
+      const result = await bulkTool.handler(
+        { ...args, confirmationToken: await fleetToken(args, ctx) },
+        ctx,
+      );
+      expect(result.structuredContent).toMatchObject({ succeeded: 1, failed: 0 });
+    });
+
+    it("gates a non-destructive write tool", async () => {
+      vi.mocked(mockWriteTool.handler).mockClear();
+      const ctx = makeFleetContextWithSecret("fleet-secret");
+      await expect(
+        bulkTool.handler({ toolName: "manage_route", routerIds: ["r1", "r2"], params: {} }, ctx),
+      ).rejects.toMatchObject({
+        category: ErrorCategory.APPROVAL_REQUIRED,
+        code: "FLEET_CONFIRMATION_REQUIRED",
+      });
+      expect(mockWriteTool.handler).not.toHaveBeenCalled();
+    });
+
+    it("fans out a read-only tool without a token", async () => {
+      const ctx = makeFleetContextWithSecret("fleet-secret");
+      const result = await bulkTool.handler(
+        { toolName: "list_interfaces", routerIds: ["r1"], params: {} },
+        ctx,
+      );
+      expect(result.structuredContent).toMatchObject({ totalRouters: 1 });
     });
   });
 });

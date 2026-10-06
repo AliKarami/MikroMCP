@@ -42,9 +42,11 @@ Tools that modify or delete router state use a two-step confirmation flow:
 1. The first call returns a short-lived confirmation token (HMAC-SHA256, 5-minute TTL, single-use).
 2. The caller must echo the token back in a second call to execute the change.
 
-This prevents accidental fan-out: a runaway agent loop or a misrouted tool call cannot cause destructive changes without a human-in-the-loop confirmation step (or an automation that explicitly handles the confirmation round-trip).
+This stops one-shot mistakes: a misrouted tool call or a runaway loop cannot apply a destructive change in a single call. The token is returned to the caller, so it is not a human approval — an LLM client can complete the round-trip on its own. For an enforced human in the loop, use your MCP client's per-tool approval prompts and scope identities with `allowedToolPatterns`.
 
-`bulk_execute` explicitly blocks destructive tools — it only permits read-only and idempotent write operations to prevent unintended mass changes across a router fleet.
+Every write tool except the preview-only `plan_changes` is destructive. `manage_script`, `run_script`, `manage_scheduled_job`, and `upload_file` (a `*.auto.rsc` file uploaded over FTP runs immediately) amount to arbitrary script execution with the RouterOS user's policies.
+
+`bulk_execute` gates every write fan-out, destructive or not, behind a fleet-wide token for every role.
 
 ---
 

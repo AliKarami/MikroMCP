@@ -54,4 +54,22 @@ describe("skill tool-map stays in lockstep with allTools", () => {
     const unknown = referencedTools.filter((name) => !real.has(name)).sort();
     expect(unknown, `unknown tool names in tool-map.md: ${unknown.join(", ")}`).toEqual([]);
   });
+
+  it("every row's safety class matches the tool's annotations", () => {
+    // The agent picks how carefully to act from this column, so it must not
+    // understate a tool: read = readOnlyHint, destructive = destructiveHint.
+    const row = /^\|.*\| `([a-z0-9_]+)` \|.*\| (read|write|destructive) \|$/gm;
+    const mismatches: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = row.exec(markdown)) !== null) {
+      const tool = allTools.find((t) => t.name === m![1]);
+      if (!tool) continue;
+      const { readOnlyHint, destructiveHint } = tool.annotations;
+      const expected = readOnlyHint ? "read" : destructiveHint ? "destructive" : "write";
+      if (m[2] !== expected) mismatches.push(`${m[1]}: ${m[2]} (expected ${expected})`);
+    }
+    expect(mismatches, `tool-map.md safety classes out of date: ${mismatches.join("; ")}`).toEqual(
+      [],
+    );
+  });
 });

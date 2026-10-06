@@ -1,7 +1,11 @@
-import { createHmac, createHash, timingSafeEqual } from "node:crypto";
+import { createHmac, createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
+
+// Used when MIKROMCP_CONFIRMATION_SECRET is unset, so fleet writes are always
+// gated. Its tokens verify only in this process and die with it.
+const processSecret = randomBytes(32).toString("hex");
 
 // Replay protection only (single-instance) — see confirmation.ts for the
 // multi-instance limitation.
@@ -50,11 +54,15 @@ export function _resetForTests(): void {
 }
 
 /**
- * Two-step confirmation for fleet-wide destructive operations.
+ * Two-step confirmation for fleet-wide write operations.
  * First call (no token) throws APPROVAL_REQUIRED carrying a self-verifying token.
  * Second call with the matching token for the identical fleet/params returns void.
  */
-export function checkFleetConfirmation(args: FleetConfirmationArgs, secret: string): void {
+export function checkFleetConfirmation(
+  args: FleetConfirmationArgs,
+  configuredSecret: string | undefined,
+): void {
+  const secret = configuredSecret ?? processSecret;
   const now = Date.now();
   sweepUsed(now);
   const fp = fingerprint(args);
@@ -92,7 +100,7 @@ export function checkFleetConfirmation(args: FleetConfirmationArgs, secret: stri
   throw new MikroMCPError({
     category: ErrorCategory.APPROVAL_REQUIRED,
     code: "FLEET_CONFIRMATION_REQUIRED",
-    message: `This will run destructive tool "${args.toolName}" across ${args.routerIds.length} router(s). Re-submit with confirmationToken to proceed.`,
+    message: `This will run write tool "${args.toolName}" across ${args.routerIds.length} router(s). Re-submit with confirmationToken to proceed.`,
     details: {
       confirmationToken: token,
       expiresAt: new Date(expiresAtMs).toISOString(),
