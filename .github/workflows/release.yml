@@ -250,6 +250,23 @@ jobs:
             npm publish --access public --provenance --tag "$NPM_TAG"
           fi
 
+      - name: Wait for npm to serve the version
+        # npm processes a new publish asynchronously ("may take a few minutes to become
+        # available"), and the MCP Registry rejects the server until npm returns the
+        # version. v1.12.0 took about 3.5 minutes; allow up to 15.
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          for attempt in $(seq 1 60); do
+            if npm view "mikromcp@${VERSION}" version --prefer-online 2>/dev/null | grep -qx "${VERSION}"; then
+              echo "mikromcp@${VERSION} is available on npm."
+              exit 0
+            fi
+            echo "Waiting for npm to serve mikromcp@${VERSION} (attempt ${attempt}/60)..."
+            sleep 15
+          done
+          echo "::error::mikromcp@${VERSION} was not available on npm after 15 minutes."
+          exit 1
+
       - name: Install mcp-publisher
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
