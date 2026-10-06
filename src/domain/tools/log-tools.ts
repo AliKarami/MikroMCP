@@ -98,7 +98,7 @@ const manageLogRuleTool: ToolDefinition = {
   inputSchema: manageLogRuleInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
@@ -346,7 +346,7 @@ const manageLogActionTool: ToolDefinition = {
   inputSchema: manageLogActionInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

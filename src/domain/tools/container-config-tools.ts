@@ -74,7 +74,7 @@ const manageContainerConfigTool: ToolDefinition = {
   inputSchema: manageContainerConfigInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
@@ -223,7 +223,7 @@ const manageContainerEnvTool: ToolDefinition = {
   inputSchema: manageContainerEnvInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
@@ -400,7 +400,7 @@ const manageContainerMountTool: ToolDefinition = {
   inputSchema: manageContainerMountInputSchema,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },

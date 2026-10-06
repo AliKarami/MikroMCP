@@ -84,7 +84,8 @@ Full enumeration of every tool by family: `references/tool-map.md`.
    only; it refuses writes and `ping`/`traceroute`/`torch`/`bandwidth_test`).
 2. Validate the change on ONE router first (dry-run → apply).
 3. `bulk_execute` with the tool + params, targeting routerIds or a tag.
-4. For destructive tools, complete the fleet confirmation-token step.
+4. For any write tool, complete the fleet confirmation-token step: tell the user which
+   routers and what change the token covers, and re-submit only after they agree.
 5. Review per-router succeeded/failed counts; `rollback_change` per-router if needed.
 
 ### Recover from an error

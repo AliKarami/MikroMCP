@@ -16,9 +16,9 @@ Multi-tool patterns:
 | List filter/nat/mangle rules | `list_firewall_rules` | `ip/firewall/filter` | read |
 | Add/remove/toggle a filter or NAT rule | `manage_firewall_rule` | `ip/firewall/filter`, `ip/firewall/nat` | destructive |
 | List mangle rules | `list_mangle_rules` | `ip/firewall/mangle` | read |
-| Add/remove a mangle rule | `manage_mangle_rule` | `ip/firewall/mangle` | write |
+| Add/remove a mangle rule | `manage_mangle_rule` | `ip/firewall/mangle` | destructive |
 | List address-list entries | `list_address_list_entries` | `ip/firewall/address-list` | read |
-| Add/remove an address-list entry | `manage_address_list_entry` | `ip/firewall/address-list` | write |
+| Add/remove an address-list entry | `manage_address_list_entry` | `ip/firewall/address-list` | destructive |
 | List active connections | `list_connections` | `ip/firewall/connection` | read |
 
 ## System
@@ -26,7 +26,7 @@ Multi-tool patterns:
 |---|---|---|---|
 | Get CPU, memory, uptime, version | `get_system_status` | `system/identity`, `system/resource` | read |
 | Get current system clock | `get_system_clock` | `system/clock` | read |
-| Set system clock | `set_system_clock` | `system/clock` | write |
+| Set system clock | `set_system_clock` | `system/clock` | destructive |
 | Reboot the router | `reboot` | `system/reboot` | destructive |
 | Run an arbitrary RouterOS console command via SSH | `run_command` | SSH | destructive |
 
@@ -38,8 +38,8 @@ Multi-tool patterns:
 | Add/remove/modify a bridge | `manage_bridge` | `interface/bridge` | destructive |
 | Add/remove a port to a bridge | `manage_bridge_port` | `interface/bridge/port` | destructive |
 | List interface lists | `list_interface_lists` | `interface/list` | read |
-| Add/remove an interface list | `manage_interface_list` | `interface/list` | write |
-| Add/remove a member from an interface list | `manage_interface_list_member` | `interface/list/member` | write |
+| Add/remove an interface list | `manage_interface_list` | `interface/list` | destructive |
+| Add/remove a member from an interface list | `manage_interface_list_member` | `interface/list/member` | destructive |
 | List ARP table entries | `list_arp_entries` | `ip/arp` | read |
 | List LLDP/CDP neighbors | `list_neighbors` | `ip/neighbor` | read |
 
@@ -48,21 +48,21 @@ Multi-tool patterns:
 |---|---|---|---|
 | Add/remove an IP address on an interface | `manage_ip_address` | `ip/address` | destructive |
 | Get DNS resolver settings | `get_dns_settings` | `ip/dns` | read |
-| Manage DNS resolver settings | `manage_dns_settings` | `ip/dns` | write |
+| Manage DNS resolver settings | `manage_dns_settings` | `ip/dns` | destructive |
 | List static DNS entries | `list_dns_entries` | `ip/dns/static` | read |
 | Add/remove a static DNS entry | `manage_dns_entry` | `ip/dns/static` | destructive |
 | List IP service ports (ssh, api, www…) | `list_ip_services` | `ip/service` | read |
 | Enable/disable/change port of an IP service | `manage_ip_service` | `ip/service` | destructive |
 | List IP pools | `list_ip_pools` | `ip/pool` | read |
-| Add/remove an IP pool | `manage_ip_pool` | `ip/pool` | write |
+| Add/remove an IP pool | `manage_ip_pool` | `ip/pool` | destructive |
 
 ## DHCP
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List DHCP server leases | `list_dhcp_leases` | `ip/dhcp-server/lease` | read |
-| Add/remove/toggle a DHCP lease | `manage_dhcp_lease` | `ip/dhcp-server/lease` | write |
+| Add/remove/toggle a DHCP lease | `manage_dhcp_lease` | `ip/dhcp-server/lease` | destructive |
 | List DHCP servers | `list_dhcp_servers` | `ip/dhcp-server` | read |
-| Add/remove/toggle a DHCP server | `manage_dhcp_server` | `ip/dhcp-server` | write |
+| Add/remove/toggle a DHCP server | `manage_dhcp_server` | `ip/dhcp-server` | destructive |
 | List DHCP clients (WAN-side) | `list_dhcp_clients` | `ip/dhcp-client` | read |
 | Add/remove/toggle a DHCP client | `manage_dhcp_client` | `ip/dhcp-client` | destructive |
 
@@ -72,9 +72,9 @@ Multi-tool patterns:
 | List static routes | `list_routes` | `ip/route` | read |
 | Add/remove a static route | `manage_route` | `ip/route` | destructive |
 | List routing rules (policy routing) | `list_routing_rules` | `routing/rule` | read |
-| Add/remove a routing rule | `manage_routing_rule` | `routing/rule` | write |
+| Add/remove a routing rule | `manage_routing_rule` | `routing/rule` | destructive |
 | List routing tables | `list_routing_tables` | `routing/table` | read |
-| Add/remove a routing table | `manage_routing_table` | `routing/table` | write |
+| Add/remove a routing table | `manage_routing_table` | `routing/table` | destructive |
 | List BGP peers | `list_bgp_peers` | `routing/bgp/session` | read |
 | List OSPF neighbors | `list_ospf_neighbors` | `routing/ospf/neighbor` | read |
 
@@ -82,7 +82,7 @@ Multi-tool patterns:
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List WireGuard interfaces | `list_wireguard_interfaces` | `interface/wireguard` | read |
-| Add/remove a WireGuard interface | `manage_wireguard_interface` | `interface/wireguard` | write |
+| Add/remove a WireGuard interface | `manage_wireguard_interface` | `interface/wireguard` | destructive |
 | List WireGuard peers | `list_wireguard_peers` | `interface/wireguard/peers` | read |
 | Add/remove a WireGuard peer | `manage_wireguard_peer` | `interface/wireguard/peers` | destructive |
 
@@ -100,13 +100,13 @@ Multi-tool patterns:
 | List IPSec peers | `list_ipsec_peers` | `ip/ipsec/peer` | read |
 | Add/remove an IPSec peer | `manage_ipsec_peer` | `ip/ipsec/peer` | destructive |
 | List IPSec policies | `list_ipsec_policies` | `ip/ipsec/policy` | read |
-| Add/remove an IPSec policy | `manage_ipsec_policy` | `ip/ipsec/policy` | write |
+| Add/remove an IPSec policy | `manage_ipsec_policy` | `ip/ipsec/policy` | destructive |
 
 ## VPN — PPP & PPPoE
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List PPP profiles | `list_ppp_profiles` | `ppp/profile` | read |
-| Add/remove/update a PPP profile | `manage_ppp_profile` | `ppp/profile` | write |
+| Add/remove/update a PPP profile | `manage_ppp_profile` | `ppp/profile` | destructive |
 | List PPPoE clients | `list_pppoe_clients` | `interface/pppoe-client` | read |
 | Add/remove a PPPoE client | `manage_pppoe_client` | `interface/pppoe-client` | destructive |
 
@@ -114,47 +114,47 @@ Multi-tool patterns:
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List WiFi interfaces | `list_wifi_interfaces` | `interface/wifi` | read |
-| Enable/disable/update a WiFi interface | `manage_wifi_interface` | `interface/wifi` | write |
+| Enable/disable/update a WiFi interface | `manage_wifi_interface` | `interface/wifi` | destructive |
 | List associated WiFi clients | `list_wifi_clients` | `interface/wifi` | read |
 
 ## Queues
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List simple queues | `list_queues` | `queue/simple` | read |
-| Add/remove/update a simple queue | `manage_queue` | `queue/simple` | write |
+| Add/remove/update a simple queue | `manage_queue` | `queue/simple` | destructive |
 
 ## Users & Access
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List users | `list_users` | `user` | read |
-| Add/remove/update a user | `manage_user` | `user` | write |
+| Add/remove/update a user | `manage_user` | `user` | destructive |
 | List user groups | `list_user_groups` | `user/group` | read |
-| Add/remove a user group | `manage_user_group` | `user/group` | write |
+| Add/remove a user group | `manage_user_group` | `user/group` | destructive |
 
 ## Files, Scripts & Scheduler
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List files on the router | `list_files` | `file` | read |
 | Read a file's contents | `get_file_content` | `file` | read |
-| Upload a file to the router | `upload_file` | `file` | write |
+| Upload a file to the router | `upload_file` | `file` | destructive |
 | Delete a file | `delete_file` | `file` | destructive |
 | List scripts | `list_scripts` | `system/script` | read |
-| Add/remove/update a script | `manage_script` | `system/script` | write |
-| Run a script by name | `run_script` | `system/script` | write |
+| Add/remove/update a script | `manage_script` | `system/script` | destructive |
+| Run a script by name | `run_script` | `system/script` | destructive |
 | List scheduled jobs | `list_scheduled_jobs` | `system/scheduler` | read |
-| Add/remove/update a scheduled job | `manage_scheduled_job` | `system/scheduler` | write |
+| Add/remove/update a scheduled job | `manage_scheduled_job` | `system/scheduler` | destructive |
 
 ## Containers
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List containers | `list_containers` | `container` | read |
-| Add/remove/start/stop a container | `manage_container` | `container` | write |
+| Add/remove/start/stop a container | `manage_container` | `container` | destructive |
 | Get container registry/network config | `get_container_config` | `container/config` | read |
-| Update container global config | `manage_container_config` | `container/config` | write |
+| Update container global config | `manage_container_config` | `container/config` | destructive |
 | List container environment variables | `list_container_envs` | `container/envs` | read |
-| Add/remove a container env var | `manage_container_env` | `container/envs` | write |
+| Add/remove a container env var | `manage_container_env` | `container/envs` | destructive |
 | List container volume mounts | `list_container_mounts` | `container/mounts` | read |
-| Add/remove a container mount | `manage_container_mount` | `container/mounts` | write |
+| Add/remove a container mount | `manage_container_mount` | `container/mounts` | destructive |
 
 ## Diagnostics
 | Intent | Tool | REST path | Class |
@@ -163,7 +163,7 @@ Multi-tool patterns:
 | Traceroute to a host | `traceroute` | `tool/traceroute` | read |
 | Run a traffic capture (torch) | `torch` | `tool/torch` | read |
 | Run a RouterOS bandwidth test | `bandwidth_test` | `tool/bandwidth-test` | read |
-| Fetch a URL from the router | `fetch_url` | `tool/fetch` | read |
+| Fetch a URL from the router | `fetch_url` | `tool/fetch` | destructive |
 | Read the system log | `get_log` | `log` | read |
 
 ## Change Management & Fleet
@@ -172,20 +172,20 @@ Multi-tool patterns:
 | Preview a sequence of write operations | `plan_changes` | (orchestration) | write |
 | Execute a previewed plan | `apply_plan` | (orchestration) | destructive |
 | Roll back a previous change | `rollback_change` | (orchestration) | destructive |
-| Run the same tool against multiple routers | `bulk_execute` | (orchestration) | write |
+| Run the same tool against multiple routers | `bulk_execute` | (orchestration) | destructive |
 | Run the same read-only tool against multiple routers | `bulk_read` | (orchestration) | read |
 | Check health of a router | `check_router_health` | `system/resource` | read |
 | Discover configured routers, tags, and the default | `list_routers` | (local config) | read |
-| Create a config backup/snapshot | `create_backup` | `system/backup/save` | write |
-| Export running config | `export_config` | `system/export` | read |
+| Create a config backup/snapshot | `create_backup` | `system/backup/save` | destructive |
+| Export running config | `export_config` | `system/export` | destructive |
 
 ## Logging
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List log actions (output targets) | `list_log_actions` | `system/logging/action` | read |
-| Add/remove/update a log action | `manage_log_action` | `system/logging/action` | write |
+| Add/remove/update a log action | `manage_log_action` | `system/logging/action` | destructive |
 | List log rules (topic → action mappings) | `list_log_rules` | `system/logging` | read |
-| Add/remove/update a log rule | `manage_log_rule` | `system/logging` | write |
+| Add/remove/update a log rule | `manage_log_rule` | `system/logging` | destructive |
 
 ## Certificates
 | Intent | Tool | REST path | Class |
@@ -197,7 +197,7 @@ Multi-tool patterns:
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List installed packages | `list_packages` | `system/package` | read |
-| Enable/disable a package | `manage_package` | `system/package` | write |
+| Enable/disable a package | `manage_package` | `system/package` | destructive |
 | Get pending upgrade status | `get_upgrade_status` | `system/package/update` | read |
 | Check for updates / install upgrade | `manage_upgrade` | `system/package/update` | destructive |
 
@@ -206,15 +206,15 @@ Multi-tool patterns:
 |---|---|---|---|
 | Get SNMP settings | `get_snmp_settings` | `snmp` | read |
 | Get NTP client settings | `get_ntp_settings` | `system/ntp/client` | read |
-| Configure NTP client | `manage_ntp_client` | `system/ntp/client` | write |
+| Configure NTP client | `manage_ntp_client` | `system/ntp/client` | destructive |
 | List netwatch entries | `list_netwatch_entries` | `tool/netwatch` | read |
-| Add/remove/update a netwatch entry | `manage_netwatch_entry` | `tool/netwatch` | write |
+| Add/remove/update a netwatch entry | `manage_netwatch_entry` | `tool/netwatch` | destructive |
 
 ## VRRP
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | List VRRP instances | `list_vrrp_instances` | `interface/vrrp` | read |
-| Add/remove/toggle a VRRP instance | `manage_vrrp_instance` | `interface/vrrp` | write |
+| Add/remove/toggle a VRRP instance | `manage_vrrp_instance` | `interface/vrrp` | destructive |
 
 ## VLAN
 | Intent | Tool | REST path | Class |
