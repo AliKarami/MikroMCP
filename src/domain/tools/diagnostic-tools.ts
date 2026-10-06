@@ -172,7 +172,9 @@ const tracerouteTool: ToolDefinition = {
       const lines = [`Traceroute to ${parsed.address} from ${context.routerId}:`];
       for (const h of hops) {
         const last = typeof h.last === "number" ? `${h.last}ms` : String(h.last ?? "?");
-        lines.push(`  ${h.hop}  ${h.address ?? "???"}  ${last}  loss=${h.loss ?? "?"}%`);
+        const loss = typeof h.loss === "number" ? `${h.loss}%` : "?";
+        const status = typeof h.status === "string" && h.status !== "" ? `  ${h.status}` : "";
+        lines.push(`  ${h.hop}  ${h.address ?? "???"}  ${last}  loss=${loss}${status}`);
       }
       const routerError = hops.find((h) => typeof h.error === "string" && h.error !== "")?.error;
       if (routerError !== undefined) {
@@ -216,7 +218,7 @@ const torchInputSchema = z
 const TORCH_TIMEOUT_MARGIN_S = 5;
 const BPS_UNITS = ["bps", "kbps", "Mbps", "Gbps"];
 
-function formatBps(bps: number): string {
+export function formatBps(bps: number): string {
   let value = bps;
   let unit = 0;
   // Compare after rounding so 999950 bps reads 1Mbps, not 1000kbps.

@@ -123,13 +123,18 @@ export function parseRecords<T = Record<string, unknown>>(raw: Array<Record<stri
 /**
  * Records of the final update of a command that reports progress
  * (`/tool/torch`, `/tool/traceroute`, `/tool/fetch`, `/tool/bandwidth-test`).
- * RouterOS REST returns every update, each tagged with `.section`.
+ * RouterOS REST returns every update, each tagged with `.section`. A record without
+ * a numeric `.section` counts as section 0, so an unexpected tag never empties the
+ * result.
  */
 export function lastSection(
   result: Array<Record<string, string>> | Record<string, string> | undefined,
 ): Array<Record<string, string>> {
   const records = Array.isArray(result) ? result : result ? [result] : [];
-  const section = (record: Record<string, string>): number => Number(record[".section"] ?? 0);
+  const section = (record: Record<string, string>): number => {
+    const value = Number(record[".section"]);
+    return Number.isFinite(value) ? value : 0;
+  };
   const last = Math.max(...records.map(section));
   return records.filter((record) => section(record) === last);
 }

@@ -5,6 +5,7 @@ import { listContent, compactFields } from "./pagination.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { createLogger } from "../../observability/logger.js";
+import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 
 const log = createLogger("network-test-tools");
 const BODY_CAP = 65536;
@@ -48,12 +49,25 @@ const bandwidthTestTool: ToolDefinition = {
     const parsed = bandwidthTestInputSchema.parse(params);
     log.info({ routerId: context.routerId, address: parsed.address }, "Running bandwidth test");
     try {
-      const [result = {}] = await context.routerClient.executeFinal("tool/bandwidth-test", {
+      const [result] = await context.routerClient.executeFinal("tool/bandwidth-test", {
         address: parsed.address,
         protocol: parsed.protocol,
         direction: parsed.direction,
         duration: String(parsed.duration),
       });
+      // An empty result would otherwise read as 0 Mbps, indistinguishable from a dead link.
+      if (result === undefined) {
+        throw new MikroMCPError({
+          category: ErrorCategory.ROUTER_ERROR,
+          code: "BANDWIDTH_TEST_NO_RESULT",
+          message: `RouterOS returned no bandwidth-test result for ${parsed.address}`,
+          recoverability: {
+            retryable: false,
+            suggestedAction:
+              "Check that the target runs a RouterOS btest server and that the router can reach it.",
+          },
+        });
+      }
       const txBps = Number(result["tx-current"] ?? 0);
       const rxBps = Number(result["rx-current"] ?? 0);
       const txMbps = Math.round((txBps / 1_000_000) * 100) / 100;

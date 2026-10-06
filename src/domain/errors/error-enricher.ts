@@ -24,6 +24,10 @@ const UNREACHABLE_CODES = new Set([
   "ERR_SOCKET_CONNECTION_TIMEOUT",
 ]);
 
+// undici's own request timeouts: the router accepted the connection but did not
+// answer within the request timeout.
+const TIMEOUT_CODES = new Set(["UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]);
+
 /**
  * Default recoverability hints keyed by error category.
  */
@@ -222,6 +226,18 @@ export function enrichError(error: unknown, context?: EnrichContext): MikroMCPEr
     typeof raw === "object" && raw !== null && typeof raw.code === "string"
       ? (raw.code as string)
       : undefined;
+
+  if (errorCode && TIMEOUT_CODES.has(errorCode)) {
+    const category = ErrorCategory.ROUTER_TIMEOUT;
+    return new MikroMCPError({
+      category,
+      code: errorCode,
+      message: rawMessage || `Request timed out: ${errorCode}`,
+      details: buildDetails({ errorCode }, context),
+      recoverability: defaultRecoverability(category),
+      cause: error,
+    });
+  }
 
   if (errorCode && UNREACHABLE_CODES.has(errorCode)) {
     const category = ErrorCategory.ROUTER_UNREACHABLE;
