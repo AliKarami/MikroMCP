@@ -28,3 +28,9 @@ export const limit = z
   .max(500)
   .default(100)
   .describe("Max results to return.");
+
+/**
+ * Comment used as a rule's idempotency key. Never empty: a REST lookup with
+ * `?comment=` matches no rule.
+ */
+export const ruleComment = z.string().min(1);

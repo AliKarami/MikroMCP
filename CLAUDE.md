@@ -205,7 +205,9 @@ Test groups follow: `metadata` → `input schema` → `handler - <action>`. Alwa
 - Input schema: valid input with defaults, rejection of extra fields, rejection of out-of-range values
 - Handler: happy path, idempotency (`already_exists`), conflict, dry-run, not-found
 
-Use inline Zod schemas in schema tests so they don't depend on internal exports.
+Test input schemas through the tool's own `inputSchema` (`tool.inputSchema.parse(...)`), never a hand-written copy: a copy keeps passing when the real schema changes.
+
+Write `routerClient.get` fixtures in wire form, every value a string as RouterOS sends it, and pass them through `fromWire()` from `test/unit/helpers/wire.ts`. It runs them through the REST response parser, so an idempotency check meets the numbers and booleans the real client returns (`"53"` arrives as `53`).
 
 ## Transport
 

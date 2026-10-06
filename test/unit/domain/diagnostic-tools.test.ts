@@ -11,7 +11,6 @@ import { lastSection } from "../../../src/adapter/response-parser.js";
 import type { RouterConfig } from "../../../src/types.js";
 import { enrichError } from "../../../src/domain/errors/error-enricher.js";
 import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
-import { z } from "zod";
 
 const pingTool = diagnosticTools[0];
 const tracerouteTool = diagnosticTools[1];
@@ -69,15 +68,7 @@ function makeContext(sshOutput = "", restResult: unknown = []): ToolContext {
   };
 }
 
-const pingInputSchema = z
-  .object({
-    routerId: z.string(),
-    address: z.string(),
-    count: z.number().int().min(1).max(20).default(4),
-    size: z.number().int().min(14).max(65535).default(56),
-    routingTable: z.string().optional(),
-  })
-  .strict();
+const pingInputSchema = pingTool.inputSchema;
 
 describe("diagnostic tools", () => {
   describe("control character validation", () => {
@@ -569,16 +560,7 @@ describe("diagnostic tools", () => {
   });
 
   describe("get_log input schema", () => {
-    const getLogInputSchema = z
-      .object({
-        routerId: z.string(),
-        limit: z.number().int().min(1).max(500).default(100),
-        offset: z.number().int().min(0).default(0),
-        topics: z.array(z.string()).optional(),
-        prefix: z.string().optional(),
-        sinceMinutes: z.number().int().min(1).max(1440).optional(),
-      })
-      .strict();
+    const getLogInputSchema = diagnosticTools[3].inputSchema;
 
     it("accepts minimal input with defaults", () => {
       const r = getLogInputSchema.parse({ routerId: "r" });

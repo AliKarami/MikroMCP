@@ -5,7 +5,6 @@ import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
-import { z } from "zod";
 
 function makeRouterConfig(): RouterConfig {
   return {
@@ -54,20 +53,8 @@ function makeContext(
 const listContainersTool = containerTools[0];
 const manageContainerTool = containerTools[1];
 
-const listSchema = z.object({ routerId: z.string() }).strict();
-const manageSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["create", "start", "stop", "remove"]),
-    name: z.string(),
-    remoteImage: z.string().optional(),
-    interface: z.string().optional(),
-    rootDir: z.string().optional(),
-    envlist: z.string().optional(),
-    comment: z.string().optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const listSchema = listContainersTool.inputSchema;
+const manageSchema = manageContainerTool.inputSchema;
 
 describe("container tools", () => {
   describe("metadata", () => {

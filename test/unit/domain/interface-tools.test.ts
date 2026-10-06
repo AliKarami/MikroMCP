@@ -5,7 +5,6 @@ import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
-import { z } from "zod";
 
 const listInterfacesTool = interfaceTools[0];
 
@@ -43,17 +42,7 @@ function makeContext(ifaces: Record<string, unknown>[]): ToolContext {
   };
 }
 
-const listInterfacesInputSchema = z
-  .object({
-    routerId: z.string(),
-    type: z.enum(["ether", "vlan", "bridge", "bonding", "wireguard", "gre", "all"]).default("all"),
-    status: z.enum(["up", "down", "all"]).default("all"),
-    macAddress: z.string().optional(),
-    includeCounters: z.boolean().default(false),
-    limit: z.number().int().min(1).max(500).default(100),
-    offset: z.number().int().min(0).default(0),
-  })
-  .strict();
+const listInterfacesInputSchema = listInterfacesTool.inputSchema;
 
 describe("list_interfaces", () => {
   describe("input schema", () => {

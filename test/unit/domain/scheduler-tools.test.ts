@@ -5,7 +5,6 @@ import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
-import { z } from "zod";
 
 function makeRouterConfig(): RouterConfig {
   return {
@@ -54,20 +53,8 @@ function makeContext(
 const listJobsTool = schedulerTools[0];
 const manageJobTool = schedulerTools[1];
 
-const listSchema = z.object({ routerId: z.string(), name: z.string().optional() }).strict();
-const manageSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "update", "remove", "enable", "disable"]),
-    name: z.string(),
-    onEvent: z.string().optional(),
-    startDate: z.string().optional(),
-    startTime: z.string().optional(),
-    interval: z.string().optional(),
-    comment: z.string().optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const listSchema = listJobsTool.inputSchema;
+const manageSchema = manageJobTool.inputSchema;
 
 describe("scheduler tools", () => {
   describe("metadata", () => {
