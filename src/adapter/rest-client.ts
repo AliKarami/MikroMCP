@@ -24,6 +24,17 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * Serialize GET filter params with percent-encoding. `URLSearchParams` writes a
+ * space as `+`, which RouterOS does not decode back to a space, so a filter on
+ * a value like `comment=allow web` silently matched nothing.
+ */
+export function encodeQueryParams(params: Record<string, string>): string {
+  return Object.entries(params)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
+}
+
 // ---------------------------------------------------------------------------
 // REST client
 // ---------------------------------------------------------------------------
@@ -65,7 +76,7 @@ export class RouterOSRestClient {
         | Array<Record<string, string>>
         | undefined;
     } else {
-      const qs = query.queryParams ? "?" + new URLSearchParams(query.queryParams).toString() : "";
+      const qs = query.queryParams ? "?" + encodeQueryParams(query.queryParams) : "";
       raw = (await this.doRequest("GET", `${this.baseUrl}/${path}${qs}`)) as
         | Array<Record<string, string>>
         | undefined;
