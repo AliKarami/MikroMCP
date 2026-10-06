@@ -1,34 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { z } from "zod";
 import { ipTools } from "../../../src/domain/tools/ip-tools.js";
 import { MikroMCPError } from "../../../src/domain/errors/error-types.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const manageIpAddressTool = ipTools.find((t) => t.name === "manage_ip_address")!;
 
-// Inline schema for isolated validation tests
-const manageIpAddressInputSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "update", "remove"]),
-    address: z
-      .string()
-      .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/)
-      .transform((v) => (v.includes("/") ? v : `${v}/32`)),
-    interface: z.string(),
-    network: z.string().optional(),
-    comment: z.string().max(255).optional(),
-    disabled: z.boolean().default(false),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageIpAddressInputSchema = manageIpAddressTool.inputSchema;
 
-function makeContext(
-  addresses: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
-  const mockGet = vi.fn().mockResolvedValue(addresses);
+function makeContext(addresses: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
+  const mockGet = vi.fn().mockResolvedValue(fromWire(addresses));
   const mockCreate = vi
     .fn()
     .mockResolvedValue(createReturn ?? { ".id": "*1", address: "192.0.2.1/24" });
@@ -129,15 +111,6 @@ describe("ip tools", () => {
       expect((ctx.routerClient as Record<string, unknown>).create).not.toHaveBeenCalled();
     });
 
-    it("returns already_exists when the record carries a parsed boolean disabled field", async () => {
-      const ctx = makeContext([{ ...sampleAddress, disabled: false }]);
-      const result = await manageIpAddressTool.handler(
-        { ...baseParams, action: "add", comment: "itest" },
-        ctx,
-      );
-      expect(result.structuredContent).toHaveProperty("action", "already_exists");
-    });
-
     it("throws CONFLICT when match found with different config", async () => {
       const ctx = makeContext([sampleAddress]);
       const error = await manageIpAddressTool
@@ -145,6 +118,16 @@ describe("ip tools", () => {
         .catch((err: unknown) => err);
       expect(error).toBeInstanceOf(MikroMCPError);
       expect((error as MikroMCPError).code).toBe("IP_ADDRESS_CONFLICT");
+      expect((ctx.routerClient as Record<string, unknown>).create).not.toHaveBeenCalled();
+    });
+
+    it("returns already_exists for a numeric comment, which the parser turns into a number", async () => {
+      const ctx = makeContext([{ ...sampleAddress, comment: "2024" }]);
+      const result = await manageIpAddressTool.handler(
+        { ...baseParams, action: "add", comment: "2024" },
+        ctx,
+      );
+      expect(result.structuredContent).toHaveProperty("action", "already_exists");
       expect((ctx.routerClient as Record<string, unknown>).create).not.toHaveBeenCalled();
     });
 
@@ -170,18 +153,6 @@ describe("ip tools", () => {
       expect((ctx.routerClient as Record<string, unknown>).update).not.toHaveBeenCalled();
     });
 
-    it("returns no_change when the record carries a parsed boolean disabled field", async () => {
-      // The response parser converts "false" to boolean false — the change
-      // detection must not report a spurious disabled update.
-      const ctx = makeContext([{ ...sampleAddress, disabled: false }]);
-      const result = await manageIpAddressTool.handler(
-        { ...baseParams, action: "update", comment: "itest", disabled: false },
-        ctx,
-      );
-      expect(result.structuredContent).toHaveProperty("action", "no_change");
-      expect((ctx.routerClient as Record<string, unknown>).update).not.toHaveBeenCalled();
-    });
-
     it("returns no_change for a comment of yes, which normalizes like a boolean", async () => {
       // Both sides go through normalizeWireValue; normalizing only the stored side
       // turned "yes" into "true" and reported an update on every call.
@@ -194,8 +165,18 @@ describe("ip tools", () => {
       expect((ctx.routerClient as Record<string, unknown>).update).not.toHaveBeenCalled();
     });
 
+    it("returns no_change for a numeric comment", async () => {
+      const ctx = makeContext([{ ...sampleAddress, comment: "2024" }]);
+      const result = await manageIpAddressTool.handler(
+        { ...baseParams, action: "update", comment: "2024", disabled: false },
+        ctx,
+      );
+      expect(result.structuredContent).toHaveProperty("action", "no_change");
+      expect((ctx.routerClient as Record<string, unknown>).update).not.toHaveBeenCalled();
+    });
+
     it("updates when disabled actually differs", async () => {
-      const ctx = makeContext([{ ...sampleAddress, disabled: false }]);
+      const ctx = makeContext([sampleAddress]);
       const result = await manageIpAddressTool.handler(
         { ...baseParams, action: "update", comment: "itest", disabled: true },
         ctx,
@@ -263,9 +244,9 @@ describe("ip tools", () => {
 describe("list_ip_addresses", () => {
   const listIpAddressesTool = ipTools.find((t) => t.name === "list_ip_addresses")!;
   const rows = [
-    { ".id": "*1", address: "192.168.1.1/24", interface: "bridge1", disabled: false },
-    { ".id": "*2", address: "10.0.0.1/24", interface: "ether2", disabled: true },
-    { ".id": "*3", address: "100.64.20.10/22", interface: "ether1", dynamic: true },
+    { ".id": "*1", address: "192.168.1.1/24", interface: "bridge1", disabled: "false" },
+    { ".id": "*2", address: "10.0.0.1/24", interface: "ether2", disabled: "true" },
+    { ".id": "*3", address: "100.64.20.10/22", interface: "ether1", dynamic: "true" },
   ];
 
   it("is a read-only tool", () => {

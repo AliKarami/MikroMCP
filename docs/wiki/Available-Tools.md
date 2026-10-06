@@ -1054,7 +1054,7 @@ List firewall rules in evaluation order.
 
 ### `manage_firewall_rule` — Write · Destructive · Idempotent
 
-Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match or NAT-target config; a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
+Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match, NAT-target config, or `disabled` state (when only `disabled` differs, the error points to `action=enable`/`disable`); a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1077,7 +1077,7 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `connectionNatState` | string | — | Connection NAT state: `srcnat`, `dstnat` or both, optionally negated (`!dstnat`) |
 | `toAddresses` | string | — | NAT target address or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same` |
 | `toPorts` | string | — | NAT target port or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same`, `redirect`, `masquerade` |
-| `disabled` | boolean | `false` | Create/update the rule in disabled state |
+| `disabled` | boolean | `false` | Create the rule in disabled state; on `add`, part of the idempotency check |
 | `placeBefore` | string | — | Place the new rule before this rule ID |
 | `dryRun` | boolean | `false` | Preview without applying |
 

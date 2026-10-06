@@ -164,7 +164,12 @@ const FLEET_TOOL_NAMES = new Set(["bulk_execute", "bulk_read", "check_router_hea
  * bandwidth_test) or loads it for the sampling window (torch). A fleet-wide run of these
  * stays an explicit bulk_execute call, so allowing bulk_read never allows them.
  */
-const BULK_READ_EXCLUDED_TOOLS = new Set(["ping", "traceroute", "torch", "bandwidth_test"]);
+export const BULK_READ_EXCLUDED_TOOLS: ReadonlySet<string> = new Set([
+  "ping",
+  "traceroute",
+  "torch",
+  "bandwidth_test",
+]);
 
 // Treat empty arrays as not provided — MCP Inspector defaults optional arrays to []
 function hasItems(list: string[] | undefined): list is string[] {

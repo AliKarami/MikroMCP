@@ -2,30 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import { addressListTools } from "../../../src/domain/tools/address-list-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
 
 const listAddressListTool = addressListTools[0];
 const manageAddressListTool = addressListTools[1];
 
-const listSchema = z
-  .object({
-    routerId: z.string(),
-    list: z.string().optional(),
-    address: z.string().optional(),
-  })
-  .strict();
+const listSchema = listAddressListTool.inputSchema;
 
-const manageSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove"]),
-    list: z.string(),
-    address: z.string(),
-    comment: z.string().optional(),
-    timeout: z.string().optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageSchema = manageAddressListTool.inputSchema;
 
 function makeContext(
   records: Record<string, unknown>[],

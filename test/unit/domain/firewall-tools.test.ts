@@ -2,48 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 import { firewallTools } from "../../../src/domain/tools/firewall-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const listFirewallRulesTool = firewallTools[0];
 const manageFirewallRuleTool = firewallTools[1];
 
-const listFirewallRulesInputSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.enum(["filter", "nat"]).default("filter"),
-    chain: z.string().optional(),
-    disabled: z.enum(["true", "false", "all"]).default("all"),
-    limit: z.number().int().min(1).max(500).default(100),
-    offset: z.number().int().min(0).default(0),
-  })
-  .strict();
+const listFirewallRulesInputSchema = listFirewallRulesTool.inputSchema;
 
-const manageFirewallRuleInputSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.enum(["filter", "nat"]).default("filter"),
-    action: z.enum(["add", "remove", "disable", "enable"]),
-    chain: z.string(),
-    ruleAction: z.string(),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    protocol: z.enum(["tcp", "udp", "icmp", "gre", "ospf", "all"]).optional(),
-    srcPort: z.string().optional(),
-    dstPort: z.string().optional(),
-    inInterface: z.string().optional(),
-    outInterface: z.string().optional(),
-    comment: z.string().max(255).optional(),
-    disabled: z.boolean().default(false),
-    placeBefore: z.string().optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageFirewallRuleInputSchema = manageFirewallRuleTool.inputSchema;
 
-function makeContext(
-  records: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
-  const mockGet = vi.fn().mockResolvedValue(records);
+function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
+  const mockGet = vi.fn().mockResolvedValue(fromWire(records));
   const mockCreate = vi
     .fn()
     .mockResolvedValue(createReturn ?? { ".id": "*1", chain: "forward", action: "drop" });
@@ -585,17 +554,17 @@ describe("firewall tools", () => {
 });
 
 describe("manage_firewall_rule - interface lists, connection state and NAT targets", () => {
-  // A dst-nat rule as the REST response parser returns it: single ports
-  // arrive as numbers, sets as comma-separated strings.
+  // A dst-nat rule as RouterOS sends it; makeContext runs it through the response
+  // parser, which turns the single ports into numbers.
   const portForward = {
     ".id": "*4",
     chain: "dstnat",
     action: "dst-nat",
     protocol: "tcp",
-    "dst-port": 8443,
+    "dst-port": "8443",
     "in-interface-list": "WAN",
     "to-addresses": "192.168.88.10",
-    "to-ports": 443,
+    "to-ports": "443",
     comment: "fwd-nas-https",
   };
   const portForwardParams = {
@@ -737,8 +706,57 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
     expect(() => schema.parse({ ...base, connectionState: "established,bogus" })).toThrow();
     expect(() => schema.parse({ ...base, connectionState: "" })).toThrow();
     expect(() => schema.parse({ ...base, connectionState: "!invalid" })).not.toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "new,new" })).toThrow(/only once/);
+    expect(() => schema.parse({ ...base, connectionState: "!new,related,new" })).toThrow();
     expect(() => schema.parse({ ...base, toPorts: "8000-8100" })).not.toThrow();
     expect(() => schema.parse({ ...base, toPorts: "https" })).toThrow();
+  });
+
+  it.each([
+    "srcAddress",
+    "dstAddress",
+    "srcPort",
+    "dstPort",
+    "inInterface",
+    "outInterface",
+    "inInterfaceList",
+    "outInterfaceList",
+    "toAddresses",
+  ])("rejects an empty %s", (field) => {
+    // An empty string reached the request body as "" while the idempotency check
+    // treated it as an absent field.
+    const base = { routerId: "r", action: "add", table: "nat", chain: "dstnat" };
+    const parsed = manageFirewallRuleTool.inputSchema.safeParse({
+      ...base,
+      ruleAction: "dst-nat",
+      [field]: "",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects toAddresses "" before touching the router', async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...portForwardParams, toAddresses: "" }, ctx),
+    ).rejects.toMatchObject({ name: "ZodError" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    expect(createMock(ctx)).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["1", true],
+    ["65535", true],
+    ["80-80", true],
+    ["8000-8100", true],
+    ["0", false],
+    ["65536", false],
+    ["99999", false],
+    ["9000-80", false],
+    ["0-80", false],
+    ["80-65536", false],
+  ])("toPorts %s is accepted: %s", (toPorts, valid) => {
+    const base = { routerId: "r", action: "add", chain: "dstnat", ruleAction: "dst-nat" };
+    expect(manageFirewallRuleTool.inputSchema.safeParse({ ...base, toPorts }).success).toBe(valid);
   });
   it("treats a /32 host address as equal to the bare address", async () => {
     const existing = {
@@ -817,6 +835,72 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
         { ...params, connectionState: "invalid" },
         makeContext([existing]),
       ),
+    ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
+  });
+
+  it("throws CONFLICT pointing to enable when only the disabled state differs", async () => {
+    // RouterOS sends disabled as a string; the parser turns it into a boolean.
+    const existing = { ...portForward, disabled: "true" };
+    await expect(
+      manageFirewallRuleTool.handler(portForwardParams, makeContext([existing])),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      message: expect.stringContaining("already exists but is disabled"),
+      details: { existing: { disabled: true }, requested: { disabled: false } },
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=enable"] },
+    });
+  });
+
+  it("throws CONFLICT pointing to disable when add asks for a disabled rule", async () => {
+    const existing = { ...portForward, disabled: "false" };
+    const ctx = makeContext([existing]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...portForwardParams, disabled: true }, ctx),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=disable"] },
+    });
+    expect(createMock(ctx)).not.toHaveBeenCalled();
+  });
+
+  it("returns already_exists when the disabled state also matches", async () => {
+    const existing = { ...portForward, disabled: "true" };
+    const result = await manageFirewallRuleTool.handler(
+      { ...portForwardParams, disabled: true },
+      makeContext([existing]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("suggests remove when the match differs as well as the disabled state", async () => {
+    const existing = { ...portForward, disabled: "true" };
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...portForwardParams, toAddresses: "192.168.88.20" },
+        makeContext([existing]),
+      ),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      message: expect.stringContaining("different configuration"),
+      recoverability: { alternativeTools: ["manage_firewall_rule with action=remove"] },
+    });
+  });
+
+  it("treats protocol all as no protocol match", async () => {
+    const base = {
+      routerId: "test-router",
+      action: "add",
+      chain: "forward",
+      ruleAction: "accept",
+      protocol: "all",
+      comment: "any-proto",
+    };
+    const unset = { ".id": "*F", chain: "forward", action: "accept", comment: "any-proto" };
+    const same = await manageFirewallRuleTool.handler(base, makeContext([unset]));
+    expect((same.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    await expect(
+      manageFirewallRuleTool.handler(base, makeContext([{ ...unset, protocol: "tcp" }])),
     ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
   });
 

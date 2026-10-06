@@ -31,6 +31,10 @@ const TIMEOUT_CODES = new Set(["UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"
 // ssh2 sets this `level` on the error it emits when every auth method was refused.
 const SSH_AUTH_LEVEL = "client-authentication";
 
+// ssh2 sets this `level`, without an errno `code`, when the handshake does not finish
+// within readyTimeout.
+const SSH_TIMEOUT_LEVEL = "client-timeout";
+
 /**
  * Default recoverability hints keyed by error category.
  */
@@ -149,6 +153,7 @@ function responseDetail(body: unknown): unknown {
  *
  * - If the value is already a MikroMCPError it is returned unchanged.
  * - SSH login rejections (ssh2 `level: "client-authentication"`) become ROUTER_AUTH_FAILED.
+ * - SSH handshake timeouts (ssh2 `level: "client-timeout"`) become ROUTER_UNREACHABLE.
  * - HTTP-style errors (with a numeric `statusCode`) are mapped by status.
  * - Network errors (ECONNREFUSED, etc.) become ROUTER_UNREACHABLE.
  * - Everything else becomes INTERNAL.
@@ -196,6 +201,24 @@ export function enrichError(error: unknown, context?: EnrichContext): MikroMCPEr
           "Check that the user's group has the ssh policy, that a key in /user ssh-keys does not " +
           "block password login (/ip ssh password-authentication), and that sshPrivateKeyPath and " +
           "sshUsername in routers.yaml match the router. Restart the server after editing routers.yaml.",
+      },
+      cause: error,
+    });
+  }
+
+  // --- SSH handshake timed out (ssh2 level "client-timeout") ---
+  // Not retryable: the client already waited readyTimeout, and a retry repeats the wait.
+  if (typeof raw === "object" && raw !== null && raw.level === SSH_TIMEOUT_LEVEL) {
+    return new MikroMCPError({
+      category: ErrorCategory.ROUTER_UNREACHABLE,
+      code: "SSH_HANDSHAKE_TIMEOUT",
+      message: `The SSH connection to the router timed out: ${rawMessage}`,
+      details: buildDetails({ transport: "ssh" }, context),
+      recoverability: {
+        retryable: false,
+        suggestedAction:
+          "Check that the router's SSH service is enabled and reachable from this host on " +
+          "sshPort (default 22): /ip service ssh, its available-from list, and input firewall rules.",
       },
       cause: error,
     });
