@@ -13,6 +13,30 @@ const log = createLogger("mangle-tools");
 
 const MANGLE_PATH = "ip/firewall/mangle";
 
+/** Match and mark parameters compared on a repeated add, mapped to their RouterOS property names. */
+const MANGLE_RULE_FIELDS = [
+  ["srcAddress", "src-address"],
+  ["dstAddress", "dst-address"],
+  ["srcAddressList", "src-address-list"],
+  ["dstAddressList", "dst-address-list"],
+  ["protocol", "protocol"],
+  ["srcPort", "src-port"],
+  ["dstPort", "dst-port"],
+  ["inInterface", "in-interface"],
+  ["outInterface", "out-interface"],
+  ["newRoutingMark", "new-routing-mark"],
+  ["newConnectionMark", "new-connection-mark"],
+  ["newDscpValue", "new-dscp"],
+] as const;
+
+/**
+ * RouterOS reports `passthrough=true` on a rule added without it (the default is
+ * yes), so an omitted value on either side counts as `true`.
+ */
+function samePassthrough(stored: unknown, requested: boolean | undefined): boolean {
+  return sameRuleValue("passthrough", stored ?? true, requested ?? true);
+}
+
 async function findMangleRuleByComment(
   context: ToolContext,
   comment: string,
@@ -131,7 +155,7 @@ const manageMangleRuleTool: ToolDefinition = {
   name: "manage_mangle_rule",
   title: "Manage Mangle Rule",
   description:
-    "Add, remove, enable, or disable a firewall mangle rule. Uses comment as idempotency key. Supports dry-run mode.",
+    "Add, remove, enable, or disable a firewall mangle rule. Uses comment as idempotency key: a repeated add returns already_exists only when the chain, match fields, marks, DSCP, and passthrough agree, otherwise CONFLICT. Supports dry-run mode.",
   inputSchema: manageMangleRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -164,73 +188,34 @@ const manageMangleRuleTool: ToolDefinition = {
         const existing = await findMangleRuleByComment(context, parsed.comment);
 
         if (existing) {
-          const sameChain = existing.chain === parsed.chain;
-          const sameSrcAddress = sameRuleValue(
-            "src-address",
-            existing["src-address"],
-            parsed.srcAddress,
-          );
-          const sameDstAddress = sameRuleValue(
-            "dst-address",
-            existing["dst-address"],
-            parsed.dstAddress,
-          );
-          const sameSrcAddressList = sameRuleValue(
-            "src-address-list",
-            existing["src-address-list"],
-            parsed.srcAddressList,
-          );
-          const sameDstAddressList = sameRuleValue(
-            "dst-address-list",
-            existing["dst-address-list"],
-            parsed.dstAddressList,
-          );
-          const sameNewRoutingMark = sameRuleValue(
-            "new-routing-mark",
-            existing["new-routing-mark"],
-            parsed.newRoutingMark,
-          );
-          const sameNewConnectionMark = sameRuleValue(
-            "new-connection-mark",
-            existing["new-connection-mark"],
-            parsed.newConnectionMark,
-          );
+          const matches =
+            existing.chain === parsed.chain &&
+            MANGLE_RULE_FIELDS.every(([key, property]) =>
+              sameRuleValue(property, existing[property], parsed[key]),
+            ) &&
+            samePassthrough(existing.passthrough, parsed.passthrough);
 
-          if (
-            sameChain &&
-            sameSrcAddress &&
-            sameDstAddress &&
-            sameSrcAddressList &&
-            sameDstAddressList &&
-            sameNewRoutingMark &&
-            sameNewConnectionMark
-          ) {
+          if (matches) {
             return {
               content: `Mangle rule with comment "${parsed.comment}" already exists. No changes made.`,
               structuredContent: { action: "already_exists", rule: existing },
             };
           }
 
+          const existingDetails: Record<string, unknown> = { chain: existing.chain };
+          const requestedDetails: Record<string, unknown> = { chain: parsed.chain };
+          for (const [key, property] of MANGLE_RULE_FIELDS) {
+            existingDetails[property] = existing[property];
+            requestedDetails[property] = parsed[key];
+          }
+          existingDetails.passthrough = existing.passthrough;
+          requestedDetails.passthrough = parsed.passthrough;
+
           throw new MikroMCPError({
             category: ErrorCategory.CONFLICT,
             code: "MANGLE_RULE_CONFLICT",
             message: `Mangle rule with comment "${parsed.comment}" already exists but with different configuration.`,
-            details: {
-              existing: {
-                chain: existing.chain,
-                "src-address": existing["src-address"],
-                "dst-address": existing["dst-address"],
-                "new-routing-mark": existing["new-routing-mark"],
-                "new-connection-mark": existing["new-connection-mark"],
-              },
-              requested: {
-                chain: parsed.chain,
-                "src-address": parsed.srcAddress,
-                "dst-address": parsed.dstAddress,
-                "new-routing-mark": parsed.newRoutingMark,
-                "new-connection-mark": parsed.newConnectionMark,
-              },
-            },
+            details: { existing: existingDetails, requested: requestedDetails },
             recoverability: {
               retryable: false,
               suggestedAction:

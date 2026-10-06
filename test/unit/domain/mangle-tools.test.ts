@@ -3,6 +3,7 @@ import { mangleTools } from "../../../src/domain/tools/mangle-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { z } from "zod";
+import { parseRecord } from "../../../src/adapter/response-parser.js";
 
 const listMangleRulesTool = mangleTools[0];
 const manageMangleRuleTool = mangleTools[1];
@@ -339,6 +340,90 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
         newRoutingMark: "to-leg1",
       },
       makeContext([existing]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  // Fixtures go through parseRecord, as RouterOSRestClient.get does: "443" arrives
+  // as 443 and "true" as true.
+  const wireRuleWire = {
+    ".id": "*4",
+    action: "accept",
+    chain: "prerouting",
+    comment: "mark-https",
+    disabled: "false",
+    "dst-port": "443",
+    "in-interface": "bridge1",
+    "new-dscp": "46",
+    "new-routing-mark": "to-leg1",
+    passthrough: "true",
+    protocol: "tcp",
+  };
+  const wireRule: Record<string, unknown> = parseRecord(wireRuleWire);
+
+  const sameAdd = {
+    routerId: "test-router",
+    action: "add",
+    comment: "mark-https",
+    chain: "prerouting",
+    protocol: "tcp",
+    dstPort: "443",
+    inInterface: "bridge1",
+    newRoutingMark: "to-leg1",
+    newDscpValue: 46,
+  };
+
+  it("returns already_exists for the same rule read back from the wire", async () => {
+    const result = await manageMangleRuleTool.handler(sameAdd, makeContext([wireRule]));
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it.each([
+    ["protocol", { protocol: "udp" }],
+    ["dst-port", { dstPort: "8443" }],
+    ["src-port", { srcPort: "1024" }],
+    ["in-interface", { inInterface: "ether2" }],
+    ["out-interface", { outInterface: "wg-leg1" }],
+    ["new-dscp", { newDscpValue: 10 }],
+  ])("throws CONFLICT when %s differs", async (property, change) => {
+    await expect(
+      manageMangleRuleTool.handler({ ...sameAdd, ...change }, makeContext([wireRule])),
+    ).rejects.toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: { existing: { [property]: wireRule[property] } },
+    });
+  });
+
+  it("lists every compared field in CONFLICT details", async () => {
+    await expect(
+      manageMangleRuleTool.handler({ ...sameAdd, dstPort: "8443" }, makeContext([wireRule])),
+    ).rejects.toMatchObject({
+      details: {
+        existing: { "dst-port": 443, protocol: "tcp", "new-dscp": 46, passthrough: true },
+        requested: { "dst-port": "8443", protocol: "tcp", "new-dscp": 46, passthrough: undefined },
+      },
+    });
+  });
+
+  it("treats an omitted passthrough as the RouterOS default yes", async () => {
+    const result = await manageMangleRuleTool.handler(
+      { ...sameAdd, passthrough: true },
+      makeContext([wireRule]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("throws CONFLICT when passthrough differs", async () => {
+    await expect(
+      manageMangleRuleTool.handler({ ...sameAdd, passthrough: false }, makeContext([wireRule])),
+    ).rejects.toMatchObject({ code: "MANGLE_RULE_CONFLICT" });
+  });
+
+  it("matches passthrough=no read back from the wire", async () => {
+    const stored = parseRecord({ ...wireRuleWire, passthrough: "false" });
+    const result = await manageMangleRuleTool.handler(
+      { ...sameAdd, passthrough: false },
+      makeContext([stored]),
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
