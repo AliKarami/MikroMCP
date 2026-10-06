@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { mangleTools } from "../../../src/domain/tools/mangle-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 import { z } from "zod";
 
 const listMangleRulesTool = mangleTools[0];
@@ -39,15 +40,12 @@ const manageSchema = z
   })
   .strict();
 
-function makeContext(
-  records: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
+function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerClient: {
-      get: vi.fn().mockResolvedValue(records),
+      get: vi.fn().mockResolvedValue(fromWire(records)),
       create: vi.fn().mockResolvedValue(createReturn ?? { ".id": "*1", chain: "prerouting" }),
       remove: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
@@ -341,5 +339,30 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
       makeContext([existing]),
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("treats numeric marks from the router as equal to requested strings", async () => {
+    // RouterOS sends "100"; the response parser turns it into the number 100.
+    const existing = {
+      ".id": "*3",
+      chain: "prerouting",
+      "new-connection-mark": "100",
+      "new-routing-mark": "200",
+      comment: "numeric-marks",
+    };
+    const ctx = makeContext([existing]);
+    const result = await manageMangleRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        comment: "numeric-marks",
+        chain: "prerouting",
+        newConnectionMark: "100",
+        newRoutingMark: "200",
+      },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    expect(ctx.routerClient.create).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { policyRoutingTools } from "../../../src/domain/tools/policy-routing-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 import { z } from "zod";
 
 const listRoutingRulesTool = policyRoutingTools[0];
@@ -40,15 +41,12 @@ const manageTableSchema = z
   })
   .strict();
 
-function makeContext(
-  records: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
+function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerClient: {
-      get: vi.fn().mockResolvedValue(records),
+      get: vi.fn().mockResolvedValue(fromWire(records)),
       create: vi.fn().mockResolvedValue(createReturn ?? { ".id": "*1" }),
       remove: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
