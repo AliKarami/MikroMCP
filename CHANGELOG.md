@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Fixed
+- An error result's text now also carries the error `code`, its `details` as compact JSON, the alternative tools, and the retry hint, not only the category, message, and suggested action. Some MCP clients, Claude Code among them, give the model only the text of an error result, so it never saw `details.confirmationToken`: since 1.12.0 every `bulk_execute` write needs that token, and from such a client none could be confirmed. The same applied to destructive calls by `readonly`/`operator` identities, and to the `existing`/`requested` details of a `CONFLICT`. `structuredContent` is unchanged. Reported by [@akuzin87](https://github.com/akuzin87) in #90.
+
 ## [1.12.0] - 2026-10-06
 
 This release is largely the work of [@akuzin87](https://github.com/akuzin87) (Alex). He privately reported the confirmation-gate gap fixed under Security, and contributed `bulk_read`, the REST-based `traceroute` and `torch`, three new list tools, NAT and connection-state matching in `manage_firewall_rule`, and the filter-encoding and SSH-login fixes. Each came with a clear write-up and live verification against real routers. Thank you, Alex.
