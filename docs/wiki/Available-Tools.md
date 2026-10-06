@@ -1,6 +1,6 @@
 # Available Tools
 
-All 122 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 125 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -424,6 +424,22 @@ Add or remove an interface as a bridge port. Returns `already_exists` if the int
 
 ---
 
+### `list_bridge_ports` — Read
+
+List bridge port entries: interface membership, PVID, frame types, STP role and status. The per-port `debug-info` STP dump is omitted.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `bridge` | string | — | Only ports of this bridge |
+| `interface` | string | — | Only the port entry for this interface |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Is ether5 a port of bridge1 on core-01, and what is its PVID?"
+
+---
+
 ## WiFi / Wireless
 
 > Path is version-aware: `/interface/wifi` on RouterOS 7.13+, `/interface/wireless` on older versions.
@@ -524,6 +540,22 @@ Add or remove a WireGuard peer. Idempotent by public key: `add` returns `already
 ---
 
 ## IP Addresses
+
+### `list_ip_addresses` — Read
+
+List IPv4 addresses assigned to interfaces, including dynamic ones (DHCP client, PPP).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Only addresses on this interface |
+| `disabled` | `true` \| `false` \| `all` | `all` | Filter by disabled state |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which IP addresses are configured on bridge1 on core-01?"
+
+---
 
 ### `manage_ip_address` — Write · Idempotent
 
@@ -1022,7 +1054,7 @@ List firewall rules in evaluation order.
 
 ### `manage_firewall_rule` — Write · Idempotent
 
-Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with different port or interface config.
+Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match or NAT-target config. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1039,11 +1071,19 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `protocol` | `tcp` \| `udp` \| `icmp` \| `gre` \| `ospf` \| `all` | — | Protocol to match |
 | `inInterface` | string | — | Incoming interface |
 | `outInterface` | string | — | Outgoing interface |
+| `inInterfaceList` | string | — | Incoming interface list (e.g. `WAN`, `!LAN`) |
+| `outInterfaceList` | string | — | Outgoing interface list |
+| `connectionState` | array of `established` \| `related` \| `new` \| `invalid` \| `untracked` | — | Connection-tracking states to match |
+| `connectionNatState` | string | — | Connection NAT state: `srcnat`, `dstnat`, optionally negated (`!dstnat`) |
+| `toAddresses` | string | — | NAT target address or range (`nat` table only) |
+| `toPorts` | string | — | NAT target port or range (`nat` table only) |
 | `disabled` | boolean | `false` | Create/update the rule in disabled state |
 | `placeBefore` | string | — | Place the new rule before this rule ID |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a drop rule for 1.2.3.4 on the input chain of core-01, comment it 'block-attacker'."
+
+**Example prompt:** "Forward TCP 8443 arriving on the WAN interface list to 192.168.88.10:443 on core-01, comment it 'fwd-nas-https'."
 
 ---
 
@@ -1945,6 +1985,22 @@ List all interface lists defined on the router.
 | `limit` | int (1–500) | `100` | Maximum lists to return |
 
 **Example prompt:** "List all interface lists on router core"
+
+---
+
+### `list_interface_list_members` — Read
+
+List interface list memberships — which interface belongs to which list (e.g. `WAN`, `LAN`), including dynamic members.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `list` | string | — | Only members of this interface list |
+| `interface` | string | — | Only memberships of this interface |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which interfaces are in the WAN list on router edge?"
 
 ---
 

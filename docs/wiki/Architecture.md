@@ -121,7 +121,7 @@ flowchart TD
 |---|---|---|
 | Entry point | `src/main.ts` | Loads config, selects transport, starts server |
 | Tool registry | `src/mcp/tool-registry.ts` | Registers tools; injects circuit breaker, retry, correlation ID, credentials |
-| All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**122 typed tools**) |
+| All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**125 typed tools**) |
 | REST client | `src/adapter/rest-client.ts` | `get`, `getOne`, `create`, `update`, `remove`, `execute` over HTTPS |
 | SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping`, `/tool/traceroute`, `/tool/torch`, and `run_command`; optionally uses a separate SSH username and local private key |
 | SFTP adapter | `src/adapter/sftp-client.ts` | Preferred encrypted transport for `upload_file`; shares the router's SSH username, key, port, and host-key fingerprint settings |

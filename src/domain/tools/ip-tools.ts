@@ -5,14 +5,92 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
-import { routerId } from "./schema-fields.js";
+import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
+import { paginate, listContent, compactFields } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 import { cidrSchema } from "./cidr.js";
 
 const log = createLogger("ip-tools");
+
+// ---------------------------------------------------------------------------
+// list_ip_addresses
+// ---------------------------------------------------------------------------
+
+const listIpAddressesInputSchema = z
+  .object({
+    routerId,
+    interface: z.string().optional().describe("Only addresses on this interface"),
+    disabled: z
+      .enum(["true", "false", "all"])
+      .default("all")
+      .describe("Filter by disabled state: true, false, or all"),
+    limit,
+    offset,
+  })
+  .strict();
+
+const listIpAddressesTool: ToolDefinition = {
+  name: "list_ip_addresses",
+  title: "List IP Addresses",
+  description:
+    "List IPv4 addresses assigned to interfaces on a MikroTik router, including dynamic ones (DHCP client, PPP). Supports filtering by interface and disabled state, with pagination.",
+  inputSchema: listIpAddressesInputSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = listIpAddressesInputSchema.parse(params);
+    log.info({ routerId: context.routerId, interface: parsed.interface }, "Listing IP addresses");
+
+    try {
+      let addresses = await context.routerClient.get<RouterOSRecord>(
+        "ip/address",
+        parsed.interface !== undefined ? { filter: { interface: parsed.interface } } : {},
+      );
+
+      if (parsed.disabled !== "all") {
+        const wantDisabled = parsed.disabled === "true";
+        addresses = addresses.filter((a) => isTrue(a.disabled) === wantDisabled);
+      }
+
+      const { items, total, hasMore } = paginate(addresses, parsed.offset, parsed.limit);
+
+      return {
+        content: listContent("IP addresses", context.routerId, items, total, parsed.offset, (a) =>
+          compactFields(a, [
+            "address",
+            "network",
+            "interface",
+            "dynamic",
+            "invalid",
+            "disabled",
+            "comment",
+          ]),
+        ),
+        structuredContent: {
+          routerId: context.routerId,
+          addresses: items,
+          total,
+          hasMore,
+          offset: parsed.offset,
+          limit: parsed.limit,
+        },
+      };
+    } catch (err) {
+      throw toolError(err, context, "list_ip_addresses");
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// manage_ip_address
+// ---------------------------------------------------------------------------
 
 const inputSchema = z
   .object({
@@ -302,4 +380,4 @@ const manageIpAddressTool: ToolDefinition = {
   },
 };
 
-export const ipTools: ToolDefinition[] = [manageIpAddressTool];
+export const ipTools: ToolDefinition[] = [listIpAddressesTool, manageIpAddressTool];

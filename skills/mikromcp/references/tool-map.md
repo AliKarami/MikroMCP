@@ -6,7 +6,9 @@ The quick index in `SKILL.md` covers the common cases; this is the full set.
 
 Multi-tool patterns:
 - **Expose an internal service** = NAT dst-nat rule (`manage_firewall_rule` table
-  `nat`) + an allow rule in `filter` + optionally an `address-list` entry.
+  `nat`, `ruleAction` `dst-nat` with `toAddresses`/`toPorts`, usually
+  `inInterfaceList` `WAN`) + an allow rule in `filter` + optionally an
+  `address-list` entry.
 - **New subnet on a port** = `manage_ip_address` + `manage_dhcp_server` (+ pool
   via `manage_ip_pool`) + a firewall rule.
 
@@ -37,15 +39,18 @@ Multi-tool patterns:
 | List bridge interfaces and settings | `list_bridges` | `interface/bridge` | read |
 | Add/remove/modify a bridge | `manage_bridge` | `interface/bridge` | destructive |
 | Add/remove a port to a bridge | `manage_bridge_port` | `interface/bridge/port` | destructive |
+| List bridge ports (membership, PVID, STP role) | `list_bridge_ports` | `interface/bridge/port` | read |
 | List interface lists | `list_interface_lists` | `interface/list` | read |
 | Add/remove an interface list | `manage_interface_list` | `interface/list` | write |
 | Add/remove a member from an interface list | `manage_interface_list_member` | `interface/list/member` | write |
+| List interface list members | `list_interface_list_members` | `interface/list/member` | read |
 | List ARP table entries | `list_arp_entries` | `ip/arp` | read |
 | List LLDP/CDP neighbors | `list_neighbors` | `ip/neighbor` | read |
 
 ## IP, DNS & Addressing
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
+| List IP addresses on interfaces | `list_ip_addresses` | `ip/address` | read |
 | Add/remove an IP address on an interface | `manage_ip_address` | `ip/address` | destructive |
 | Get DNS resolver settings | `get_dns_settings` | `ip/dns` | read |
 | Manage DNS resolver settings | `manage_dns_settings` | `ip/dns` | write |

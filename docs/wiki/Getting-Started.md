@@ -159,7 +159,7 @@ curl -sk https://10.0.0.1/rest/system/resource \
 
 ## Step 5b — Install the Usage Skill (recommended)
 
-The MikroMCP usage skill teaches your AI assistant how to use all 122 tools safely — dry-run before write, rollback patterns, fleet operations, and more. It ships in the repository (not the npm package), so link it into Claude Code from a clone:
+The MikroMCP usage skill teaches your AI assistant how to use all 125 tools safely — dry-run before write, rollback patterns, fleet operations, and more. It ships in the repository (not the npm package), so link it into Claude Code from a clone:
 
 ```bash
 git clone https://github.com/AliKarami/MikroMCP.git

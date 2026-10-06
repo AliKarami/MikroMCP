@@ -34,6 +34,50 @@ async function findRuleByComment(
   return results.length > 0 ? (results[0] as Record<string, string>) : undefined;
 }
 
+/** Optional match and NAT-target parameters, mapped to their RouterOS property names. */
+const RULE_FIELDS = [
+  ["srcAddress", "src-address"],
+  ["dstAddress", "dst-address"],
+  ["srcPort", "src-port"],
+  ["dstPort", "dst-port"],
+  ["inInterface", "in-interface"],
+  ["outInterface", "out-interface"],
+  ["inInterfaceList", "in-interface-list"],
+  ["outInterfaceList", "out-interface-list"],
+  ["connectionState", "connection-state"],
+  ["connectionNatState", "connection-nat-state"],
+  ["toAddresses", "to-addresses"],
+  ["toPorts", "to-ports"],
+] as const;
+
+type RuleFieldKey = (typeof RULE_FIELDS)[number][0];
+
+/** Properties RouterOS stores as an unordered comma-separated set. */
+const SET_PROPERTIES = new Set<string>(["connection-state"]);
+
+/** The RouterOS string value requested for a field, or undefined when it was not given. */
+function requestedValue(
+  parsed: Partial<Record<RuleFieldKey, string | string[]>>,
+  key: RuleFieldKey,
+): string | undefined {
+  const value = parsed[key];
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value.join(",") : value;
+}
+
+/**
+ * Compare a stored property with a requested value. The response parser turns
+ * numeric strings into numbers (`dst-port: 53`), so both sides are compared as
+ * strings; set-valued properties ignore element order.
+ */
+function sameProperty(property: string, stored: unknown, requested: string | undefined): boolean {
+  const have = stored === undefined || stored === null ? "" : String(stored);
+  const want = requested ?? "";
+  if (!SET_PROPERTIES.has(property)) return have === want;
+  const norm = (s: string) => s.split(",").filter(Boolean).sort().join(",");
+  return norm(have) === norm(want);
+}
+
 // ---------------------------------------------------------------------------
 // list_firewall_rules
 // ---------------------------------------------------------------------------
@@ -124,6 +168,12 @@ const listFirewallRulesTool: ToolDefinition = {
               "dst-port",
               "in-interface",
               "out-interface",
+              "in-interface-list",
+              "out-interface-list",
+              "connection-state",
+              "connection-nat-state",
+              "to-addresses",
+              "to-ports",
               "disabled",
               "comment",
             ]),
@@ -170,6 +220,27 @@ const manageFirewallRuleInputSchema = z
     dstPort: z.string().optional().describe("Destination port or range"),
     inInterface: z.string().optional().describe("Incoming interface"),
     outInterface: z.string().optional().describe("Outgoing interface"),
+    inInterfaceList: z.string().optional().describe("Incoming interface list, e.g. WAN or !LAN"),
+    outInterfaceList: z.string().optional().describe("Outgoing interface list, e.g. WAN or !LAN"),
+    connectionState: z
+      .array(z.enum(["established", "related", "new", "invalid", "untracked"]))
+      .min(1)
+      .optional()
+      .describe("Connection-tracking states to match"),
+    connectionNatState: z
+      .string()
+      .regex(/^!?(srcnat|dstnat)(,(srcnat|dstnat))?$/)
+      .optional()
+      .describe("Connection NAT state to match, e.g. dstnat or !dstnat"),
+    toAddresses: z
+      .string()
+      .optional()
+      .describe("NAT target address or range (nat table only, e.g. dst-nat)"),
+    toPorts: z
+      .string()
+      .regex(/^\d{1,5}(-\d{1,5})?$/)
+      .optional()
+      .describe("NAT target port or range (nat table only)"),
     comment: z
       .string()
       .max(255)
@@ -188,7 +259,7 @@ const manageFirewallRuleTool: ToolDefinition = {
   name: "manage_firewall_rule",
   title: "Manage Firewall Rule",
   description:
-    "Add, remove, disable, or enable a firewall rule on a MikroTik router. Uses comment as idempotency key for deduplication and identification. Supports dry-run mode.",
+    "Add, remove, disable, or enable a firewall rule on a MikroTik router. Matches addresses, ports, protocol, interfaces, interface lists, and connection/NAT state; nat rules take toAddresses/toPorts (e.g. a dst-nat port forward). Uses comment as idempotency key for deduplication and identification. Supports dry-run mode.",
   inputSchema: manageFirewallRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -218,67 +289,63 @@ const manageFirewallRuleTool: ToolDefinition = {
       // ADD
       // -----------------------------------------------------------------------
       if (parsed.action === "add") {
+        if (
+          parsed.table !== "nat" &&
+          (parsed.toAddresses !== undefined || parsed.toPorts !== undefined)
+        ) {
+          throw new MikroMCPError({
+            category: ErrorCategory.VALIDATION,
+            code: "NAT_TARGET_REQUIRES_NAT_TABLE",
+            message: "toAddresses and toPorts apply only to rules in the nat table.",
+            details: { table: parsed.table },
+            recoverability: {
+              retryable: false,
+              suggestedAction: "Set table=nat, or drop toAddresses/toPorts for a filter rule.",
+            },
+          });
+        }
+
+        const wantProtocol =
+          parsed.protocol !== undefined && parsed.protocol !== "all" ? parsed.protocol : "";
+
         if (comment !== undefined) {
           const existing = await findRuleByComment(context, path, comment);
           if (existing) {
-            const wantProtocol =
-              parsed.protocol !== undefined && parsed.protocol !== "all" ? parsed.protocol : "";
-            const sameChain = existing.chain === parsed.chain;
-            const sameRuleAction = existing.action === parsed.ruleAction;
-            const sameSrcAddress = (existing["src-address"] ?? "") === (parsed.srcAddress ?? "");
-            const sameDstAddress = (existing["dst-address"] ?? "") === (parsed.dstAddress ?? "");
-            const sameProtocol = (existing.protocol ?? "") === wantProtocol;
-            const sameSrcPort = (existing["src-port"] ?? "") === (parsed.srcPort ?? "");
-            const sameDstPort = (existing["dst-port"] ?? "") === (parsed.dstPort ?? "");
-            const sameInInterface = (existing["in-interface"] ?? "") === (parsed.inInterface ?? "");
-            const sameOutInterface =
-              (existing["out-interface"] ?? "") === (parsed.outInterface ?? "");
+            const matches =
+              existing.chain === parsed.chain &&
+              existing.action === parsed.ruleAction &&
+              sameProperty("protocol", existing.protocol, wantProtocol) &&
+              RULE_FIELDS.every(([key, property]) =>
+                sameProperty(property, existing[property], requestedValue(parsed, key)),
+              );
 
-            if (
-              sameChain &&
-              sameRuleAction &&
-              sameSrcAddress &&
-              sameDstAddress &&
-              sameProtocol &&
-              sameSrcPort &&
-              sameDstPort &&
-              sameInInterface &&
-              sameOutInterface
-            ) {
+            if (matches) {
               return {
                 content: `Firewall ${parsed.table} rule with comment "${comment}" already exists. No changes made.`,
                 structuredContent: { action: "already_exists", rule: existing },
               };
             }
 
+            const existingDetails: Record<string, unknown> = {
+              chain: existing.chain,
+              action: existing.action,
+              protocol: existing.protocol,
+            };
+            const requestedDetails: Record<string, unknown> = {
+              chain: parsed.chain,
+              action: parsed.ruleAction,
+              protocol: wantProtocol || undefined,
+            };
+            for (const [key, property] of RULE_FIELDS) {
+              existingDetails[property] = existing[property];
+              requestedDetails[property] = requestedValue(parsed, key);
+            }
+
             throw new MikroMCPError({
               category: ErrorCategory.CONFLICT,
               code: "FIREWALL_RULE_CONFLICT",
               message: `Firewall ${parsed.table} rule with comment "${comment}" already exists but with different configuration.`,
-              details: {
-                existing: {
-                  chain: existing.chain,
-                  action: existing.action,
-                  "src-address": existing["src-address"],
-                  "dst-address": existing["dst-address"],
-                  protocol: existing.protocol,
-                  "src-port": existing["src-port"],
-                  "dst-port": existing["dst-port"],
-                  "in-interface": existing["in-interface"],
-                  "out-interface": existing["out-interface"],
-                },
-                requested: {
-                  chain: parsed.chain,
-                  action: parsed.ruleAction,
-                  "src-address": parsed.srcAddress,
-                  "dst-address": parsed.dstAddress,
-                  protocol: wantProtocol || undefined,
-                  "src-port": parsed.srcPort,
-                  "dst-port": parsed.dstPort,
-                  "in-interface": parsed.inInterface,
-                  "out-interface": parsed.outInterface,
-                },
-              },
+              details: { existing: existingDetails, requested: requestedDetails },
               recoverability: {
                 retryable: false,
                 suggestedAction:
@@ -296,14 +363,11 @@ const manageFirewallRuleTool: ToolDefinition = {
         };
 
         if (comment !== undefined) body.comment = comment;
-        if (parsed.srcAddress !== undefined) body["src-address"] = parsed.srcAddress;
-        if (parsed.dstAddress !== undefined) body["dst-address"] = parsed.dstAddress;
-        if (parsed.protocol !== undefined && parsed.protocol !== "all")
-          body.protocol = parsed.protocol;
-        if (parsed.srcPort !== undefined) body["src-port"] = parsed.srcPort;
-        if (parsed.dstPort !== undefined) body["dst-port"] = parsed.dstPort;
-        if (parsed.inInterface !== undefined) body["in-interface"] = parsed.inInterface;
-        if (parsed.outInterface !== undefined) body["out-interface"] = parsed.outInterface;
+        if (wantProtocol) body.protocol = wantProtocol;
+        for (const [key, property] of RULE_FIELDS) {
+          const value = requestedValue(parsed, key);
+          if (value !== undefined) body[property] = value;
+        }
         if (parsed.placeBefore !== undefined) body["place-before"] = parsed.placeBefore;
 
         if (parsed.dryRun) {

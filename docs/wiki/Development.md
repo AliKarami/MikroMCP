@@ -180,7 +180,7 @@ Test structure for each tool file:
 - `test/unit/docs/available-tools-sync.test.ts` — verifies `docs/wiki/Available-Tools.md` lists every registered tool and nothing else.
 - `test/unit/docs/available-tools-params-sync.test.ts` — verifies each tool's parameter table in `docs/wiki/Available-Tools.md` lists exactly the parameters its Zod input schema accepts.
 - `test/unit/docs/configuration-yaml-sync.test.ts` — loads every full `routers:` / `identities:` YAML example in `docs/wiki/Configuration.md` through the real registries, so a copied example always starts.
-- `test/unit/docs/tool-count-sync.test.ts` — verifies the tool count stated in `README.md`, the wiki, and the landing page matches the actual count (currently **122 tools**).
+- `test/unit/docs/tool-count-sync.test.ts` — verifies the tool count stated in `README.md`, the wiki, and the landing page matches the actual count (currently **125 tools**).
 - `test/unit/docs/site-version-sync.test.ts` — verifies the landing page's version matches `src/version.ts`.
 - `test/unit/skill/tool-map-sync.test.ts` — verifies `skills/mikromcp/references/tool-map.md` is in lockstep with the registered tools.
 
@@ -228,6 +228,6 @@ MIKROMCP_CONFIG_PATH=config/routers.yaml \
   npx @modelcontextprotocol/inspector node dist/main.js
 ```
 
-Inspector opens at `http://localhost:5173`. Browse all 122 tools, call them with sample inputs, and inspect raw responses including `structuredContent`.
+Inspector opens at `http://localhost:5173`. Browse all 125 tools, call them with sample inputs, and inspect raw responses including `structuredContent`.
 
 For hot-reload during tool development, replace `node dist/main.js` with `npm run dev`.
