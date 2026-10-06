@@ -20,6 +20,12 @@ describe("sameRuleValue", () => {
     expect(sameRuleValue("src-address", "10.0.0.0/24", "10.0.0.0/32")).toBe(false);
   });
 
+  it("treats protocol all as no protocol", () => {
+    expect(sameRuleValue("protocol", undefined, "all")).toBe(true);
+    expect(sameRuleValue("protocol", "", "all")).toBe(true);
+    expect(sameRuleValue("protocol", "tcp", "all")).toBe(false);
+  });
+
   it("leaves /32 alone on non-address fields", () => {
     expect(sameRuleValue("comment", "x", "x/32")).toBe(false);
   });

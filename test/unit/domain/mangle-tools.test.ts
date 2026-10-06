@@ -336,6 +336,163 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
     expect(ctx.routerClient.create).not.toHaveBeenCalled();
   });
+
+  // Real rules from RB5009 (RouterOS 7.24.2, list_mangle_rules, 2026-10-06), written back
+  // as the wire strings REST sends; makeContext parses them like RouterOSRestClient.get.
+  const MSS_CLAMP_WG: WireRecord = {
+    ".id": "*A",
+    action: "change-mss",
+    bytes: "353820",
+    chain: "forward",
+    comment: "MSS clamp wg-leg1",
+    dynamic: "false",
+    invalid: "false",
+    "new-mss": "clamp-to-pmtu",
+    "out-interface": "wg-leg1",
+    packets: "5897",
+    passthrough: "true",
+    protocol: "tcp",
+    "tcp-flags": "syn",
+  };
+  // Dynamic rule: the router reports neither passthrough nor protocol for it.
+  const FASTTRACK_DUMMY: WireRecord = {
+    ".id": "*C",
+    action: "passthrough",
+    bytes: "593383747678",
+    chain: "forward",
+    comment: "special dummy rule to show fasttrack counters",
+    dynamic: "true",
+    packets: "490690209",
+  };
+
+  const sameAdd = {
+    routerId: "test-router",
+    action: "add",
+    comment: "MSS clamp wg-leg1",
+    chain: "forward",
+    protocol: "tcp",
+    outInterface: "wg-leg1",
+  };
+  const ctxWith = (wire: WireRecord) => makeContext([wire]);
+
+  it("returns already_exists for the same rule read back from the router", async () => {
+    const result = await manageMangleRuleTool.handler(sameAdd, ctxWith(MSS_CLAMP_WG));
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it.each([
+    ["protocol", { protocol: "udp" }],
+    ["dst-port", { dstPort: "443" }],
+    ["src-port", { srcPort: "1024" }],
+    ["in-interface", { inInterface: "bridge1" }],
+    ["out-interface", { outInterface: "ether1" }],
+    ["new-routing-mark", { newRoutingMark: "to-leg1" }],
+  ])("throws CONFLICT when %s differs, with both values in details", async (property, change) => {
+    const [stored] = fromWire([MSS_CLAMP_WG]);
+    await expect(
+      manageMangleRuleTool.handler({ ...sameAdd, ...change }, ctxWith(MSS_CLAMP_WG)),
+    ).rejects.toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: {
+        existing: { [property]: stored[property] },
+        requested: { [property]: Object.values(change)[0] },
+      },
+    });
+  });
+
+  it("throws CONFLICT when a reported new-dscp differs", async () => {
+    // Derived: the same rule with new-dscp set; RB5009 has no rule that sets it.
+    await expect(
+      manageMangleRuleTool.handler(
+        { ...sameAdd, newDscpValue: 10 },
+        ctxWith({ ...MSS_CLAMP_WG, "new-dscp": "46" }),
+      ),
+    ).rejects.toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: { existing: { "new-dscp": 46 }, requested: { "new-dscp": 10 } },
+    });
+  });
+
+  it("lists every compared field, with the effective passthrough, in CONFLICT details", async () => {
+    await expect(
+      manageMangleRuleTool.handler({ ...sameAdd, dstPort: "443" }, ctxWith(MSS_CLAMP_WG)),
+    ).rejects.toMatchObject({
+      details: {
+        existing: { protocol: "tcp", "out-interface": "wg-leg1", passthrough: true },
+        requested: {
+          "dst-port": "443",
+          protocol: "tcp",
+          "out-interface": "wg-leg1",
+          passthrough: true,
+        },
+      },
+    });
+  });
+
+  it("treats an omitted passthrough as the RouterOS default yes", async () => {
+    const result = await manageMangleRuleTool.handler(
+      { ...sameAdd, passthrough: true },
+      ctxWith(MSS_CLAMP_WG),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("throws CONFLICT when passthrough differs", async () => {
+    await expect(
+      manageMangleRuleTool.handler({ ...sameAdd, passthrough: false }, ctxWith(MSS_CLAMP_WG)),
+    ).rejects.toMatchObject({ code: "MANGLE_RULE_CONFLICT" });
+  });
+
+  it("does not compare passthrough or new-dscp when the router does not report them", async () => {
+    const result = await manageMangleRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        comment: FASTTRACK_DUMMY.comment,
+        chain: "forward",
+        passthrough: false,
+        newDscpValue: 10,
+      },
+      ctxWith(FASTTRACK_DUMMY),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("treats protocol all as no protocol", async () => {
+    const result = await manageMangleRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        comment: FASTTRACK_DUMMY.comment,
+        chain: "forward",
+        protocol: "all",
+      },
+      ctxWith(FASTTRACK_DUMMY),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("matches a numeric custom chain read back from the router", async () => {
+    // Derived: the same rule in a jump chain named "100", which parses to a number.
+    const ctx = ctxWith({ ...MSS_CLAMP_WG, chain: "100" });
+    const result = await manageMangleRuleTool.handler({ ...sameAdd, chain: "100" }, ctx);
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    const listed = await listMangleRulesTool.handler(
+      { routerId: "test-router", chain: "100" },
+      ctx,
+    );
+    expect((listed.structuredContent as Record<string, unknown>).total).toBe(1);
+  });
+
+  it("matches passthrough=no read back from the router", async () => {
+    // Derived: the same rule with passthrough=no.
+    const result = await manageMangleRuleTool.handler(
+      { ...sameAdd, passthrough: false },
+      ctxWith({ ...MSS_CLAMP_WG, passthrough: "false" }),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
 });
 
 describe("manage_mangle_rule - empty comment", () => {

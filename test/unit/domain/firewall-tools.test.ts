@@ -939,6 +939,44 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
   });
 });
 
+describe("firewall rules in a numeric custom chain", () => {
+  // Derived from a real defconf rule on RB5009 (RouterOS 7.24.2, list_firewall_rules,
+  // 2026-10-06) moved to a jump chain named "100", which the response parser turns into 100.
+  const stored: WireRecord = {
+    ".id": "*6",
+    action: "accept",
+    bytes: "0",
+    chain: "100",
+    comment: "defconf: accept in ipsec policy",
+    dynamic: "false",
+    invalid: "false",
+    "ipsec-policy": "in,ipsec",
+    packets: "0",
+  };
+
+  it("a repeated add finds the rule (already_exists)", async () => {
+    const result = await manageFirewallRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        chain: "100",
+        ruleAction: "accept",
+        comment: "defconf: accept in ipsec policy",
+      },
+      makeContext([stored]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("list_firewall_rules filters by the numeric chain", async () => {
+    const result = await listFirewallRulesTool.handler(
+      { routerId: "test-router", chain: "100" },
+      makeContext([stored]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
+  });
+});
+
 describe("manage_firewall_rule - empty comment", () => {
   // A `?comment=` lookup matches no rule on RouterOS (checked on 7.24.2), so an empty
   // comment cannot serve as the idempotency key.

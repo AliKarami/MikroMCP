@@ -14,6 +14,38 @@ const log = createLogger("mangle-tools");
 
 const MANGLE_PATH = "ip/firewall/mangle";
 
+/** Match and mark parameters compared on a repeated add, mapped to their RouterOS property names. */
+const MANGLE_RULE_FIELDS = [
+  ["srcAddress", "src-address"],
+  ["dstAddress", "dst-address"],
+  ["srcAddressList", "src-address-list"],
+  ["dstAddressList", "dst-address-list"],
+  ["protocol", "protocol"],
+  ["srcPort", "src-port"],
+  ["dstPort", "dst-port"],
+  ["inInterface", "in-interface"],
+  ["outInterface", "out-interface"],
+  ["newRoutingMark", "new-routing-mark"],
+  ["newConnectionMark", "new-connection-mark"],
+] as const;
+
+/**
+ * Compare a field RouterOS reports only for the actions that use it. `passthrough`
+ * reads back as `true` on a rule added without it (the default is yes), but a rule
+ * whose action ignores the field, such as the `accept` this tool creates when no
+ * action applies, may not report it at all. A field the router does not report
+ * cannot differ, so only a reported value is compared.
+ */
+function sameActionField(
+  property: string,
+  stored: unknown,
+  requested: unknown,
+  fallback?: unknown,
+): boolean {
+  if (stored === undefined) return true;
+  return sameRuleValue(property, stored, requested ?? fallback);
+}
+
 const listMangleRulesInputSchema = z
   .object({
     routerId,
@@ -52,7 +84,9 @@ const listMangleRulesTool: ToolDefinition = {
       });
 
       if (parsed.chain !== undefined) {
-        rules = rules.filter((r) => (r as Record<string, string>).chain === parsed.chain);
+        rules = rules.filter((r) =>
+          sameRuleValue("chain", (r as Record<string, unknown>).chain, parsed.chain),
+        );
       }
       if (parsed.action !== undefined) {
         rules = rules.filter((r) => (r as Record<string, string>).action === parsed.action);
@@ -122,7 +156,7 @@ const manageMangleRuleTool: ToolDefinition = {
   name: "manage_mangle_rule",
   title: "Manage Mangle Rule",
   description:
-    "Add, remove, enable, or disable a firewall mangle rule. Uses comment as idempotency key. Supports dry-run mode.",
+    "Add, remove, enable, or disable a firewall mangle rule. Uses comment as idempotency key: a repeated add returns already_exists only when the chain, match fields, marks, DSCP, and passthrough agree, otherwise CONFLICT. Supports dry-run mode.",
   inputSchema: manageMangleRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -157,73 +191,38 @@ const manageMangleRuleTool: ToolDefinition = {
         const existing = await findRuleByComment(context, MANGLE_PATH, comment);
 
         if (existing) {
-          const sameChain = existing.chain === parsed.chain;
-          const sameSrcAddress = sameRuleValue(
-            "src-address",
-            existing["src-address"],
-            parsed.srcAddress,
-          );
-          const sameDstAddress = sameRuleValue(
-            "dst-address",
-            existing["dst-address"],
-            parsed.dstAddress,
-          );
-          const sameSrcAddressList = sameRuleValue(
-            "src-address-list",
-            existing["src-address-list"],
-            parsed.srcAddressList,
-          );
-          const sameDstAddressList = sameRuleValue(
-            "dst-address-list",
-            existing["dst-address-list"],
-            parsed.dstAddressList,
-          );
-          const sameNewRoutingMark = sameRuleValue(
-            "new-routing-mark",
-            existing["new-routing-mark"],
-            parsed.newRoutingMark,
-          );
-          const sameNewConnectionMark = sameRuleValue(
-            "new-connection-mark",
-            existing["new-connection-mark"],
-            parsed.newConnectionMark,
-          );
+          const matches =
+            sameRuleValue("chain", existing.chain, parsed.chain) &&
+            MANGLE_RULE_FIELDS.every(([key, property]) =>
+              sameRuleValue(property, existing[property], parsed[key]),
+            ) &&
+            sameActionField("new-dscp", existing["new-dscp"], parsed.newDscpValue) &&
+            sameActionField("passthrough", existing.passthrough, parsed.passthrough, true);
 
-          if (
-            sameChain &&
-            sameSrcAddress &&
-            sameDstAddress &&
-            sameSrcAddressList &&
-            sameDstAddressList &&
-            sameNewRoutingMark &&
-            sameNewConnectionMark
-          ) {
+          if (matches) {
             return {
               content: `Mangle rule with comment "${comment}" already exists. No changes made.`,
               structuredContent: { action: "already_exists", rule: existing },
             };
           }
 
+          const existingDetails: Record<string, unknown> = { chain: existing.chain };
+          const requestedDetails: Record<string, unknown> = { chain: parsed.chain };
+          for (const [key, property] of MANGLE_RULE_FIELDS) {
+            existingDetails[property] = existing[property];
+            requestedDetails[property] = parsed[key];
+          }
+          existingDetails["new-dscp"] = existing["new-dscp"];
+          requestedDetails["new-dscp"] = parsed.newDscpValue;
+          existingDetails.passthrough = existing.passthrough;
+          // The effective value: an omitted passthrough means the RouterOS default yes.
+          requestedDetails.passthrough = parsed.passthrough ?? true;
+
           throw new MikroMCPError({
             category: ErrorCategory.CONFLICT,
             code: "MANGLE_RULE_CONFLICT",
             message: `Mangle rule with comment "${comment}" already exists but with different configuration.`,
-            details: {
-              existing: {
-                chain: existing.chain,
-                "src-address": existing["src-address"],
-                "dst-address": existing["dst-address"],
-                "new-routing-mark": existing["new-routing-mark"],
-                "new-connection-mark": existing["new-connection-mark"],
-              },
-              requested: {
-                chain: parsed.chain,
-                "src-address": parsed.srcAddress,
-                "dst-address": parsed.dstAddress,
-                "new-routing-mark": parsed.newRoutingMark,
-                "new-connection-mark": parsed.newConnectionMark,
-              },
-            },
+            details: { existing: existingDetails, requested: requestedDetails },
             recoverability: {
               retryable: false,
               suggestedAction:

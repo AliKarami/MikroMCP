@@ -18,6 +18,8 @@ const ADDRESS_PROPERTIES: ReadonlySet<string> = new Set([
 const SET_PROPERTIES: ReadonlySet<string> = new Set(["connection-state", "connection-nat-state"]);
 
 function canonical(property: string, value: string): string {
+  // `protocol=all` is the absence of a protocol match; RouterOS reports no protocol.
+  if (property === "protocol" && value === "all") return "";
   if (ADDRESS_PROPERTIES.has(property)) return value.replace(/\/32$/, "");
   if (SET_PROPERTIES.has(property)) {
     const negated = value.startsWith("!");
@@ -30,8 +32,8 @@ function canonical(property: string, value: string): string {
 /**
  * Compare a rule field as stored by RouterOS with a requested value. The
  * response parser turns numeric strings into numbers (`dst-port: 53`), a
- * missing field equals an empty one, a host `/32` mask is optional, and set
- * fields ignore element order.
+ * missing field equals an empty one, `protocol=all` equals no protocol, a host
+ * `/32` mask is optional, and set fields ignore element order.
  */
 export function sameRuleValue(property: string, stored: unknown, requested: unknown): boolean {
   return (

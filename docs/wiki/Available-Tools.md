@@ -1106,7 +1106,7 @@ List firewall mangle rules in evaluation order. Supports filtering by chain, act
 
 ### `manage_mangle_rule` — Write · Destructive · Idempotent
 
-Add, remove, enable, or disable a mangle rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with different chain or match config.
+Add, remove, enable, or disable a mangle rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different chain, match fields (addresses, address lists, protocol, ports, interfaces), marks, `newDscpValue`, or `passthrough`. `newDscpValue` and `passthrough` are compared only when the router reports them for the rule's action; an omitted `passthrough` counts as the RouterOS default `yes`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|

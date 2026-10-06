@@ -335,4 +335,37 @@ describe("manage_routing_rule - composite key comparison", () => {
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
+
+  // Derived from the real PS5 rule on RB5009 (RouterOS 7.24.2, list_routing_rules,
+  // 2026-10-06) with the table renamed to "100", which the response parser turns into 100.
+  const numericTableRule: WireRecord = {
+    ".id": "*2",
+    action: "lookup-only-in-table",
+    comment: "PS5 to leg1 fail-closed",
+    disabled: "false",
+    inactive: "false",
+    "src-address": "192.168.1.251/32",
+    table: "100",
+  };
+
+  it("finds a rule whose table name is numeric", async () => {
+    const ctx = makeContext([numericTableRule]);
+    const result = await manageRoutingRuleTool.handler(
+      { routerId: "test-router", action: "add", table: "100", srcAddress: "192.168.1.251/32" },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    const mockCreate = (ctx.routerClient as Record<string, unknown>).create as ReturnType<
+      typeof vi.fn
+    >;
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("list_routing_rules filters by a numeric table name", async () => {
+    const result = await listRoutingRulesTool.handler(
+      { routerId: "test-router", table: "100" },
+      makeContext([numericTableRule]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
+  });
 });
