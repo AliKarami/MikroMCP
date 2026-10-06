@@ -44,6 +44,7 @@ Define identities for distinct consumers (a read-only dashboard vs. an automatio
 
 - **Dry-run first.** Every write tool supports `dryRun: true` to preview the diff without touching the router.
 - **Confirmation tokens.** When `MIKROMCP_CONFIRMATION_SECRET` is set, `readonly` and `operator` identities must call a destructive tool twice: the first call returns `APPROVAL_REQUIRED` with a single-use token valid for five minutes, the second call carries it as `confirmationToken`. `admin` and `superadmin` (including the built-in stdio identity) skip this per-router gate. Destructive `bulk_execute` fan-outs are gated for every role: they always require the secret and a fleet-wide token obtained the same two-step way.
+- **Fleet reads vs. fleet writes.** `bulk_read` fans out only read-only tools and refuses everything else on the server, so a client that approves tools by name (for example Claude Code permission rules) can allow `bulk_read` and keep `bulk_execute` behind a prompt.
 - **Maintenance windows.** Routers can declare windows during which destructive operations are permitted; calls outside them are rejected with `PERMISSION_DENIED`.
 - **Snapshots & rollback.** Write tools snapshot affected config and append a journal entry before applying, so a change can be reversed with `rollback_change`.
 

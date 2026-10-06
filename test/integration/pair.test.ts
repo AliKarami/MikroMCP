@@ -110,4 +110,30 @@ describe.skipIf(!pairEnabled)("fleet operations across two live CHRs", () => {
       ITEST_PAIR_ROUTER_ID,
     ]);
   });
+
+  it("bulk_read fans a read tool out to both routers by tag", async () => {
+    const response = await executeToolCall(
+      tool("bulk_read"),
+      { toolName: "get_system_status", tags: ["pair"], params: {} },
+      deps!,
+    );
+
+    expect(response.isError).toBeUndefined();
+    const sc = response.structuredContent as { succeeded: number; failed: number };
+    expect(sc.succeeded).toBe(2);
+    expect(sc.failed).toBe(0);
+  });
+
+  it("bulk_read refuses a write tool before contacting any router", async () => {
+    const response = await executeToolCall(
+      tool("bulk_read"),
+      { toolName: "manage_route", tags: ["pair"], params: {} },
+      deps!,
+    );
+
+    expect(response.isError).toBe(true);
+    const error = response.structuredContent as Record<string, unknown>;
+    expect(error.code).toBe("BULK_READ_TOOL_NOT_READ_ONLY");
+    expect(error.category).toBe("VALIDATION");
+  });
 });

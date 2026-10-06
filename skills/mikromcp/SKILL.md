@@ -58,6 +58,7 @@ RouterOS documentation — when you need to know what a RouterOS field means, se
 | See/assign DHCP leases | `list_dhcp_leases`, `manage_dhcp_lease` |
 | See who's connected (WiFi) | `list_wifi_clients` |
 | Test connectivity | `ping`, `traceroute` |
+| Read the same data across many routers | `bulk_read` |
 | Run a change across many routers | `bulk_execute` |
 | Undo a change | `rollback_change` |
 
@@ -79,10 +80,12 @@ Full enumeration of every tool by family: `references/tool-map.md`.
    suggests. Cross-check field meanings via `references/routeros-docs.md`.
 
 ### Fleet rollout
-1. Validate the change on ONE router first (dry-run → apply).
-2. `bulk_execute` with the tool + params, targeting routerIds or a tag.
-3. For destructive tools, complete the fleet confirmation-token step.
-4. Review per-router succeeded/failed counts; `rollback_change` per-router if needed.
+1. Capture current state across the fleet with `bulk_read` (read-only tools
+   only; it refuses writes and `ping`/`traceroute`/`torch`/`bandwidth_test`).
+2. Validate the change on ONE router first (dry-run → apply).
+3. `bulk_execute` with the tool + params, targeting routerIds or a tag.
+4. For destructive tools, complete the fleet confirmation-token step.
+5. Review per-router succeeded/failed counts; `rollback_change` per-router if needed.
 
 ### Recover from an error
 1. Read the error `code`/`category` and `suggestedAction`.

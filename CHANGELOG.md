@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- `bulk_read` fleet tool — fans a read-only tool out across routers by id or tag, like `bulk_execute`, but the server refuses any inner tool that is not annotated read-only, plus the traffic-generating `ping`, `traceroute`, `torch`, and `bandwidth_test` (`BULK_READ_TOOL_NOT_READ_ONLY`). Clients that approve tools by name can now allow fleet-wide reads without allowing `bulk_execute`, which can fan out writes. `bulk_execute` and `bulk_read` share one per-router execution path. Closes #79.
+
 ### Fixed
 - **Docs:** the wiki's Configuration page documented `identities.yaml` in a shape the server has never accepted — an array with `name`/`tokenHash` and no `role`, `allowedRouters: ["*"]` (which is matched literally and would deny every router), and a hash command using the `bcrypt` package when MikroMCP depends on `bcryptjs`. The page now mirrors `config/identities.example.yaml`, documents the four roles and what they gate, states that an empty list means "all", and shows how to generate a token from a source checkout, a global install, or the Docker image. A new lockstep test loads every full `routers:` / `identities:` example on that page through the real registries so the two cannot drift again. Closes #75.
 - **Docs:** parameter tables for 21 tools in `Available-Tools.md` had drifted from their input schemas — `check_router_health` described a fleet-sweep signature (`routerIds`, `tags`, `checkSsh`, `concurrency`) that does not exist, `manage_container` listed `image`/`envs`/`mounts` instead of `remoteImage`/`rootDir`/`envlist`, `manage_ipsec_peer` listed `authMethod`/`secret` instead of `localAddress`/`exchange`, several list tools documented an `offset` they do not accept, and a dozen filter parameters were missing. Every table now matches its schema, enforced by a new lockstep test.
