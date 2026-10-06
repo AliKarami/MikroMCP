@@ -41,7 +41,8 @@ function makeContext(executeResult: unknown = {}, getResult: unknown[] = []) {
       allowedToolPatterns: [],
     },
     routerClient: {
-      execute: vi.fn().mockResolvedValue(executeResult),
+      // Progress-reporting commands must go through executeFinal, never raw execute.
+      execute: vi.fn().mockRejectedValue(new Error("unexpected raw execute() call")),
       executeFinal: vi.fn(async () =>
         lastSection(executeResult as Record<string, string> | Array<Record<string, string>>),
       ),
@@ -154,6 +155,13 @@ describe("networkTestTools", () => {
       expect(result.structuredContent).toMatchObject({ txMbps: 100, rxMbps: 50, lostPackets: "3" });
     });
 
+    it("fails instead of reporting 0 Mbps when RouterOS returns no result", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        bandwidthTestTool.handler({ routerId: "test-router", address: "10.0.0.2" }, ctx),
+      ).rejects.toMatchObject({ code: "BANDWIDTH_TEST_NO_RESULT" });
+    });
+
     it("propagates errors", async () => {
       const ctx = makeContext();
       (ctx.routerClient.executeFinal as ReturnType<typeof vi.fn>).mockRejectedValue(
@@ -213,6 +221,30 @@ describe("networkTestTools", () => {
         expect.objectContaining({ output: "file", "dst-path": "flash/response.txt" }),
       );
     });
+
+    it('reports the final update even when it is not "finished"', async () => {
+      const ctx = makeContext([
+        { ".section": "0", status: "connecting" },
+        { ".section": "1", status: "failed", code: "500" },
+      ]);
+      const result = await fetchUrlTool.handler(
+        { routerId: "test-router", url: "http://example.com" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).statusCode).toBe("500");
+    });
+
+    it.each(["007", "true", "1d2h", "3.14"])(
+      "returns a body of %s verbatim, without value parsing",
+      async (body) => {
+        const ctx = makeContext([{ ".section": "1", status: "finished", code: "200", data: body }]);
+        const result = await fetchUrlTool.handler(
+          { routerId: "test-router", url: "http://example.com" },
+          ctx,
+        );
+        expect((result.structuredContent as Record<string, unknown>).body).toBe(body);
+      },
+    );
 
     it("truncates body over 64KB", async () => {
       const bigBody = "x".repeat(70000);

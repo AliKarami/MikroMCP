@@ -50,3 +50,31 @@ describe("SSH-backed tools against live CHR", () => {
     expect(result.structuredContent).toBeTruthy();
   });
 });
+
+describe("REST diagnostics against live CHR", () => {
+  it("traceroute returns the final hops once, numbered from 1", async () => {
+    const result = await runTool(harness.context, "traceroute", {
+      address: "127.0.0.1",
+      count: 1,
+      maxHops: 2,
+    });
+
+    const hops = result.structuredContent.hops as Array<Record<string, unknown>>;
+    expect(hops.length).toBeGreaterThan(0);
+    hops.forEach((hop, i) => expect(hop.hop).toBe(i + 1));
+  });
+
+  it("torch on ether1 ends after its duration and returns a flow list", async () => {
+    const started = Date.now();
+    const result = await runTool(harness.context, "torch", { interface: "ether1", duration: 2 });
+
+    expect(Array.isArray(result.structuredContent.flows)).toBe(true);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
+  it("torch on a missing interface fails with VALIDATION instead of an empty capture", async () => {
+    await expect(
+      runTool(harness.context, "torch", { interface: "ether99", duration: 1 }),
+    ).rejects.toMatchObject({ category: "VALIDATION" });
+  });
+});

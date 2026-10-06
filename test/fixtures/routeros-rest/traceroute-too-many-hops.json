@@ -1,0 +1,78 @@
+{
+  "_comment": "Real POST /rest/tool/traceroute response from RouterOS 7.24.2 (hAP ax3 to 1.1.1.1, count 1, max-hops 4). Addresses replaced with private and documentation ranges.",
+  "request": {
+    "address": "1.1.1.1",
+    "count": "1",
+    "max-hops": "4"
+  },
+  "response": [
+    {
+      ".section": "0",
+      "address": "192.168.88.1",
+      "avg": "0.4",
+      "best": "0.4",
+      "last": "0.4",
+      "loss": "0",
+      "sent": "1",
+      "status": "",
+      "std-dev": "0",
+      "worst": "0.4"
+    },
+    {
+      ".section": "0",
+      "address": "",
+      "last": "0",
+      "loss": "0",
+      "sent": "1",
+      "status": ""
+    },
+    {
+      ".section": "1",
+      "address": "192.168.88.1",
+      "avg": "0.4",
+      "best": "0.4",
+      "error": "Too many hops",
+      "last": "0.4",
+      "loss": "0",
+      "sent": "1",
+      "status": "",
+      "std-dev": "0",
+      "worst": "0.4"
+    },
+    {
+      ".section": "1",
+      "address": "",
+      "error": "Too many hops",
+      "last": "timeout",
+      "loss": "100",
+      "sent": "1",
+      "status": ""
+    },
+    {
+      ".section": "1",
+      "address": "10.0.0.1",
+      "avg": "29.4",
+      "best": "29.4",
+      "error": "Too many hops",
+      "last": "29.4",
+      "loss": "0",
+      "sent": "1",
+      "status": "",
+      "std-dev": "0",
+      "worst": "29.4"
+    },
+    {
+      ".section": "1",
+      "address": "10.0.0.2",
+      "avg": "32.6",
+      "best": "32.6",
+      "error": "Too many hops",
+      "last": "32.6",
+      "loss": "0",
+      "sent": "1",
+      "status": "",
+      "std-dev": "0",
+      "worst": "32.6"
+    }
+  ]
+}

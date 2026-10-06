@@ -160,6 +160,26 @@ describe("lastSection", () => {
     expect(lastSection([{ a: "1" }, { a: "2" }])).toEqual([{ a: "1" }, { a: "2" }]);
   });
 
+  it("does not depend on the order of the records", () => {
+    expect(
+      lastSection([
+        { ".section": "2", a: "x" },
+        { ".section": "1", a: "y" },
+      ]),
+    ).toEqual([{ ".section": "2", a: "x" }]);
+  });
+
+  it("treats a missing or non-numeric .section as section 0 instead of emptying the result", () => {
+    expect(lastSection([{ ".section": "x", a: "1" }])).toEqual([{ ".section": "x", a: "1" }]);
+    expect(lastSection([{ a: "untagged" }, { ".section": "0", a: "tagged" }])).toEqual([
+      { a: "untagged" },
+      { ".section": "0", a: "tagged" },
+    ]);
+    expect(lastSection([{ a: "untagged" }, { ".section": "1", a: "final" }])).toEqual([
+      { ".section": "1", a: "final" },
+    ]);
+  });
+
   it("wraps a single record and handles an empty result", () => {
     expect(lastSection({ a: "1" })).toEqual([{ a: "1" }]);
     expect(lastSection([])).toEqual([]);

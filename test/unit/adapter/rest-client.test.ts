@@ -128,6 +128,22 @@ describe("RouterOSRestClient write methods", () => {
     expect(records).toEqual([{ ".section": "1", status: "finished", code: "200" }]);
   });
 
+  it.each([
+    ["an empty body", emptyResponse(), []],
+    ["a single object", jsonResponse({ status: "finished" }), [{ status: "finished" }]],
+    [
+      "sections out of order",
+      jsonResponse([
+        { ".section": "1", status: "finished" },
+        { ".section": "0", status: "connecting" },
+      ]),
+      [{ ".section": "1", status: "finished" }],
+    ],
+  ])("executeFinal handles %s", async (_label, response, expected) => {
+    requestMock.mockResolvedValue(response);
+    expect(await makeClient().executeFinal("tool/fetch", {})).toEqual(expected);
+  });
+
   it("update PATCHes the record path by .id", async () => {
     requestMock.mockResolvedValue(emptyResponse());
     await makeClient().update("interface/vlan", "*1", { disabled: "true" });
