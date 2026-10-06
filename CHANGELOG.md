@@ -13,6 +13,9 @@ Each release section covers changes **since the previous release only**.
 ### Changed
 - Usage skill: release notes come from the forum's release announcements first. `mikrotik.com/download/changelogs` renders its content with JavaScript, so a plain fetch of it returned no notes, and an assistant following the skill could not read the changelog it was told to check. The version check is now a short workflow in `SKILL.md` (exact version from `get_system_status`, then the release notes) instead of a pointer to the reference file. `SKILL.md` also names `plan_changes` → `apply_plan` for several dependent writes.
 
+### Fixed
+- The REST response parser turned a version with a single dot into a number, so a release ending in `0` lost it: `get_upgrade_status` showed RouterOS 7.20 as `7.2` and 7.10 as `7.1`, in both its text and `installedVersion`/`latestVersion`. The same applied to `minimum-version` and the routerboard `*-firmware` fields in `get_system_status`, so one field was a number or a string depending on the value (`7.8` vs `"7.14.2"`). Decimal values of `version`, `*-version` and `*-firmware` fields now stay strings. Integers there, such as a VRRP or IGMP protocol `version` of `3`, still parse as numbers. Closes #101.
+
 ## [1.13.0] - 2026-10-06
 
 This release is again largely the work of [@akuzin87](https://github.com/akuzin87) (Alex). After 1.12.0 he ran a QA pass over the rule tools and their tests, and checked each fix against real routers and a CHR. He found that the firewall, mangle, routing-rule and DNS tools could report success for changes they had not made, that `manage_routing_rule` and `manage_mangle_rule` created rules that did nothing, and that Claude Code could not complete the fleet confirmation 1.12.0 introduced. Thank you again, Alex.
