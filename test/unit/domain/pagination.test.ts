@@ -71,4 +71,10 @@ describe("listContent", () => {
   it("returns a header-only 'none' line for an empty page", () => {
     expect(listContent("Widgets", "r1", [], 0, 0, render)).toBe("Widgets on r1: none.");
   });
+
+  it("reports an offset past the end of a non-empty list", () => {
+    expect(listContent("Widgets", "r1", [], 3, 10, render)).toBe(
+      "Widgets on r1: none of 3 (offset 10).",
+    );
+  });
 });

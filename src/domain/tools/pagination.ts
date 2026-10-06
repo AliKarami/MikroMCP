@@ -32,7 +32,8 @@ export function compactFields(record: Record<string, unknown>, fields: string[])
 
 /**
  * Human-readable itemized list for a list-tool's `content` field: a header line with the
- * shown range, then one `renderItem` line per record on the current page. Mirrors how
+ * shown range (`none of <total> (offset <n>)` when the offset is past the end), then one
+ * `renderItem` line per record on the current page. Mirrors how
  * `get_log` serializes entries so `content`-only MCP clients see the actual rows, not just a
  * count. `structuredContent` still carries the full untruncated records for structured clients.
  */
@@ -44,7 +45,12 @@ export function listContent<T>(
   offset: number,
   renderItem: (item: T) => string,
 ): string {
-  const range = total === 0 ? "none" : `${offset + 1}-${offset + page.length} of ${total}`;
+  const range =
+    total === 0
+      ? "none"
+      : page.length === 0
+        ? `none of ${total} (offset ${offset})`
+        : `${offset + 1}-${offset + page.length} of ${total}`;
   const header = `${label} on ${routerId}: ${range}.`;
   if (page.length === 0) return header;
   return [header, ...page.map((item) => `  ${renderItem(item)}`)].join("\n");
