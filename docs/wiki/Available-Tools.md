@@ -960,17 +960,18 @@ List policy routing rules in evaluation order. Supports filtering by table and d
 
 ### `manage_routing_rule` — Write · Destructive · Idempotent
 
-Add, remove, enable, or disable a policy routing rule. Idempotent by the composite key `srcAddress + dstAddress + interface + table`. At least one of `srcAddress`, `dstAddress`, or `interface` is required on `add`.
+Add, remove, enable, or disable a policy routing rule. Idempotent by the composite key `srcAddress + dstAddress + interface + table`; a repeated `add` with an explicit, different `ruleAction` throws `CONFLICT`. At least one of `srcAddress`, `dstAddress`, or `interface` is required on `add`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
 | `table` | string | — | Routing table name (required for all actions) |
+| `ruleAction` | `lookup` \| `lookup-only-in-table` | `lookup` on `add` | Rule action, `add` only (rejected otherwise). `lookup` falls through to later rules and `main` when the table has no route; `lookup-only-in-table` does not |
 | `srcAddress` | string | — | Source CIDR to match |
 | `dstAddress` | string | — | Destination CIDR to match |
 | `interface` | string | — | Incoming interface to match |
-| `priority` | integer | — | Rule priority (0–4294967295) |
+| `priority` | integer | — | Unsupported: RouterOS 7 `/routing/rule` has no priority (rules apply in list order), so `add` rejects it with `PRIORITY_UNSUPPORTED` |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a policy routing rule that sends traffic from 10.10.0.0/24 to the 'vpn' routing table on core-01."

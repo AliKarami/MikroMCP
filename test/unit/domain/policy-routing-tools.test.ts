@@ -164,6 +164,7 @@ describe("policy routing tools", () => {
     it("returns already_exists when composite key matches", async () => {
       const existing = {
         ".id": "*1",
+        action: "lookup",
         table: "isp1",
         "dst-address": "0.0.0.0/0",
         "src-address": "",
@@ -202,6 +203,7 @@ describe("policy routing tools", () => {
     it("removes rule and returns removed", async () => {
       const existing = {
         ".id": "*1",
+        action: "lookup",
         table: "isp1",
         "dst-address": "0.0.0.0/0",
         "src-address": "",
@@ -244,6 +246,7 @@ describe("policy routing tools", () => {
     it("calls update with disabled true when disabling", async () => {
       const existing = {
         ".id": "*1",
+        action: "lookup",
         table: "isp1",
         "dst-address": "0.0.0.0/0",
         "src-address": "",
@@ -325,6 +328,7 @@ describe("manage_routing_rule - composite key comparison", () => {
   it("finds the rule when the requested address has a /32 mask", async () => {
     const existing = {
       ".id": "*3",
+      action: "lookup",
       table: "to-leg1",
       "src-address": "192.168.1.251",
       disabled: "false",
@@ -367,5 +371,131 @@ describe("manage_routing_rule - composite key comparison", () => {
       makeContext([numericTableRule]),
     );
     expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
+  });
+});
+
+describe("manage_routing_rule - rule action", () => {
+  // The real PS5 rule on RB5009 (RouterOS 7.24.2, list_routing_rules, 2026-10-06), written
+  // back as wire strings; makeContext parses them like RouterOSRestClient.get.
+  const PS5_RULE: WireRecord = {
+    ".id": "*2",
+    action: "lookup-only-in-table",
+    comment: "PS5 to leg1 fail-closed",
+    disabled: "false",
+    inactive: "false",
+    "src-address": "192.168.1.251/32",
+    table: "to-leg1",
+  };
+  // A rule added without an action, as RouterOS reads it back (CHR 7.23.2, raw REST GET):
+  // inactive, and without the table it was added with.
+  const NO_ACTION_RULE: WireRecord = {
+    ".about": "action must be specified",
+    ".id": "*1",
+    inactive: "true",
+    "src-address": "203.0.113.0/24",
+  };
+
+  const add = {
+    routerId: "test-router",
+    action: "add",
+    table: "to-leg1",
+    srcAddress: "192.168.1.251/32",
+  };
+
+  it("sends action=lookup by default", async () => {
+    const ctx = makeContext([]);
+    await manageRoutingRuleTool.handler(add, ctx);
+    expect(ctx.routerClient.create).toHaveBeenCalledWith("routing/rule", {
+      action: "lookup",
+      table: "to-leg1",
+      "src-address": "192.168.1.251/32",
+    });
+  });
+
+  it("sends the requested ruleAction", async () => {
+    const ctx = makeContext([]);
+    await manageRoutingRuleTool.handler({ ...add, ruleAction: "lookup-only-in-table" }, ctx);
+    expect(ctx.routerClient.create).toHaveBeenCalledWith(
+      "routing/rule",
+      expect.objectContaining({ action: "lookup-only-in-table" }),
+    );
+  });
+
+  it("shows the action in the dry-run diff", async () => {
+    const result = await manageRoutingRuleTool.handler({ ...add, dryRun: true }, makeContext([]));
+    expect((result.structuredContent as Record<string, unknown>).diff).toContainEqual({
+      property: "action",
+      before: null,
+      after: "lookup",
+    });
+  });
+
+  it("returns already_exists when the stored action matches", async () => {
+    const ctx = makeContext([PS5_RULE]);
+    const result = await manageRoutingRuleTool.handler(
+      { ...add, ruleAction: "lookup-only-in-table" },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    expect(ctx.routerClient.create).not.toHaveBeenCalled();
+  });
+
+  it("returns already_exists without ruleAction, whatever the stored action", async () => {
+    const result = await manageRoutingRuleTool.handler(add, makeContext([PS5_RULE]));
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("throws ROUTING_RULE_CONFLICT when an explicit ruleAction differs from the stored one", async () => {
+    await expect(
+      manageRoutingRuleTool.handler({ ...add, ruleAction: "lookup" }, makeContext([PS5_RULE])),
+    ).rejects.toMatchObject({
+      code: "ROUTING_RULE_CONFLICT",
+      details: {
+        existing: { action: "lookup-only-in-table" },
+        requested: { action: "lookup" },
+      },
+    });
+  });
+
+  it("does not match a rule an earlier version added without an action (no table on it)", async () => {
+    const ctx = makeContext([NO_ACTION_RULE]);
+    const result = await manageRoutingRuleTool.handler(
+      { ...add, table: "100", srcAddress: "203.0.113.0/24" },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
+  });
+
+  it.each(["remove", "enable", "disable"])(
+    "rejects ruleAction on %s before any router call",
+    async (action) => {
+      const ctx = makeContext([PS5_RULE]);
+      await expect(
+        manageRoutingRuleTool.handler({ ...add, action, ruleAction: "lookup" }, ctx),
+      ).rejects.toMatchObject({ code: "RULE_ACTION_ADD_ONLY" });
+      expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    },
+  );
+
+  it("list_routing_rules shows an action-less rule as inactive in its text", async () => {
+    const result = await listRoutingRulesTool.handler(
+      { routerId: "test-router" },
+      makeContext([NO_ACTION_RULE]),
+    );
+    expect(result.content).toContain("inactive=true");
+  });
+
+  it("rejects priority on add before any router call (RouterOS 7: unknown parameter)", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageRoutingRuleTool.handler({ ...add, priority: 100 }, ctx),
+    ).rejects.toMatchObject({ code: "PRIORITY_UNSUPPORTED" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it("the real input schema rejects an action that takes no table", () => {
+    expect(
+      manageRoutingRuleTool.inputSchema.safeParse({ ...add, ruleAction: "drop" }).success,
+    ).toBe(false);
   });
 });
