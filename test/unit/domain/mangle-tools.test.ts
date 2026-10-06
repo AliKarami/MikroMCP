@@ -362,3 +362,31 @@ describe("manage_mangle_rule - empty comment", () => {
     },
   );
 });
+
+describe("manage_mangle_rule - control characters in comment", () => {
+  it("rejects a comment of control characters only, before any router call", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageMangleRuleTool.handler(
+        { routerId: "test-router", action: "remove", comment: "\x01\n" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "COMMENT_EMPTY" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it("looks up and stores the comment without control characters, as manage_firewall_rule does", async () => {
+    const ctx = makeContext([]);
+    await manageMangleRuleTool.handler(
+      { routerId: "test-router", action: "add", comment: "mark\nweb", chain: "prerouting" },
+      ctx,
+    );
+    expect(ctx.routerClient.get).toHaveBeenCalledWith("ip/firewall/mangle", {
+      filter: { comment: "markweb" },
+    });
+    expect(ctx.routerClient.create).toHaveBeenCalledWith(
+      "ip/firewall/mangle",
+      expect.objectContaining({ comment: "markweb" }),
+    );
+  });
+});

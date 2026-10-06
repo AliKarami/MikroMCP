@@ -11,7 +11,7 @@ Each release section covers changes **since the previous release only**.
 ## [Unreleased]
 
 ### Fixed
-- `manage_firewall_rule` and `manage_mangle_rule` accepted `comment: ""`, their idempotency key. A REST lookup with `?comment=` matches no rule, not even one without a comment (checked on RouterOS 7.24.2). So every repeated `add` with an empty comment created another rule that could not be found by its key afterwards. `remove` never found the rule: `manage_mangle_rule` reported `already_removed` without removing anything, and `manage_firewall_rule` reported it missing. An empty `comment` is now a `VALIDATION` error in both tools. `manage_firewall_rule` also rejects a comment that is empty after control characters are stripped (`COMMENT_EMPTY`), such as `"\n"`. Omit `comment` on a firewall rule that needs none.
+- `manage_firewall_rule` and `manage_mangle_rule` accepted `comment: ""`, their idempotency key. A REST lookup with `?comment=` matches no rule, not even one without a comment (checked on RouterOS 7.24.2). So every repeated `add` with an empty comment created another rule that could not be found by its key afterwards. `remove` never found the rule: `manage_mangle_rule` reported `already_removed` without removing anything, and `manage_firewall_rule` reported it missing. An empty `comment` is now a `VALIDATION` error in both tools, and so is a comment that is empty after control characters are stripped (`COMMENT_EMPTY`), such as `"\n"`. `manage_mangle_rule` now strips control characters from `comment` before the lookup and the add, as `manage_firewall_rule` already did. Omit `comment` on a firewall rule that needs none.
 
 ## [1.12.0] - 2026-10-06
 

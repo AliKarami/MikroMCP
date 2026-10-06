@@ -3,7 +3,8 @@ import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
 import { sameRuleValue } from "./rule-match.js";
-import { dryRun, routerId } from "./schema-fields.js";
+import { dryRun, routerId, ruleComment } from "./schema-fields.js";
+import { findRuleByComment, ruleCommentKey } from "./rule-comment.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -12,16 +13,6 @@ import { createLogger } from "../../observability/logger.js";
 const log = createLogger("mangle-tools");
 
 const MANGLE_PATH = "ip/firewall/mangle";
-
-async function findMangleRuleByComment(
-  context: ToolContext,
-  comment: string,
-): Promise<Record<string, string> | undefined> {
-  const results = await context.routerClient.get<RouterOSRecord>(MANGLE_PATH, {
-    filter: { comment },
-  });
-  return results.length > 0 ? (results[0] as Record<string, string>) : undefined;
-}
 
 const listMangleRulesInputSchema = z
   .object({
@@ -105,7 +96,7 @@ const manageMangleRuleInputSchema = z
   .object({
     routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
-    comment: z.string().min(1).describe("Idempotency key — uniquely identifies this mangle rule"),
+    comment: ruleComment.describe("Idempotency key — uniquely identifies this mangle rule"),
     chain: z
       .string()
       .optional()
@@ -148,6 +139,8 @@ const manageMangleRuleTool: ToolDefinition = {
     );
 
     try {
+      const comment = ruleCommentKey(parsed.comment);
+
       if (parsed.action === "add") {
         if (parsed.chain === undefined) {
           throw new MikroMCPError({
@@ -161,7 +154,7 @@ const manageMangleRuleTool: ToolDefinition = {
           });
         }
 
-        const existing = await findMangleRuleByComment(context, parsed.comment);
+        const existing = await findRuleByComment(context, MANGLE_PATH, comment);
 
         if (existing) {
           const sameChain = existing.chain === parsed.chain;
@@ -206,7 +199,7 @@ const manageMangleRuleTool: ToolDefinition = {
             sameNewConnectionMark
           ) {
             return {
-              content: `Mangle rule with comment "${parsed.comment}" already exists. No changes made.`,
+              content: `Mangle rule with comment "${comment}" already exists. No changes made.`,
               structuredContent: { action: "already_exists", rule: existing },
             };
           }
@@ -214,7 +207,7 @@ const manageMangleRuleTool: ToolDefinition = {
           throw new MikroMCPError({
             category: ErrorCategory.CONFLICT,
             code: "MANGLE_RULE_CONFLICT",
-            message: `Mangle rule with comment "${parsed.comment}" already exists but with different configuration.`,
+            message: `Mangle rule with comment "${comment}" already exists but with different configuration.`,
             details: {
               existing: {
                 chain: existing.chain,
@@ -242,7 +235,7 @@ const manageMangleRuleTool: ToolDefinition = {
 
         const body: Record<string, string> = {
           chain: parsed.chain!,
-          comment: parsed.comment,
+          comment: comment,
         };
 
         if (parsed.srcAddress !== undefined) body["src-address"] = parsed.srcAddress;
@@ -267,26 +260,26 @@ const manageMangleRuleTool: ToolDefinition = {
             after,
           }));
           return {
-            content: `Dry run: Would add mangle rule in chain "${parsed.chain}" with comment "${parsed.comment}".`,
+            content: `Dry run: Would add mangle rule in chain "${parsed.chain}" with comment "${comment}".`,
             structuredContent: { action: "dry_run", diff },
           };
         }
 
         const created = await context.routerClient.create(MANGLE_PATH, body);
-        log.info({ comment: parsed.comment, id: created[".id"] }, "Mangle rule added");
+        log.info({ comment: comment, id: created[".id"] }, "Mangle rule added");
 
         return {
-          content: `Added mangle rule in chain "${parsed.chain}" with comment "${parsed.comment}".`,
+          content: `Added mangle rule in chain "${parsed.chain}" with comment "${comment}".`,
           structuredContent: { action: "created", rule: created },
         };
       }
 
       if (parsed.action === "remove") {
-        const existing = await findMangleRuleByComment(context, parsed.comment);
+        const existing = await findRuleByComment(context, MANGLE_PATH, comment);
         if (!existing) {
           return {
-            content: `Mangle rule with comment "${parsed.comment}" does not exist. No changes made.`,
-            structuredContent: { action: "already_removed", comment: parsed.comment },
+            content: `Mangle rule with comment "${comment}" does not exist. No changes made.`,
+            structuredContent: { action: "already_removed", comment: comment },
           };
         }
 
@@ -294,30 +287,30 @@ const manageMangleRuleTool: ToolDefinition = {
 
         if (parsed.dryRun) {
           return {
-            content: `Dry run: Would remove mangle rule with comment "${parsed.comment}".`,
-            structuredContent: { action: "dry_run", id, comment: parsed.comment },
+            content: `Dry run: Would remove mangle rule with comment "${comment}".`,
+            structuredContent: { action: "dry_run", id, comment: comment },
           };
         }
 
         await context.routerClient.remove(MANGLE_PATH, id);
-        log.info({ id, comment: parsed.comment }, "Mangle rule removed");
+        log.info({ id, comment: comment }, "Mangle rule removed");
 
         return {
-          content: `Removed mangle rule with comment "${parsed.comment}".`,
-          structuredContent: { action: "removed", id, comment: parsed.comment },
+          content: `Removed mangle rule with comment "${comment}".`,
+          structuredContent: { action: "removed", id, comment: comment },
         };
       }
 
       if (parsed.action === "enable" || parsed.action === "disable") {
         const wantDisabled = parsed.action === "disable";
-        const existing = await findMangleRuleByComment(context, parsed.comment);
+        const existing = await findRuleByComment(context, MANGLE_PATH, comment);
 
         if (!existing) {
           throw new MikroMCPError({
             category: ErrorCategory.NOT_FOUND,
             code: "MANGLE_RULE_NOT_FOUND",
-            message: `No mangle rule found with comment "${parsed.comment}".`,
-            details: { comment: parsed.comment },
+            message: `No mangle rule found with comment "${comment}".`,
+            details: { comment: comment },
             recoverability: {
               retryable: false,
               suggestedAction: "Verify the comment using list_mangle_rules.",
@@ -331,8 +324,8 @@ const manageMangleRuleTool: ToolDefinition = {
 
         if (isDisabled === wantDisabled) {
           return {
-            content: `Mangle rule with comment "${parsed.comment}" is already ${wantDisabled ? "disabled" : "enabled"}. No changes made.`,
-            structuredContent: { action: "no_change", id, comment: parsed.comment },
+            content: `Mangle rule with comment "${comment}" is already ${wantDisabled ? "disabled" : "enabled"}. No changes made.`,
+            structuredContent: { action: "no_change", id, comment: comment },
           };
         }
 
@@ -341,7 +334,7 @@ const manageMangleRuleTool: ToolDefinition = {
             { property: "disabled", before: String(isDisabled), after: String(wantDisabled) },
           ];
           return {
-            content: `Dry run: Would ${parsed.action} mangle rule with comment "${parsed.comment}".`,
+            content: `Dry run: Would ${parsed.action} mangle rule with comment "${comment}".`,
             structuredContent: { action: "dry_run", diff },
           };
         }
@@ -349,11 +342,11 @@ const manageMangleRuleTool: ToolDefinition = {
         await context.routerClient.update(MANGLE_PATH, id, {
           disabled: wantDisabled ? "true" : "false",
         });
-        log.info({ id, comment: parsed.comment, action: parsed.action }, "Mangle rule toggled");
+        log.info({ id, comment: comment, action: parsed.action }, "Mangle rule toggled");
 
         return {
-          content: `${parsed.action === "disable" ? "Disabled" : "Enabled"} mangle rule with comment "${parsed.comment}".`,
-          structuredContent: { action: "updated", id, comment: parsed.comment },
+          content: `${parsed.action === "disable" ? "Disabled" : "Enabled"} mangle rule with comment "${comment}".`,
+          structuredContent: { action: "updated", id, comment: comment },
         };
       }
 
