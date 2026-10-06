@@ -60,6 +60,21 @@ describe("parseRouterOSValue", () => {
     expect(parseRouterOSValue("text", "42")).toBe("42");
   });
 
+  it("keeps decimal versions and firmware as strings", () => {
+    expect(parseRouterOSValue("latest-version", "7.20")).toBe("7.20");
+    expect(parseRouterOSValue("current-firmware", "7.10")).toBe("7.10");
+    expect(parseRouterOSValue("version", "7.10")).toBe("7.10");
+  });
+
+  it("still parses an integer protocol version (VRRP, IGMP) as a number", () => {
+    expect(parseRouterOSValue("version", "3")).toBe(3);
+    expect(parseRouterOSValue("igmp-version", "2")).toBe(2);
+  });
+
+  it("still parses decimals outside version fields", () => {
+    expect(parseRouterOSValue("bad-blocks", "0.1")).toBe(0.1);
+  });
+
   it("keeps .id values as strings", () => {
     expect(parseRouterOSValue(".id", "*A")).toBe("*A");
     expect(parseRouterOSValue(".id", "*1")).toBe("*1");
@@ -206,5 +221,69 @@ describe("lastSection", () => {
     expect(lastSection({ a: "1" })).toEqual([{ a: "1" }]);
     expect(lastSection([])).toEqual([]);
     expect(lastSection(undefined)).toEqual([]);
+  });
+});
+
+describe("parseRecord - version fields of real router records", () => {
+  // Read from an RB5009 and a NetMetal ax on RouterOS 7.24.2 (get_system_status,
+  // list_packages, get_upgrade_status, 2026-10-06), written back as REST wire strings.
+  it("keeps minimum-version of /system/resource a string, like a multi-dot version", () => {
+    const rb5009 = parseRecord({
+      "architecture-name": "arm64",
+      "bad-blocks": "0",
+      "board-name": "RB5009UPr+S+",
+      "cpu-count": "4",
+      "cpu-load": "1",
+      "minimum-version": "7.8",
+      uptime: "3w3d11h1m38s",
+      version: "7.24.2 (stable)",
+    });
+    expect(rb5009["minimum-version"]).toBe("7.8");
+    expect(rb5009["cpu-count"]).toBe(4);
+    expect(rb5009.version).toBe("7.24.2 (stable)");
+
+    const netmetal = parseRecord({ "minimum-version": "7.14.2", "cpu-count": "2" });
+    expect(netmetal["minimum-version"]).toBe("7.14.2");
+  });
+
+  it("keeps routerboard firmware fields strings", () => {
+    const rb = parseRecord({
+      "current-firmware": "7.24.2",
+      "firmware-type": "70x0",
+      "minimum-firmware": "7.19.6",
+      model: "RB5009UPr+S+",
+      routerboard: "true",
+      "upgrade-firmware": "7.24.2",
+    });
+    expect(rb).toMatchObject({
+      "current-firmware": "7.24.2",
+      "minimum-firmware": "7.19.6",
+      routerboard: true,
+    });
+  });
+
+  it("keeps a release ending in 0 intact in /system/package/update", () => {
+    // Derived: RB5009 reported installed 7.24.2 and latest 7.24.4; latest-version is set
+    // to 7.20, a real release, which a number would show as 7.2.
+    const update = parseRecord({
+      channel: "stable",
+      "installed-version": "7.24.2",
+      "latest-version": "7.20",
+      status: "New version is available",
+    });
+    expect(update["latest-version"]).toBe("7.20");
+    expect(update["installed-version"]).toBe("7.24.2");
+  });
+
+  it("keeps a package version string and parses its size", () => {
+    const pkg = parseRecord({
+      ".id": "*1",
+      "build-time": "2026-09-03 09:57:14",
+      disabled: "false",
+      name: "routeros",
+      size: "13922573",
+      version: "7.24.2",
+    });
+    expect(pkg).toMatchObject({ version: "7.24.2", size: 13922573, disabled: false });
   });
 });
