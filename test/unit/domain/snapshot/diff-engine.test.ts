@@ -282,6 +282,38 @@ describe("computeRestorePlan", () => {
   });
 });
 
+describe("computeRestorePlan wire-value normalisation", () => {
+  // Records reach the diff parsed or raw: true, "true" and "yes" are one value, and so
+  // are 2048 and "2048". A difference in form alone must not produce a restore step.
+  function expectNoOp(plan: ReturnType<typeof computeRestorePlan>): void {
+    expect(plan.toSet).toBeUndefined();
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRemove).toHaveLength(0);
+    expect(plan.toUpdate).toHaveLength(0);
+  }
+
+  it("keyed path: yes equals a parsed true", () => {
+    const before: RouterOSRecord = { ".id": "*1", name: "my-ca", trusted: "yes" };
+    const current = { ".id": "*1", name: "my-ca", trusted: true } as unknown as RouterOSRecord;
+    expectNoOp(computeRestorePlan("certificate", [before], [current]));
+  });
+
+  it("unkeyed path: no equals a parsed false and a numeric string equals a number", () => {
+    const before: RouterOSRecord = { ".id": "*1", foo: "no", size: "100" };
+    const current = { ".id": "*1", foo: false, size: 100 } as unknown as RouterOSRecord;
+    expectNoOp(computeRestorePlan("some/unkeyed/path", [before], [current]));
+  });
+
+  it("singleton: true and yes are the same setting", () => {
+    const before: RouterOSRecord = { "allow-remote-requests": "true", "cache-size": "2048" };
+    const current = {
+      "allow-remote-requests": "yes",
+      "cache-size": 2048,
+    } as unknown as RouterOSRecord;
+    expectNoOp(computeRestorePlan("ip/dns", [before], [current]));
+  });
+});
+
 describe("applyRestorePlan", () => {
   it("calls create for toCreate records (strips .id)", async () => {
     const client = {

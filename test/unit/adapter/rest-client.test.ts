@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { RouterOSRestClient, encodeQueryParams } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 
 const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }));
@@ -65,6 +65,16 @@ describe("RouterOSRestClient.get", () => {
     await makeClient().get("ip/firewall/nat", { filter: { comment: "DNS -> AGH:53" } });
     expect(requestMock.mock.calls[0][0]).toBe(
       "http://192.0.2.1:80/rest/ip/firewall/nat?comment=DNS%20-%3E%20AGH%3A53",
+    );
+  });
+
+  it("percent-encodes characters that would end or split a filter value", async () => {
+    requestMock.mockResolvedValue(jsonResponse([]));
+    await makeClient().get("ip/firewall/filter", {
+      filter: { comment: "a+b & c=d", "in-interface": "ether1" },
+    });
+    expect(requestMock.mock.calls[0][0]).toBe(
+      "http://192.0.2.1:80/rest/ip/firewall/filter?comment=a%2Bb%20%26%20c%3Dd&in-interface=ether1",
     );
   });
 
@@ -176,5 +186,33 @@ describe("RouterOSRestClient write methods", () => {
     await makeClient().remove("interface/vlan", "*1");
     expect(requestMock.mock.calls[0][0]).toBe("http://192.0.2.1:80/rest/interface/vlan/*1");
     expect(requestMock.mock.calls[0][1]).toMatchObject({ method: "DELETE" });
+  });
+});
+
+describe("encodeQueryParams", () => {
+  it.each([
+    ["a+b", "a%2Bb"],
+    ["a&b", "a%26b"],
+    ["a=b", "a%3Db"],
+    ["a b", "a%20b"],
+    ["a#b?c/d", "a%23b%3Fc%2Fd"],
+    ["Шлюз", "%D0%A8%D0%BB%D1%8E%D0%B7"],
+    ["", ""],
+  ])("encodes %j as %s", (value, encoded) => {
+    expect(encodeQueryParams({ comment: value })).toBe(`comment=${encoded}`);
+  });
+
+  it("round-trips through a standard decoder", () => {
+    const params = { comment: "DNS -> AGH:53 + Шлюз & co", name: "a=b" };
+    const decoded = Object.fromEntries(
+      encodeQueryParams(params)
+        .split("&")
+        .map((pair) => pair.split("=").map(decodeURIComponent)),
+    );
+    expect(decoded).toEqual(params);
+  });
+
+  it("encodes keys as well as values", () => {
+    expect(encodeQueryParams({ "a b": "1" })).toBe("a%20b=1");
   });
 });

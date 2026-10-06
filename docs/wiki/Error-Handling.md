@@ -40,6 +40,18 @@ Every error MikroMCP returns includes a machine-readable `category`, `code`, and
 
 Retryable errors include a `retryAfterMs` hint. The AI assistant uses the `suggestedAction` and `alternativeTools` fields to decide what to try next without user input.
 
+The error's text block carries the same fields, because some MCP clients (Claude Code among them) show the model only the text of an error result:
+
+```
+Error [CONFLICT]: Route 10.0.0.0/8 via 192.168.1.1 already exists with distance=5. Requested distance=1.
+Suggested action: Remove the existing route first, or use manage_route with action=remove before re-adding.
+Code: ROUTE_CONFLICT
+Details: {"existing":{"distance":"5","disabled":"false"},"requested":{"distance":"1","disabled":"false"}}
+Alternative tools: manage_route with action=remove
+```
+
+`Details` is compact JSON and appears only when the error has details; `Alternative tools` and `Retry after` likewise. An `APPROVAL_REQUIRED` error's `Details` line holds the `confirmationToken` to re-submit with.
+
 ---
 
 ## Retry Engine

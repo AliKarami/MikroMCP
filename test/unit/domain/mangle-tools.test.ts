@@ -2,52 +2,21 @@ import { describe, it, expect, vi } from "vitest";
 import { mangleTools } from "../../../src/domain/tools/mangle-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const listMangleRulesTool = mangleTools[0];
 const manageMangleRuleTool = mangleTools[1];
 
-const listSchema = z
-  .object({
-    routerId: z.string(),
-    chain: z.string().optional(),
-    action: z.string().optional(),
-    disabled: z.boolean().optional(),
-  })
-  .strict();
+const listSchema = listMangleRulesTool.inputSchema;
 
-const manageSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove", "enable", "disable"]),
-    comment: z.string(),
-    chain: z.string().optional(),
-    dryRun: z.boolean().default(false),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    srcAddressList: z.string().optional(),
-    dstAddressList: z.string().optional(),
-    protocol: z.string().optional(),
-    srcPort: z.string().optional(),
-    dstPort: z.string().optional(),
-    inInterface: z.string().optional(),
-    outInterface: z.string().optional(),
-    newRoutingMark: z.string().optional(),
-    newConnectionMark: z.string().optional(),
-    newDscpValue: z.number().int().min(0).max(63).optional(),
-    passthrough: z.boolean().optional(),
-  })
-  .strict();
+const manageSchema = manageMangleRuleTool.inputSchema;
 
-function makeContext(
-  records: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
+function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
     routerClient: {
-      get: vi.fn().mockResolvedValue(records),
+      get: vi.fn().mockResolvedValue(fromWire(records)),
       create: vi.fn().mockResolvedValue(createReturn ?? { ".id": "*1", chain: "prerouting" }),
       remove: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
@@ -341,5 +310,30 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
       makeContext([existing]),
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("treats numeric marks from the router as equal to requested strings", async () => {
+    // RouterOS sends "100"; the response parser turns it into the number 100.
+    const existing = {
+      ".id": "*3",
+      chain: "prerouting",
+      "new-connection-mark": "100",
+      "new-routing-mark": "200",
+      comment: "numeric-marks",
+    };
+    const ctx = makeContext([existing]);
+    const result = await manageMangleRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        comment: "numeric-marks",
+        chain: "prerouting",
+        newConnectionMark: "100",
+        newRoutingMark: "200",
+      },
+      ctx,
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    expect(ctx.routerClient.create).not.toHaveBeenCalled();
   });
 });
