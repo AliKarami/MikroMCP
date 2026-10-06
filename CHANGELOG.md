@@ -10,6 +10,15 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-06
+
+This release is largely the work of [@akuzin87](https://github.com/akuzin87) (Alex). He privately reported the confirmation-gate gap fixed under Security, and contributed `bulk_read`, the REST-based `traceroute` and `torch`, three new list tools, NAT and connection-state matching in `manage_firewall_rule`, and the filter-encoding and SSH-login fixes. Each came with a clear write-up and live verification against real routers. Thank you, Alex.
+
+**Upgrading from 1.11.** This release changes behaviour in three places:
+- **More tools are gated.** 18 more write tools are now destructive. `readonly` and `operator` identities confirm them with a token when `MIKROMCP_CONFIRMATION_SECRET` is set. On routers with `maintenanceWindows`, they run only inside a window, dry runs included.
+- **Fleet writes take two steps.** `bulk_execute` needs a fleet confirmation token for every write tool, from every role. Use the new `bulk_read` for fleet-wide reads.
+- **`traceroute` and `torch` run over REST.** They use the router's REST user, whose group needs `test` and `rest-api` (plus `sniff` for `torch`). Their structured output changed; see Fixed.
+
 ### Added
 - `list_ip_addresses` — lists IPv4 addresses on interfaces (`ip/address`), filterable by interface and disabled state. Until now the only way to read addresses was `run_command` or `export_config`, both of which need SSH.
 - `list_bridge_ports` — lists bridge port entries (`interface/bridge/port`) filterable by bridge and interface, without the per-port `debug-info` STP dump that makes `list_bridges` output large.
