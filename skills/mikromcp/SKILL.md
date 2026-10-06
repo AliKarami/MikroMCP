@@ -75,6 +75,10 @@ Full enumeration of every tool by family: `references/tool-map.md`.
 6. Re-read with the same `list_*` and compare with the intent — RouterOS has no
    commit step, so this is the only check that the change landed as meant.
 
+Several dependent writes (a routing table, then a route in it, then a rule that
+uses it): `plan_changes` (up to 10 steps, all dry-run) → review → `apply_plan`.
+It stops at the first failed step and journals each step separately.
+
 ### Diagnose connectivity
 1. `get_system_status` and `list_interfaces` to confirm links are up.
 2. `ping` the target from the router; `traceroute` if it fails partway.
@@ -89,6 +93,13 @@ Full enumeration of every tool by family: `references/tool-map.md`.
 4. For any write tool, complete the fleet confirmation-token step: tell the user which
    routers and what change the token covers, and re-submit only after they agree.
 5. Review per-router succeeded/failed counts; `rollback_change` per-router if needed.
+
+### Advise on an upgrade or version-specific behaviour
+1. Take the exact version from `get_system_status`, not `rosVersion` from
+   `list_routers` and not the router's own update check — both can lag.
+2. Read the target release's notes in the forum announcements
+   (`references/routeros-docs.md`) before recommending anything, and say what
+   they contain.
 
 ### Recover from an error
 1. Read the error `code`/`category` and `suggestedAction`.
