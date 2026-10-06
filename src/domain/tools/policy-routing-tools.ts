@@ -70,6 +70,7 @@ const listRoutingRulesTool: ToolDefinition = {
               "table",
               "interface",
               "disabled",
+              "inactive",
             ]),
         ),
         structuredContent: { routerId: context.routerId, rules, total: rules.length },
@@ -88,6 +89,12 @@ const manageRoutingRuleInputSchema = z
       .string()
       .describe(
         "Routing table name — part of the composite idempotency key; required for all actions",
+      ),
+    ruleAction: z
+      .enum(["lookup", "lookup-only-in-table"])
+      .optional()
+      .describe(
+        "Rule action, add only: lookup (default; when the table has no route, later rules and main still apply) or lookup-only-in-table (no fallback)",
       ),
     srcAddress: z.string().optional().describe("Source CIDR to match"),
     dstAddress: z.string().optional().describe("Destination CIDR to match"),
@@ -125,7 +132,7 @@ const manageRoutingRuleTool: ToolDefinition = {
   name: "manage_routing_rule",
   title: "Manage Routing Rule",
   description:
-    "Add, remove, enable, or disable a policy routing rule. Idempotent by srcAddress+dstAddress+interface+table composite key. Supports dry-run mode.",
+    "Add, remove, enable, or disable a policy routing rule. Idempotent by srcAddress+dstAddress+interface+table composite key; a repeated add with an explicit, different ruleAction is a CONFLICT. Supports dry-run mode.",
   inputSchema: manageRoutingRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -142,6 +149,22 @@ const manageRoutingRuleTool: ToolDefinition = {
     );
 
     try {
+      if (parsed.action !== "add" && parsed.ruleAction !== undefined) {
+        // The composite key ignores the action, so a ruleAction here would not narrow
+        // which rule is removed or toggled.
+        throw new MikroMCPError({
+          category: ErrorCategory.VALIDATION,
+          code: "RULE_ACTION_ADD_ONLY",
+          message: `ruleAction applies only to add, not to ${parsed.action}.`,
+          details: { action: parsed.action, ruleAction: parsed.ruleAction },
+          recoverability: {
+            retryable: false,
+            suggestedAction:
+              "Drop ruleAction; the rule is identified by srcAddress, dstAddress, interface, and table.",
+          },
+        });
+      }
+
       const allRules = await context.routerClient.get<RouterOSRecord>(ROUTING_RULE_PATH, {
         limit: undefined,
         offset: undefined,
@@ -173,13 +196,37 @@ const manageRoutingRuleTool: ToolDefinition = {
         }
 
         if (existing) {
+          // Only an explicit ruleAction is compared, so a repeated add without one still
+          // finds a rule created elsewhere with any action.
+          if (parsed.ruleAction !== undefined && existing.action !== parsed.ruleAction) {
+            throw new MikroMCPError({
+              category: ErrorCategory.CONFLICT,
+              code: "ROUTING_RULE_CONFLICT",
+              message: `Routing rule for table "${parsed.table}" already exists with action "${existing.action ?? "(none)"}".`,
+              details: {
+                existing: { action: existing.action },
+                requested: { action: parsed.ruleAction },
+              },
+              recoverability: {
+                retryable: false,
+                suggestedAction:
+                  "Remove the existing routing rule first, then re-add it with the desired ruleAction.",
+                alternativeTools: ["manage_routing_rule with action=remove"],
+              },
+            });
+          }
           return {
             content: `Routing rule for table "${parsed.table}" already exists. No changes made.`,
             structuredContent: { action: "already_exists", rule: existing },
           };
         }
 
-        const body: Record<string, string> = { table: parsed.table };
+        // RouterOS keeps a rule without an action inactive and drops its table
+        // (`.about: "action must be specified"`, CHR 7.23.2).
+        const body: Record<string, string> = {
+          action: parsed.ruleAction ?? "lookup",
+          table: parsed.table,
+        };
         if (parsed.srcAddress !== undefined) body["src-address"] = parsed.srcAddress;
         if (parsed.dstAddress !== undefined) body["dst-address"] = parsed.dstAddress;
         if (parsed.interface !== undefined) body["interface"] = parsed.interface;

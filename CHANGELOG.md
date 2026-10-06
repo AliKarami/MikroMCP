@@ -10,6 +10,12 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Changed
+- `manage_routing_rule` takes an optional `ruleAction` (`lookup` or `lookup-only-in-table`), sent as the rule's `action` on `add` (default `lookup`). When it is given and an existing rule with the same composite key has a different action, `add` throws `ROUTING_RULE_CONFLICT`; without it, `add` still returns `already_exists` for a rule of any action. `ruleAction` on `remove`, `enable`, or `disable` is a `VALIDATION` error (`RULE_ACTION_ADD_ONLY`), because the composite key ignores the action. `list_routing_rules` shows `inactive` in its text output.
+
+### Fixed
+- `manage_routing_rule` `add` sent no `action`. RouterOS keeps such a rule inactive and drops its `table` (`.about: "action must be specified"`, seen on CHR 7.23.2), so every rule the tool created did nothing. A repeated `add` could not find it by its `table` key and created another one. The tool now always sends `action` (see `ruleAction` under Changed). Rules created by earlier versions have no `action` and no `table` and are not found by the composite key; `list_routing_rules` lists them with `inactive=true`, and they have to be removed by hand.
+
 ## [1.12.0] - 2026-10-06
 
 This release is largely the work of [@akuzin87](https://github.com/akuzin87) (Alex). He privately reported the confirmation-gate gap fixed under Security, and contributed `bulk_read`, the REST-based `traceroute` and `torch`, three new list tools, NAT and connection-state matching in `manage_firewall_rule`, and the filter-encoding and SSH-login fixes. Each came with a clear write-up and live verification against real routers. Thank you, Alex.
