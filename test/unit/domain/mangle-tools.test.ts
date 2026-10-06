@@ -3,42 +3,13 @@ import { mangleTools } from "../../../src/domain/tools/mangle-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { fromWire, type WireRecord } from "../helpers/wire.js";
-import { z } from "zod";
 
 const listMangleRulesTool = mangleTools[0];
 const manageMangleRuleTool = mangleTools[1];
 
-const listSchema = z
-  .object({
-    routerId: z.string(),
-    chain: z.string().optional(),
-    action: z.string().optional(),
-    disabled: z.boolean().optional(),
-  })
-  .strict();
+const listSchema = listMangleRulesTool.inputSchema;
 
-const manageSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove", "enable", "disable"]),
-    comment: z.string(),
-    chain: z.string().optional(),
-    dryRun: z.boolean().default(false),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    srcAddressList: z.string().optional(),
-    dstAddressList: z.string().optional(),
-    protocol: z.string().optional(),
-    srcPort: z.string().optional(),
-    dstPort: z.string().optional(),
-    inInterface: z.string().optional(),
-    outInterface: z.string().optional(),
-    newRoutingMark: z.string().optional(),
-    newConnectionMark: z.string().optional(),
-    newDscpValue: z.number().int().min(0).max(63).optional(),
-    passthrough: z.boolean().optional(),
-  })
-  .strict();
+const manageSchema = manageMangleRuleTool.inputSchema;
 
 function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   return {

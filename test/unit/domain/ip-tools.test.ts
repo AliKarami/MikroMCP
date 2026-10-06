@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import { z } from "zod";
 import { ipTools } from "../../../src/domain/tools/ip-tools.js";
 import { MikroMCPError } from "../../../src/domain/errors/error-types.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
@@ -9,21 +8,7 @@ import { fromWire, type WireRecord } from "../helpers/wire.js";
 const manageIpAddressTool = ipTools.find((t) => t.name === "manage_ip_address")!;
 
 // Inline schema for isolated validation tests
-const manageIpAddressInputSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "update", "remove"]),
-    address: z
-      .string()
-      .regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/)
-      .transform((v) => (v.includes("/") ? v : `${v}/32`)),
-    interface: z.string(),
-    network: z.string().optional(),
-    comment: z.string().max(255).optional(),
-    disabled: z.boolean().default(false),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageIpAddressInputSchema = manageIpAddressTool.inputSchema;
 
 function makeContext(addresses: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   const mockGet = vi.fn().mockResolvedValue(fromWire(addresses));

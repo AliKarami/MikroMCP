@@ -3,42 +3,13 @@ import { firewallTools } from "../../../src/domain/tools/firewall-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { fromWire, type WireRecord } from "../helpers/wire.js";
-import { z } from "zod";
 
 const listFirewallRulesTool = firewallTools[0];
 const manageFirewallRuleTool = firewallTools[1];
 
-const listFirewallRulesInputSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.enum(["filter", "nat"]).default("filter"),
-    chain: z.string().optional(),
-    disabled: z.enum(["true", "false", "all"]).default("all"),
-    limit: z.number().int().min(1).max(500).default(100),
-    offset: z.number().int().min(0).default(0),
-  })
-  .strict();
+const listFirewallRulesInputSchema = listFirewallRulesTool.inputSchema;
 
-const manageFirewallRuleInputSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.enum(["filter", "nat"]).default("filter"),
-    action: z.enum(["add", "remove", "disable", "enable"]),
-    chain: z.string(),
-    ruleAction: z.string(),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    protocol: z.enum(["tcp", "udp", "icmp", "gre", "ospf", "all"]).optional(),
-    srcPort: z.string().optional(),
-    dstPort: z.string().optional(),
-    inInterface: z.string().optional(),
-    outInterface: z.string().optional(),
-    comment: z.string().max(255).optional(),
-    disabled: z.boolean().default(false),
-    placeBefore: z.string().optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageFirewallRuleInputSchema = manageFirewallRuleTool.inputSchema;
 
 function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   const mockGet = vi.fn().mockResolvedValue(fromWire(records));

@@ -3,43 +3,15 @@ import { policyRoutingTools } from "../../../src/domain/tools/policy-routing-too
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { fromWire, type WireRecord } from "../helpers/wire.js";
-import { z } from "zod";
 
 const listRoutingRulesTool = policyRoutingTools[0];
 const manageRoutingRuleTool = policyRoutingTools[1];
 const listRoutingTablesTool = policyRoutingTools[2];
 const manageRoutingTableTool = policyRoutingTools[3];
 
-const listRulesSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.string().optional(),
-    disabled: z.boolean().optional(),
-  })
-  .strict();
+const manageRuleSchema = manageRoutingRuleTool.inputSchema;
 
-const manageRuleSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove", "enable", "disable"]),
-    table: z.string(),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    interface: z.string().optional(),
-    priority: z.number().int().min(0).max(4294967295).optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
-
-const manageTableSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove"]),
-    name: z.string(),
-    fib: z.boolean().default(false),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageTableSchema = manageRoutingTableTool.inputSchema;
 
 function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   return {

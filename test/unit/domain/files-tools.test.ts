@@ -5,7 +5,6 @@ import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
-import { z } from "zod";
 
 function makeRouterConfig(): RouterConfig {
   return {
@@ -57,24 +56,9 @@ const listFilesTool = filesTools[0];
 const getFileContentTool = filesTools[1];
 const uploadFileTool = filesTools[2];
 
-const listSchema = z
-  .object({
-    routerId: z.string(),
-    name: z.string().optional(),
-    type: z.string().optional(),
-  })
-  .strict();
+const listSchema = listFilesTool.inputSchema;
 
-const getContentSchema = z.object({ routerId: z.string(), name: z.string() }).strict();
-
-const uploadSchema = z
-  .object({
-    routerId: z.string(),
-    name: z.string(),
-    content: z.string(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const uploadSchema = uploadFileTool.inputSchema;
 
 describe("files tools", () => {
   beforeEach(() => {
