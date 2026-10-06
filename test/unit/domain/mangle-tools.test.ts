@@ -695,32 +695,84 @@ describe("manage_mangle_rule - action and its value parameter", () => {
   });
 
   it.each([
-    ["newRoutingMark", "omitted", undefined, { newRoutingMark: "to-leg1" }, "mark-routing"],
-    ["newConnectionMark", "omitted", undefined, { newConnectionMark: "ps5" }, "mark-connection"],
-    ["newPacketMark", "omitted", undefined, { newPacketMark: "ps5" }, "mark-packet"],
-    ["newDscpValue", "omitted", undefined, { newDscpValue: 46 }, "change-dscp"],
-    ["newMss", "omitted", undefined, { newMss: "clamp-to-pmtu" }, "change-mss"],
-    ["newDscpValue", "accept", "accept", { newDscpValue: 46 }, "change-dscp"],
+    ["mark-routing", { newRoutingMark: "to-leg1" }, { "new-routing-mark": "to-leg1" }],
+    ["mark-connection", { newConnectionMark: "ps5" }, { "new-connection-mark": "ps5" }],
+    ["mark-packet", { newPacketMark: "ps5" }, { "new-packet-mark": "ps5" }],
+    ["change-dscp", { newDscpValue: 46 }, { "new-dscp": "46" }],
+    [
+      "change-mss",
+      { protocol: "tcp", tcpFlags: "syn", newMss: "clamp-to-pmtu" },
+      { "new-mss": "clamp-to-pmtu" },
+    ],
+  ])(
+    "infers action %s from its value when ruleAction is omitted",
+    async (ruleAction, value, wire) => {
+      expect(await createdBody(value)).toMatchObject({ action: ruleAction, ...wire });
+    },
+  );
+
+  it("rejects values of two actions without ruleAction, before any router call", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageMangleRuleTool.handler({ ...add, newConnectionMark: "c", newRoutingMark: "r" }, ctx),
+    ).rejects.toMatchObject({
+      code: "MANGLE_FIELD_NOT_APPLICABLE",
+      details: {
+        params: ["newRoutingMark", "newConnectionMark"],
+        actions: ["mark-routing", "mark-connection"],
+      },
+    });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["newDscpValue", "accept", { newDscpValue: 46 }, "change-dscp"],
     [
       "newRoutingMark",
-      "mark-connection",
       "mark-connection",
       { newConnectionMark: "c", newRoutingMark: "r" },
       "mark-routing",
     ],
   ])(
     "rejects %s with ruleAction %s before any router call",
-    async (param, _label, ruleAction, values, requiredRuleAction) => {
+    async (param, ruleAction, values, requiredRuleAction) => {
       const ctx = makeContext([]);
       await expect(
         manageMangleRuleTool.handler({ ...add, ruleAction, ...values }, ctx),
       ).rejects.toMatchObject({
         code: "MANGLE_FIELD_NOT_APPLICABLE",
-        details: { ruleAction: ruleAction ?? "accept", param, requiredRuleAction },
+        details: { ruleAction, param, requiredRuleAction },
       });
       expect(ctx.routerClient.get).not.toHaveBeenCalled();
     },
   );
+
+  it("compares an inferred action on a repeated add", async () => {
+    const markRule = {
+      ".id": "*5",
+      action: "mark-connection",
+      chain: "prerouting",
+      comment: "MSS clamp wg-leg1",
+      "new-connection-mark": "ps5",
+    };
+    const same = await manageMangleRuleTool.handler(
+      { ...add, newConnectionMark: "ps5" },
+      makeContext([markRule]),
+    );
+    expect((same.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    // What earlier versions created for the same call: no action field, mark dropped.
+    const { action: _action, "new-connection-mark": _mark, ...noActionRule } = markRule;
+    await expect(
+      manageMangleRuleTool.handler(
+        { ...add, newConnectionMark: "ps5" },
+        makeContext([noActionRule]),
+      ),
+    ).rejects.toMatchObject({
+      code: "MANGLE_RULE_CONFLICT",
+      details: { existing: { action: "accept" }, requested: { action: "mark-connection" } },
+    });
+  });
 
   it.each([
     ["mark-routing", "newRoutingMark"],

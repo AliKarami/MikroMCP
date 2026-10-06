@@ -111,7 +111,20 @@ function validationError(
  * says which it is (CHR 7.23.2 and 7.24.2).
  */
 function checkAddParams(parsed: z.infer<typeof manageMangleRuleInputSchema>): MangleAction {
-  const ruleAction = parsed.ruleAction ?? "accept";
+  const values = ACTION_VALUE_PARAMS.filter(([, param]) => parsed[param] !== undefined);
+  // Each value parameter belongs to exactly one action, so without ruleAction a lone
+  // value names the action. RouterOS does not infer it: it would create the rule as
+  // accept and drop the value.
+  if (parsed.ruleAction === undefined && values.length > 1) {
+    throw validationError(
+      "MANGLE_FIELD_NOT_APPLICABLE",
+      `${values.map(([, param]) => param).join(" and ")} belong to different actions (${values.map(([action]) => action).join(", ")}); a mangle rule has one action.`,
+      { params: values.map(([, param]) => param), actions: values.map(([action]) => action) },
+      "Add one rule per action, each with its own value.",
+    );
+  }
+  const ruleAction = parsed.ruleAction ?? values[0]?.[0] ?? "accept";
+
   for (const [action, param, property] of ACTION_VALUE_PARAMS) {
     const given = parsed[param] !== undefined;
     // Stricter than RouterOS, which creates the rule and drops the value.
@@ -120,9 +133,7 @@ function checkAddParams(parsed: z.infer<typeof manageMangleRuleInputSchema>): Ma
         "MANGLE_FIELD_NOT_APPLICABLE",
         `${param} (${property}) applies only to ruleAction ${action}, not to ${ruleAction}.`,
         { ruleAction, param, requiredRuleAction: action },
-        parsed.ruleAction === undefined
-          ? `Set ruleAction to ${action}; without it the rule is accept and RouterOS drops ${property}.`
-          : `Drop ${param}, or set ruleAction to ${action}.`,
+        `Drop ${param}, or set ruleAction to ${action}.`,
       );
     }
     // Stricter than RouterOS, which creates a mark or dscp action without its value
@@ -280,7 +291,7 @@ const manageMangleRuleInputSchema = z
       .enum(MANGLE_ACTIONS)
       .optional()
       .describe(
-        "Mangle action, add only; default accept, as in RouterOS. Each new* value needs its action: newRoutingMark → mark-routing, newConnectionMark → mark-connection, newPacketMark → mark-packet, newDscpValue → change-dscp, newMss → change-mss",
+        "Mangle action, add only. Omitted: the action of the new* value given (newRoutingMark → mark-routing, newConnectionMark → mark-connection, newPacketMark → mark-packet, newDscpValue → change-dscp, newMss → change-mss), else accept, the RouterOS default",
       ),
     newRoutingMark: z
       .string()
@@ -321,7 +332,7 @@ const manageMangleRuleTool: ToolDefinition = {
   name: "manage_mangle_rule",
   title: "Manage Mangle Rule",
   description:
-    "Add, remove, enable, or disable a firewall mangle rule. ruleAction sets the action (default accept); each new* value is accepted only with its action, e.g. newRoutingMark with mark-routing. Uses comment as idempotency key: a repeated add returns already_exists only when the chain, match fields, marks, DSCP, MSS, passthrough, and an explicit ruleAction agree, otherwise CONFLICT. Supports dry-run mode.",
+    "Add, remove, enable, or disable a firewall mangle rule. ruleAction sets the action; when it is omitted, a new* value implies its own (newRoutingMark → mark-routing), otherwise accept. Each new* value is accepted only under its action. Uses comment as idempotency key: a repeated add returns already_exists only when the chain, match fields, marks, DSCP, MSS, passthrough, and the given or implied action agree, otherwise CONFLICT. Supports dry-run mode.",
   inputSchema: manageMangleRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -367,17 +378,18 @@ const manageMangleRuleTool: ToolDefinition = {
         const existing = await findRuleByComment(context, MANGLE_PATH, comment);
 
         if (existing) {
-          // Only an explicit ruleAction is compared, so a repeated add without one still
-          // finds a rule with any action, such as one added in WinBox. A value parameter
-          // always comes with its explicit action, so comparing a value only when the
-          // router reports it misses nothing: a rule of another action differs in action.
-          const compareAction = parsed.ruleAction !== undefined;
+          // The action is compared when ruleAction is given or implied by a value
+          // parameter. Without either, a repeated add still finds a rule with any action,
+          // such as one added in WinBox. A value parameter always comes with its action,
+          // so comparing a value only when the router reports it misses nothing: a rule
+          // of another action differs in action.
+          const compareAction = parsed.ruleAction !== undefined || ruleAction !== "accept";
           // A rule created without an action, as earlier versions of this tool did, has no
           // `action` field at all (CHR 7.23.2 and 7.24.2); it is the documented default
           // accept. Without this, such a rule would never differ in action.
           const existingAction = existing.action ?? "accept";
           const matches =
-            (!compareAction || sameRuleValue("action", existingAction, parsed.ruleAction)) &&
+            (!compareAction || sameRuleValue("action", existingAction, ruleAction)) &&
             sameRuleValue("chain", existing.chain, parsed.chain) &&
             MANGLE_MATCH_FIELDS.every(([key, property]) =>
               sameRuleValue(property, existing[property], parsed[key]),
@@ -399,7 +411,7 @@ const manageMangleRuleTool: ToolDefinition = {
             ? { action: existingAction, chain: existing.chain }
             : { chain: existing.chain };
           const requestedDetails: Record<string, unknown> = compareAction
-            ? { action: parsed.ruleAction, chain: parsed.chain }
+            ? { action: ruleAction, chain: parsed.chain }
             : { chain: parsed.chain };
           for (const [key, property] of MANGLE_MATCH_FIELDS) {
             existingDetails[property] = existing[property];
