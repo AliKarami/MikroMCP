@@ -26,15 +26,23 @@ const MANGLE_RULE_FIELDS = [
   ["outInterface", "out-interface"],
   ["newRoutingMark", "new-routing-mark"],
   ["newConnectionMark", "new-connection-mark"],
-  ["newDscpValue", "new-dscp"],
 ] as const;
 
 /**
- * RouterOS reports `passthrough=true` on a rule added without it (the default is
- * yes), so an omitted value on either side counts as `true`.
+ * Compare a field RouterOS reports only for the actions that use it. `passthrough`
+ * reads back as `true` on a rule added without it (the default is yes), but a rule
+ * whose action ignores the field, such as the `accept` this tool creates when no
+ * action applies, may not report it at all. A field the router does not report
+ * cannot differ, so only a reported value is compared.
  */
-function samePassthrough(stored: unknown, requested: boolean | undefined): boolean {
-  return sameRuleValue("passthrough", stored ?? true, requested ?? true);
+function sameActionField(
+  property: string,
+  stored: unknown,
+  requested: unknown,
+  fallback?: unknown,
+): boolean {
+  if (stored === undefined) return true;
+  return sameRuleValue(property, stored, requested ?? fallback);
 }
 
 async function findMangleRuleByComment(
@@ -85,7 +93,9 @@ const listMangleRulesTool: ToolDefinition = {
       });
 
       if (parsed.chain !== undefined) {
-        rules = rules.filter((r) => (r as Record<string, string>).chain === parsed.chain);
+        rules = rules.filter((r) =>
+          sameRuleValue("chain", (r as Record<string, unknown>).chain, parsed.chain),
+        );
       }
       if (parsed.action !== undefined) {
         rules = rules.filter((r) => (r as Record<string, string>).action === parsed.action);
@@ -189,11 +199,12 @@ const manageMangleRuleTool: ToolDefinition = {
 
         if (existing) {
           const matches =
-            existing.chain === parsed.chain &&
+            sameRuleValue("chain", existing.chain, parsed.chain) &&
             MANGLE_RULE_FIELDS.every(([key, property]) =>
               sameRuleValue(property, existing[property], parsed[key]),
             ) &&
-            samePassthrough(existing.passthrough, parsed.passthrough);
+            sameActionField("new-dscp", existing["new-dscp"], parsed.newDscpValue) &&
+            sameActionField("passthrough", existing.passthrough, parsed.passthrough, true);
 
           if (matches) {
             return {
@@ -208,8 +219,11 @@ const manageMangleRuleTool: ToolDefinition = {
             existingDetails[property] = existing[property];
             requestedDetails[property] = parsed[key];
           }
+          existingDetails["new-dscp"] = existing["new-dscp"];
+          requestedDetails["new-dscp"] = parsed.newDscpValue;
           existingDetails.passthrough = existing.passthrough;
-          requestedDetails.passthrough = parsed.passthrough;
+          // The effective value: an omitted passthrough means the RouterOS default yes.
+          requestedDetails.passthrough = parsed.passthrough ?? true;
 
           throw new MikroMCPError({
             category: ErrorCategory.CONFLICT,

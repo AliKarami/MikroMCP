@@ -16,10 +16,27 @@ const { find: findOnRouter, removeLeftover } = liveResource(harness.context, "ip
   comment: COMMENT,
 });
 
-beforeAll(removeLeftover);
+// Fields RouterOS may report only for actions that use them; the tool sends no action.
+const ACTION_FIELDS_RULE = {
+  comment: "mikromcp-itest-mangle-action-fields",
+  chain: "forward",
+  srcAddress: "203.0.113.0/24",
+  passthrough: false,
+  newDscpValue: 46,
+};
+
+const actionFieldsRule = liveResource(harness.context, "ip/firewall/mangle", {
+  comment: ACTION_FIELDS_RULE.comment,
+});
+
+beforeAll(async () => {
+  await removeLeftover();
+  await actionFieldsRule.removeLeftover();
+});
 
 afterAll(async () => {
   await removeLeftover();
+  await actionFieldsRule.removeLeftover();
   harness.close();
 });
 
@@ -71,5 +88,19 @@ describe("manage_mangle_rule repeated add against live CHR", () => {
 
     expect(result.structuredContent.action).toBe("removed");
     expect(await findOnRouter()).toBeUndefined();
+  });
+
+  it("a repeated add with passthrough and newDscpValue, read back from the router, is already_exists", async () => {
+    const created = await runTool(harness.context, "manage_mangle_rule", {
+      action: "add",
+      ...ACTION_FIELDS_RULE,
+    });
+    expect(created.structuredContent.action).toBe("created");
+
+    const again = await runTool(harness.context, "manage_mangle_rule", {
+      action: "add",
+      ...ACTION_FIELDS_RULE,
+    });
+    expect(again.structuredContent.action).toBe("already_exists");
   });
 });

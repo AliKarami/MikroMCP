@@ -121,8 +121,8 @@ const listFirewallRulesTool: ToolDefinition = {
 
       if (parsed.chain !== undefined) {
         rules = rules.filter((r) => {
-          const rec = r as Record<string, string>;
-          return rec.chain === parsed.chain;
+          const rec = r as Record<string, unknown>;
+          return sameRuleValue("chain", rec.chain, parsed.chain);
         });
       }
 
@@ -303,7 +303,7 @@ const manageFirewallRuleTool: ToolDefinition = {
           const existing = await findRuleByComment(context, path, comment);
           if (existing) {
             const matches =
-              existing.chain === parsed.chain &&
+              sameRuleValue("chain", existing.chain, parsed.chain) &&
               existing.action === parsed.ruleAction &&
               sameRuleValue("protocol", existing.protocol, wantProtocol) &&
               RULE_FIELDS.every(([key, property]) =>

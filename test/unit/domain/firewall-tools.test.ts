@@ -3,6 +3,7 @@ import { firewallTools } from "../../../src/domain/tools/firewall-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { z } from "zod";
+import { parseRecord } from "../../../src/adapter/response-parser.js";
 
 const listFirewallRulesTool = firewallTools[0];
 const manageFirewallRuleTool = firewallTools[1];
@@ -852,5 +853,38 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
     }
+  });
+});
+
+describe("firewall rules in a numeric custom chain", () => {
+  // A jump chain may be named "100"; the response parser turns it into 100.
+  const stored = parseRecord({
+    ".id": "*7",
+    action: "accept",
+    chain: "100",
+    comment: "numeric-chain",
+    disabled: "false",
+  });
+
+  it("a repeated add finds the rule (already_exists)", async () => {
+    const result = await manageFirewallRuleTool.handler(
+      {
+        routerId: "test-router",
+        action: "add",
+        chain: "100",
+        ruleAction: "accept",
+        comment: "numeric-chain",
+      },
+      makeContext([stored]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("list_firewall_rules filters by the numeric chain", async () => {
+    const result = await listFirewallRulesTool.handler(
+      { routerId: "test-router", chain: "100" },
+      makeContext([stored]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).total).toBe(1);
   });
 });

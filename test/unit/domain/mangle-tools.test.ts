@@ -394,13 +394,13 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     });
   });
 
-  it("lists every compared field in CONFLICT details", async () => {
+  it("lists every compared field, with the effective passthrough, in CONFLICT details", async () => {
     await expect(
       manageMangleRuleTool.handler({ ...sameAdd, dstPort: "8443" }, makeContext([wireRule])),
     ).rejects.toMatchObject({
       details: {
         existing: { "dst-port": 443, protocol: "tcp", "new-dscp": 46, passthrough: true },
-        requested: { "dst-port": "8443", protocol: "tcp", "new-dscp": 46, passthrough: undefined },
+        requested: { "dst-port": "8443", protocol: "tcp", "new-dscp": 46, passthrough: true },
       },
     });
   });
@@ -417,6 +417,42 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     await expect(
       manageMangleRuleTool.handler({ ...sameAdd, passthrough: false }, makeContext([wireRule])),
     ).rejects.toMatchObject({ code: "MANGLE_RULE_CONFLICT" });
+  });
+
+  it.each([
+    ["passthrough", { passthrough: false }],
+    ["new-dscp", { newDscpValue: 10 }],
+  ])(
+    "does not compare %s when the router does not report it (e.g. an accept rule)",
+    async (property, change) => {
+      const { [property]: _omitted, ...stored } = wireRuleWire;
+      const result = await manageMangleRuleTool.handler(
+        { ...sameAdd, ...change },
+        makeContext([parseRecord(stored)]),
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    },
+  );
+
+  it("treats protocol all as no protocol", async () => {
+    const { protocol: _omitted, ...stored } = wireRuleWire;
+    const result = await manageMangleRuleTool.handler(
+      { ...sameAdd, protocol: "all" },
+      makeContext([parseRecord(stored)]),
+    );
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+  });
+
+  it("matches a numeric custom chain read back from the wire", async () => {
+    const ctx = makeContext([parseRecord({ ...wireRuleWire, chain: "100" })]);
+    const result = await manageMangleRuleTool.handler({ ...sameAdd, chain: "100" }, ctx);
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    const listed = await listMangleRulesTool.handler(
+      { routerId: "test-router", chain: "100" },
+      ctx,
+    );
+    expect((listed.structuredContent as Record<string, unknown>).total).toBe(1);
   });
 
   it("matches passthrough=no read back from the wire", async () => {
