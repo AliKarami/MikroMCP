@@ -69,6 +69,12 @@ function isPortOrRange(value: string): boolean {
   return start >= 1 && end <= 65535 && start <= end;
 }
 
+/** True when no state appears twice in a (possibly negated) state list. */
+function hasNoRepeats(value: string): boolean {
+  const items = value.replace(/^!/, "").split(",");
+  return new Set(items).size === items.length;
+}
+
 // ---------------------------------------------------------------------------
 // list_firewall_rules
 // ---------------------------------------------------------------------------
@@ -224,6 +230,7 @@ const manageFirewallRuleInputSchema = z
     connectionState: z
       .string()
       .regex(new RegExp(`^!?${CONNECTION_STATE}(,${CONNECTION_STATE})*$`))
+      .refine(hasNoRepeats, "Each connection state may appear only once")
       .optional()
       .describe(
         "Connection-tracking states, comma-separated, optionally negated: established,related or !invalid",

@@ -737,6 +737,8 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
     expect(() => schema.parse({ ...base, connectionState: "established,bogus" })).toThrow();
     expect(() => schema.parse({ ...base, connectionState: "" })).toThrow();
     expect(() => schema.parse({ ...base, connectionState: "!invalid" })).not.toThrow();
+    expect(() => schema.parse({ ...base, connectionState: "new,new" })).toThrow(/only once/);
+    expect(() => schema.parse({ ...base, connectionState: "!new,related,new" })).toThrow();
     expect(() => schema.parse({ ...base, toPorts: "8000-8100" })).not.toThrow();
     expect(() => schema.parse({ ...base, toPorts: "https" })).toThrow();
   });

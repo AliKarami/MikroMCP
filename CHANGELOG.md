@@ -13,6 +13,7 @@ Each release section covers changes **since the previous release only**.
 ### Fixed
 - `manage_firewall_rule` validated `toPorts` with a pattern only, so `99999`, `0`, and a descending range such as `9000-80` passed the schema and were sent to RouterOS as is. It now accepts a port 1–65535 or a range whose start is not above its end, and rejects anything else with a `VALIDATION` error before any router call.
 - `manage_firewall_rule` accepted empty strings in its match and NAT-target fields. `toAddresses: ""` was sent to RouterOS as `to-addresses=""`, while the idempotency check treated the empty value as an absent field. `srcAddress`, `dstAddress`, `srcPort`, `dstPort`, `inInterface`, `outInterface`, `inInterfaceList`, `outInterfaceList`, and `toAddresses` now require at least one character. Omit a field to leave it unset.
+- `manage_firewall_rule` accepted a `connectionState` that repeats a state (`new,new`) and sent it to RouterOS unchanged, while the idempotency check compared it as a set. A repeated state is now a `VALIDATION` error.
 
 ## [1.12.0] - 2026-10-06
 
