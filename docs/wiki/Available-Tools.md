@@ -971,7 +971,7 @@ Add, remove, enable, or disable a policy routing rule. Idempotent by the composi
 | `srcAddress` | string | — | Source CIDR to match |
 | `dstAddress` | string | — | Destination CIDR to match |
 | `interface` | string | — | Incoming interface to match |
-| `priority` | integer | — | Rule priority (0–4294967295) |
+| `priority` | integer | — | Unsupported: RouterOS 7 `/routing/rule` has no priority (rules apply in list order), so `add` rejects it with `PRIORITY_UNSUPPORTED` |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a policy routing rule that sends traffic from 10.10.0.0/24 to the 'vpn' routing table on core-01."

@@ -105,7 +105,9 @@ const manageRoutingRuleInputSchema = z
       .min(0)
       .max(4294967295)
       .optional()
-      .describe("Rule priority (0–4294967295)"),
+      .describe(
+        "Unsupported: RouterOS 7 /routing/rule has no priority (rules apply in list order); add rejects it",
+      ),
     dryRun,
   })
   .strict();
@@ -149,6 +151,20 @@ const manageRoutingRuleTool: ToolDefinition = {
     );
 
     try {
+      if (parsed.action === "add" && parsed.priority !== undefined) {
+        // RouterOS 7 answers HTTP 400 "unknown parameter priority" (CHR 7.23.2).
+        throw new MikroMCPError({
+          category: ErrorCategory.VALIDATION,
+          code: "PRIORITY_UNSUPPORTED",
+          message: "RouterOS 7 routing rules have no priority; they apply in list order.",
+          details: { priority: parsed.priority },
+          recoverability: {
+            retryable: false,
+            suggestedAction: "Drop priority. Rule order is the position in /routing/rule.",
+          },
+        });
+      }
+
       if (parsed.action !== "add" && parsed.ruleAction !== undefined) {
         // The composite key ignores the action, so a ruleAction here would not narrow
         // which rule is removed or toggled.
@@ -230,7 +246,6 @@ const manageRoutingRuleTool: ToolDefinition = {
         if (parsed.srcAddress !== undefined) body["src-address"] = parsed.srcAddress;
         if (parsed.dstAddress !== undefined) body["dst-address"] = parsed.dstAddress;
         if (parsed.interface !== undefined) body["interface"] = parsed.interface;
-        if (parsed.priority !== undefined) body.priority = String(parsed.priority);
 
         if (parsed.dryRun) {
           const diff = Object.entries(body).map(([property, after]) => ({

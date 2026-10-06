@@ -15,6 +15,7 @@ Each release section covers changes **since the previous release only**.
 
 ### Fixed
 - `manage_routing_rule` `add` sent no `action`. RouterOS keeps such a rule inactive and drops its `table` (`.about: "action must be specified"`, seen on CHR 7.23.2), so every rule the tool created did nothing. A repeated `add` could not find it by its `table` key and created another one. The tool now always sends `action` (see `ruleAction` under Changed). Rules created by earlier versions have no `action` and no `table` and are not found by the composite key; `list_routing_rules` lists them with `inactive=true`, and they have to be removed by hand.
+- `manage_routing_rule` `add` with `priority` always failed with `HTTP 400 unknown parameter priority`: RouterOS 7 `/routing/rule` has no such property, and rules apply in list order (checked on CHR 7.23.2). `add` now rejects `priority` with `VALIDATION` / `PRIORITY_UNSUPPORTED` before any router call. The parameter stays in the schema; `remove`, `enable`, and `disable` still ignore it.
 
 ## [1.12.0] - 2026-10-06
 

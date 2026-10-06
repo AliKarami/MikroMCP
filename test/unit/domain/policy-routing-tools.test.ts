@@ -486,6 +486,14 @@ describe("manage_routing_rule - rule action", () => {
     expect(result.content).toContain("inactive=true");
   });
 
+  it("rejects priority on add before any router call (RouterOS 7: unknown parameter)", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageRoutingRuleTool.handler({ ...add, priority: 100 }, ctx),
+    ).rejects.toMatchObject({ code: "PRIORITY_UNSUPPORTED" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
   it("the real input schema rejects an action that takes no table", () => {
     expect(
       manageRoutingRuleTool.inputSchema.safeParse({ ...add, ruleAction: "drop" }).success,
