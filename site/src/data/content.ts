@@ -6,7 +6,7 @@ export const SITE = {
   tagline: "Open Source MikroTik MCP Server for RouterOS",
   github: "https://github.com/AliKarami/MikroMCP",
   docs: "https://docs.mikromcp.com",
-  toolCount: 125,
+  toolCount: 126,
   version: VERSION,
 };
 
@@ -25,7 +25,7 @@ export const features = [
   { icon: "lock", title: "Secure access", body: "HTTP bearer auth, SSH private keys, bcrypt token hashes, RBAC, router/tool restrictions, confirmation tokens." },
   { icon: "activity", title: "Diagnostics", body: "Router-originated ping, traceroute, torch, log filtering, guarded SSH command execution." },
   { icon: "shield", title: "Change safety", body: "Dry-run, idempotent writes, snapshots, write journal, plan_changes, apply_plan, rollback_change." },
-  { icon: "layers", title: "Fleet operations", body: "Discover configured routers with list_routers, then fan a tool out across them by id or tag with bulk_execute." },
+  { icon: "layers", title: "Fleet operations", body: "Discover configured routers with list_routers, then fan a tool out across them by id or tag with bulk_execute, or with bulk_read, which runs read-only tools only." },
   { icon: "settings", title: "Production behavior", body: "Retries for read tools, per-router circuit breakers, correlation IDs, structured logs, audit logs." },
 ];
 

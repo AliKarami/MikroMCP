@@ -1,6 +1,6 @@
 # MikroMCP
 
-A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives AI assistants safe, structured access to MikroTik RouterOS devices. 125 typed tools. Dry-run on every write. Idempotency built in.
+A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives AI assistants safe, structured access to MikroTik RouterOS devices. 126 typed tools. Dry-run on every write. Idempotency built in.
 
 ---
 
@@ -39,7 +39,7 @@ Raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerf
 
 | Page | What's in it |
 |---|---|
-| [Available Tools](Available-Tools) | All 125 tools — parameters, defaults, example prompts |
+| [Available Tools](Available-Tools) | All 126 tools — parameters, defaults, example prompts |
 | [Architecture](Architecture) | System layers, request pipeline, auth model |
 | [Error Handling](Error-Handling) | Error categories, retry engine, circuit breaker |
 | [Security](Security) | Threat model, RouterOS/credential/RBAC hardening, audit, vulnerability reporting |
