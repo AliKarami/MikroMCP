@@ -857,13 +857,18 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
 });
 
 describe("firewall rules in a numeric custom chain", () => {
-  // A jump chain may be named "100"; the response parser turns it into 100.
+  // Derived from a real defconf rule on RB5009 (RouterOS 7.24.2, list_firewall_rules,
+  // 2026-10-06) moved to a jump chain named "100", which the response parser turns into 100.
   const stored = parseRecord({
-    ".id": "*7",
+    ".id": "*6",
     action: "accept",
+    bytes: "0",
     chain: "100",
-    comment: "numeric-chain",
-    disabled: "false",
+    comment: "defconf: accept in ipsec policy",
+    dynamic: "false",
+    invalid: "false",
+    "ipsec-policy": "in,ipsec",
+    packets: "0",
   });
 
   it("a repeated add finds the rule (already_exists)", async () => {
@@ -873,7 +878,7 @@ describe("firewall rules in a numeric custom chain", () => {
         action: "add",
         chain: "100",
         ruleAction: "accept",
-        comment: "numeric-chain",
+        comment: "defconf: accept in ipsec policy",
       },
       makeContext([stored]),
     );

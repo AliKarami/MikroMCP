@@ -367,19 +367,22 @@ describe("manage_routing_rule - composite key comparison", () => {
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
 
-  // RouterOS allows a numeric table name; the response parser turns "100" into 100.
+  // Derived from the real PS5 rule on RB5009 (RouterOS 7.24.2, list_routing_rules,
+  // 2026-10-06) with the table renamed to "100", which the response parser turns into 100.
   const numericTableRule = parseRecord({
-    ".id": "*5",
-    action: "lookup",
+    ".id": "*2",
+    action: "lookup-only-in-table",
+    comment: "PS5 to leg1 fail-closed",
     disabled: "false",
-    "src-address": "192.168.1.0/24",
+    inactive: "false",
+    "src-address": "192.168.1.251/32",
     table: "100",
   });
 
   it("finds a rule whose table name is numeric", async () => {
     const ctx = makeContext([numericTableRule]);
     const result = await manageRoutingRuleTool.handler(
-      { routerId: "test-router", action: "add", table: "100", srcAddress: "192.168.1.0/24" },
+      { routerId: "test-router", action: "add", table: "100", srcAddress: "192.168.1.251/32" },
       ctx,
     );
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
