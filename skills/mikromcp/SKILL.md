@@ -97,9 +97,10 @@ It stops at the first failed step and journals each step separately.
 ### Advise on an upgrade or version-specific behaviour
 1. Take the exact version from `get_system_status`, not `rosVersion` from
    `list_routers` and not the router's own update check — both can lag.
-2. Read the target release's notes in the forum announcements
-   (`references/routeros-docs.md`) before recommending anything, and say what
-   they contain.
+2. Read the release notes from MikroTik's upgrade server
+   (`references/routeros-docs.md`): the newest release on the router's channel,
+   and the notes of every release after the installed one. Do this before
+   recommending anything, and say what they contain.
 
 ### Recover from an error
 1. Read the error `code`/`category` and `suggestedAction`.
