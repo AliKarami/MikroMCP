@@ -4,6 +4,7 @@ import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import { HttpError, type RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { lastSection } from "../../../src/adapter/response-parser.js";
 import type { RouterConfig } from "../../../src/types.js";
 import { enrichError } from "../../../src/domain/errors/error-enricher.js";
 import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
@@ -42,6 +43,7 @@ function makeContext(sshOutput = "", restResult: unknown = []): ToolContext {
     } as unknown as FtpClient,
     routerClient: {
       execute: vi.fn().mockResolvedValue(restResult),
+      executeFinal: vi.fn(async () => lastSection(restResult as Record<string, string>[])),
       get: vi.fn().mockResolvedValue([]),
     } as unknown as RouterOSRestClient,
   };
@@ -110,7 +112,7 @@ describe("diagnostic tools", () => {
         code: "VALIDATION_ERROR",
       });
       expect(ctx.sshClient.execute).not.toHaveBeenCalled();
-      expect(ctx.routerClient.execute).not.toHaveBeenCalled();
+      expect(ctx.routerClient.executeFinal).not.toHaveBeenCalled();
     });
   });
 
@@ -321,18 +323,20 @@ describe("diagnostic tools", () => {
       expect(hops[2]).toEqual({
         hop: 3,
         address: "10.196.39.1",
-        avg: "30.8",
-        best: "30.8",
+        avg: 30.8,
+        best: 30.8,
         error: "Too many hops",
-        last: "30.8",
-        loss: "0",
-        sent: "1",
+        last: 30.8,
+        loss: 0,
+        sent: 1,
         status: "",
-        stdDev: "0",
-        worst: "30.8",
+        stdDev: 0,
+        worst: 30.8,
       });
+      expect(hops[1]).toMatchObject({ address: null, last: "timeout", loss: 100 });
       expect(result.content).toContain("  2  ???  timeout  loss=100%");
       expect(result.content).toContain("  3  10.196.39.1  30.8ms  loss=0%");
+      expect(result.content).toContain("RouterOS: Too many hops — 1.1.1.1 was not reached");
     });
 
     it("POSTs address, count, and max-hops to tool/traceroute", async () => {
@@ -341,12 +345,36 @@ describe("diagnostic tools", () => {
         { routerId: "test-router", address: "8.8.8.8", count: 2, maxHops: 10 },
         ctx,
       );
-      expect(ctx.routerClient.execute).toHaveBeenCalledWith("tool/traceroute", {
-        address: "8.8.8.8",
-        count: "2",
-        "max-hops": "10",
-      });
+      expect(ctx.routerClient.executeFinal).toHaveBeenCalledWith(
+        "tool/traceroute",
+        { address: "8.8.8.8", count: "2", "max-hops": "10" },
+        { timeoutMs: 65_000 },
+      );
       expect(ctx.sshClient.execute).not.toHaveBeenCalled();
+    });
+
+    it("does not report an error when RouterOS reached the target", async () => {
+      const ctx = makeContext("", [
+        {
+          ".section": "0",
+          address: "1.1.1.1",
+          avg: "48",
+          last: "48",
+          loss: "0",
+          sent: "1",
+          status: "",
+        },
+      ]);
+      const result = await tracerouteTool.handler(
+        { routerId: "test-router", address: "one.one.one.one" },
+        ctx,
+      );
+      expect(result.content).not.toContain("was not reached");
+      expect(ctx.routerClient.executeFinal).toHaveBeenCalledWith(
+        "tool/traceroute",
+        expect.objectContaining({ address: "one.one.one.one" }),
+        expect.anything(),
+      );
     });
 
     it("returns no hops for an empty result", async () => {
@@ -452,7 +480,7 @@ describe("diagnostic tools", () => {
         "rx-packets": "4",
         "src-address": "fe80::aaaa:bbbb:cccc:1",
         "src-port": "5353",
-        tx: "1234567",
+        tx: "999950",
         "tx-packets": "120",
       },
     ];
@@ -465,29 +493,29 @@ describe("diagnostic tools", () => {
       const flows = (result.structuredContent as Record<string, unknown>).flows;
       expect(flows).toEqual([
         {
-          dscp: "0",
+          dscp: 0,
           dstAddress: "255.255.255.255",
-          dstPort: "20561",
+          dstPort: 20561,
           ipProtocol: "udp",
           macProtocol: "ip",
           rx: 10800,
           rxPackets: 17,
           srcAddress: "192.168.1.55",
-          srcPort: "56457",
+          srcPort: 56457,
           tx: 0,
           txPackets: 0,
         },
         {
-          dscp: "0",
+          dscp: 0,
           dstAddress: "ff02::fb",
-          dstPort: "5353",
+          dstPort: 5353,
           ipProtocol: "udp",
           macProtocol: "ipv6",
           rx: 7600,
           rxPackets: 4,
           srcAddress: "fe80::aaaa:bbbb:cccc:1",
-          srcPort: "5353",
-          tx: 1234567,
+          srcPort: 5353,
+          tx: 999950,
           txPackets: 120,
         },
       ]);
@@ -495,8 +523,29 @@ describe("diagnostic tools", () => {
         "udp  192.168.1.55:56457 → 255.255.255.255:20561  tx=0bps  rx=10.8kbps",
       );
       expect(result.content).toContain(
-        "udp  [fe80::aaaa:bbbb:cccc:1]:5353 → [ff02::fb]:5353  tx=1.2Mbps  rx=7.6kbps",
+        "udp  [fe80::aaaa:bbbb:cccc:1]:5353 → [ff02::fb]:5353  tx=1Mbps  rx=7.6kbps",
       );
+    });
+
+    it("keeps a port that RouterOS names as a string", async () => {
+      const torchTool = diagnosticTools[2];
+      const ctx = makeContext("", [
+        {
+          ".section": "0",
+          "dst-address": "1.1.1.1",
+          "dst-port": "443 (https)",
+          "ip-protocol": "tcp",
+          rx: "1000000",
+          tx: "0",
+        },
+      ]);
+      const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
+      const [flow] = (result.structuredContent as Record<string, unknown>).flows as Record<
+        string,
+        unknown
+      >[];
+      expect(flow).toMatchObject({ dstPort: "443 (https)", rx: 1000000 });
+      expect(result.content).toContain("tcp  * → 1.1.1.1:443 (https)  tx=0bps  rx=1Mbps");
     });
 
     it("lets RouterOS end the capture and waits longer than duration", async () => {
@@ -512,7 +561,7 @@ describe("diagnostic tools", () => {
         },
         ctx,
       );
-      expect(ctx.routerClient.execute).toHaveBeenCalledWith(
+      expect(ctx.routerClient.executeFinal).toHaveBeenCalledWith(
         "tool/torch",
         {
           interface: "ether1",
@@ -535,7 +584,7 @@ describe("diagnostic tools", () => {
     it("surfaces a RouterOS error instead of reporting zero flows", async () => {
       const torchTool = diagnosticTools[2];
       const ctx = makeContext();
-      (ctx.routerClient.execute as ReturnType<typeof vi.fn>).mockRejectedValue(
+      (ctx.routerClient.executeFinal as ReturnType<typeof vi.fn>).mockRejectedValue(
         new HttpError(
           400,
           JSON.stringify({

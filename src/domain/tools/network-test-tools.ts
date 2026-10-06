@@ -48,15 +48,12 @@ const bandwidthTestTool: ToolDefinition = {
     const parsed = bandwidthTestInputSchema.parse(params);
     log.info({ routerId: context.routerId, address: parsed.address }, "Running bandwidth test");
     try {
-      const result = await context.routerClient.execute<Record<string, string>>(
-        "tool/bandwidth-test",
-        {
-          address: parsed.address,
-          protocol: parsed.protocol,
-          direction: parsed.direction,
-          duration: String(parsed.duration),
-        },
-      );
+      const [result = {}] = await context.routerClient.executeFinal("tool/bandwidth-test", {
+        address: parsed.address,
+        protocol: parsed.protocol,
+        direction: parsed.direction,
+        duration: String(parsed.duration),
+      });
       const txBps = Number(result["tx-current"] ?? 0);
       const rxBps = Number(result["rx-current"] ?? 0);
       const txMbps = Math.round((txBps / 1_000_000) * 100) / 100;
@@ -129,12 +126,7 @@ const fetchUrlTool: ToolDefinition = {
         body.output = "user";
       }
 
-      const sections = await context.routerClient.execute<Record<string, string>[]>(
-        "tool/fetch",
-        body,
-      );
-      const finished =
-        sections.find((s) => s.status === "finished") ?? sections[sections.length - 1];
+      const [finished] = await context.routerClient.executeFinal("tool/fetch", body);
       const statusCode = finished?.code ?? null;
 
       if (parsed.outputFile) {

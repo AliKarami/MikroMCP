@@ -128,6 +128,15 @@ function buildDetails(
   return details;
 }
 
+function responseDetail(body: unknown): unknown {
+  if (typeof body !== "string") return undefined;
+  try {
+    return (JSON.parse(body) as Record<string, unknown>).detail;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Enrich an unknown thrown value into a structured MikroMCPError.
  *
@@ -170,16 +179,32 @@ export function enrichError(error: unknown, context?: EnrichContext): MikroMCPEr
     const statusCode = raw.statusCode as number;
     let category = categoryFromStatus(statusCode);
 
+    const detail = responseDetail(raw.responseBody);
+
     // RouterOS returns 500 for permission errors — detect and reclassify.
-    if (statusCode >= 500 && typeof raw.responseBody === "string") {
-      try {
-        const body = JSON.parse(raw.responseBody) as Record<string, unknown>;
-        if (typeof body.detail === "string" && body.detail.startsWith("not enough permissions")) {
-          category = ErrorCategory.PERMISSION_DENIED;
-        }
-      } catch {
-        // non-JSON body — leave category as-is
-      }
+    if (
+      statusCode >= 500 &&
+      typeof detail === "string" &&
+      detail.startsWith("not enough permissions")
+    ) {
+      category = ErrorCategory.PERMISSION_DENIED;
+    }
+
+    // RouterOS closes a REST session after 60 s; rerunning the same command hits the
+    // same limit, so this is a timeout the caller must shorten, not a retry.
+    if (statusCode === 400 && detail === "Session closed") {
+      return new MikroMCPError({
+        category: ErrorCategory.ROUTER_TIMEOUT,
+        code: "REST_SESSION_CLOSED",
+        message: "RouterOS closed the REST session: the command ran longer than 60 seconds",
+        details: buildDetails({ statusCode }, context),
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "Shorten the command so it finishes within 60 seconds (lower count, hops or duration).",
+        },
+        cause: error,
+      });
     }
 
     return new MikroMCPError({

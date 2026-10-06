@@ -5,7 +5,7 @@
 import { request, Agent } from "undici";
 import type { RouterConfig, QueryOptions, RouterOSRecord } from "../types.js";
 import { buildAgentOptions } from "./tls-manager.js";
-import { parseRecord, parseRecords } from "./response-parser.js";
+import { lastSection, parseRecord, parseRecords } from "./response-parser.js";
 import { buildListQuery, applyPagination } from "./query-builder.js";
 
 // ---------------------------------------------------------------------------
@@ -122,6 +122,24 @@ export class RouterOSRestClient {
   ): Promise<T> {
     const result = await this.doRequest("POST", `${this.baseUrl}/${path}`, data, options.timeoutMs);
     return result as T;
+  }
+
+  /**
+   * Execute a command that reports progress and return the unparsed records of its
+   * final update (see {@link lastSection}).
+   */
+  async executeFinal(
+    path: string,
+    data?: Record<string, unknown>,
+    options: { timeoutMs?: number } = {},
+  ): Promise<Array<Record<string, string>>> {
+    return lastSection(
+      await this.execute<Array<Record<string, string>> | Record<string, string>>(
+        path,
+        data,
+        options,
+      ),
+    );
   }
 
   // ---------- lifecycle ----------

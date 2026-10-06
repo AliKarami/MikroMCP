@@ -1486,7 +1486,7 @@ Send ICMP echo requests from the router to a target. 100% packet loss is a valid
 
 ### `traceroute` — Read
 
-Trace the network path from the router to a destination. Returns one entry per hop, numbered from 1, from RouterOS's final result: `address` (`null` when the hop did not answer), `loss` (%), `sent`, and `last`/`avg`/`best`/`worst`/`stdDev` in milliseconds (`last` is `timeout` for a lost probe). Timeouts and partial hops are valid results.
+Trace the network path from the router to a destination. Returns one entry per hop, numbered from 1, from RouterOS's final result: `address` (`null` when the hop did not answer), `loss` (%), `sent`, and `last`/`avg`/`best`/`worst`/`stdDev` in milliseconds (`last` is `"timeout"` for a lost probe). If the target is not reached within `maxHops`, each hop carries `error: "Too many hops"` and the text output says so. Timeouts and partial hops are valid results. RouterOS ends a REST command after 60 seconds; a trace that runs longer fails with `ROUTER_TIMEOUT` (`REST_SESSION_CLOSED`) — lower `count` or `maxHops`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|

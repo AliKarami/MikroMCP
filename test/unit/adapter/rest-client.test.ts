@@ -117,6 +117,17 @@ describe("RouterOSRestClient write methods", () => {
     });
   });
 
+  it("executeFinal returns the records of the last .section", async () => {
+    requestMock.mockResolvedValue(
+      jsonResponse([
+        { ".section": "0", status: "connecting" },
+        { ".section": "1", status: "finished", code: "200" },
+      ]),
+    );
+    const records = await makeClient().executeFinal("tool/fetch", { url: "https://x" });
+    expect(records).toEqual([{ ".section": "1", status: "finished", code: "200" }]);
+  });
+
   it("update PATCHes the record path by .id", async () => {
     requestMock.mockResolvedValue(emptyResponse());
     await makeClient().update("interface/vlan", "*1", { disabled: "true" });

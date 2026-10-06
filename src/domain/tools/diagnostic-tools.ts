@@ -4,6 +4,7 @@ import { limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 import { buildRouterOsCommand, isRouterOsCommandString } from "../../adapter/routeros-command.js";
+import { parseRecord } from "../../adapter/response-parser.js";
 
 import { paginate } from "./pagination.js";
 
@@ -12,20 +13,11 @@ const routerOsCommandString = z
   .string()
   .refine(isRouterOsCommandString, "Must not contain control characters");
 
-type CommandRecord = Record<string, string>;
-
-// REST returns every screen update of a running command, tagged with `.section`;
-// the last section is the final state.
-function lastSection(result: CommandRecord[] | CommandRecord | undefined): CommandRecord[] {
-  const records = Array.isArray(result) ? result : result ? [result] : [];
-  const section = (record: CommandRecord): number => Number(record[".section"] ?? 0);
-  const last = Math.max(...records.map(section));
-  return records.filter((record) => section(record) === last);
-}
-
-function camelCaseFields(record: CommandRecord): CommandRecord {
+// Command results are parsed like REST records (numbers, booleans); `.section` and
+// other dot-prefixed bookkeeping fields are dropped.
+function commandFields(record: Record<string, string>): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(record)
+    Object.entries(parseRecord(record))
       .filter(([key]) => !key.startsWith("."))
       .map(([key, value]) => [
         key.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase()),
@@ -132,10 +124,13 @@ const tracerouteInputSchema = z
   })
   .strict();
 
+// RouterOS closes a REST session after 60 s; wait past that so its own error arrives.
+const TRACEROUTE_TIMEOUT_MS = 65_000;
+
 interface TracerouteHop {
   hop: number;
   address: string | null;
-  [field: string]: string | number | null;
+  [field: string]: unknown;
 }
 
 const tracerouteTool: ToolDefinition = {
@@ -156,15 +151,19 @@ const tracerouteTool: ToolDefinition = {
     log.info({ routerId: context.routerId, address: parsed.address }, "Tracerouting");
 
     try {
-      const result = await context.routerClient.execute<CommandRecord[]>("tool/traceroute", {
-        address: parsed.address,
-        count: String(parsed.count),
-        "max-hops": String(parsed.maxHops),
-      });
+      const records = await context.routerClient.executeFinal(
+        "tool/traceroute",
+        {
+          address: parsed.address,
+          count: String(parsed.count),
+          "max-hops": String(parsed.maxHops),
+        },
+        { timeoutMs: TRACEROUTE_TIMEOUT_MS },
+      );
 
-      const hops = lastSection(result).map(
+      const hops = records.map(
         (record, i): TracerouteHop => ({
-          ...camelCaseFields(record),
+          ...commandFields(record),
           hop: i + 1,
           address: record.address || null,
         }),
@@ -172,8 +171,12 @@ const tracerouteTool: ToolDefinition = {
 
       const lines = [`Traceroute to ${parsed.address} from ${context.routerId}:`];
       for (const h of hops) {
-        const last = /^\d+(\.\d+)?$/.test(String(h.last)) ? `${h.last}ms` : h.last || "?";
+        const last = typeof h.last === "number" ? `${h.last}ms` : String(h.last ?? "?");
         lines.push(`  ${h.hop}  ${h.address ?? "???"}  ${last}  loss=${h.loss ?? "?"}%`);
+      }
+      const routerError = hops.find((h) => typeof h.error === "string" && h.error !== "")?.error;
+      if (routerError !== undefined) {
+        lines.push(`  RouterOS: ${routerError} — ${parsed.address} was not reached`);
       }
 
       return {
@@ -211,17 +214,17 @@ const torchInputSchema = z
   .strict();
 
 const TORCH_TIMEOUT_MARGIN_S = 5;
-const TORCH_RATE_FIELDS = ["tx", "rx", "txPackets", "rxPackets"];
+const BPS_UNITS = ["bps", "kbps", "Mbps", "Gbps"];
 
 function formatBps(bps: number): string {
-  for (const [unit, size] of [
-    ["Gbps", 1e9],
-    ["Mbps", 1e6],
-    ["kbps", 1e3],
-  ] as const) {
-    if (bps >= size) return `${Number((bps / size).toFixed(1))}${unit}`;
+  let value = bps;
+  let unit = 0;
+  // Compare after rounding so 999950 bps reads 1Mbps, not 1000kbps.
+  while (unit < BPS_UNITS.length - 1 && Number(value.toFixed(1)) >= 1000) {
+    value /= 1000;
+    unit++;
   }
-  return `${bps}bps`;
+  return `${Number(value.toFixed(1))}${BPS_UNITS[unit]}`;
 }
 
 function torchEndpoint(address: unknown, port: unknown): string {
@@ -255,17 +258,10 @@ const torchTool: ToolDefinition = {
       if (parsed.srcAddress !== undefined) data["src-address"] = parsed.srcAddress;
       if (parsed.dstAddress !== undefined) data["dst-address"] = parsed.dstAddress;
 
-      const result = await context.routerClient.execute<CommandRecord[]>("tool/torch", data, {
+      const records = await context.routerClient.executeFinal("tool/torch", data, {
         timeoutMs: (parsed.duration + TORCH_TIMEOUT_MARGIN_S) * 1000,
       });
-
-      const flows = lastSection(result).map((record) => {
-        const flow: Record<string, string | number> = camelCaseFields(record);
-        for (const field of TORCH_RATE_FIELDS) {
-          if (flow[field] !== undefined) flow[field] = Number(flow[field]);
-        }
-        return flow;
-      });
+      const flows = records.map(commandFields);
 
       const lines = [
         `Torch on ${parsed.interface} (${parsed.duration}s) from ${context.routerId}: ${flows.length} flows`,

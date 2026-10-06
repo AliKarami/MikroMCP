@@ -84,6 +84,8 @@ See the required policies table below to decide which policies to include.
 | `reboot` | `read`, `write`, `reboot`, `rest-api` |
 | `manage_package` (install/uninstall) | `read`, `write`, `rest-api` |
 
+`traceroute` and `torch` run through the REST user. Earlier releases ran them through the SSH user; if you granted `test`/`sniff` only to a separate SSH user, add them to the REST user's group.
+
 The simplest all-in-one policy set for full coverage:
 
 ```
