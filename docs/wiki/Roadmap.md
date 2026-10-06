@@ -194,6 +194,16 @@ Contributed by [@akuzin87](https://github.com/akuzin87), who also reported the c
 
 ---
 
+## ✅ v1.13 — Write Tools That Do What They Report
+
+`manage_routing_rule` and `manage_mangle_rule` now send an action, so the rules they create take effect: before, RouterOS kept routing rules inactive and created mangle rules as `accept` with their marks dropped. A mangle mark implies its action, and new parameters cover packet marks and MSS clamping.
+
+A repeated `add` no longer reports `already_exists` for a firewall rule, mangle rule or DNS record that differs from the request; it reports a `CONFLICT` naming both values. Input that cannot work, such as an empty comment or `priority` on a routing rule, is refused before any router call. Error text now carries the error code and details, so clients that show the model only the text, such as Claude Code, can complete confirmations again.
+
+Contributed by [@akuzin87](https://github.com/akuzin87).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
