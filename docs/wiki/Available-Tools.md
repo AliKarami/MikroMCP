@@ -596,20 +596,20 @@ List static DNS entries with optional filtering by hostname and record type.
 
 ### `manage_dns_entry` — Write · Destructive · Idempotent
 
-Add or remove a static DNS entry. Idempotent by name+type.
+Add or remove a static DNS entry, found by `name` (case-insensitive) and `type`. `add` returns `already_exists` if such a record has the requested value and `disabled` state (and `ttl`/`comment`, when given; TTLs are compared by duration, so `24h` equals `1d`), and throws `CONFLICT` if it differs; `add` never creates a second record with the same name and type. `remove` deletes the one matching record; when several share the name (round-robin), pass `address`/`cname`/`text` to pick one, otherwise it throws `DNS_ENTRY_AMBIGUOUS`. A value field that does not belong to `type` is rejected.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` | — | Operation to perform |
-| `name` | string | — | Hostname for the DNS record (e.g. `server.example.com`) |
+| `name` | string | — | Hostname for the DNS record (e.g. `server.example.com`); matched case-insensitively |
 | `type` | `A` \| `CNAME` \| `TXT` | `A` | DNS record type |
-| `address` | string | — | IP address — required for A records |
-| `cname` | string | — | Target hostname — required for CNAME records |
-| `text` | string | — | Text value — required for TXT records |
-| `ttl` | string | — | TTL value (e.g. `1d`, `00:05:00`) |
-| `comment` | string | — | Optional comment |
-| `disabled` | boolean | `false` | Create the entry in disabled state |
+| `address` | string | — | IP address — required for A records; on `remove`, picks the record when several share the name |
+| `cname` | string | — | Target hostname — required for CNAME records; on `remove`, picks the record when several share the name |
+| `text` | string | — | Text value — required for TXT records; on `remove`, picks the record when several share the name |
+| `ttl` | string | — | TTL value (e.g. `1d`, `00:05:00`); on `add`, part of the idempotency check when given |
+| `comment` | string | — | Optional comment; on `add`, part of the idempotency check when given |
+| `disabled` | boolean | `false` | Create the entry in disabled state; on `add`, part of the idempotency check |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a static DNS A record for printer.lan pointing to 192.168.1.50 on core-01."
@@ -960,17 +960,18 @@ List policy routing rules in evaluation order. Supports filtering by table and d
 
 ### `manage_routing_rule` — Write · Destructive · Idempotent
 
-Add, remove, enable, or disable a policy routing rule. Idempotent by the composite key `srcAddress + dstAddress + interface + table`. At least one of `srcAddress`, `dstAddress`, or `interface` is required on `add`.
+Add, remove, enable, or disable a policy routing rule. Idempotent by the composite key `srcAddress + dstAddress + interface + table`; a repeated `add` with an explicit, different `ruleAction` throws `CONFLICT`. At least one of `srcAddress`, `dstAddress`, or `interface` is required on `add`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
 | `table` | string | — | Routing table name (required for all actions) |
+| `ruleAction` | `lookup` \| `lookup-only-in-table` | `lookup` on `add` | Rule action, `add` only (rejected otherwise). `lookup` falls through to later rules and `main` when the table has no route; `lookup-only-in-table` does not |
 | `srcAddress` | string | — | Source CIDR to match |
 | `dstAddress` | string | — | Destination CIDR to match |
 | `interface` | string | — | Incoming interface to match |
-| `priority` | integer | — | Rule priority (0–4294967295) |
+| `priority` | integer | — | Unsupported: RouterOS 7 `/routing/rule` has no priority (rules apply in list order), so `add` rejects it with `PRIORITY_UNSUPPORTED` |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a policy routing rule that sends traffic from 10.10.0.0/24 to the 'vpn' routing table on core-01."

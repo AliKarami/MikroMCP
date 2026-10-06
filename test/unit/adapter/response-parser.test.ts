@@ -53,6 +53,13 @@ describe("parseRouterOSValue", () => {
     expect(parseRouterOSValue("rx-byte", "9007199254740993")).toBe("9007199254740993");
   });
 
+  it("keeps free-text fields as strings", () => {
+    expect(parseRouterOSValue("comment", "0123")).toBe("0123");
+    expect(parseRouterOSValue("comment", "true")).toBe("true");
+    expect(parseRouterOSValue("text", "1.50")).toBe("1.50");
+    expect(parseRouterOSValue("text", "42")).toBe("42");
+  });
+
   it("keeps .id values as strings", () => {
     expect(parseRouterOSValue(".id", "*A")).toBe("*A");
     expect(parseRouterOSValue(".id", "*1")).toBe("*1");
