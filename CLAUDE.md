@@ -162,7 +162,7 @@ remove(path: string, id: string): Promise<void>
 execute<T>(path: string, data?: Record<string, unknown>): Promise<T>
 ```
 
-RouterOS record fields use kebab-case (`"dst-address"`, `"routing-table"`). The special ID field is `".id"`. RouterOS sends everything as strings, but `response-parser.ts` converts records: `"true"`/`"false"` become real JS booleans and numeric strings become numbers (unsafe 64-bit integers stay strings to preserve precision). For boolean-ish fields, **always use `isTrue(value)` from `adapter/response-parser.js`** — it handles parsed booleans, raw `"true"`/`"false"`, and `"yes"`/`"no"`. For any other field, **compare with `sameValue(recordValue, desired)`** from the same module — never `record.x === String(desired)` (it silently never matches once the parser has turned the wire string into a number). Note `RouterOSRecord` values are typed `string | number | boolean`.
+RouterOS record fields use kebab-case (`"dst-address"`, `"routing-table"`). The special ID field is `".id"`. RouterOS sends everything as strings, but `response-parser.ts` converts records: `"true"`/`"false"` become real JS booleans and numeric strings become numbers (unsafe 64-bit integers stay strings to preserve precision; the free-text fields `comment` and `text` are never converted). For boolean-ish fields, **always use `isTrue(value)` from `adapter/response-parser.js`** — it handles parsed booleans, raw `"true"`/`"false"`, and `"yes"`/`"no"`. For any other field, **compare with `sameValue(recordValue, desired)`** from the same module — never `record.x === String(desired)` (it silently never matches once the parser has turned the wire string into a number). Note `RouterOSRecord` values are typed `string | number | boolean`.
 
 ## Code conventions
 

@@ -80,7 +80,7 @@ describe("dnsTools", () => {
   describe("manage_dns_entry", () => {
     it("returns already_exists when same name+type exists", async () => {
       const ctx = makeGetContext([
-        { ".id": "*1", name: "host.lan", type: "A", address: "10.0.0.5" },
+        { ".id": "*1", name: "host.lan", type: "A", address: "10.0.0.5", disabled: false },
       ]);
       const result = await manageDnsTool.handler(
         {
@@ -94,6 +94,296 @@ describe("dnsTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("already_exists");
+    });
+
+    // Records as the REST response parser returns them: "false" becomes a
+    // boolean and numeric strings become numbers.
+    const ROUTER_LAN = {
+      ".id": "*1",
+      name: "router.lan",
+      type: "A",
+      address: "192.168.1.1",
+      ttl: "1d",
+      comment: "defconf",
+      disabled: false,
+      dynamic: false,
+    };
+
+    async function addError(ctx: ToolContext, params: Record<string, unknown>) {
+      return manageDnsTool
+        .handler({ routerId: "test-router", action: "add", ...params }, ctx)
+        .catch((err: unknown) => err);
+    }
+
+    it("throws DNS_ENTRY_CONFLICT when an A record with the name has another address", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      const error = await addError(ctx, { name: "router.lan", address: "192.168.1.2" });
+
+      expect(error).toMatchObject({
+        category: ErrorCategory.CONFLICT,
+        code: "DNS_ENTRY_CONFLICT",
+        details: {
+          existing: [{ address: "192.168.1.1", disabled: false, ttl: "1d", comment: "defconf" }],
+          requested: { address: "192.168.1.2", disabled: "false" },
+        },
+      });
+      // The model sees only the message, so it must carry both values.
+      expect((error as Error).message).toContain("address=192.168.1.1");
+      expect((error as Error).message).toContain("address=192.168.1.2");
+      expect(ctx.routerClient.create).not.toHaveBeenCalled();
+    });
+
+    it("dry-run add reports the same CONFLICT", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      const error = await addError(ctx, {
+        name: "router.lan",
+        address: "192.168.1.2",
+        dryRun: true,
+      });
+      expect(error).toMatchObject({ code: "DNS_ENTRY_CONFLICT" });
+    });
+
+    it("throws DNS_ENTRY_CONFLICT when only the disabled state differs", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      const error = await addError(ctx, {
+        name: "router.lan",
+        address: "192.168.1.1",
+        disabled: true,
+      });
+      expect(error).toMatchObject({ code: "DNS_ENTRY_CONFLICT" });
+    });
+
+    it("ignores ttl and comment when they are not requested", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      const result = await manageDnsTool.handler(
+        { routerId: "test-router", action: "add", name: "router.lan", address: "192.168.1.1" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    });
+
+    it.each([
+      ["24h", "1d"],
+      ["1d 00:00:00", "1d"],
+      ["00:05:00", "5m"],
+      ["300", "5m"],
+      ["1w", "7d"],
+      ["90s", "1m30s"],
+      ["2d1w", "1w2d"],
+      ["1d 02:00:00", "1d2h"],
+      ["00:00:01.500", "1s500ms"],
+    ])("treats ttl %s as equal to the stored %s", async (requested, stored) => {
+      const ctx = makeGetContext([{ ...ROUTER_LAN, ttl: stored }]);
+      const result = await manageDnsTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "router.lan",
+          address: "192.168.1.1",
+          ttl: requested,
+        },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    });
+
+    it("throws DNS_ENTRY_CONFLICT when a requested ttl differs", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      const error = await addError(ctx, { name: "router.lan", address: "192.168.1.1", ttl: "1h" });
+      expect(error).toMatchObject({ code: "DNS_ENTRY_CONFLICT" });
+      expect((error as Error).message).toContain("ttl=1h");
+    });
+
+    it("throws DNS_ENTRY_CONFLICT when a requested comment differs", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      const error = await addError(ctx, {
+        name: "router.lan",
+        address: "192.168.1.1",
+        comment: "gateway",
+      });
+      expect(error).toMatchObject({ code: "DNS_ENTRY_CONFLICT" });
+    });
+
+    it("returns the matching record when several share the name (round-robin)", async () => {
+      const second = { ...ROUTER_LAN, ".id": "*2", address: "192.168.1.2" };
+      const ctx = makeGetContext([ROUTER_LAN, second]);
+      const result = await manageDnsTool.handler(
+        { routerId: "test-router", action: "add", name: "router.lan", address: "192.168.1.2" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("already_exists");
+      expect(sc.entry).toBe(second);
+    });
+
+    it("lists every record with the name in a CONFLICT", async () => {
+      const second = { ...ROUTER_LAN, ".id": "*2", address: "192.168.1.2" };
+      const ctx = makeGetContext([ROUTER_LAN, second]);
+      const error = await addError(ctx, { name: "router.lan", address: "192.168.1.3" });
+      expect(error).toMatchObject({
+        code: "DNS_ENTRY_CONFLICT",
+        details: { existing: [{ address: "192.168.1.1" }, { address: "192.168.1.2" }] },
+      });
+    });
+
+    it("compares CNAME and TXT values, including a numeric-looking TXT value", async () => {
+      const cnameCtx = makeGetContext([
+        { ".id": "*3", name: "www.lan", type: "CNAME", cname: "host.lan", disabled: false },
+      ]);
+      await expect(
+        addError(cnameCtx, { name: "www.lan", type: "CNAME", cname: "other.lan" }),
+      ).resolves.toMatchObject({ code: "DNS_ENTRY_CONFLICT" });
+
+      const txtCtx = makeGetContext([
+        // The parser keeps free text as typed, so "0123" stays a string.
+        { ".id": "*4", name: "txt.lan", type: "TXT", text: "0123", disabled: false },
+      ]);
+      const result = await manageDnsTool.handler(
+        { routerId: "test-router", action: "add", name: "txt.lan", type: "TXT", text: "0123" },
+        txtCtx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+    });
+
+    it("finds an existing record whatever the case of the name", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      const result = await manageDnsTool.handler(
+        { routerId: "test-router", action: "add", name: "Router.LAN", address: "192.168.1.1" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+      // The REST filter matches names exactly, so only the type goes to the router.
+      expect(ctx.routerClient.get).toHaveBeenCalledWith("ip/dns/static", {
+        filter: { type: "A" },
+      });
+    });
+
+    it("ignores records with another name returned by the type filter", async () => {
+      const ctx = makeGetContext([{ ...ROUTER_LAN, name: "other.lan" }]);
+      const result = await manageDnsTool.handler(
+        { routerId: "test-router", action: "add", name: "router.lan", address: "192.168.1.2" },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("created");
+    });
+
+    it("sends only the value field of the record type", async () => {
+      const ctx = makeGetContext([]);
+      await manageDnsTool.handler(
+        { routerId: "test-router", action: "add", name: "new.lan", address: "10.0.0.9" },
+        ctx,
+      );
+      expect(ctx.routerClient.create).toHaveBeenCalledWith("ip/dns/static", {
+        name: "new.lan",
+        type: "A",
+        disabled: "false",
+        address: "10.0.0.9",
+      });
+    });
+
+    it.each(["add", "remove"])(
+      "%s rejects a value field of another record type before any router call",
+      async (action) => {
+        const ctx = makeGetContext([ROUTER_LAN]);
+        const error = await manageDnsTool
+          .handler(
+            {
+              routerId: "test-router",
+              action,
+              name: "router.lan",
+              address: "192.168.1.1",
+              cname: "x.lan",
+            },
+            ctx,
+          )
+          .catch((err: unknown) => err);
+        expect(error).toMatchObject({
+          category: ErrorCategory.VALIDATION,
+          code: "DNS_FIELD_NOT_APPLICABLE",
+        });
+        expect(ctx.routerClient.get).not.toHaveBeenCalled();
+      },
+    );
+
+    it("quotes values with spaces in the CONFLICT message", async () => {
+      const ctx = makeGetContext([{ ...ROUTER_LAN, comment: "home router" }]);
+      const error = await addError(ctx, { name: "router.lan", address: "192.168.1.2" });
+      expect((error as Error).message).toContain('comment="home router"');
+    });
+
+    it("tells to remove each record when several share the name", async () => {
+      const second = { ...ROUTER_LAN, ".id": "*2", address: "192.168.1.2" };
+      const ctx = makeGetContext([ROUTER_LAN, second]);
+      const error = await addError(ctx, { name: "router.lan", address: "192.168.1.3" });
+      expect(error).toMatchObject({
+        recoverability: {
+          suggestedAction: expect.stringContaining("2 records share this name"),
+        },
+      });
+    });
+
+    it("rejects an A record without an address even when the name exists", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      const error = await addError(ctx, { name: "router.lan" });
+      expect(error).toMatchObject({ code: "DNS_MISSING_ADDRESS" });
+    });
+
+    describe("remove with several records sharing the name", () => {
+      const second = { ...ROUTER_LAN, ".id": "*2", address: "192.168.1.2" };
+
+      it("throws DNS_ENTRY_AMBIGUOUS without a value and removes nothing", async () => {
+        const ctx = makeGetContext([ROUTER_LAN, second]);
+        const error = await manageDnsTool
+          .handler({ routerId: "test-router", action: "remove", name: "router.lan" }, ctx)
+          .catch((err: unknown) => err);
+        expect(error).toMatchObject({
+          category: ErrorCategory.VALIDATION,
+          code: "DNS_ENTRY_AMBIGUOUS",
+        });
+        expect((error as Error).message).toContain("address=192.168.1.2");
+        expect(ctx.routerClient.remove).not.toHaveBeenCalled();
+      });
+
+      it("removes the record picked by its address", async () => {
+        const ctx = makeGetContext([ROUTER_LAN, second]);
+        const result = await manageDnsTool.handler(
+          {
+            routerId: "test-router",
+            action: "remove",
+            name: "router.lan",
+            address: "192.168.1.2",
+          },
+          ctx,
+        );
+        expect((result.structuredContent as Record<string, unknown>).id).toBe("*2");
+        expect(ctx.routerClient.remove).toHaveBeenCalledWith("ip/dns/static", "*2");
+      });
+
+      it("throws NOT_FOUND naming the existing values when no address matches", async () => {
+        const ctx = makeGetContext([ROUTER_LAN, second]);
+        const error = await manageDnsTool
+          .handler(
+            {
+              routerId: "test-router",
+              action: "remove",
+              name: "router.lan",
+              address: "192.168.1.9",
+            },
+            ctx,
+          )
+          .catch((err: unknown) => err);
+        expect(error).toMatchObject({ code: "DNS_ENTRY_NOT_FOUND" });
+        expect((error as Error).message).toContain("address=192.168.1.1");
+      });
+    });
+
+    it("removes the only record without a value", async () => {
+      const ctx = makeGetContext([ROUTER_LAN]);
+      await manageDnsTool.handler(
+        { routerId: "test-router", action: "remove", name: "router.lan" },
+        ctx,
+      );
+      expect(ctx.routerClient.remove).toHaveBeenCalledWith("ip/dns/static", "*1");
     });
 
     it("throws NOT_FOUND when removing non-existent entry", async () => {
