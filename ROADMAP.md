@@ -378,6 +378,19 @@ Contributed by [@anmaxx](https://github.com/anmaxx).
 
 ---
 
+## ✅ v1.12 — Safety Gates, Fleet Reads & REST Diagnostics (122 → 126 tools)
+
+**Goal:** Close a gap in the confirmation gate, let clients allow fleet-wide reads without allowing fleet-wide writes, and make the RouterOS 7 diagnostics actually work.
+
+- **Confirmation gate closed.** `manage_scheduled_job` runs arbitrary RouterOS script, and `upload_file` can run a `*.auto.rsc` file over FTP, yet both were annotated non-destructive. They skipped the confirmation gate, and `bulk_execute` fanned them out with no fleet token. Every write tool that can remove, overwrite, reconfigure or run script is now destructive, and a unit test enforces it. `bulk_execute` gates every write fan-out for every role.
+- **Fleet reads.** `bulk_read` fans out read-only tools only and refuses everything else on the server, so a client can allow it by name and keep `bulk_execute` behind a prompt.
+- **Diagnostics over REST.** `traceroute` and `torch` moved from scraping console output over SSH to the REST API. `torch` returns flows instead of timing out, `traceroute` no longer repeats hops, and `bandwidth_test` reports real throughput.
+- **Coverage and correctness.** New tools: `list_ip_addresses`, `list_bridge_ports` and `list_interface_list_members`. `manage_firewall_rule` gained interface lists, connection and NAT state, and NAT targets, so a dst-nat port forward no longer needs `run_command`. Also fixed: filters on values containing spaces matched nothing, re-adding a rule with a single port reported a false conflict, and a refused SSH login was reported as an internal error.
+
+Contributed by [@akuzin87](https://github.com/akuzin87), who also reported the confirmation-gate gap privately.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

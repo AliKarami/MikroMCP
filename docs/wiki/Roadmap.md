@@ -184,6 +184,16 @@ Contributed by [@anmaxx](https://github.com/anmaxx).
 
 ---
 
+## ✅ v1.12 — Safety Gates, Fleet Reads & REST Diagnostics
+
+Every write tool that can remove, overwrite, reconfigure or run RouterOS script is now marked destructive, so it goes through the confirmation gate and maintenance windows. Previously `manage_scheduled_job` and `upload_file`, both able to run script, skipped both. `bulk_execute` now needs a fleet token for every write it fans out, and the new `bulk_read` fans out read-only tools only, so a client can allow fleet reads without allowing fleet writes.
+
+`traceroute` and `torch` now run over the REST API instead of scraping console output over SSH: `torch` returns flows, `traceroute` reports each hop once, and `bandwidth_test` reports real throughput. Three new list tools cover IP addresses, bridge ports and interface list members, and `manage_firewall_rule` can express NAT port forwards and connection-state rules. Filters on values with spaces and re-adding a rule with a single port both work correctly now.
+
+Contributed by [@akuzin87](https://github.com/akuzin87), who also reported the confirmation-gate gap privately.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
