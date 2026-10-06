@@ -123,7 +123,7 @@ flowchart TD
 | Tool registry | `src/mcp/tool-registry.ts` | Registers tools; injects circuit breaker, retry, correlation ID, credentials |
 | All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**122 typed tools**) |
 | REST client | `src/adapter/rest-client.ts` | `get`, `getOne`, `create`, `update`, `remove`, `execute` over HTTPS |
-| SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping`, `/tool/traceroute`, `/tool/torch`, and `run_command`; optionally uses a separate SSH username and local private key |
+| SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping` and `run_command`; optionally uses a separate SSH username and local private key |
 | SFTP adapter | `src/adapter/sftp-client.ts` | Preferred encrypted transport for `upload_file`; shares the router's SSH username, key, port, and host-key fingerprint settings |
 | FTP adapter | `src/adapter/ftp-client.ts` | Plaintext fallback for `upload_file` using REST credentials |
 | SwOS client | `src/adapter/swos-client.ts` | SwOS / SwOS Lite `.b` API over HTTP digest auth (`deviceType: "swos"`) |

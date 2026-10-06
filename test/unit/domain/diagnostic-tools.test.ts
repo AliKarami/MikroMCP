@@ -3,7 +3,7 @@ import { diagnosticTools } from "../../../src/domain/tools/diagnostic-tools.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
-import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { HttpError, type RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import { enrichError } from "../../../src/domain/errors/error-enricher.js";
 import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
@@ -24,7 +24,7 @@ function makeRouterConfig(): RouterConfig {
   };
 }
 
-function makeContext(sshOutput = ""): ToolContext {
+function makeContext(sshOutput = "", restResult: unknown = []): ToolContext {
   return {
     routerId: "test-router",
     correlationId: "test-corr",
@@ -41,7 +41,7 @@ function makeContext(sshOutput = ""): ToolContext {
       connect: vi.fn().mockResolvedValue(undefined),
     } as unknown as FtpClient,
     routerClient: {
-      execute: vi.fn().mockResolvedValue([]),
+      execute: vi.fn().mockResolvedValue(restResult),
       get: vi.fn().mockResolvedValue([]),
     } as unknown as RouterOSRestClient,
   };
@@ -95,7 +95,7 @@ describe("diagnostic tools", () => {
         diagnosticTools[2],
         { routerId: "test-router", interface: "ether1", dstAddress: "10.0.0.1\u007fowned" },
       ],
-    ])("classifies %s as validation before SSH", async (_label, tool, params) => {
+    ])("classifies %s as validation before any router call", async (_label, tool, params) => {
       const ctx = makeContext();
       let thrown: unknown;
 
@@ -110,6 +110,7 @@ describe("diagnostic tools", () => {
         code: "VALIDATION_ERROR",
       });
       expect(ctx.sshClient.execute).not.toHaveBeenCalled();
+      expect(ctx.routerClient.execute).not.toHaveBeenCalled();
     });
   });
 
@@ -234,46 +235,127 @@ describe("diagnostic tools", () => {
   });
 
   describe("traceroute handler", () => {
-    const TRACE_SSH_OUTPUT =
-      " # ADDRESS       STATUS     RTT1   RTT2   RTT3\n" +
-      " 1 192.168.1.1  echo reply  1ms    1ms    1ms\n" +
-      " 2 10.0.0.1     echo reply  5ms    5ms    5ms\n";
+    // POST /rest/tool/traceroute on RouterOS 7.24.2 (count=1, max-hops=4): one
+    // `.section` per screen update; only the last one is final.
+    const TRACE_REST_RESULT = [
+      {
+        ".section": "0",
+        address: "192.168.1.1",
+        avg: "0.3",
+        best: "0.3",
+        last: "0.3",
+        loss: "0",
+        sent: "1",
+        status: "",
+        "std-dev": "0",
+        worst: "0.3",
+      },
+      { ".section": "0", address: "", last: "0", loss: "0", sent: "1", status: "" },
+      {
+        ".section": "1",
+        address: "192.168.1.1",
+        avg: "0.3",
+        best: "0.3",
+        error: "Too many hops",
+        last: "0.3",
+        loss: "0",
+        sent: "1",
+        status: "",
+        "std-dev": "0",
+        worst: "0.3",
+      },
+      {
+        ".section": "1",
+        address: "",
+        error: "Too many hops",
+        last: "timeout",
+        loss: "100",
+        sent: "1",
+        status: "",
+      },
+      {
+        ".section": "1",
+        address: "10.196.39.1",
+        avg: "30.8",
+        best: "30.8",
+        error: "Too many hops",
+        last: "30.8",
+        loss: "0",
+        sent: "1",
+        status: "",
+        "std-dev": "0",
+        worst: "30.8",
+      },
+      {
+        ".section": "1",
+        address: "203.0.113.237",
+        avg: "29.9",
+        best: "29.9",
+        error: "Too many hops",
+        last: "29.9",
+        loss: "0",
+        sent: "1",
+        status: "",
+        "std-dev": "0",
+        worst: "29.9",
+      },
+    ];
 
-    it("returns hop list", async () => {
-      const ctx = makeContext(TRACE_SSH_OUTPUT);
+    it("returns the hops of the final section once, numbered from 1", async () => {
+      const ctx = makeContext("", TRACE_REST_RESULT);
       const result = await tracerouteTool.handler(
-        { routerId: "test-router", address: "8.8.8.8" },
+        { routerId: "test-router", address: "1.1.1.1" },
         ctx,
       );
       expect(result.isError).toBeFalsy();
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.hops as unknown[]).length).toBe(2);
+      const hops = (result.structuredContent as Record<string, unknown>).hops as Record<
+        string,
+        unknown
+      >[];
+      expect(hops.map((h) => [h.hop, h.address])).toEqual([
+        [1, "192.168.1.1"],
+        [2, null],
+        [3, "10.196.39.1"],
+        [4, "203.0.113.237"],
+      ]);
+      expect(hops[2]).toEqual({
+        hop: 3,
+        address: "10.196.39.1",
+        avg: "30.8",
+        best: "30.8",
+        error: "Too many hops",
+        last: "30.8",
+        loss: "0",
+        sent: "1",
+        status: "",
+        stdDev: "0",
+        worst: "30.8",
+      });
+      expect(result.content).toContain("  2  ???  timeout  loss=100%");
+      expect(result.content).toContain("  3  10.196.39.1  30.8ms  loss=0%");
     });
 
-    it("sends address, count, and max-hops in the SSH command", async () => {
-      const ctx = makeContext(TRACE_SSH_OUTPUT);
+    it("POSTs address, count, and max-hops to tool/traceroute", async () => {
+      const ctx = makeContext("", TRACE_REST_RESULT);
       await tracerouteTool.handler(
         { routerId: "test-router", address: "8.8.8.8", count: 2, maxHops: 10 },
         ctx,
       );
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(
-        '/tool traceroute address="8.8.8.8" count=2 max-hops=10',
-      );
+      expect(ctx.routerClient.execute).toHaveBeenCalledWith("tool/traceroute", {
+        address: "8.8.8.8",
+        count: "2",
+        "max-hops": "10",
+      });
+      expect(ctx.sshClient.execute).not.toHaveBeenCalled();
     });
 
-    it("treats partial hop list (some timeouts shown as ???) as valid response", async () => {
-      const ctx = makeContext(
-        " # ADDRESS       STATUS     RTT1\n" +
-          " 1 192.168.1.1  echo reply  1ms\n" +
-          " 2 ???          timeout\n",
-      );
+    it("returns no hops for an empty result", async () => {
+      const ctx = makeContext("", []);
       const result = await tracerouteTool.handler(
         { routerId: "test-router", address: "8.8.8.8" },
         ctx,
       );
-      expect(result.isError).toBeFalsy();
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.hops as unknown[]).length).toBe(2);
+      expect((result.structuredContent as Record<string, unknown>).hops).toEqual([]);
     });
   });
 
@@ -329,23 +411,97 @@ describe("diagnostic tools", () => {
   });
 
   describe("torch handler", () => {
-    const TORCH_SSH_OUTPUT =
-      "SRC             DST             TX         RX\n" +
-      "192.168.1.10    8.8.8.8         1000       500\n" +
-      "192.168.1.11    1.1.1.1         2000       100\n";
+    // POST /rest/tool/torch on RouterOS 7.24.2; rates are bits/s and packets/s.
+    const TORCH_REST_RESULT = [
+      {
+        ".section": "0",
+        dscp: "0",
+        "dst-address": "224.0.0.224",
+        "dst-port": "7447",
+        "ip-protocol": "udp",
+        "mac-protocol": "ip",
+        rx: "552",
+        "rx-packets": "1",
+        "src-address": "192.168.1.114",
+        "src-port": "48595",
+        tx: "0",
+        "tx-packets": "0",
+      },
+      {
+        ".section": "1",
+        dscp: "0",
+        "dst-address": "255.255.255.255",
+        "dst-port": "20561",
+        "ip-protocol": "udp",
+        "mac-protocol": "ip",
+        rx: "10800",
+        "rx-packets": "17",
+        "src-address": "192.168.1.55",
+        "src-port": "56457",
+        tx: "0",
+        "tx-packets": "0",
+      },
+      {
+        ".section": "1",
+        dscp: "0",
+        "dst-address": "ff02::fb",
+        "dst-port": "5353",
+        "ip-protocol": "udp",
+        "mac-protocol": "ipv6",
+        rx: "7600",
+        "rx-packets": "4",
+        "src-address": "fe80::aaaa:bbbb:cccc:1",
+        "src-port": "5353",
+        tx: "1234567",
+        "tx-packets": "120",
+      },
+    ];
 
-    it("returns flows from SSH output", async () => {
+    it("returns the flows of the final section with numeric rates", async () => {
       const torchTool = diagnosticTools[2];
-      const ctx = makeContext(TORCH_SSH_OUTPUT);
+      const ctx = makeContext("", TORCH_REST_RESULT);
       const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
       expect(result.isError).toBeFalsy();
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.flows as unknown[]).length).toBe(2);
+      const flows = (result.structuredContent as Record<string, unknown>).flows;
+      expect(flows).toEqual([
+        {
+          dscp: "0",
+          dstAddress: "255.255.255.255",
+          dstPort: "20561",
+          ipProtocol: "udp",
+          macProtocol: "ip",
+          rx: 10800,
+          rxPackets: 17,
+          srcAddress: "192.168.1.55",
+          srcPort: "56457",
+          tx: 0,
+          txPackets: 0,
+        },
+        {
+          dscp: "0",
+          dstAddress: "ff02::fb",
+          dstPort: "5353",
+          ipProtocol: "udp",
+          macProtocol: "ipv6",
+          rx: 7600,
+          rxPackets: 4,
+          srcAddress: "fe80::aaaa:bbbb:cccc:1",
+          srcPort: "5353",
+          tx: 1234567,
+          txPackets: 120,
+        },
+      ]);
+      expect(result.content).toContain(
+        "udp  192.168.1.55:56457 → 255.255.255.255:20561  tx=0bps  rx=10.8kbps",
+      );
+      expect(result.content).toContain(
+        "udp  [fe80::aaaa:bbbb:cccc:1]:5353 → [ff02::fb]:5353  tx=1.2Mbps  rx=7.6kbps",
+      );
     });
 
-    it("sends interface in the SSH command and uses duration as timeout", async () => {
+    it("lets RouterOS end the capture and waits longer than duration", async () => {
       const torchTool = diagnosticTools[2];
-      const ctx = makeContext(TORCH_SSH_OUTPUT);
+      const ctx = makeContext("", TORCH_REST_RESULT);
       await torchTool.handler(
         {
           routerId: "test-router",
@@ -356,18 +512,42 @@ describe("diagnostic tools", () => {
         },
         ctx,
       );
-      expect(ctx.sshClient.execute).toHaveBeenCalledWith(
-        '/tool torch interface="ether1" src-address="192.168.1.0/24" dst-address="8.8.8.8"',
-        11_000,
+      expect(ctx.routerClient.execute).toHaveBeenCalledWith(
+        "tool/torch",
+        {
+          interface: "ether1",
+          duration: "10s",
+          "src-address": "192.168.1.0/24",
+          "dst-address": "8.8.8.8",
+        },
+        { timeoutMs: 15_000 },
       );
+      expect(ctx.sshClient.execute).not.toHaveBeenCalled();
     });
 
-    it("returns empty flows for empty output", async () => {
+    it("returns empty flows for an empty result", async () => {
       const torchTool = diagnosticTools[2];
-      const ctx = makeContext("");
+      const ctx = makeContext("", []);
       const result = await torchTool.handler({ routerId: "test-router", interface: "ether1" }, ctx);
-      const sc = result.structuredContent as Record<string, unknown>;
-      expect((sc.flows as unknown[]).length).toBe(0);
+      expect((result.structuredContent as Record<string, unknown>).flows).toEqual([]);
+    });
+
+    it("surfaces a RouterOS error instead of reporting zero flows", async () => {
+      const torchTool = diagnosticTools[2];
+      const ctx = makeContext();
+      (ctx.routerClient.execute as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new HttpError(
+          400,
+          JSON.stringify({
+            error: 400,
+            message: "Bad Request",
+            detail: "input does not match any value of interface",
+          }),
+        ),
+      );
+      await expect(
+        torchTool.handler({ routerId: "test-router", interface: "ether9" }, ctx),
+      ).rejects.toThrow(/input does not match any value of interface/);
     });
   });
 

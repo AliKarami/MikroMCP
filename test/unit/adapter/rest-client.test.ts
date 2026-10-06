@@ -103,6 +103,20 @@ describe("RouterOSRestClient write methods", () => {
     });
   });
 
+  it("execute uses the default request timeout unless the call overrides it", async () => {
+    requestMock.mockResolvedValue(jsonResponse([]));
+    await makeClient().execute("tool/torch", { interface: "ether1" });
+    await makeClient().execute("tool/torch", { interface: "ether1" }, { timeoutMs: 45_000 });
+    expect(requestMock.mock.calls[0][1]).toMatchObject({
+      bodyTimeout: 30_000,
+      headersTimeout: 30_000,
+    });
+    expect(requestMock.mock.calls[1][1]).toMatchObject({
+      bodyTimeout: 45_000,
+      headersTimeout: 45_000,
+    });
+  });
+
   it("update PATCHes the record path by .id", async () => {
     requestMock.mockResolvedValue(emptyResponse());
     await makeClient().update("interface/vlan", "*1", { disabled: "true" });
