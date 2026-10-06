@@ -111,3 +111,43 @@ describe("sameRuleValue", () => {
     }
   });
 });
+
+describe("sameRuleValue - tcp-flags", () => {
+  it.each([
+    ["syn,!ack", "!ack,syn"],
+    ["!syn,ack", "ack,!syn"],
+    ["syn", "syn,syn"],
+  ])("treats %s and %s as the same flags", (stored, requested) => {
+    expect(sameRuleValue("tcp-flags", stored, requested)).toBe(true);
+  });
+
+  it.each([
+    ["syn", "!syn"],
+    ["syn,!ack", "syn,ack"],
+    ["syn", undefined],
+  ])("tells %s from %s", (stored, requested) => {
+    expect(sameRuleValue("tcp-flags", stored, requested)).toBe(false);
+  });
+});
+
+describe("sameRuleValue - protocol numbers", () => {
+  // RouterOS stores these numbers as names (CHR 7.23.2 and 7.24.2).
+  it.each([
+    ["tcp", "6"],
+    ["udp", "17"],
+    ["icmp", "1"],
+    ["udp-lite", "136"],
+  ])("treats stored %s as protocol %s", (stored, requested) => {
+    expect(sameRuleValue("protocol", stored, requested)).toBe(true);
+  });
+
+  it("compares a number RouterOS keeps as a number with that number", () => {
+    // The response parser turns the stored "253" into a number.
+    expect(sameRuleValue("protocol", 253, "253")).toBe(true);
+    expect(sameRuleValue("protocol", 253, "254")).toBe(false);
+  });
+
+  it("tells different protocols apart", () => {
+    expect(sameRuleValue("protocol", "tcp", "17")).toBe(false);
+  });
+});

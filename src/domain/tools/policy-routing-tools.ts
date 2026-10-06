@@ -2,7 +2,7 @@ import { z } from "zod";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
-import { sameRuleValue } from "./rule-match.js";
+import { ruleActionAddOnly, sameRuleValue } from "./rule-match.js";
 import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
@@ -170,17 +170,11 @@ const manageRoutingRuleTool: ToolDefinition = {
       if (parsed.action !== "add" && parsed.ruleAction !== undefined) {
         // The composite key ignores the action, so a ruleAction here would not narrow
         // which rule is removed or toggled.
-        throw new MikroMCPError({
-          category: ErrorCategory.VALIDATION,
-          code: "RULE_ACTION_ADD_ONLY",
-          message: `ruleAction applies only to add, not to ${parsed.action}.`,
-          details: { action: parsed.action, ruleAction: parsed.ruleAction },
-          recoverability: {
-            retryable: false,
-            suggestedAction:
-              "Drop ruleAction; the rule is identified by srcAddress, dstAddress, interface, and table.",
-          },
-        });
+        throw ruleActionAddOnly(
+          parsed.action,
+          parsed.ruleAction,
+          "Drop ruleAction; the rule is identified by srcAddress, dstAddress, interface, and table.",
+        );
       }
 
       const allRules = await context.routerClient.get<RouterOSRecord>(ROUTING_RULE_PATH, {
