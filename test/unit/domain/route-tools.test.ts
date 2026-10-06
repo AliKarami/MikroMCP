@@ -6,7 +6,6 @@ import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 const listRoutesTool = routeTools[0];
 const manageRouteTool = routeTools[1];
 
-// Inline schemas for isolated validation tests
 const listRoutesInputSchema = listRoutesTool.inputSchema;
 
 const manageRouteInputSchema = manageRouteTool.inputSchema;

@@ -6,7 +6,6 @@ import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 const listTool = dhcpTools[0];
 
-// Inline schema for isolated validation tests (avoids importing internal implementation detail)
 const listDhcpInputSchema = listTool.inputSchema;
 
 function makeContext(leases: Record<string, unknown>[]): ToolContext {

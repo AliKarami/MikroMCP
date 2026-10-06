@@ -7,7 +7,6 @@ import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const manageIpAddressTool = ipTools.find((t) => t.name === "manage_ip_address")!;
 
-// Inline schema for isolated validation tests
 const manageIpAddressInputSchema = manageIpAddressTool.inputSchema;
 
 function makeContext(addresses: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
