@@ -2,48 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 import { firewallTools } from "../../../src/domain/tools/firewall-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const listFirewallRulesTool = firewallTools[0];
 const manageFirewallRuleTool = firewallTools[1];
 
-const listFirewallRulesInputSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.enum(["filter", "nat"]).default("filter"),
-    chain: z.string().optional(),
-    disabled: z.enum(["true", "false", "all"]).default("all"),
-    limit: z.number().int().min(1).max(500).default(100),
-    offset: z.number().int().min(0).default(0),
-  })
-  .strict();
+const listFirewallRulesInputSchema = listFirewallRulesTool.inputSchema;
 
-const manageFirewallRuleInputSchema = z
-  .object({
-    routerId: z.string(),
-    table: z.enum(["filter", "nat"]).default("filter"),
-    action: z.enum(["add", "remove", "disable", "enable"]),
-    chain: z.string(),
-    ruleAction: z.string(),
-    srcAddress: z.string().optional(),
-    dstAddress: z.string().optional(),
-    protocol: z.enum(["tcp", "udp", "icmp", "gre", "ospf", "all"]).optional(),
-    srcPort: z.string().optional(),
-    dstPort: z.string().optional(),
-    inInterface: z.string().optional(),
-    outInterface: z.string().optional(),
-    comment: z.string().max(255).optional(),
-    disabled: z.boolean().default(false),
-    placeBefore: z.string().optional(),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageFirewallRuleInputSchema = manageFirewallRuleTool.inputSchema;
 
-function makeContext(
-  records: Record<string, unknown>[],
-  createReturn?: Record<string, unknown>,
-): ToolContext {
-  const mockGet = vi.fn().mockResolvedValue(records);
+function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
+  const mockGet = vi.fn().mockResolvedValue(fromWire(records));
   const mockCreate = vi
     .fn()
     .mockResolvedValue(createReturn ?? { ".id": "*1", chain: "forward", action: "drop" });
@@ -585,17 +554,17 @@ describe("firewall tools", () => {
 });
 
 describe("manage_firewall_rule - interface lists, connection state and NAT targets", () => {
-  // A dst-nat rule as the REST response parser returns it: single ports
-  // arrive as numbers, sets as comma-separated strings.
+  // A dst-nat rule as RouterOS sends it; makeContext runs it through the response
+  // parser, which turns the single ports into numbers.
   const portForward = {
     ".id": "*4",
     chain: "dstnat",
     action: "dst-nat",
     protocol: "tcp",
-    "dst-port": 8443,
+    "dst-port": "8443",
     "in-interface-list": "WAN",
     "to-addresses": "192.168.88.10",
-    "to-ports": 443,
+    "to-ports": "443",
     comment: "fwd-nas-https",
   };
   const portForwardParams = {
@@ -817,6 +786,24 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
         { ...params, connectionState: "invalid" },
         makeContext([existing]),
       ),
+    ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
+  });
+
+  it("treats protocol all as no protocol match", async () => {
+    const base = {
+      routerId: "test-router",
+      action: "add",
+      chain: "forward",
+      ruleAction: "accept",
+      protocol: "all",
+      comment: "any-proto",
+    };
+    const unset = { ".id": "*F", chain: "forward", action: "accept", comment: "any-proto" };
+    const same = await manageFirewallRuleTool.handler(base, makeContext([unset]));
+    expect((same.structuredContent as Record<string, unknown>).action).toBe("already_exists");
+
+    await expect(
+      manageFirewallRuleTool.handler(base, makeContext([{ ...unset, protocol: "tcp" }])),
     ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
   });
 

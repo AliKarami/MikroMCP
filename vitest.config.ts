@@ -10,6 +10,10 @@ export default defineConfig({
   test: {
     globals: true,
     include: ["test/unit/**/*.test.ts"],
+    // Many tests exercise error paths on purpose; their pino output only hides real failures.
+    env: {
+      MIKROMCP_LOG_LEVEL: "silent",
+    },
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

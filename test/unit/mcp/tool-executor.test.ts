@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { executeToolCall, type ToolExecutorDeps } from "../../../src/mcp/tool-executor.js";
 import type { ToolDefinition } from "../../../src/domain/tools/tool-definition.js";
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
+import { createSshClient } from "../../../src/adapter/adapter-factory.js";
+import { diagnosticTools } from "../../../src/domain/tools/diagnostic-tools.js";
 
 // Stub modules that require real I/O or external state
 vi.mock("../../../src/observability/audit-log.js", () => ({ auditLog: vi.fn() }));
@@ -140,6 +142,30 @@ describe("executeToolCall", () => {
     expect(result.isError).toBe(true);
     const sc = result.structuredContent as { code?: string };
     expect(sc?.code).toBe("X_NOT_FOUND");
+  });
+
+  it("refused SSH login — the model reads ROUTER_AUTH_FAILED, not INTERNAL", async () => {
+    // ssh2 tags a refused login with level "client-authentication"; the level must
+    // survive SshClient, the tool's error wrapping, and the executor.
+    const authError = Object.assign(new Error("All configured authentication methods failed"), {
+      level: "client-authentication",
+    });
+    vi.mocked(createSshClient).mockReturnValueOnce({
+      execute: vi.fn().mockRejectedValue(authError),
+    } as unknown as ReturnType<typeof createSshClient>);
+    const pingTool = diagnosticTools.find((t) => t.name === "ping")!;
+
+    const result = await executeToolCall(
+      pingTool,
+      { routerId: "r1", address: "192.0.2.1" },
+      makeDeps(),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(
+      /^Error \[ROUTER_AUTH_FAILED\]: The router rejected the SSH login/,
+    );
+    expect((result.structuredContent as { code?: string }).code).toBe("SSH_AUTH_FAILED");
   });
 
   it("circuit breaker reuse — same router creates only one breaker", async () => {

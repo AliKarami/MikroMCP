@@ -18,10 +18,40 @@ const { find: findOnRouter, removeLeftover } = liveResource(harness.context, "ip
   comment: COMMENT,
 });
 
-beforeAll(removeLeftover);
+// A comment with spaces exercises the percent-encoded GET filter (#77).
+const NAT_COMMENT = "mikromcp itest dst-nat";
+const PORT_FORWARD = {
+  table: "nat",
+  chain: "dstnat",
+  ruleAction: "dst-nat",
+  protocol: "tcp",
+  dstAddress: "198.51.100.10",
+  dstPort: "18443",
+  toAddresses: "192.0.2.10",
+  toPorts: "443",
+  comment: NAT_COMMENT,
+};
+const nat = liveResource(harness.context, "ip/firewall/nat", { comment: NAT_COMMENT });
+
+const STATE_COMMENT = "mikromcp-itest-fw-not-invalid";
+const NOT_INVALID = {
+  chain: "forward",
+  ruleAction: "accept",
+  connectionState: "!invalid",
+  comment: STATE_COMMENT,
+};
+const notInvalid = liveResource(harness.context, "ip/firewall/filter", { comment: STATE_COMMENT });
+
+beforeAll(async () => {
+  await removeLeftover();
+  await nat.removeLeftover();
+  await notInvalid.removeLeftover();
+});
 
 afterAll(async () => {
   await removeLeftover();
+  await nat.removeLeftover();
+  await notInvalid.removeLeftover();
   harness.close();
 });
 
@@ -122,5 +152,80 @@ describe("manage_firewall_rule lifecycle against live CHR", () => {
 
     expect(error).toBeInstanceOf(MikroMCPError);
     expect((error as MikroMCPError).code).toBe("FIREWALL_RULE_NOT_FOUND");
+  });
+});
+
+describe("manage_firewall_rule dst-nat port forward against live CHR", () => {
+  it("add creates the rule with its NAT targets", async () => {
+    const result = await runTool(harness.context, "manage_firewall_rule", {
+      action: "add",
+      ...PORT_FORWARD,
+    });
+
+    expect(result.structuredContent.action).toBe("created");
+    const onRouter = await nat.find();
+    expect(onRouter).toMatchObject({ action: "dst-nat", "to-addresses": "192.0.2.10" });
+    expect(String(onRouter!["to-ports"])).toBe("443");
+  });
+
+  it("identical add finds the rule by a comment with spaces (already_exists)", async () => {
+    const result = await runTool(harness.context, "manage_firewall_rule", {
+      action: "add",
+      ...PORT_FORWARD,
+    });
+
+    expect(result.structuredContent.action).toBe("already_exists");
+  });
+
+  it("add with a different to-ports throws CONFLICT", async () => {
+    await expect(
+      runTool(harness.context, "manage_firewall_rule", {
+        action: "add",
+        ...PORT_FORWARD,
+        toPorts: "8443",
+      }),
+    ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
+  });
+
+  it("remove deletes the rule", async () => {
+    const result = await runTool(harness.context, "manage_firewall_rule", {
+      action: "remove",
+      ...PORT_FORWARD,
+    });
+
+    expect(result.structuredContent.action).toBe("removed");
+    expect(await nat.find()).toBeUndefined();
+  });
+});
+
+describe("manage_firewall_rule negated connection-state against live CHR", () => {
+  it("stores connection-state=!invalid as sent", async () => {
+    const result = await runTool(harness.context, "manage_firewall_rule", {
+      action: "add",
+      ...NOT_INVALID,
+    });
+
+    expect(result.structuredContent.action).toBe("created");
+    // How RouterOS stores a negated state set was not verified before this test.
+    expect((await notInvalid.find())!["connection-state"]).toBe("!invalid");
+  });
+
+  it("identical add is idempotent (already_exists)", async () => {
+    const result = await runTool(harness.context, "manage_firewall_rule", {
+      action: "add",
+      ...NOT_INVALID,
+    });
+
+    expect(result.structuredContent.action).toBe("already_exists");
+  });
+
+  it("add with the non-negated state throws CONFLICT", async () => {
+    await expect(
+      runTool(harness.context, "manage_firewall_rule", {
+        action: "add",
+        ...NOT_INVALID,
+        connectionState: "invalid",
+      }),
+    ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
   });
 });

@@ -2,13 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { routingProtocolTools } from "../../../src/domain/tools/routing-protocol-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
 
 const listBgpPeersTool = routingProtocolTools[0];
 const listOspfNeighborsTool = routingProtocolTools[1];
 
-const listBgpSchema = z.object({ routerId: z.string(), state: z.string().optional() }).strict();
-const listOspfSchema = z.object({ routerId: z.string(), state: z.string().optional() }).strict();
+const listBgpSchema = listBgpPeersTool.inputSchema;
+const listOspfSchema = listOspfNeighborsTool.inputSchema;
 
 function makeContext(records: Record<string, unknown>[]): ToolContext {
   return {

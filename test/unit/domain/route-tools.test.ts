@@ -2,41 +2,14 @@ import { describe, it, expect, vi, type MockedFunction } from "vitest";
 import { routeTools } from "../../../src/domain/tools/route-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
-import { z } from "zod";
 
 const listRoutesTool = routeTools[0];
 const manageRouteTool = routeTools[1];
 
 // Inline schemas for isolated validation tests
-const listRoutesInputSchema = z
-  .object({
-    routerId: z.string(),
-    activeOnly: z.boolean().default(false),
-    staticOnly: z.boolean().default(false),
-    limit: z.number().int().min(1).max(500).default(100),
-    offset: z.number().int().min(0).default(0),
-  })
-  .strict();
+const listRoutesInputSchema = listRoutesTool.inputSchema;
 
-const manageRouteInputSchema = z
-  .object({
-    routerId: z.string(),
-    action: z.enum(["add", "remove"]),
-    dstAddress: z
-      .string()
-      .regex(
-        /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/,
-        "Must be an IPv4 address or CIDR notation",
-      )
-      .transform((v) => (v.includes("/") ? v : `${v}/32`)),
-    gateway: z.string(),
-    distance: z.number().int().min(1).max(255).default(1),
-    routingTable: z.string().optional(),
-    comment: z.string().max(255).optional(),
-    disabled: z.boolean().default(false),
-    dryRun: z.boolean().default(false),
-  })
-  .strict();
+const manageRouteInputSchema = manageRouteTool.inputSchema;
 
 function makeContext(
   routes: Record<string, unknown>[],
