@@ -25,4 +25,28 @@ describe("enrichError", () => {
     });
     expect(enrichError(err)).toBe(err);
   });
+
+  it("maps an ssh2 client-authentication error to ROUTER_AUTH_FAILED", () => {
+    // Shape emitted by ssh2 when the router refuses every configured auth method.
+    const sshErr = Object.assign(new Error("All configured authentication methods failed"), {
+      level: "client-authentication",
+    });
+    const result = enrichError(sshErr, { routerId: "r1", tool: "export_config" });
+    expect(result.category).toBe(ErrorCategory.ROUTER_AUTH_FAILED);
+    expect(result.code).toBe("SSH_AUTH_FAILED");
+    expect(result.message).toContain("All configured authentication methods failed");
+    expect(result.details).toMatchObject({
+      transport: "ssh",
+      routerId: "r1",
+      tool: "export_config",
+    });
+    expect(result.recoverability.retryable).toBe(false);
+    expect(result.recoverability.suggestedAction).toContain("ssh policy");
+  });
+
+  it("keeps an error without a known code or level as INTERNAL", () => {
+    const result = enrichError(new Error("boom"));
+    expect(result.category).toBe(ErrorCategory.INTERNAL);
+    expect(result.code).toBe("INTERNAL_ERROR");
+  });
 });

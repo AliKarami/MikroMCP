@@ -12,7 +12,7 @@ Every error MikroMCP returns includes a machine-readable `category`, `code`, and
 | `PERMISSION_DENIED` | Identity lacks the required role or the call is outside a maintenance window |
 | `APPROVAL_REQUIRED` | Destructive operation or `bulk_execute` write fan-out requires a two-step confirmation token |
 | `ROUTER_UNREACHABLE` | Network or TLS connectivity failure to the router |
-| `ROUTER_AUTH_FAILED` | Bad credentials or insufficient RouterOS API policy |
+| `ROUTER_AUTH_FAILED` | Bad credentials or insufficient RouterOS API policy; `SSH_AUTH_FAILED` when the router refuses the SSH login of an SSH-backed tool |
 | `ROUTER_TIMEOUT` | Request timed out waiting for a RouterOS response |
 | `ROUTER_ERROR` | RouterOS accepted the connection but rejected the operation |
 | `ROUTER_BUSY` | Circuit breaker is open (`CIRCUIT_OPEN`) — router is being protected after repeated failures |
