@@ -72,6 +72,8 @@ Full enumeration of every tool by family: `references/tool-map.md`.
 3. If a confirmation token is required, re-issue with `confirmationToken`.
 4. Apply for real; confirm the `action` in the result (`created`/`updated`).
 5. Note the journal ID in case you need `rollback_change`.
+6. Re-read with the same `list_*` and compare with the intent — RouterOS has no
+   commit step, so this is the only check that the change landed as meant.
 
 ### Diagnose connectivity
 1. `get_system_status` and `list_interfaces` to confirm links are up.
@@ -92,6 +94,14 @@ Full enumeration of every tool by family: `references/tool-map.md`.
 1. Read the error `code`/`category` and `suggestedAction`.
 2. Map it to a next step via the error→action table in
    `references/safety-and-recovery.md`.
+
+## Router permissions by transport
+
+- `run_command`, `export_config` and `ping` log in over SSH: the router user's
+  group needs the `ssh` policy, and a key in `/user ssh-keys` turns off password
+  login for that user (`/ip ssh password-authentication`).
+- `traceroute`, `torch` and every other tool run over REST: no `ssh` needed, but
+  `traceroute` and `torch` need `test`, and `torch` also `sniff`.
 
 ## Pointers
 
