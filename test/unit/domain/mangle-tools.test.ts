@@ -343,3 +343,22 @@ describe("manage_mangle_rule - field comparison on repeated add", () => {
     expect((result.structuredContent as Record<string, unknown>).action).toBe("already_exists");
   });
 });
+
+describe("manage_mangle_rule - empty comment", () => {
+  it.each(["add", "remove", "enable", "disable"])(
+    "%s with an empty comment fails validation before any router call",
+    async (action) => {
+      const ctx = makeContext([]);
+      expect(
+        manageMangleRuleTool.inputSchema.safeParse({ routerId: "r", action, comment: "" }).success,
+      ).toBe(false);
+      await expect(
+        manageMangleRuleTool.handler(
+          { routerId: "test-router", action, comment: "", chain: "prerouting" },
+          ctx,
+        ),
+      ).rejects.toThrow();
+      expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    },
+  );
+});

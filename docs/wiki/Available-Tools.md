@@ -1062,7 +1062,7 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `action` | `add` \| `remove` \| `disable` \| `enable` | — | Operation to perform |
 | `table` | `filter` \| `nat` | `filter` | Firewall table |
 | `chain` | string | — | Chain name (e.g. `input`, `forward`, `output`, `srcnat`) |
-| `comment` | string | — | Comment used as idempotency key |
+| `comment` | string | — | Comment used as idempotency key; at least one printable character, omit for none |
 | `ruleAction` | string | — | RouterOS action (e.g. `accept`, `drop`, `masquerade`) |
 | `srcAddress` | string | — | Source IP or CIDR |
 | `dstAddress` | string | — | Destination IP or CIDR |
@@ -1112,7 +1112,7 @@ Add, remove, enable, or disable a mangle rule. Uses `comment` as the idempotency
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
-| `comment` | string | — | **Idempotency key** — required for all actions |
+| `comment` | string | — | **Idempotency key** — required for all actions, non-empty |
 | `chain` | string | — | Mangle chain (required on `add`): `prerouting`, `input`, `forward`, `output`, `postrouting` |
 | `srcAddress` | string | — | Source IP/CIDR to match |
 | `dstAddress` | string | — | Destination IP/CIDR to match |

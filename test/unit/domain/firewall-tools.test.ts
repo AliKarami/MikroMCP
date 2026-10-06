@@ -854,3 +854,39 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
     }
   });
 });
+
+describe("manage_firewall_rule - empty comment", () => {
+  // A `?comment=` lookup matches no rule on RouterOS (checked on 7.24.2), so an empty
+  // comment cannot serve as the idempotency key.
+  it("the real input schema rejects an empty comment", () => {
+    const result = manageFirewallRuleTool.inputSchema.safeParse({
+      routerId: "r",
+      action: "add",
+      chain: "forward",
+      ruleAction: "accept",
+      comment: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it.each(["add", "remove", "enable", "disable"])(
+    "%s rejects a comment that is empty after sanitizing, before any router call",
+    async (action) => {
+      const ctx = makeContext([]);
+      await expect(
+        manageFirewallRuleTool.handler(
+          {
+            routerId: "test-router",
+            action,
+            chain: "forward",
+            ruleAction: "accept",
+            comment: "\x01\n\x7f",
+          },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ code: "COMMENT_EMPTY" });
+      expect(ctx.routerClient.get).not.toHaveBeenCalled();
+      expect(ctx.routerClient.create).not.toHaveBeenCalled();
+    },
+  );
+});

@@ -230,9 +230,10 @@ const manageFirewallRuleInputSchema = z
       .describe("NAT target port or range (nat table only)"),
     comment: z
       .string()
+      .min(1)
       .max(255)
       .optional()
-      .describe("Comment to identify the rule (used as idempotency key)"),
+      .describe("Comment to identify the rule (used as idempotency key); omit for none"),
     disabled: z.boolean().default(false).describe("Whether the rule should be disabled"),
     placeBefore: z.string().optional().describe("Place the new rule before this rule ID"),
     dryRun: z
@@ -258,6 +259,20 @@ const manageFirewallRuleTool: ToolDefinition = {
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageFirewallRuleInputSchema.parse(params);
     const comment = sanitizeComment(parsed.comment);
+    if (comment === "") {
+      // RouterOS stores no empty comment and a `?comment=` lookup matches nothing,
+      // so an add would duplicate on every call and remove would never find the rule.
+      throw new MikroMCPError({
+        category: ErrorCategory.VALIDATION,
+        code: "COMMENT_EMPTY",
+        message: "comment is empty after removing control characters.",
+        details: { comment: parsed.comment },
+        recoverability: {
+          retryable: false,
+          suggestedAction: "Use a comment with printable characters, or omit it.",
+        },
+      });
+    }
 
     log.info(
       {

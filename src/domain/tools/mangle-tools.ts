@@ -105,7 +105,7 @@ const manageMangleRuleInputSchema = z
   .object({
     routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
-    comment: z.string().describe("Idempotency key — uniquely identifies this mangle rule"),
+    comment: z.string().min(1).describe("Idempotency key — uniquely identifies this mangle rule"),
     chain: z
       .string()
       .optional()
