@@ -139,6 +139,21 @@ describe("circuit breaker - failure filtering", () => {
     expect(cb.state).toBe("closed");
   });
 
+  it("does not count a REST session closed after 60 s as a failure", async () => {
+    // RouterOS answered; the command was too long, so the router is not unhealthy.
+    const cb = new CircuitBreaker("r1", { failureThreshold: 2, cooldownMs: 30000 });
+    const sessionClosed = new MikroMCPError({
+      category: ErrorCategory.ROUTER_TIMEOUT,
+      code: "REST_SESSION_CLOSED",
+      message: "RouterOS closed the REST session",
+      recoverability: { retryable: false, suggestedAction: "shorten the command" },
+    });
+    for (let i = 0; i < 2; i++) {
+      await expect(cb.execute(() => Promise.reject(sessionClosed))).rejects.toThrow();
+    }
+    expect(cb.state).toBe("closed");
+  });
+
   it("trips on ROUTER_UNREACHABLE errors", async () => {
     const cb = new CircuitBreaker("r1", { failureThreshold: 2, cooldownMs: 30000 });
     const unreachable = new MikroMCPError({

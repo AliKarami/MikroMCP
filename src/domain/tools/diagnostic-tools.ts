@@ -137,8 +137,11 @@ const tracerouteTool: ToolDefinition = {
   name: "traceroute",
   title: "Traceroute",
   description:
-    "Trace the network path from the router to a target address. Returns an ordered hop list with RTT per hop. Timeouts and partial results are valid responses.",
+    "Trace the network path from the router to a target address. Returns an ordered hop list with RTT per hop. Timeouts and partial results are valid responses. Not auto-retried.",
   inputSchema: tracerouteInputSchema,
+  // A run can take up to RouterOS's 60 s REST limit; a silent retry would multiply
+  // the wait, so opt out of auto-retry.
+  retryable: false,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -239,8 +242,11 @@ const torchTool: ToolDefinition = {
   name: "torch",
   title: "Torch",
   description:
-    "Capture a real-time traffic snapshot on a router interface. RouterOS runs the capture for `duration` seconds; the tool returns the flows of the final update with their TX/RX rates in bits per second and packets per second. readOnlyHint true — auto-retry enabled.",
+    "Capture a real-time traffic snapshot on a router interface. RouterOS runs the capture for `duration` seconds; the tool returns the flows of the final update with their TX/RX rates in bits per second and packets per second. Not auto-retried.",
   inputSchema: torchInputSchema,
+  // Each run captures for `duration` seconds; a silent retry would repeat the
+  // capture, so opt out of auto-retry.
+  retryable: false,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,

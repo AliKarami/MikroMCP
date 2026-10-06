@@ -144,6 +144,11 @@ describe("diagnostic tools", () => {
       expect(tracerouteTool.annotations.readOnlyHint).toBe(true);
       expect(tracerouteTool.annotations.destructiveHint).toBe(false);
     });
+
+    it("traceroute and torch opt out of auto-retry (each run can take up to a minute)", () => {
+      expect(tracerouteTool.retryable).toBe(false);
+      expect(torchTool.retryable).toBe(false);
+    });
   });
 
   describe("ping input schema", () => {
