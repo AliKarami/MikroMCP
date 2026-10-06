@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Fixed
+- `manage_firewall_rule` validated `toPorts` with a pattern only, so `99999`, `0`, and a descending range such as `9000-80` passed the schema and were sent to RouterOS as is. It now accepts a port 1–65535 or a range whose start is not above its end, and rejects anything else with a `VALIDATION` error before any router call.
+
 ## [1.12.0] - 2026-10-06
 
 This release is largely the work of [@akuzin87](https://github.com/akuzin87) (Alex). He privately reported the confirmation-gate gap fixed under Security, and contributed `bulk_read`, the REST-based `traceroute` and `torch`, three new list tools, NAT and connection-state matching in `manage_firewall_rule`, and the filter-encoding and SSH-login fixes. Each came with a clear write-up and live verification against real routers. Thank you, Alex.

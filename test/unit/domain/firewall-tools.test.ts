@@ -740,6 +740,22 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
     expect(() => schema.parse({ ...base, toPorts: "8000-8100" })).not.toThrow();
     expect(() => schema.parse({ ...base, toPorts: "https" })).toThrow();
   });
+
+  it.each([
+    ["1", true],
+    ["65535", true],
+    ["80-80", true],
+    ["8000-8100", true],
+    ["0", false],
+    ["65536", false],
+    ["99999", false],
+    ["9000-80", false],
+    ["0-80", false],
+    ["80-65536", false],
+  ])("toPorts %s is accepted: %s", (toPorts, valid) => {
+    const base = { routerId: "r", action: "add", chain: "dstnat", ruleAction: "dst-nat" };
+    expect(manageFirewallRuleTool.inputSchema.safeParse({ ...base, toPorts }).success).toBe(valid);
+  });
   it("treats a /32 host address as equal to the bare address", async () => {
     const existing = {
       ".id": "*C",

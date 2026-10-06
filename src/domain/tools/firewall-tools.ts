@@ -63,6 +63,12 @@ const TO_PORTS_ACTIONS: ReadonlySet<string> = new Set([
 
 const CONNECTION_STATE = "(established|related|new|invalid|untracked)";
 
+/** A port 1–65535, or a range `start-end` with start <= end. */
+function isPortOrRange(value: string): boolean {
+  const [start, end = start] = value.split("-").map(Number);
+  return start >= 1 && end <= 65535 && start <= end;
+}
+
 // ---------------------------------------------------------------------------
 // list_firewall_rules
 // ---------------------------------------------------------------------------
@@ -226,6 +232,7 @@ const manageFirewallRuleInputSchema = z
     toPorts: z
       .string()
       .regex(/^\d{1,5}(-\d{1,5})?$/)
+      .refine(isPortOrRange, "Must be a port 1-65535 or an ascending range such as 8000-8100")
       .optional()
       .describe("NAT target port or range (nat table only)"),
     comment: z
