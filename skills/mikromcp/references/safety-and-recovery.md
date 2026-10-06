@@ -45,7 +45,7 @@ Write tools take a config snapshot and write a journal entry before applying.
 | `PERMISSION_DENIED` | Identity lacks rights, or outside maintenance window | Use an allowed identity; wait for the window; check `details` |
 | `APPROVAL_REQUIRED` | Destructive op needs confirmation | Re-issue with the returned `confirmationToken` |
 | `ROUTER_UNREACHABLE` | Network/TLS failure to the router | Check host/port/TLS in `routers.yaml`; verify the router is up |
-| `ROUTER_AUTH_FAILED` | Bad credentials | Fix `ROUTER_<PREFIX>_USER`/`_PASS`; pooled client is evicted automatically |
+| `ROUTER_AUTH_FAILED` | Bad credentials | Fix `ROUTER_<PREFIX>_USER`/`_PASS`; pooled client is evicted automatically. Code `SSH_AUTH_FAILED`: only SSH-backed tools fail — check the `ssh` policy, `/user ssh-keys` vs `/ip ssh password-authentication`, `sshPrivateKeyPath`, then restart the server |
 | `ROUTER_TIMEOUT` | Router too slow to respond | Retry; check router load |
 | `ROUTER_ERROR` | RouterOS rejected the request | Read the message; verify the operation is valid for this ROS version |
 | `ROUTER_BUSY` / `CIRCUIT_OPEN` | Breaker open after failures | Wait for cooldown, then retry |
