@@ -28,6 +28,9 @@ const UNREACHABLE_CODES = new Set([
 // answer within the request timeout.
 const TIMEOUT_CODES = new Set(["UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]);
 
+// ssh2 sets this `level` on the error it emits when every auth method was refused.
+const SSH_AUTH_LEVEL = "client-authentication";
+
 /**
  * Default recoverability hints keyed by error category.
  */
@@ -145,6 +148,7 @@ function responseDetail(body: unknown): unknown {
  * Enrich an unknown thrown value into a structured MikroMCPError.
  *
  * - If the value is already a MikroMCPError it is returned unchanged.
+ * - SSH login rejections (ssh2 `level: "client-authentication"`) become ROUTER_AUTH_FAILED.
  * - HTTP-style errors (with a numeric `statusCode`) are mapped by status.
  * - Network errors (ECONNREFUSED, etc.) become ROUTER_UNREACHABLE.
  * - Everything else becomes INTERNAL.
@@ -177,6 +181,25 @@ export function enrichError(error: unknown, context?: EnrichContext): MikroMCPEr
       : typeof raw === "object" && raw !== null && typeof raw.message === "string"
         ? (raw.message as string)
         : String(error);
+
+  // --- SSH login rejected (ssh2 tags it with level "client-authentication") ---
+  // REST may still authenticate fine, so the hint names the SSH-specific causes.
+  if (typeof raw === "object" && raw !== null && raw.level === SSH_AUTH_LEVEL) {
+    return new MikroMCPError({
+      category: ErrorCategory.ROUTER_AUTH_FAILED,
+      code: "SSH_AUTH_FAILED",
+      message: `The router rejected the SSH login: ${rawMessage}`,
+      details: buildDetails({ transport: "ssh" }, context),
+      recoverability: {
+        retryable: false,
+        suggestedAction:
+          "Check that the user's group has the ssh policy, that a key in /user ssh-keys does not " +
+          "block password login (/ip ssh password-authentication), and that sshPrivateKeyPath and " +
+          "sshUsername in routers.yaml match the router. Restart the server after editing routers.yaml.",
+      },
+      cause: error,
+    });
+  }
 
   // --- HTTP-style errors (e.g. undici responses) ---
   if (typeof raw === "object" && raw !== null && typeof raw.statusCode === "number") {

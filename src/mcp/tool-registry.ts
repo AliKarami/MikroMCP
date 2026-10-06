@@ -22,16 +22,20 @@ export function registerAllTools(
   const deps: ToolExecutorDeps = { registry, pool, circuitBreakers, config, identityRegistry };
 
   for (const tool of allTools) {
-    const registrationSchema = tool.annotations.destructiveHint
-      ? (tool.inputSchema as z.ZodObject<z.ZodRawShape>).extend({
-          confirmationToken: z
-            .string()
-            .optional()
-            .describe(
-              "Token from a prior APPROVAL_REQUIRED response. Re-submit the identical call with this token to confirm the destructive action.",
-            ),
-        })
-      : tool.inputSchema;
+    const schema = tool.inputSchema as z.ZodObject<z.ZodRawShape>;
+    // Tools that declare their own confirmationToken (bulk_execute's fleet token,
+    // apply_plan) keep their more specific description.
+    const registrationSchema =
+      tool.annotations.destructiveHint && !("confirmationToken" in schema.shape)
+        ? schema.extend({
+            confirmationToken: z
+              .string()
+              .optional()
+              .describe(
+                "Token from a prior APPROVAL_REQUIRED response. Re-submit the identical call with this token to confirm the destructive action.",
+              ),
+          })
+        : tool.inputSchema;
 
     server.registerTool(
       tool.name,

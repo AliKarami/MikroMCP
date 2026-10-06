@@ -85,9 +85,47 @@ const mockWriteTool: ToolDefinition = {
   handler: vi.fn().mockResolvedValue({ content: "ok", structuredContent: { action: "created" } }),
 };
 
-const fleetTools = createFleetTools([mockReadTool, mockDestructiveTool, mockWriteTool]);
+const mockRunCommandTool: ToolDefinition = {
+  name: "run_command",
+  title: "Run Command",
+  description: "Run a CLI command",
+  inputSchema: z.object({ routerId: z.string() }).strict(),
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  handler: vi.fn(),
+};
+
+/** Read-only by annotation, yet bulk_read refuses them because they generate traffic. */
+const trafficTools: ToolDefinition[] = ["ping", "traceroute", "torch", "bandwidth_test"].map(
+  (name) => ({
+    name,
+    title: name,
+    description: "Traffic-generating diagnostic",
+    inputSchema: z.object({ routerId: z.string() }).strict(),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    handler: vi.fn(),
+  }),
+);
+
+const fleetTools = createFleetTools([
+  mockReadTool,
+  mockDestructiveTool,
+  mockWriteTool,
+  mockRunCommandTool,
+  ...trafficTools,
+]);
 const healthTool = fleetTools.find((t) => t.name === "check_router_health")!;
 const bulkTool = fleetTools.find((t) => t.name === "bulk_execute")!;
+const bulkReadTool = fleetTools.find((t) => t.name === "bulk_read")!;
 const listRoutersTool = fleetTools.find((t) => t.name === "list_routers")!;
 
 function makeRouterConfig(id = "test-router", tags: string[] = []): RouterConfig {
@@ -130,6 +168,16 @@ function makeContext(overrides: Partial<ToolContext> = {}): ToolContext {
   };
 }
 
+/** Two-step fleet confirmation: returns the token from the APPROVAL_REQUIRED first call. */
+async function fleetToken(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
+  try {
+    await bulkTool.handler(args, ctx);
+  } catch (err) {
+    return (err as MikroMCPError).details!.confirmationToken as string;
+  }
+  throw new Error("expected APPROVAL_REQUIRED");
+}
+
 function makeFleetContext(overrides: Partial<ToolContext> = {}): ToolContext {
   const mockRegistry = {
     getRouter: vi.fn().mockImplementation((id: string) => makeRouterConfig(id)),
@@ -154,14 +202,15 @@ function makeFleetContext(overrides: Partial<ToolContext> = {}): ToolContext {
 
 describe("fleet-tools", () => {
   describe("metadata", () => {
-    it("exports 3 tools", () => {
-      expect(fleetTools).toHaveLength(3);
+    it("exports 4 tools", () => {
+      expect(fleetTools).toHaveLength(4);
     });
 
     it("tool names are correct", () => {
       const names = fleetTools.map((t) => t.name);
       expect(names).toContain("check_router_health");
       expect(names).toContain("bulk_execute");
+      expect(names).toContain("bulk_read");
       expect(names).toContain("list_routers");
     });
 
@@ -170,9 +219,16 @@ describe("fleet-tools", () => {
       expect(healthTool.annotations.destructiveHint).toBe(false);
     });
 
-    it("bulk_execute has readOnlyHint: false", () => {
+    it("bulk_execute is a destructive write", () => {
       expect(bulkTool.annotations.readOnlyHint).toBe(false);
-      expect(bulkTool.annotations.destructiveHint).toBe(false);
+      expect(bulkTool.annotations.destructiveHint).toBe(true);
+    });
+
+    it("bulk_read is read-only, idempotent, and fleet-scoped", () => {
+      expect(bulkReadTool.annotations.readOnlyHint).toBe(true);
+      expect(bulkReadTool.annotations.destructiveHint).toBe(false);
+      expect(bulkReadTool.annotations.idempotentHint).toBe(true);
+      expect(bulkReadTool.skipRouterContext).toBe(true);
     });
 
     it("list_routers is read-only and fleet-scoped", () => {
@@ -385,16 +441,6 @@ describe("fleet-tools", () => {
       ).rejects.toMatchObject({
         category: ErrorCategory.VALIDATION,
         code: "BULK_SELF_REFERENCE",
-      });
-    });
-
-    it("throws CONFIGURATION when destructive tool is used and confirmationSecret is not configured", async () => {
-      const ctx = makeFleetContext();
-      await expect(
-        bulkTool.handler({ toolName: "reboot", routerIds: ["r1"], params: {} }, ctx),
-      ).rejects.toMatchObject({
-        category: ErrorCategory.CONFIGURATION,
-        code: "FLEET_CONFIRMATION_UNAVAILABLE",
       });
     });
 
@@ -733,10 +779,13 @@ describe("fleet-tools", () => {
 
     it("snapshots and journals each router for a write tool", async () => {
       const ctx = writeFleetContext();
-      await bulkTool.handler(
-        { toolName: "manage_route", routerIds: ["r1", "r2"], params: {}, concurrency: 5 },
-        ctx,
-      );
+      const args = {
+        toolName: "manage_route",
+        routerIds: ["r1", "r2"],
+        params: {},
+        concurrency: 5,
+      };
+      await bulkTool.handler({ ...args, confirmationToken: await fleetToken(args, ctx) }, ctx);
 
       expect(vi.mocked(takeSnapshot)).toHaveBeenCalledTimes(2);
       expect(vi.mocked(recordAttempt)).toHaveBeenCalledTimes(2);
@@ -747,10 +796,8 @@ describe("fleet-tools", () => {
     it("records a failure outcome when the write tool throws", async () => {
       vi.mocked(mockWriteTool.handler).mockRejectedValueOnce(new Error("boom"));
       const ctx = writeFleetContext();
-      await bulkTool.handler(
-        { toolName: "manage_route", routerIds: ["r1"], params: {}, concurrency: 5 },
-        ctx,
-      );
+      const args = { toolName: "manage_route", routerIds: ["r1"], params: {}, concurrency: 5 };
+      await bulkTool.handler({ ...args, confirmationToken: await fleetToken(args, ctx) }, ctx);
 
       expect(vi.mocked(recordOutcome)).toHaveBeenCalledWith(
         expect.objectContaining({ phase: "failure", outcome: "boom" }),
@@ -817,7 +864,7 @@ describe("fleet-tools", () => {
     });
   });
 
-  describe("handler — bulk_execute destructive confirmation", () => {
+  describe("handler — bulk_execute write confirmation", () => {
     function makeFleetContextWithSecret(secret: string | undefined): ToolContext {
       return makeFleetContext({
         appConfig: {
@@ -873,14 +920,294 @@ describe("fleet-tools", () => {
       expect(mockDestructiveTool.handler).toHaveBeenCalledTimes(2);
     });
 
-    it("returns FLEET_CONFIRMATION_UNAVAILABLE when confirmationSecret is not configured", async () => {
-      const ctx = makeFleetContextWithSecret(undefined);
-      await expect(
-        bulkTool.handler({ toolName: "reboot", routerIds: ["r1"], params: {} }, ctx),
-      ).rejects.toMatchObject({
-        category: ErrorCategory.CONFIGURATION,
-        code: "FLEET_CONFIRMATION_UNAVAILABLE",
+    it("still gates a fan-out when confirmationSecret is not configured", async () => {
+      vi.mocked(mockDestructiveTool.handler).mockResolvedValue({
+        content: "ok",
+        structuredContent: {},
       });
+      const ctx = makeFleetContextWithSecret(undefined);
+      const args = { toolName: "reboot", routerIds: ["r1"], params: {} };
+
+      await expect(bulkTool.handler(args, ctx)).rejects.toMatchObject({
+        category: ErrorCategory.APPROVAL_REQUIRED,
+        code: "FLEET_CONFIRMATION_REQUIRED",
+      });
+      const result = await bulkTool.handler(
+        { ...args, confirmationToken: await fleetToken(args, ctx) },
+        ctx,
+      );
+      expect(result.structuredContent).toMatchObject({ succeeded: 1, failed: 0 });
+    });
+
+    it("gates a non-destructive write tool", async () => {
+      vi.mocked(mockWriteTool.handler).mockClear();
+      const ctx = makeFleetContextWithSecret("fleet-secret");
+      await expect(
+        bulkTool.handler({ toolName: "manage_route", routerIds: ["r1", "r2"], params: {} }, ctx),
+      ).rejects.toMatchObject({
+        category: ErrorCategory.APPROVAL_REQUIRED,
+        code: "FLEET_CONFIRMATION_REQUIRED",
+      });
+      expect(mockWriteTool.handler).not.toHaveBeenCalled();
+    });
+
+    it("fans out a read-only tool without a token", async () => {
+      const ctx = makeFleetContextWithSecret("fleet-secret");
+      const result = await bulkTool.handler(
+        { toolName: "list_interfaces", routerIds: ["r1"], params: {} },
+        ctx,
+      );
+      expect(result.structuredContent).toMatchObject({ totalRouters: 1 });
+    });
+  });
+
+  describe("bulk_read input schema", () => {
+    it("rejects confirmationToken (strict schema, no confirmation flow)", () => {
+      expect(() =>
+        bulkReadTool.inputSchema.parse({
+          toolName: "list_interfaces",
+          routerIds: ["r1"],
+          params: {},
+          confirmationToken: "t",
+        }),
+      ).toThrow();
+    });
+
+    it("defaults concurrency to 5 and rejects values above 20", () => {
+      const parsed = bulkReadTool.inputSchema.parse({
+        toolName: "list_interfaces",
+        tags: ["edge"],
+        params: {},
+      }) as { concurrency: number };
+      expect(parsed.concurrency).toBe(5);
+      expect(() =>
+        bulkReadTool.inputSchema.parse({
+          toolName: "list_interfaces",
+          tags: ["edge"],
+          params: {},
+          concurrency: 21,
+        }),
+      ).toThrow();
+    });
+  });
+
+  describe("handler — bulk_read refusals", () => {
+    beforeEach(() => {
+      vi.mocked(mockWriteTool.handler).mockClear();
+      vi.mocked(mockRunCommandTool.handler).mockClear();
+      vi.mocked(mockDestructiveTool.handler).mockClear();
+      for (const t of trafficTools) vi.mocked(t.handler).mockClear();
+    });
+
+    it.each(["manage_route", "reboot", "run_command"])(
+      "refuses the write tool %s before touching any router",
+      async (toolName) => {
+        const ctx = makeFleetContext();
+        await expect(
+          bulkReadTool.handler({ toolName, routerIds: ["r1", "r2"], params: {} }, ctx),
+        ).rejects.toMatchObject({
+          category: ErrorCategory.VALIDATION,
+          code: "BULK_READ_TOOL_NOT_READ_ONLY",
+          recoverability: expect.objectContaining({ alternativeTools: ["bulk_execute"] }),
+        });
+        expect(ctx.routerRegistry!.getRouter).not.toHaveBeenCalled();
+        const inner = [mockWriteTool, mockDestructiveTool, mockRunCommandTool].find(
+          (t) => t.name === toolName,
+        )!;
+        expect(inner.handler).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["ping", "traceroute", "torch", "bandwidth_test"])(
+      "refuses the read-only but traffic-generating %s",
+      async (toolName) => {
+        const ctx = makeFleetContext();
+        await expect(
+          bulkReadTool.handler({ toolName, tags: ["edge"], params: {} }, ctx),
+        ).rejects.toMatchObject({
+          category: ErrorCategory.VALIDATION,
+          code: "BULK_READ_TOOL_NOT_READ_ONLY",
+          message: expect.stringMatching(/traffic/),
+        });
+        expect(trafficTools.find((t) => t.name === toolName)!.handler).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["bulk_read", "bulk_execute", "check_router_health"])(
+      "refuses the fleet tool %s as BULK_SELF_REFERENCE",
+      async (toolName) => {
+        const ctx = makeFleetContext();
+        await expect(
+          bulkReadTool.handler({ toolName, routerIds: ["r1"], params: {} }, ctx),
+        ).rejects.toMatchObject({
+          category: ErrorCategory.VALIDATION,
+          code: "BULK_SELF_REFERENCE",
+        });
+      },
+    );
+
+    it("returns TOOL_NOT_FOUND for an unknown tool", async () => {
+      const ctx = makeFleetContext();
+      await expect(
+        bulkReadTool.handler({ toolName: "no_such_tool", routerIds: ["r1"], params: {} }, ctx),
+      ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND, code: "TOOL_NOT_FOUND" });
+    });
+
+    it("requires exactly one of routerIds or tags", async () => {
+      const ctx = makeFleetContext();
+      await expect(
+        bulkReadTool.handler({ toolName: "list_interfaces", params: {} }, ctx),
+      ).rejects.toMatchObject({ code: "BULK_TARGET_REQUIRED" });
+      await expect(
+        bulkReadTool.handler(
+          { toolName: "list_interfaces", routerIds: ["r1"], tags: ["edge"], params: {} },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ code: "BULK_TARGET_REQUIRED" });
+    });
+  });
+
+  describe("handler — bulk_read fan-out", () => {
+    beforeEach(() => {
+      vi.mocked(checkAuthz).mockReset();
+      vi.mocked(auditLog).mockClear();
+      vi.mocked(takeSnapshot).mockClear();
+      vi.mocked(recordAttempt).mockClear();
+      vi.mocked(mockReadTool.handler).mockReset();
+      vi.mocked(mockReadTool.handler).mockResolvedValue({
+        content: "ok",
+        structuredContent: { interfaces: [] },
+      });
+    });
+
+    it("reads from every router in routerIds, injecting routerId into params", async () => {
+      const ctx = makeFleetContext();
+      const result = await bulkReadTool.handler(
+        { toolName: "list_interfaces", routerIds: ["r1", "r2", "r3"], params: { type: "ether" } },
+        ctx,
+      );
+
+      expect(result.structuredContent).toMatchObject({
+        toolName: "list_interfaces",
+        totalRouters: 3,
+        succeeded: 3,
+        failed: 0,
+      });
+      const calls = vi.mocked(mockReadTool.handler).mock.calls.map((c) => c[0]);
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          { type: "ether", routerId: "r1" },
+          { type: "ether", routerId: "r2" },
+          { type: "ether", routerId: "r3" },
+        ]),
+      );
+    });
+
+    it("targets only routers carrying ALL requested tags", async () => {
+      const ctx = makeFleetContext({
+        routerRegistry: {
+          getRouter: vi.fn(),
+          listRouters: vi
+            .fn()
+            .mockReturnValue([
+              makeRouterConfig("r1", ["home", "cap"]),
+              makeRouterConfig("r2", ["home"]),
+              makeRouterConfig("r3", ["cap"]),
+            ]),
+          hasRouter: vi.fn(),
+        } as unknown as ToolContext["routerRegistry"],
+      });
+
+      const home = await bulkReadTool.handler(
+        { toolName: "list_interfaces", tags: ["home"], params: {} },
+        ctx,
+      );
+      expect(home.structuredContent).toMatchObject({ totalRouters: 2, succeeded: 2 });
+
+      const homeCap = await bulkReadTool.handler(
+        { toolName: "list_interfaces", tags: ["home", "cap"], params: {} },
+        ctx,
+      );
+      const results = (homeCap.structuredContent as { results: Array<{ routerId: string }> })
+        .results;
+      expect(results.map((r) => r.routerId)).toEqual(["r1"]);
+    });
+
+    it("keeps reading the other routers when one fails or is unknown", async () => {
+      vi.mocked(mockReadTool.handler)
+        .mockResolvedValueOnce({ content: "ok", structuredContent: {} })
+        .mockRejectedValueOnce(new Error("connect EHOSTUNREACH"))
+        .mockResolvedValueOnce({ content: "ok", structuredContent: {} });
+      const ctx = makeFleetContext({
+        routerRegistry: {
+          getRouter: vi.fn().mockImplementation((id: string) => {
+            if (id === "ghost") throw new Error("not found");
+            return makeRouterConfig(id);
+          }),
+          listRouters: vi.fn(),
+          hasRouter: vi.fn(),
+        } as unknown as ToolContext["routerRegistry"],
+      });
+
+      const result = await bulkReadTool.handler(
+        { toolName: "list_interfaces", routerIds: ["r1", "r2", "ghost", "r3"], params: {} },
+        ctx,
+      );
+
+      const sc = result.structuredContent as {
+        totalRouters: number;
+        succeeded: number;
+        failed: number;
+        results: Array<{ routerId: string; status: string; error?: string }>;
+      };
+      expect(sc).toMatchObject({ totalRouters: 4, succeeded: 2, failed: 2 });
+      expect(sc.results.find((r) => r.routerId === "ghost")).toMatchObject({ status: "error" });
+      expect(sc.results.find((r) => r.routerId === "r2")).toMatchObject({
+        status: "error",
+        error: "connect EHOSTUNREACH",
+      });
+    });
+
+    it("reports a per-router authz denial without failing the call", async () => {
+      vi.mocked(checkAuthz).mockImplementation((_identity, _tool, routerId) => {
+        if (routerId === "r2") {
+          throw new MikroMCPError({
+            category: ErrorCategory.PERMISSION_DENIED,
+            code: "ROUTER_NOT_ALLOWED",
+            message: "not allowed",
+            recoverability: { retryable: false, suggestedAction: "n/a" },
+          });
+        }
+      });
+      const ctx = makeFleetContext();
+      const result = await bulkReadTool.handler(
+        { toolName: "list_interfaces", routerIds: ["r1", "r2"], params: {} },
+        ctx,
+      );
+
+      expect(result.structuredContent).toMatchObject({ succeeded: 1, failed: 1 });
+      expect(vi.mocked(checkAuthz)).toHaveBeenCalledWith(ctx.identity, "list_interfaces", "r2");
+    });
+
+    it("takes no snapshot, writes no journal entry, and emits no audit events", async () => {
+      const ctx = makeFleetContext({
+        appConfig: {
+          ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
+          snapshotDir: "/tmp/snaps",
+          journalPath: "/tmp/journal.ndjson",
+          auditLogPath: "/tmp/audit.ndjson",
+          circuitBreaker: { failureThreshold: 5, cooldownMs: 30_000 },
+          retry: { maxRetries: 0, baseDelayMs: 0, maxDelayMs: 0 },
+        } as unknown as AppConfig,
+      });
+      await bulkReadTool.handler(
+        { toolName: "list_interfaces", routerIds: ["r1", "r2"], params: {} },
+        ctx,
+      );
+
+      expect(vi.mocked(takeSnapshot)).not.toHaveBeenCalled();
+      expect(vi.mocked(recordAttempt)).not.toHaveBeenCalled();
+      expect(vi.mocked(auditLog)).not.toHaveBeenCalled();
     });
   });
 });

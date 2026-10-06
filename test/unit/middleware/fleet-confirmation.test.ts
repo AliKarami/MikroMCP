@@ -32,6 +32,23 @@ describe("checkFleetConfirmation", () => {
     expect(() => checkFleetConfirmation({ ...base, submittedToken: token }, secret)).not.toThrow();
   });
 
+  it("falls back to a per-process secret when none is configured", () => {
+    let token = "";
+    try {
+      checkFleetConfirmation({ ...base, submittedToken: undefined }, undefined);
+    } catch (err) {
+      expect((err as MikroMCPError).category).toBe(ErrorCategory.APPROVAL_REQUIRED);
+      token = (err as MikroMCPError).details!.confirmationToken as string;
+    }
+    expect(token).toBeTruthy();
+    expect(() =>
+      checkFleetConfirmation({ ...base, submittedToken: token }, "a-configured-secret"),
+    ).toThrow();
+    expect(() =>
+      checkFleetConfirmation({ ...base, submittedToken: token }, undefined),
+    ).not.toThrow();
+  });
+
   it("rejects a token when the router set differs", () => {
     let token = "";
     try {

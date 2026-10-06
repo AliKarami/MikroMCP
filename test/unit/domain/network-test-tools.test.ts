@@ -66,9 +66,9 @@ describe("networkTestTools", () => {
       expect(fetchUrlTool.annotations.readOnlyHint).toBe(false);
       expect(listConnectionsTool.annotations.readOnlyHint).toBe(true);
     });
-    it("none are destructive", () => {
+    it("only fetch_url is destructive (outputFile overwrites router files)", () => {
       expect(bandwidthTestTool.annotations.destructiveHint).toBe(false);
-      expect(fetchUrlTool.annotations.destructiveHint).toBe(false);
+      expect(fetchUrlTool.annotations.destructiveHint).toBe(true);
       expect(listConnectionsTool.annotations.destructiveHint).toBe(false);
     });
     it("bandwidth_test and fetch_url are openWorld; bandwidth_test opts out of retry", () => {

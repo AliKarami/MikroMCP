@@ -6,9 +6,10 @@
 2. **Dry-run** the `manage_*` tool with `dryRun: true`. The result's
    `structuredContent.action` is `dry_run` and includes a `diff`.
 3. **Confirm if required** (destructive tools): the first real call returns an
-   `APPROVAL_REQUIRED` error carrying a `confirmationToken`. Re-issue the same
-   call with that `confirmationToken`. Tokens are HMAC-signed and scoped to the
-   tool+router+args; `readonly` and `operator` identities need them whenever `MIKROMCP_CONFIRMATION_SECRET` is set, `admin`/`superadmin` skip per-router confirmation, and destructive `bulk_execute` fan-outs always need a fleet token.
+   `APPROVAL_REQUIRED` error carrying a `confirmationToken`. Tell the user what
+   the call will change and on which router(s), then re-issue the same call with
+   that `confirmationToken` once they agree — the token is not their approval. Tokens are HMAC-signed and scoped to the
+   tool+router+args; `readonly` and `operator` identities need them whenever `MIKROMCP_CONFIRMATION_SECRET` is set, `admin`/`superadmin` skip per-router confirmation, and `bulk_execute` fan-outs of any write tool always need a fleet token.
 4. **Apply** and read the `action`: `created`, `updated`, or `removed`.
 
 ## Idempotency outcomes (all are SUCCESS unless noted)
@@ -43,9 +44,9 @@ Write tools take a config snapshot and write a journal entry before applying.
 | `NOT_FOUND` | Target resource/router absent | Verify with the matching `list_*`; check the id/name |
 | `CONFLICT` | Exists with different config | Remove-then-recreate, or adjust the request (see above) |
 | `PERMISSION_DENIED` | Identity lacks rights, or outside maintenance window | Use an allowed identity; wait for the window; check `details` |
-| `APPROVAL_REQUIRED` | Destructive op needs confirmation | Re-issue with the returned `confirmationToken` |
+| `APPROVAL_REQUIRED` | Destructive op or fleet write needs confirmation | Show the user the change, then re-issue with the returned `confirmationToken` |
 | `ROUTER_UNREACHABLE` | Network/TLS failure to the router | Check host/port/TLS in `routers.yaml`; verify the router is up |
-| `ROUTER_AUTH_FAILED` | Bad credentials | Fix `ROUTER_<PREFIX>_USER`/`_PASS`; pooled client is evicted automatically |
+| `ROUTER_AUTH_FAILED` | Bad credentials | Fix `ROUTER_<PREFIX>_USER`/`_PASS`; pooled client is evicted automatically. Code `SSH_AUTH_FAILED`: only SSH-backed tools fail — check the `ssh` policy, `/user ssh-keys` vs `/ip ssh password-authentication`, `sshPrivateKeyPath`, then restart the server |
 | `ROUTER_TIMEOUT` | Router too slow to respond | Retry; check router load |
 | `ROUTER_ERROR` | RouterOS rejected the request | Read the message; verify the operation is valid for this ROS version |
 | `ROUTER_BUSY` / `CIRCUIT_OPEN` | Breaker open after failures | Wait for cooldown, then retry |

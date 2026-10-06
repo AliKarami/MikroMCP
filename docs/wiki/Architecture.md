@@ -16,7 +16,7 @@ flowchart LR
     end
 
     subgraph Core["MikroMCP server"]
-        Registry["Tool registry\n122 typed tools"]
+        Registry["Tool registry\n123 typed tools"]
         Schemas["Zod schemas\nstrict validation"]
         Auth["Identity, RBAC\nconfirmation gate"]
         Safety["Retry, circuit breaker\naudit, snapshots, journal"]
@@ -121,7 +121,7 @@ flowchart TD
 |---|---|---|
 | Entry point | `src/main.ts` | Loads config, selects transport, starts server |
 | Tool registry | `src/mcp/tool-registry.ts` | Registers tools; injects circuit breaker, retry, correlation ID, credentials |
-| All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**122 typed tools**) |
+| All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**123 typed tools**) |
 | REST client | `src/adapter/rest-client.ts` | `get`, `getOne`, `create`, `update`, `remove`, `execute` over HTTPS |
 | SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping` and `run_command`; optionally uses a separate SSH username and local private key |
 | SFTP adapter | `src/adapter/sftp-client.ts` | Preferred encrypted transport for `upload_file`; shares the router's SSH username, key, port, and host-key fingerprint settings |
@@ -150,7 +150,7 @@ HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) o
 - **Read tools** carry automatic exponential-backoff retry (up to 3 attempts). The circuit breaker does not trip on read failures.
 - **Write tools** are idempotent — each checks existing state before acting and returns `already_exists` / `no_change` when nothing needs to be done.
 - **All write tools** support `dryRun: true` to preview the planned change without touching the router.
-- **Destructive tools** (`reboot`, `manage_user`, and others flagged `destructiveHint: true`) require a short-lived HMAC confirmation token from `readonly` and `operator` identities whenever `MIKROMCP_CONFIRMATION_SECRET` is set; `admin` and `superadmin` skip that per-router gate. Fanning a destructive tool out with `bulk_execute` requires the secret and a fleet token from every role.
+- **Destructive tools** (`reboot`, `manage_user`, and others flagged `destructiveHint: true`) require a short-lived HMAC confirmation token from `readonly` and `operator` identities whenever `MIKROMCP_CONFIRMATION_SECRET` is set; `admin` and `superadmin` skip that per-router gate. Every write tool except the preview-only `plan_changes` is destructive. Fanning any write tool out with `bulk_execute` requires a fleet token from every role.
 - **Snapshots** are taken of affected RouterOS paths before `apply_plan` runs a write sequence, enabling `rollback_change` to restore previous state.
 - **Audit log** records every write and destructive call with identity, tool name, router, parameters (credentials redacted), and outcome.
 - **SSH private keys** remain local and are never returned by router discovery or written to logs; when a key is configured, the REST password is not offered to SSH or SFTP.

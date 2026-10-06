@@ -28,4 +28,20 @@ describe("Available-Tools.md stays in lockstep with allTools", () => {
     const unknown = [...documented].filter((n) => !real.has(n)).sort();
     expect(unknown, `unknown tools in Available-Tools.md: ${unknown.join(", ")}`).toEqual([]);
   });
+
+  it("tags each tool Read, Write, and Destructive as its annotations say", () => {
+    const header = /^#{2,4}\s+`([a-z0-9_]+)` — (.+)$/gm;
+    const mismatches: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = header.exec(markdown)) !== null) {
+      const tool = allTools.find((t) => t.name === m![1]);
+      if (!tool) continue;
+      const tags = m[2];
+      const { readOnlyHint, destructiveHint } = tool.annotations;
+      if (/\bRead\b/.test(tags) !== readOnlyHint) mismatches.push(`${m[1]}: Read`);
+      if (/\bWrite\b/.test(tags) !== !readOnlyHint) mismatches.push(`${m[1]}: Write`);
+      if (/\bDestructive\b/.test(tags) !== destructiveHint) mismatches.push(`${m[1]}: Destructive`);
+    }
+    expect(mismatches, `Available-Tools.md tags out of date: ${mismatches.join(", ")}`).toEqual([]);
+  });
 });

@@ -52,8 +52,8 @@ describe("pppTools", () => {
     it("list_ppp_profiles is readOnly", () => expect(listTool.annotations.readOnlyHint).toBe(true));
     it("manage_ppp_profile is not readOnly", () =>
       expect(manageTool.annotations.readOnlyHint).toBe(false));
-    it("manage_ppp_profile is not destructive", () =>
-      expect(manageTool.annotations.destructiveHint).toBe(false));
+    it("manage_ppp_profile is destructive", () =>
+      expect(manageTool.annotations.destructiveHint).toBe(true));
   });
 
   describe("list_ppp_profiles input schema", () => {

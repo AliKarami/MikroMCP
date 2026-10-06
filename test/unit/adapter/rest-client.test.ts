@@ -58,6 +58,16 @@ describe("RouterOSRestClient.get", () => {
     expect(requestMock.mock.calls[0][1]).toMatchObject({ method: "GET" });
   });
 
+  it("percent-encodes spaces in filter values instead of using +", async () => {
+    // Regression: RouterOS does not decode `+` as a space, so a comment-keyed
+    // lookup like comment="DNS -> AGH:53" matched nothing and broke idempotency.
+    requestMock.mockResolvedValue(jsonResponse([]));
+    await makeClient().get("ip/firewall/nat", { filter: { comment: "DNS -> AGH:53" } });
+    expect(requestMock.mock.calls[0][0]).toBe(
+      "http://192.0.2.1:80/rest/ip/firewall/nat?comment=DNS%20-%3E%20AGH%3A53",
+    );
+  });
+
   it("POSTs proplist queries to the /print command endpoint", async () => {
     // Regression: RouterOS rejects a POST to the bare collection path with
     // HTTP 400 — .proplist/.query bodies must target <path>/print.

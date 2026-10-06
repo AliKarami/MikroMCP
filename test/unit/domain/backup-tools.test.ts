@@ -42,8 +42,10 @@ describe("backupTools", () => {
     });
     it("create_backup is not readOnly", () =>
       expect(createBackupTool.annotations.readOnlyHint).toBe(false));
-    it("create_backup is not destructive", () =>
-      expect(createBackupTool.annotations.destructiveHint).toBe(false));
+    it("create_backup is destructive (overwrites a same-named backup)", () =>
+      expect(createBackupTool.annotations.destructiveHint).toBe(true));
+    it("export_config is destructive (overwrites a same-named file)", () =>
+      expect(exportConfigTool.annotations.destructiveHint).toBe(true));
     it("export_config is not read-only (writes a file with `file` arg)", () =>
       expect(exportConfigTool.annotations.readOnlyHint).toBe(false));
   });
