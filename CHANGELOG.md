@@ -10,6 +10,10 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-10-14
+
+This patch comes from [@SamMHD](https://github.com/SamMHD) (Saman), who found that `mikromcp doctor` failed on every SwOS switch. Thank you, Saman.
+
 ### Fixed
 - `mikromcp doctor` checked every registry entry as a RouterOS router, so a SwOS switch (`deviceType: "swos"`) always failed: the REST probe got the web UI's HTTP 303 redirect, and SSH and FTP were reported unreachable. Doctor now reads `sys.b` from a SwOS switch with the same `.b` API client the `swos_*` tools use. It reports the identity, model, firmware and latency, and skips the REST, SSH and FTP checks. A 401 is reported as an authentication failure, separately from an unreachable switch. RouterOS checks are unchanged. Closes #108.
 
