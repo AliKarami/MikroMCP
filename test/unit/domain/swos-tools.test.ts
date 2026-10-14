@@ -599,6 +599,43 @@ describe("swosTools", () => {
     });
   });
 
+  describe("the SNMP community never leaves the server", () => {
+    const snmp = "{en:0x01,com:'7365637265742d636f6d6d756e697479',ci:'',loc:''}";
+
+    it("is redacted in get_swos_endpoint, content and structured content alike", async () => {
+      const result = await getTool.handler(
+        { routerId: "switch-01", endpoint: "snmp.b" },
+        makeContext(makeSwosClient({ "snmp.b": snmp }, FULL_FIXTURES)),
+      );
+      expect(result.content).not.toContain("secret-community");
+      expect(result.content).toContain("<redacted>");
+      const data = (result.structuredContent as { data: Record<string, unknown> }).data;
+      expect(data.community).toBe("<redacted>");
+      expect(data.enabled).toBe(true);
+    });
+
+    it("is redacted in write_swos_blob's changes and blob preview", async () => {
+      const swos = makeSwosClient({ "snmp.b": snmp }, FULL_FIXTURES);
+      const result = await writeTool.handler(
+        { routerId: "switch-01", endpoint: "snmp.b", fields: { community: "new-community" } },
+        makeContext(swos),
+      );
+      const text = JSON.stringify(result);
+      expect(text).not.toContain("secret-community");
+      expect(text).not.toContain("new-community");
+      expect(text).not.toContain(Buffer.from("new-community").toString("hex"));
+      const sc = result.structuredContent as { action: string; changes: Record<string, unknown> };
+      expect(sc.action).toBe("dry_run");
+      expect(sc.changes.community).toEqual({ from: "<redacted>", to: "<redacted>" });
+      // The same value again is still recognised as no change.
+      const same = await writeTool.handler(
+        { routerId: "switch-01", endpoint: "snmp.b", fields: { community: "secret-community" } },
+        makeContext(swos),
+      );
+      expect((same.structuredContent as { action: string }).action).toBe("no_change");
+    });
+  });
+
   describe("write_swos_blob on full SwOS", () => {
     const params = (endpoint: string, fields: Record<string, unknown>) => ({
       routerId: "switch-01",

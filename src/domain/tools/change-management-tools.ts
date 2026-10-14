@@ -11,6 +11,9 @@ import type { StoredSnapshot } from "../snapshot/snapshot-engine.js";
 import { computeRestorePlan, applyRestorePlan } from "../snapshot/diff-engine.js";
 import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 import type { RouterOSRecord } from "../../types.js";
+import type { SwosClient } from "../../adapter/swos-client.js";
+import { parseWireBlob, presentableBlob } from "../../adapter/swos-protocol.js";
+import { unionVlanBlob } from "../swos/switch-config.js";
 
 const log = createLogger("change-management");
 
@@ -56,11 +59,51 @@ const rollbackChangeInputSchema = z
   .strict();
 
 /**
+ * The writes that restore SwOS snapshots without stranding a port. When the
+ * VLAN table and per-port settings are restored together, the table first
+ * grows to hold both the current and the old VLANs, the per-port settings
+ * follow, and only then does the old table replace it; sys.b goes last.
+ */
+export async function swosRestoreSequence(
+  client: SwosClient,
+  snapshots: { endpoint: string; blob: string }[],
+): Promise<{ endpoint: string; blob: string; step?: string }[]> {
+  const rank = (ep: string) => ["fwd.b", "link.b", "vlan.b"].indexOf(ep);
+  const perPort = snapshots.filter((s) => rank(s.endpoint) >= 0 && s.endpoint !== "vlan.b");
+  const vlan = snapshots.find((s) => s.endpoint === "vlan.b");
+  const sys = snapshots.filter((s) => s.endpoint === "sys.b");
+  const rest = snapshots.filter((s) => rank(s.endpoint) < 0 && s.endpoint !== "sys.b");
+
+  const sequence: { endpoint: string; blob: string; step?: string }[] = [];
+  if (vlan && perPort.length > 0) {
+    const currentRows = parseWireBlob(await client.getRaw("vlan.b"));
+    const targetRows = parseWireBlob(vlan.blob);
+    // The union keys rows by `vid`, a full-SwOS key; SwOS Lite's rows are not
+    // understood well enough to merge, so there the old table is written as is.
+    if (rowsHaveVid(currentRows) && rowsHaveVid(targetRows)) {
+      const union = unionVlanBlob(currentRows, targetRows);
+      sequence.push({ endpoint: "vlan.b", blob: union, step: "both tables" });
+    }
+  }
+  sequence.push(...perPort.sort((a, b) => rank(a.endpoint) - rank(b.endpoint)));
+  if (vlan) sequence.push(vlan);
+  sequence.push(...rest, ...sys);
+  return sequence;
+}
+
+function rowsHaveVid(rows: unknown): boolean {
+  return (
+    Array.isArray(rows) &&
+    rows.every((row) => row && typeof row === "object" && "vid" in (row as object))
+  );
+}
+
+/**
  * Undo a SwOS write by re-POSTing the exact blob the device sent before it.
  * There is no diff step: the firmware only accepts whole-blob writes, so the
  * verbatim capture *is* the restore plan.
  */
-async function restoreSwosBlobs(
+export async function restoreSwosBlobs(
   snapshots: StoredSnapshot[],
   journalId: string,
   dryRun: boolean,
@@ -79,25 +122,61 @@ async function restoreSwosBlobs(
     });
   }
 
-  const targets = snapshots.map((s) => ({ endpoint: s.path, blob: s.blob! }));
+  const snapshotted = snapshots.map((s) => ({ endpoint: s.path, blob: s.blob! }));
+  const targets = await swosRestoreSequence(client, snapshotted);
+  const shown = targets.map((t) => ({ ...t, blob: presentableBlob(t.endpoint, t.blob) }));
 
   if (dryRun) {
     return {
       content:
         `Rollback dry run for journal entry "${journalId}": would restore ` +
-        `${targets.length} SwOS endpoint(s).\n` +
-        targets.map((t) => `  ${t.endpoint}:\n${t.blob}`).join("\n"),
-      structuredContent: { action: "dry_run", journalId, targets },
+        `${snapshotted.length} SwOS endpoint(s) in ${targets.length} write(s).\n` +
+        shown.map((t) => `  ${t.endpoint}${t.step ? ` (${t.step})` : ""}:\n${t.blob}`).join("\n"),
+      structuredContent: { action: "dry_run", journalId, targets: shown },
     };
   }
 
-  for (const target of targets) {
-    await client.postRaw(target.endpoint, target.blob);
+  // A lost reply partway through leaves the switch between the two states;
+  // report every step so the operator knows what still has to be restored.
+  const written: string[] = [];
+  const labelOf = (t: { endpoint: string; step?: string }) =>
+    t.step ? `${t.endpoint} (${t.step})` : t.endpoint;
+  for (const [index, target] of targets.entries()) {
+    try {
+      await client.postRaw(target.endpoint, target.blob);
+      written.push(labelOf(target));
+    } catch (err) {
+      const cause = err instanceof MikroMCPError ? err : undefined;
+      const maybe = cause?.category === ErrorCategory.ROUTER_TIMEOUT;
+      const pending = targets.slice(index + 1).map(labelOf);
+      throw new MikroMCPError({
+        category: cause?.category ?? ErrorCategory.INTERNAL,
+        code: "SWOS_ROLLBACK_INCOMPLETE",
+        message:
+          `Rolling back journal entry "${journalId}" failed at ${labelOf(target)} after ` +
+          `${written.length} write(s) (${written.join(", ") || "none"})` +
+          `${maybe ? "; that write may still have been applied" : ""}; still to restore: ${pending.join(", ") || "none"}: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+        details: {
+          journalId,
+          written,
+          failedAt: labelOf(target),
+          pending,
+          ...(maybe ? { possiblyWritten: labelOf(target) } : {}),
+          ...(cause ? { cause: cause.code } : {}),
+        },
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "Check the switch with get_swos_config, then run rollback_change again once it answers; it restores the snapshots from the start.",
+        },
+      });
+    }
   }
 
   return {
-    content: `Rolled back journal entry "${journalId}": restored ${targets.map((t) => t.endpoint).join(", ")}.`,
-    structuredContent: { action: "rolled_back", journalId, targets },
+    content: `Rolled back journal entry "${journalId}": restored ${snapshotted.map((t) => t.endpoint).join(", ")}.`,
+    structuredContent: { action: "rolled_back", journalId, targets: shown },
   };
 }
 

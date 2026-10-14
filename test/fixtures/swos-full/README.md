@@ -13,11 +13,11 @@ Replace them with sanitized real captures (same rules as
 `test/fixtures/swos/README.md`) once the switch is on hand, and add the model
 to `VERIFIED_FIRMWARE` in `src/adapter/swos-protocol.ts` only then.
 
-| File | Contents |
-|---|---|
-| `sys.b` | identity `MikroTik`, static/fallback IP 192.168.88.1, no management restriction, IVL/IGMP off |
-| `link.b` | 18 ports enabled, ports 1 and 17 linked, SFP+ cages configured for 10G |
-| `fwd.b` | factory forwarding (no isolation), VLAN mode optional, default VLAN 1 everywhere |
-| `lacp.b` | every port passive LACP, no static group, no partner |
-| `snmp.b` | SNMP enabled, community `public` |
-| `vlan.b` | empty VLAN table |
+| File     | Contents                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------- |
+| `sys.b`  | identity `MikroTik`, static/fallback IP 192.168.88.1, no management restriction, IVL/IGMP off |
+| `link.b` | 18 ports enabled, ports 1 and 17 linked, SFP+ cages configured for 10G                        |
+| `fwd.b`  | factory forwarding (no isolation), VLAN mode optional, default VLAN 1 everywhere              |
+| `lacp.b` | every port passive LACP, no static group, no partner                                          |
+| `snmp.b` | SNMP enabled, community `public`                                                              |
+| `vlan.b` | empty VLAN table                                                                              |

@@ -34,6 +34,18 @@ export interface AppConfig {
   retention: {
     snapshotMaxAgeDays: number;
   };
+  /**
+   * Values a SwOS switch config may reference as `${NAME}`, read from
+   * `MIKROMCP_SECRET_<NAME>`. Only this prefix is exposed, so a config can never
+   * pull another variable (a router password) into a switch setting.
+   */
+  configSecrets: Record<string, string>;
+  /**
+   * New device passwords for `set_swos_password`, read from
+   * `MIKROMCP_PASSWORD_<NAME>`. A separate namespace: a switch config's `${NAME}`
+   * can never resolve to one of these, so no tool output can echo a password.
+   */
+  passwordSecrets: Record<string, string>;
 }
 
 import { join } from "node:path";
@@ -110,5 +122,28 @@ export function loadAppConfig(): AppConfig {
     retention: {
       snapshotMaxAgeDays: intEnv("MIKROMCP_SNAPSHOT_RETENTION_DAYS", 30),
     },
+    configSecrets: configSecretsFrom(env),
+    passwordSecrets: passwordSecretsFrom(env),
   };
+}
+
+const SECRET_PREFIX = "MIKROMCP_SECRET_";
+const PASSWORD_PREFIX = "MIKROMCP_PASSWORD_";
+
+function withPrefix(env: NodeJS.ProcessEnv, prefix: string): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env)
+      .filter(([name, value]) => name.startsWith(prefix) && value !== undefined)
+      .map(([name, value]) => [name.slice(prefix.length), value as string]),
+  );
+}
+
+/** `MIKROMCP_SECRET_SNMP_COMMUNITY=x` -> `{ SNMP_COMMUNITY: "x" }`. */
+export function configSecretsFrom(env: NodeJS.ProcessEnv): Record<string, string> {
+  return withPrefix(env, SECRET_PREFIX);
+}
+
+/** `MIKROMCP_PASSWORD_SWITCH_CORE=x` -> `{ SWITCH_CORE: "x" }`. */
+export function passwordSecretsFrom(env: NodeJS.ProcessEnv): Record<string, string> {
+  return withPrefix(env, PASSWORD_PREFIX);
 }

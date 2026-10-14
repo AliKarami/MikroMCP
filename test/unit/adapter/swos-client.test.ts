@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SwosClient } from "../../../src/adapter/swos-client.js";
 import { HttpError } from "../../../src/adapter/rest-client.js";
-import { parseBlob } from "../../../src/adapter/swos-protocol.js";
+import { encodePasswordChange, parseBlob } from "../../../src/adapter/swos-protocol.js";
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 const REALM = "SwOS";
@@ -36,15 +36,28 @@ function validDigest(authHeader: string, method: string, password: string): bool
 
 interface MockState {
   store: Map<string, string>;
+  binary: Map<string, Buffer>;
+  uploads: { path: string; contentType: string; body: Buffer }[];
   requests: { path: string; method: string; authOk: boolean }[];
+  password: string;
+  nextPassword?: string;
+  refusePassword?: boolean;
+  /** Apply the change but never answer, as SwOS Lite does with POSTed blobs. */
+  hangPassword?: boolean;
 }
 
 function startMock(): { server: Server; state: MockState; url: () => string } {
-  const state: MockState = { store: new Map(), requests: [] };
+  const state: MockState = {
+    store: new Map(),
+    binary: new Map(),
+    uploads: [],
+    requests: [],
+    password: PASS,
+  };
   const server = createServer((req, res) => {
     const path = (req.url ?? "/").replace(/^\//, "").split("?")[0];
     const auth = req.headers.authorization ?? "";
-    const authOk = validDigest(auth, req.method ?? "GET", PASS);
+    const authOk = validDigest(auth, req.method ?? "GET", state.password);
     state.requests.push({ path, method: req.method ?? "GET", authOk });
 
     if (!authOk) {
@@ -52,6 +65,47 @@ function startMock(): { server: Server; state: MockState; url: () => string } {
         "WWW-Authenticate": `Digest realm="${REALM}", qop="auth", nonce="deadbeef", algorithm=MD5`,
       });
       res.end();
+      return;
+    }
+
+    if (req.method === "POST" && path === "!pwd.b") {
+      let raw = "";
+      req.on("data", (chunk) => (raw += chunk));
+      req.on("end", () => {
+        state.store.set(path, raw);
+        if (state.hangPassword) {
+          if (state.nextPassword !== undefined) state.password = state.nextPassword;
+          return; // no reply
+        }
+        if (state.refusePassword) {
+          res.writeHead(405);
+        } else {
+          if (state.nextPassword !== undefined) state.password = state.nextPassword;
+          res.writeHead(200);
+        }
+        res.end();
+      });
+      return;
+    }
+
+    if (req.method === "GET" && state.binary.has(path)) {
+      res.writeHead(200, { "Content-Type": "application/octet-stream" });
+      res.end(state.binary.get(path));
+      return;
+    }
+
+    if (req.method === "POST" && (req.headers["content-type"] ?? "").startsWith("multipart/")) {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        state.uploads.push({
+          path,
+          contentType: req.headers["content-type"] ?? "",
+          body: Buffer.concat(chunks),
+        });
+        res.writeHead(200);
+        res.end();
+      });
       return;
     }
 
@@ -143,6 +197,94 @@ describe("SwosClient", () => {
     expect(stored).toBeDefined();
     expect(stored).not.toContain(before);
     expect(stored).toContain(Buffer.from("renamed").toString("hex"));
+  });
+
+  it("downloads a binary resource byte-for-byte", async () => {
+    const backup = Buffer.from([0x00, 0xff, 0x80, 0x0a, 0xc3, 0x28, 0x00]);
+    mock.state.binary.set("backup.swb", backup);
+    expect(await client.getBinary("backup.swb")).toEqual(backup);
+  });
+
+  it("uploads a file as multipart/form-data under the given field name", async () => {
+    const firmware = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0xff]);
+    await client.postMultipart("upgrade", "blob", "swos-css318g-2.19.bin", firmware);
+    const upload = mock.state.uploads.at(-1)!;
+    expect(upload.path).toBe("upgrade");
+    const boundary = upload.contentType.split("boundary=")[1];
+    expect(boundary).toMatch(/^----MikroMCP[0-9a-f]{24}$/);
+    const text = upload.body.toString("latin1");
+    expect(text).toContain(
+      'Content-Disposition: form-data; name="blob"; filename="swos-css318g-2.19.bin"',
+    );
+    const start = upload.body.indexOf(Buffer.from("\r\n\r\n")) + 4;
+    expect(upload.body.subarray(start, start + firmware.length)).toEqual(firmware);
+    expect(text.endsWith(`--${boundary}--\r\n`)).toBe(true);
+  });
+
+  it("withholds the SNMP blob from a round-trip mismatch error", async () => {
+    mock.state.store.set("snmp.b", "{en:12,com:'7365637265742d636f6d6d756e697479',ci:'',loc:''}");
+    const err = await client.readBlobForWrite("snmp.b").catch((e: unknown) => e);
+    expect(err).toMatchObject({ code: "SWOS_ROUNDTRIP_MISMATCH" });
+    expect(JSON.stringify(err)).not.toContain("7365637265742d636f6d6d756e697479");
+  });
+
+  it("changes the admin password and authenticates with the new one afterwards", async () => {
+    const { port } = mock.server.address() as { port: number };
+    const own = new SwosClient("127.0.0.1", port, { username: USER, password: PASS });
+    mock.state.store.set("sys.b", sysBlob);
+    mock.state.nextPassword = "n3w-pass";
+    try {
+      await own.changePassword("n3w-pass", "pwd");
+      expect(mock.state.store.get("!pwd.b")).toBe(
+        `{pwd:'${encodePasswordChange(PASS, "n3w-pass")}'}`,
+      );
+      await expect(own.getRaw("sys.b")).resolves.toBe(sysBlob);
+    } finally {
+      mock.state.password = PASS;
+      mock.state.nextPassword = undefined;
+    }
+  });
+
+  it("confirms an unanswered password change by logging in with the new password", async () => {
+    const { port } = mock.server.address() as { port: number };
+    const own = new SwosClient("127.0.0.1", port, { username: USER, password: PASS }, 300);
+    mock.state.store.set("sys.b", sysBlob);
+    mock.state.hangPassword = true;
+    mock.state.nextPassword = "n3w-pass";
+    try {
+      await expect(own.changePassword("n3w-pass", "i01")).resolves.toBeUndefined();
+      await expect(own.getRaw("sys.b")).resolves.toBe(sysBlob);
+    } finally {
+      mock.state.hangPassword = false;
+      mock.state.password = PASS;
+      mock.state.nextPassword = undefined;
+    }
+  });
+
+  it("keeps the old password when an unanswered change did not land", async () => {
+    const { port } = mock.server.address() as { port: number };
+    const own = new SwosClient("127.0.0.1", port, { username: USER, password: PASS }, 300);
+    mock.state.store.set("sys.b", sysBlob);
+    mock.state.hangPassword = true; // and no nextPassword: the switch kept the old one
+    try {
+      await expect(own.changePassword("n3w-pass", "i01")).rejects.toMatchObject({
+        code: "SWOS_REQUEST_TIMEOUT",
+      });
+      await expect(own.getRaw("sys.b")).resolves.toBe(sysBlob);
+    } finally {
+      mock.state.hangPassword = false;
+    }
+  });
+
+  it("reports a refused password change as a wrong current password", async () => {
+    mock.state.refusePassword = true;
+    try {
+      await expect(client.changePassword("whatever", "pwd")).rejects.toMatchObject({
+        code: "SWOS_PASSWORD_WRONG",
+      });
+    } finally {
+      mock.state.refusePassword = false;
+    }
   });
 
   it("throws HttpError with 401 for wrong credentials", async () => {

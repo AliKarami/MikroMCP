@@ -840,6 +840,46 @@ export const SWOS_SCHEMA: Record<string, Endpoint> = {
 
 export const SWOS_ENDPOINTS: string[] = Object.keys(SWOS_SCHEMA).sort();
 
+/** The web UI refuses longer passwords; the 32-byte change buffer holds two of them. */
+export const MAX_SWOS_PASSWORD_LENGTH = 15;
+
+/**
+ * The `/!pwd.b` payload that changes the admin password, as the SwOS web UI
+ * builds it: old password, NUL, new password, zero-padded to 32 bytes, XORed
+ * with 64 bytes of an RC4 keystream (wrapping at 32) keyed by the old password
+ * (`*` when empty) repeated to 16 characters. Hex-encoded.
+ */
+export function encodePasswordChange(oldPassword: string, newPassword: string): string {
+  const buf = new Uint8Array(32);
+  const bytes = [...Buffer.from(oldPassword, "latin1"), 0, ...Buffer.from(newPassword, "latin1")];
+  bytes.slice(0, 32).forEach((b, i) => (buf[i] = b));
+
+  let keyText = oldPassword === "" ? "*" : oldPassword;
+  while (keyText.length < 16) keyText += keyText;
+  const key = Buffer.from(keyText.slice(0, 16), "latin1");
+
+  const S = Array.from({ length: 256 }, (_, i) => i);
+  for (let i = 0, j = 0; i < 256; i++) {
+    j = (j + key[i % key.length] + S[i]) & 255;
+    [S[i], S[j]] = [S[j], S[i]];
+  }
+  for (let n = 0, i = 0, j = 0; n < 64; n++) {
+    i = (i + 1) & 255;
+    j = (j + S[i]) & 255;
+    [S[i], S[j]] = [S[j], S[i]];
+    buf[n & 31] ^= S[(S[i] + S[j]) & 255];
+  }
+  return Buffer.from(buf).toString("hex");
+}
+
+/** Endpoints whose blob carries a credential (the SNMP community). */
+export const SECRET_ENDPOINTS: ReadonlySet<string> = new Set(["snmp.b"]);
+
+/** A blob as it may appear in tool output or error details. */
+export function presentableBlob(endpoint: string, blob: string): string {
+  return SECRET_ENDPOINTS.has(endpoint) ? "<withheld: holds the SNMP community>" : blob;
+}
+
 // ---------------------------------------------------------------------------
 // Firmware compatibility
 // ---------------------------------------------------------------------------

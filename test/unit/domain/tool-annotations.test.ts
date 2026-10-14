@@ -5,7 +5,8 @@ import { allTools } from "../../../src/domain/tools/index.js";
 // confirmation gate and maintenance windows key off it. A write tool that can
 // remove, overwrite, reconfigure, or run RouterOS script is therefore destructive.
 // List a tool here only if it cannot change existing router state.
-const ADDITIVE_WRITE_TOOLS = new Set(["plan_changes"]);
+// save_swos_backup writes a file on the server and nothing on the switch.
+const ADDITIVE_WRITE_TOOLS = new Set(["plan_changes", "save_swos_backup"]);
 
 describe("tool annotations", () => {
   it("marks every write tool destructive unless it is purely additive", () => {

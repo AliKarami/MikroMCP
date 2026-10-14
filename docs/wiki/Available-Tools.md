@@ -1,6 +1,6 @@
 # Available Tools
 
-All 126 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 132 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -2101,7 +2101,7 @@ Add, update, or remove a PPP profile. Idempotent by name. `update` returns `no_c
 
 ## SwOS
 
-> **Experimental.** These tools run only against devices configured with `deviceType: "swos"` in `routers.yaml` (MikroTik SwOS or SwOS Lite firmware, e.g. CSS326, CSS610-8P-2S+). They speak the reverse-engineered `.b` HTTP API with digest auth — no RouterOS REST. RouterOS tools aimed at a switch fail with `PLATFORM_MISMATCH`, and vice versa. The schema is pinned to a CSS610-8P-2S+ on SwOS Lite 2.21; other models decode on a best-effort basis, with unrecognised keys preserved under `_raw`, and every write reports whether the switch's firmware is one the schema was verified against.
+> **Experimental.** These tools run only against devices configured with `deviceType: "swos"` in `routers.yaml` (MikroTik SwOS or SwOS Lite firmware, e.g. CSS318, CSS326, CSS610-8P-2S+). They speak the reverse-engineered `.b` HTTP API with digest auth — no RouterOS REST. RouterOS tools aimed at a switch fail with `PLATFORM_MISMATCH`, and vice versa. The SwOS Lite schema is pinned to a CSS610-8P-2S+ on SwOS Lite 2.21, the full SwOS keys to the field declarations of the SwOS 2.18 web UI and verified on a CSS318-16G-2S+ on SwOS 2.19 (export, apply, read-back); other models decode on a best-effort basis, with unrecognised keys preserved under `_raw`, and every write reports whether the switch's firmware is one the schema was verified against.
 
 ### `list_swos_endpoints` — Read
 
@@ -2163,3 +2163,110 @@ Every result — dry run and real write — carries a `compatibility` verdict co
 | `dryRun` | boolean | `true` | Preview the resulting blob without writing |
 
 **Example prompt:** "Preview setting PoE out mode to auto on all ports of the access switch, then apply it."
+
+---
+
+### `get_swos_config` — Read
+
+Export the switch's configuration as one YAML document: system settings (including how the switch is reached), every port's name, enabled state and VLAN settings, the VLAN table (full SwOS) and SNMP. The SNMP community is never exported. The document is exactly the input of `apply_swos_config`, so it doubles as a backup you can read, diff and commit.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+
+**Example prompt:** "Export the core switch's config so I can commit it next to the network plan."
+
+---
+
+### `apply_swos_config` — Write · Destructive · Idempotent
+
+Apply a switch config document (`version: 1`, then any of `system`, `ports`, `vlans`, `snmp`) to a SwOS switch. A port takes `name`, `enabled`, `vlan_mode`, `vlan_receive`, `default_vlan`, `force_vlan`, `forward_to` (its Port Isolation row), `storm_rate` (1-100 %), `limit_unknown_unicast`, `flood_unknown_multicast`, `lag_mode` and `lag_group` (full SwOS only for storm rate and LAG), `auto_negotiation`, and — with `auto_negotiation: false` on the same port — a forced `speed` and `full_duplex` (copper ports 10M or 100M, SFP+ cages 1G to 10G, as SwOS 2.19 allows). Only the settings the document names change, down to single VLAN fields; everything else on the switch is re-sent byte-for-byte. The tool reads the switch, plans every change, and writes only the endpoints that change: the VLAN table grows first (new VLANs and new members), then the per-port VLAN settings, port names/enabled and SNMP, then the table shrinks (removed VLANs and members), then the system settings. No port loses its default VLAN halfway through.
+
+`dryRun` defaults to `true`. Two kinds of change can cut off the session applying them, and both are refused unless `includeManagement` is `true`: changes to how the switch is reached (`address_acquisition`, `static_ip`, `allow_from`, `allow_from_ports`, `allow_from_vlan`), and a plan whose `warnings` show a port losing its untagged traffic (a strict port outside its default VLAN, a filtering port whose default VLAN is gone), a linked port being disabled, renegotiating, losing forwarding to another linked port, or moving in or out of a LAG. These are checked on the switch's state after the whole plan, ports the document does not name included. `snmp.community` may be `${NAME}`, replaced by the server's `MIKROMCP_SECRET_<NAME>` value, so a committed config never holds it; no other field may reference a secret, and the community never appears in plans, errors or rollback previews. A real apply snapshots all six endpoints first; `rollback_change` restores them in a lockout-safe order (both VLAN tables, then per-port settings, then the old table). Writing the VLAN table needs full SwOS (SwOS Lite's `vlan.b` keys are unverified).
+
+```yaml
+version: 1
+system:
+  independent_vlan_lookup: true
+  igmp_snooping: true
+  igmp_querier: true
+  dhcp_trusted_ports: [17]
+ports:
+  1:  { name: desk, vlan_mode: strict, vlan_receive: only_untagged, default_vlan: 20 }
+  17: { name: uplink, vlan_mode: strict, vlan_receive: only_tagged, default_vlan: 1 }
+vlans:
+  - { id: 20, name: STAFF, members: [1, 17], igmp_snooping: true }
+snmp:
+  enabled: true
+  community: ${SNMP_COMMUNITY}
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+| `config` | string \| object | — | The config as YAML text or as an object |
+| `dryRun` | boolean | `true` | Plan and show every change without writing |
+| `includeManagement` | boolean | `false` | Allow address and allow-from changes and plans that would cut a port off |
+| `pruneVlans` | boolean | `true` | With a `vlans` list, remove VLANs the list does not name |
+
+**Example prompt:** "Plan applying the switch config in office-switch.yml to the core switch, show me every change, then apply it."
+
+---
+
+### `save_swos_backup` — Write
+
+Download the switch's own configuration backup (`backup.swb`, what the web UI's Save Backup produces) into `<MIKROMCP_DATA_DIR>/swos/` (owner-only folder and file), named after the switch, model, firmware and time, with its SHA-256. The file is MikroTik's opaque format and restores only onto the same model. A switch on factory defaults has nothing to save. It changes nothing on the switch, but it writes a file on the server, so it is audited like a write.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+
+**Example prompt:** "Save a backup of the core switch before we change anything."
+
+---
+
+### `restore_swos_backup` — Write · Destructive
+
+Restore a backup file from `<MIKROMCP_DATA_DIR>/swos/` onto the switch, as the web UI's Restore Backup does. The switch replaces its whole configuration and reboots, and may come back on the address stored in the backup. The current configuration is saved first unless `saveCurrentFirst` is `false`. Files are given by name only, never as a path. When the switch drops the connection before confirming (it reboots right away), the result is `sent_unconfirmed`, not an error.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+| `file` | string | — | Backup file name in the SwOS folder |
+| `dryRun` | boolean | `true` | Check the file and the switch without restoring |
+| `saveCurrentFirst` | boolean | `true` | Save the current backup before restoring |
+| `force` | boolean | `false` | Restore a file whose name says it came from another switch or model |
+
+**Example prompt:** "Restore the golden backup onto the core switch."
+
+---
+
+### `upgrade_swos_firmware` — Write · Destructive · Idempotent
+
+Upgrade the switch's firmware the way the web UI's Upgrade tab does. Without `version`, the latest stable release for the model comes from `download.mikrotik.com`; the image `swos-<board>-<version>.bin` is downloaded over HTTPS into the SwOS folder (or taken from `file` for an offline upgrade), checked, and flashed. The switch reboots; a connection it drops before confirming is reported as `sent_unconfirmed`. The board name is derived from the model (CSS318-16G → `css318g`); a `board` that disagrees with the model is refused unless `force` is `true`. A local `file` must carry MikroTik's name, `swos-<board>-<version>.bin`, for this board; a `version` given with it must match the name. A dry run downloads and checks the image but writes nothing. Release candidates are refused unless `allowPrerelease` is `true`. A switch on its preinstalled backup firmware (a version ending in `p`, which cannot save configuration) counts as needing the upgrade.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+| `version` | string | latest stable | Target version, e.g. `2.19` |
+| `file` | string | — | Firmware file name in the SwOS folder (offline upgrade) |
+| `board` | string | from the model | Firmware board name, e.g. `css318g` |
+| `allowPrerelease` | boolean | `false` | Allow a release candidate or beta |
+| `force` | boolean | `false` | Flash a `board` that differs from the one derived from the model |
+| `dryRun` | boolean | `true` | Resolve, download and check without flashing |
+
+**Example prompt:** "Is the new switch on the latest SwOS? If not, upgrade it."
+
+---
+
+### `set_swos_password` — Write · Destructive
+
+Change the switch's admin password, as the web UI's Password Change does. The new password is read from the server secret `MIKROMCP_PASSWORD_<newPasswordSecret>`, so it never appears in the conversation and no switch config can reference it; the current one is the router's configured credential. Passwords are printable ASCII, at most 15 characters. After the change this call's client keeps working with the new password, but the server rebuilds the client from the router's configured credential (`<envPrefix>_PASS`) after any authentication failure or restart, so that variable must be updated right away. On SwOS Lite the switch does not answer the change; the result is confirmed by logging in with the new password. A switch that answers "wrong password" is reported as `SWOS_PASSWORD_WRONG`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target switch |
+| `newPasswordSecret` | string | — | NAME of the `MIKROMCP_PASSWORD_<NAME>` holding the new password |
+| `dryRun` | boolean | `true` | Check the secret and the switch without changing the password |
+
+**Example prompt:** "Set the core switch's admin password from the SWITCH_NEW_PASS secret."

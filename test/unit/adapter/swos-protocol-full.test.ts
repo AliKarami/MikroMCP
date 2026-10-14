@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   decodeEndpoint,
   dumpBlob,
+  encodePasswordChange,
   fieldFor,
   parseWireBlob,
   profileOf,
@@ -151,5 +152,23 @@ describe("full SwOS dialect (CSS318-shaped fixtures)", () => {
     ) as Record<string, Record<string, unknown>>;
     expect(stats["2"].rx_bytes).toBe(0x20);
     expect(stats["2"].rx_fcs_errors).toBe(3);
+  });
+
+  it("encodes a password change exactly as the SwOS web UI does", () => {
+    // Expected values come from running the web UI's own ra() (SwOS 2.18
+    // script) under node; lanrat/python-mikrotik-swos produces the same hex.
+    const vectors: [string, string, string][] = [
+      ["", "secret", "6467d84816731f6271272cf3dd1464ad0f479a5109cdc8e40d14998fdcbef5df"],
+      ["oldpass", "newpass", "5d740662c8c0ddabab3664b828d34a0973d18f535181b7ee3797a19dbfb25ba6"],
+      [
+        "123456789012345",
+        "abcdefghijklmno",
+        "9657aa4aec17114a698c22d70664105cc881279e013e943607782c9336b4cc89",
+      ],
+      ["x", "", "4d9b87afd1a91dc25347dfe44f6fd25d2fd14465e5f5eb5c7d3cc6f911c4936d"],
+    ];
+    for (const [oldPwd, newPwd, hex] of vectors) {
+      expect(encodePasswordChange(oldPwd, newPwd), `${oldPwd} -> ${newPwd}`).toBe(hex);
+    }
   });
 });
