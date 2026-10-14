@@ -114,6 +114,7 @@ function checkRoutersConfig(configPath: string): RouterRegistry | null {
 
 function checkEnvVars(routers: RouterConfig[], transport: string): void {
   const missing: string[] = [];
+  const emptyRouterOs: string[] = [];
 
   for (const router of routers) {
     const { source, envPrefix } = router.credentials;
@@ -121,8 +122,18 @@ function checkEnvVars(routers: RouterConfig[], transport: string): void {
       const userKey = `${envPrefix}_USER`;
       const passKey = `${envPrefix}_PASS`;
       if (!process.env[userKey]) missing.push(userKey);
-      if (!process.env[passKey]) missing.push(passKey);
+      // An empty password is a real password: SwOS switches ship with none.
+      if (process.env[passKey] === undefined) missing.push(passKey);
+      else if (process.env[passKey] === "" && router.deviceType !== "swos") {
+        emptyRouterOs.push(passKey);
+      }
     }
+  }
+
+  for (const passKey of emptyRouterOs) {
+    warn(
+      `${passKey} is empty — a RouterOS router needs a password; only a factory-fresh SwOS switch has none`,
+    );
   }
 
   if (missing.length === 0) {

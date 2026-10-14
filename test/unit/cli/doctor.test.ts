@@ -476,6 +476,54 @@ describe("runDoctor", () => {
       expect(allOutput).toMatch(/❌.*SwOS API not reachable after \d+ms — ECONNREFUSED/);
       expect(process.exitCode).toBe(1);
     });
+
+    it("accepts an empty password for a switch but warns about one for a router", async () => {
+      const sw = makeSwitch();
+      const router = {
+        ...sw,
+        id: "core",
+        deviceType: undefined,
+        rosVersion: "7.x",
+        credentials: { source: "env" as const, envPrefix: "ROUTER_CORE" },
+      };
+      mockExistsSync.mockReturnValue(true);
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [sw, router] }) as unknown as RouterRegistry,
+      );
+      mockGetCredentials.mockReturnValue({ username: "admin", password: "" });
+      MockSwosClient.mockImplementation(
+        () => ({ get: vi.fn().mockResolvedValue({}), close: vi.fn() }) as unknown as SwosClient,
+      );
+      MockRouterOSRestClient.mockImplementation(
+        () =>
+          ({
+            get: vi.fn().mockResolvedValue([{ version: "7.14" }]),
+            close: vi.fn(),
+          }) as unknown as RouterOSRestClient,
+      );
+      mockCreateConnection.mockReturnValue(makeTcpSocket(true) as unknown as net.Socket);
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }),
+      );
+      process.env.SWITCH_ACCESS_USER = "admin";
+      process.env.SWITCH_ACCESS_PASS = "";
+      process.env.ROUTER_CORE_USER = "admin";
+      process.env.ROUTER_CORE_PASS = "";
+      try {
+        const { runDoctor } = await import("../../../src/cli/doctor.js");
+        await runDoctor({ configPath: "/path/to/routers.yaml", transport: "stdio" });
+        const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+        expect(output).not.toContain("Missing credential env vars");
+        expect(output).toContain("ROUTER_CORE_PASS is empty");
+        expect(output).not.toContain("SWITCH_ACCESS_PASS is empty");
+      } finally {
+        delete process.env.ROUTER_CORE_USER;
+        delete process.env.ROUTER_CORE_PASS;
+      }
+    });
   });
 
   describe("Claude Desktop check", () => {

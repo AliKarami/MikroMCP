@@ -14,7 +14,10 @@ export interface Credentials {
  * Retrieve credentials for the given router configuration.
  *
  * - source="env": reads `{envPrefix}_USER` and `{envPrefix}_PASS` from the
- *   process environment. Throws a CONFIGURATION error if either is missing.
+ *   process environment. Throws a CONFIGURATION error if the user is missing
+ *   or empty, or the password variable is not set at all. A password set to
+ *   the empty string is a real password: SwOS switches (and older RouterOS)
+ *   ship with an admin account that has none.
  * - source="vault": not yet supported; throws a CONFIGURATION error.
  *
  * Credentials are never logged.
@@ -53,8 +56,10 @@ export function getCredentials(router: RouterConfig): Credentials {
   const username = process.env[userKey];
   const password = process.env[passKey];
 
-  if (!username || !password) {
-    const missing = [!username ? userKey : null, !password ? passKey : null].filter(Boolean);
+  if (!username || password === undefined) {
+    const missing = [!username ? userKey : null, password === undefined ? passKey : null].filter(
+      Boolean,
+    );
 
     throw new MikroMCPError({
       category: ErrorCategory.CONFIGURATION,

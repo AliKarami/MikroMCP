@@ -10,6 +10,20 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- Full SwOS dialect for the SwOS tools (CSS318, CSS326 and the other switches that run full SwOS rather than SwOS Lite). The mnemonic keys come from the field declarations in the SwOS 2.18 web UI and were checked on a CSS318 at 2.19: `sys.b` gains Independent VLAN Lookup, ETH/BOOT port, board name, revision, root bridge MAC, CPU/board/PHY temperatures and fans; `fwd.b` gains port isolation (`fp1`…`fpN`, sized to the switch instead of ten ports), port lock, mirroring, storm control, flood control, ingress rate and the per-port VLAN settings (`vlan`, `vlni`, `dvid`, `fvid`); `link.b`, `lacp.b`, `rstp.b`, `sfp.b`, `host.b`, `!igmp.b` and `acl.b` gain their full-SwOS keys; the full-SwOS `stats.b` path is served next to SwOS Lite's `!stats.b`, with metric aliases for both. Where the two dialects encode a field differently (four VLAN modes instead of three, another speed list, percent instead of fraction for storm control) the schema declares it per dialect (`profiles`). Pinned by synthetic CSS318-shaped fixtures in `test/fixtures/swos-full/` until a device capture replaces them.
+- `get_swos_status` shows the switch's temperatures and fans, marks ports with a forced speed, and lists an endpoint the switch does not serve (`poe.b` on a switch without PoE, `sfp.b` without cages) apart from failures, as `notServed` in the structured content.
+
+### Changed
+- An empty `{envPrefix}_PASS` is a password, not a missing one, for RouterOS routers as well as SwOS switches: a SwOS switch ships with `admin` and no password and could not be reached before. Only an unset variable is missing now; `mikromcp doctor` warns about an empty password on a RouterOS router.
+- `write_swos_blob` encodes option fields against the dialect the switch speaks (`strict` is written as 3 on full SwOS and 2 on SwOS Lite), resolves a raw wire key present in the blob before a decoded field of the same name (`ip` on full SwOS is the static address, not the current one), and no longer offers the per-port counter table `stats.b` as a write target.
+
+### Fixed
+- Full SwOS: the configured and negotiated speed keys were swapped (`spdc` is the configured speed, `spd` the negotiated one), the static IP was read from `sip` instead of `ip`, and MikroTik discovery from `dsc` instead of `pdsc`.
+- Port bitmasks inside record lists (VLAN members, IGMP member ports, ACL source ports) always decoded to an empty list; `get_swos_endpoint` sizes them, and the masks in `sys.b`, to the switch's port count read from `link.b`.
+- Signed 32-bit values decoded wrong: the sign extension used JavaScript bit shifts, which wrap at 32 bits, so a temperature of 42 °C read as 41.
+- `get_swos_status` on full SwOS: uptime is counted in centiseconds, so it read 100 times too long (and is now shown as days, hours, minutes and seconds); a port without link printed a stale speed code ("down (7 half)"); board and PHY temperatures of 0 from a switch without those sensors were listed; a switch without PoE reported `poe.b` as a failed section (HTTP 303); and empty SFP cages printed a bare "SFP modules:" heading.
+
 ## [1.13.2] - 2026-10-14
 
 This patch comes from [@SamMHD](https://github.com/SamMHD) (Saman), who found that `mikromcp doctor` failed on every SwOS switch. Thank you, Saman.

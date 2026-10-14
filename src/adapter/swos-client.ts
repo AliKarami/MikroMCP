@@ -261,9 +261,9 @@ export class SwosClient {
   // ---------- decoded helpers ----------
 
   /** GET + decode into the schema. Unknown keys are preserved under `_raw`. */
-  async get(endpoint: string): Promise<unknown> {
+  async get(endpoint: string, portCount?: number): Promise<unknown> {
     assertKnownEndpoint(endpoint);
-    return decodeEndpoint(endpoint, await this.getRaw(endpoint));
+    return decodeEndpoint(endpoint, await this.getRaw(endpoint), portCount);
   }
 
   /**
