@@ -281,7 +281,35 @@ const LINK: Endpoint = {
     f("sfp_offset", { swos: "sfpo" }, Kind.INT, {
       note: "0-based index of the first SFP cage (full SwOS)",
     }),
-    f("cable_pairs", { swos_lite: "i11" }, Kind.INT, {
+    f("combo_ports", { swos: "comb" }, Kind.BOOL, { note: "mask of combo ports (full SwOS)" }),
+    f("qsfp_ports", { swos: "qsfp" }, Kind.BOOL, { note: "mask of QSFP cages (full SwOS)" }),
+    f("blocked", { swos: "blkp" }, Kind.BOOL, {
+      unknown: true,
+      note: "per-port mask, reads 0 on the CSS318; blocked ports? (full SwOS)",
+    }),
+    f("flow_tx_active", { swos: "tfct" }, Kind.BOOL, {
+      note: "mask of ports with TX flow control negotiated (full SwOS)",
+    }),
+    f("flow_rx_active", { swos: "rfct" }, Kind.BOOL, {
+      note: "mask of ports with RX flow control negotiated (full SwOS)",
+    }),
+    f("qsfp_type", { swos: "qtyp" }, Kind.INT, {
+      perPort: true,
+      unknown: true,
+      note: "QSFP module type per port (full SwOS)",
+    }),
+    f("qsfp_offset", { swos: "qsfo" }, Kind.INT, {
+      note: "0-based index of the first QSFP cage (full SwOS)",
+    }),
+    f("mgmt_port_offset", { swos: "mgmo" }, Kind.INT, {
+      unknown: true,
+      note: "management port offset (full SwOS)",
+    }),
+    f("mgmt_port_count", { swos: "mgmc" }, Kind.INT, {
+      unknown: true,
+      note: "management port count (full SwOS)",
+    }),
+    f("cable_pairs", { swos: "pair", swos_lite: "i11" }, Kind.INT, {
       perPort: true,
       note: "per-port cable-pair status; 0xffff = all pairs OK",
     }),
@@ -331,7 +359,9 @@ const SYS: Endpoint = {
     }),
     f("static_ip", { swos: "ip", swos_lite: "i09" }, Kind.IP),
     f("addr_acq", { swos: "iptp", swos_lite: "i0a" }, Kind.OPTION, { options: ADDR_ACQ }),
-    f("build_number", { swos_lite: "i0b" }, Kind.INT, { unknown: true }),
+    f("build_number", { swos: "bld", swos_lite: "i0b" }, Kind.INT, {
+      note: "full SwOS: build time as a Unix timestamp",
+    }),
     f("allow_from_ports", { swos: "allp", swos_lite: "i12" }, Kind.BOOL),
     f("dhcp_trusted_ports", { swos: "dtrp", swos_lite: "i13" }, Kind.BOOL),
     f("dhcp_info_option", { swos: "ainf", swos_lite: "i14" }, Kind.CHECKBOX),
@@ -347,7 +377,7 @@ const SYS: Endpoint = {
     f("port_cost_mode", { swos: "cost", swos_lite: "i0f" }, Kind.OPTION, {
       options: ["short", "long"],
     }),
-    f("root_bridge_priority", { swos_lite: "i10" }, Kind.INT),
+    f("root_bridge_priority", { swos: "rpr", swos_lite: "i10" }, Kind.INT),
     f("igmp_fast_leave", { swos: "igfl", swos_lite: "i27" }, Kind.BOOL),
     f("igmp_version", { swos: "igve", swos_lite: "i28" }, Kind.OPTION, { options: ["v2", "v3"] }),
     f("igmp_querier", { swos: "igmq", swos_lite: "i29" }, Kind.CHECKBOX),
@@ -370,6 +400,46 @@ const SYS: Endpoint = {
     f("phy_temp", { swos: "phyt" }, Kind.INT, { signed: true, bits: 32, note: "deg C" }),
     f("fan_1", { swos: "fan1" }, Kind.INT, { note: "RPM" }),
     f("fan_2", { swos: "fan2" }, Kind.INT, { note: "RPM" }),
+    f("fan_3", { swos: "fan3" }, Kind.INT, { note: "RPM" }),
+    f("fan_4", { swos: "fan4" }, Kind.INT, { note: "RPM" }),
+    // The rest of sys.b as a CSS318 on 2.19 sends it (sanitized capture in
+    // test/fixtures/swos-full-real/). Meanings come from the web UI's labels
+    // where there is one; the others are kept by name so a write re-sends them.
+    f("watchdog", { swos: "wdt" }, Kind.CHECKBOX, { note: "System watchdog (full SwOS)" }),
+    f("discovery_enabled", { swos: "dsc" }, Kind.CHECKBOX, {
+      note: "MikroTik discovery on/off; pdsc is the per-port mask (full SwOS)",
+    }),
+    f("psu1_status", { swos: "p1s" }, Kind.INT, { unknown: true, note: "PSU 1 state (full SwOS)" }),
+    f("psu2_status", { swos: "p2s" }, Kind.INT, { unknown: true, note: "PSU 2 state (full SwOS)" }),
+    f("psu1_fan", { swos: "p1f" }, Kind.INT, { unknown: true, note: "PSU 1 fan? (full SwOS)" }),
+    f("psu2_fan", { swos: "p2f" }, Kind.INT, { unknown: true, note: "PSU 2 fan? (full SwOS)" }),
+    f("psu1_power", { swos: "p1p" }, Kind.INT, { unknown: true, note: "PSU 1 power? (full SwOS)" }),
+    f("psu2_power", { swos: "p2p" }, Kind.INT, { unknown: true, note: "PSU 2 power? (full SwOS)" }),
+    f("psu1_temp", { swos: "p1t" }, Kind.INT, {
+      unknown: true,
+      note: "PSU 1 temperature? (full SwOS)",
+    }),
+    f("psu2_temp", { swos: "p2t" }, Kind.INT, {
+      unknown: true,
+      note: "PSU 2 temperature? (full SwOS)",
+    }),
+    f("poe_present", { swos: "poe" }, Kind.INT, {
+      unknown: true,
+      note: "PoE capability flag (full SwOS)",
+    }),
+    f("poe_state", { swos: "poes" }, Kind.INT, { unknown: true, note: "PoE state (full SwOS)" }),
+    f("poe_ports", { swos: "npoe" }, Kind.INT, {
+      unknown: true,
+      note: "number of PoE ports? (full SwOS)",
+    }),
+    f("upgrade_state", { swos: "upgr" }, Kind.INT, {
+      unknown: true,
+      note: "firmware upgrade state (full SwOS)",
+    }),
+    f("alt_mac", { swos: "amac" }, Kind.MAC, {
+      unknown: true,
+      note: "second MAC the web UI shows next to the system MAC (full SwOS)",
+    }),
     f("power_consumption", { swos_lite: "i26" }, Kind.INT, {
       scale: 10,
       note: "watts (switch itself, excl. PoE)",
@@ -894,6 +964,10 @@ export function presentableBlob(endpoint: string, blob: string): string {
  */
 export const VERIFIED_FIRMWARE: readonly { model: string; version: string }[] = [
   { model: "CSS610-8P-2S+", version: "2.21" },
+  // Full SwOS: sys.b, link.b, fwd.b, vlan.b, lacp.b and snmp.b captured from the
+  // device (test/fixtures/swos-full-real/), round-tripped byte-for-byte, and
+  // get_swos_config / apply_swos_config run against it end to end.
+  { model: "CSS318-16G-2S+", version: "2.19" },
 ];
 
 export interface FirmwareSupport {

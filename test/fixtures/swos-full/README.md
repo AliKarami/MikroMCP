@@ -9,9 +9,10 @@ declarations in the SwOS 2.18 web UI script of a CSS326-24G-2S+ (same dialect)
 to pin the codec for the full-SwOS key set before a CSS318 was available. Key
 order, value widths and the exact field set of a real CSS318 may differ.
 
-Replace them with sanitized real captures (same rules as
-`test/fixtures/swos/README.md`) once the switch is on hand, and add the model
-to `VERIFIED_FIRMWARE` in `src/adapter/swos-protocol.ts` only then.
+Sanitized real captures of the same switch live in
+`test/fixtures/swos-full-real/` (a configured switch, not a factory one) and
+are what put the CSS318 into `VERIFIED_FIRMWARE`. This set stays as the
+factory-state starting point the planner tests build on.
 
 | File     | Contents                                                                                      |
 | -------- | --------------------------------------------------------------------------------------------- |
