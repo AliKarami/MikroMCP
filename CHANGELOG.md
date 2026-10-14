@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Fixed
+- `mikromcp doctor` checked every registry entry as a RouterOS router, so a SwOS switch (`deviceType: "swos"`) always failed: the REST probe got the web UI's HTTP 303 redirect, and SSH and FTP were reported unreachable. Doctor now reads `sys.b` from a SwOS switch with the same `.b` API client the `swos_*` tools use. It reports the identity, model, firmware and latency, and skips the REST, SSH and FTP checks. A 401 is reported as an authentication failure, separately from an unreachable switch. RouterOS checks are unchanged. Closes #108.
+
 ## [1.13.1] - 2026-10-06
 
 This patch again comes from [@akuzin87](https://github.com/akuzin87) (Alex). Right after 1.13.0 he found three things: `get_upgrade_status` showed RouterOS 7.20 as 7.2, a changed SSH host key was reported as an internal server error, and the usage skill sent assistants to a changelog page they could not read. Thank you, Alex.
