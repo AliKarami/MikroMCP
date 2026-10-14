@@ -17,6 +17,7 @@ import {
   SWOS_SCHEMA,
   dumpBlob,
   encodeLike,
+  fieldFor,
   firmwareSupport,
   isWireHex,
   Kind,
@@ -26,6 +27,7 @@ import {
   type FirmwareSupport,
 } from "../../adapter/swos-protocol.js";
 import type { SwosClient } from "../../adapter/swos-client.js";
+import { HttpError } from "../../adapter/rest-client.js";
 
 const log = createLogger("swos-tools");
 
@@ -138,7 +140,40 @@ function sectionOf(
   return section && !("_error" in section) ? section : undefined;
 }
 
-function formatStatus(sections: Record<string, unknown>): string {
+/**
+ * Status sections a model may simply not have: a switch without PoE answers
+ * `poe.b` with a 303 to /index.html, one without cages does the same for
+ * `sfp.b`. The same answer on `sys.b` or `link.b` means a wrong host, not a
+ * missing feature, so it stays a failure.
+ */
+const OPTIONAL_SECTIONS: ReadonlySet<string> = new Set(["poe.b", "sfp.b"]);
+
+function isNotServed(endpoint: string, err: unknown): boolean {
+  return (
+    OPTIONAL_SECTIONS.has(endpoint) &&
+    err instanceof HttpError &&
+    (err.statusCode === 303 || err.statusCode === 404)
+  );
+}
+
+/** Seconds as "3d 4h 5m 6s", leaving out the leading units that are zero. */
+export function formatUptime(seconds: number): string {
+  let rest = Math.floor(seconds);
+  const parts: string[] = [];
+  for (const [unit, size] of [
+    ["d", 86_400],
+    ["h", 3_600],
+    ["m", 60],
+  ] as const) {
+    const n = Math.floor(rest / size);
+    rest -= n * size;
+    if (n > 0 || parts.length > 0) parts.push(`${n}${unit}`);
+  }
+  parts.push(`${rest}s`);
+  return parts.join(" ");
+}
+
+function formatStatus(sections: Record<string, unknown>, notServed: string[]): string {
   const lines: string[] = [];
   const sys = sectionOf(sections, "sys.b");
   if (sys) {
@@ -152,9 +187,24 @@ function formatStatus(sections: Record<string, unknown>): string {
       );
     }
     if (sys.serial) lines.push(`  Serial: ${sys.serial}`);
-    if (sys.uptime) lines.push(`  Uptime: ${String(sys.uptime)}s`);
+    if (typeof sys.uptime === "number") lines.push(`  Uptime: ${formatUptime(sys.uptime)}`);
     if (sys.ip) lines.push(`  IP: ${sys.ip}`);
     if (sys.mac) lines.push(`  MAC: ${sys.mac}`);
+    // A board or PHY sensor the model lacks reads 0 (a CSS318 has none).
+    const sensor = (t: unknown) => (t === 0 ? undefined : t);
+    const temps = [
+      ["CPU", sys.cpu_temp],
+      ["board 1", sensor(sys.board_temp_1)],
+      ["board 2", sensor(sys.board_temp_2)],
+      ["PHY", sensor(sys.phy_temp)],
+    ].filter(([, t]) => typeof t === "number");
+    if (temps.length > 0) {
+      lines.push(
+        `  Temperature: ${temps.map(([label, t]) => `${String(label)} ${String(t)}°C`).join(", ")}`,
+      );
+    }
+    const fans = [sys.fan_1, sys.fan_2].filter((f) => typeof f === "number" && f > 0);
+    if (fans.length > 0) lines.push(`  Fans: ${fans.map((f) => `${String(f)} RPM`).join(", ")}`);
   }
 
   const link = sectionOf(sections, "link.b");
@@ -163,6 +213,9 @@ function formatStatus(sections: Record<string, unknown>): string {
     const speeds = link.speed as unknown[] | undefined;
     const links = link.link as unknown[] | undefined;
     const dups = link.duplex as unknown[] | undefined;
+    const autoNeg = link.auto_neg as unknown[] | undefined;
+    const forcedSpeed = link.manual_speed as unknown[] | undefined;
+    const forcedDuplex = link.manual_duplex as unknown[] | undefined;
     const count = Math.max(names?.length ?? 0, speeds?.length ?? 0, links?.length ?? 0);
     lines.push("Ports:");
     for (let i = 0; i < count; i++) {
@@ -170,7 +223,13 @@ function formatStatus(sections: Record<string, unknown>): string {
       const speed = speeds?.[i] ?? "?";
       const linkState = links?.[i] ? "up" : "down";
       const dup = dups?.[i] === undefined ? "?" : dups[i] ? "full" : "half";
-      lines.push(`  ${String(name)}: ${linkState} (${String(speed)} ${dup})`);
+      const forced =
+        autoNeg?.[i] === false
+          ? ` [forced ${String(forcedSpeed?.[i] ?? "?")} ${forcedDuplex?.[i] === false ? "half" : "full"}]`
+          : "";
+      // A port without link reports a stale or out-of-range speed code; leave it out.
+      const negotiated = links?.[i] ? ` (${String(speed)} ${dup})` : "";
+      lines.push(`  ${String(name)}: ${linkState}${negotiated}${forced}`);
     }
   }
 
@@ -197,18 +256,19 @@ function formatStatus(sections: Record<string, unknown>): string {
       ),
     );
     if (cages > 0) {
-      lines.push("SFP modules:");
+      const modules: string[] = [];
       for (let i = 0; i < cages; i++) {
         const vendor = (sfp.vendor as unknown[] | undefined)?.[i];
         const part = (sfp.part_number as unknown[] | undefined)?.[i];
         if (!vendor && !part) continue;
         const serial = (sfp.serial as unknown[] | undefined)?.[i];
         const temp = (sfp.temperature as unknown[] | undefined)?.[i];
-        lines.push(
+        modules.push(
           `  sfp${i + 1}: ${String(vendor ?? "?")} ${String(part ?? "?")}` +
             `${serial ? ` sn=${String(serial)}` : ""}${temp !== undefined ? ` ${String(temp)}°C` : ""}`,
         );
       }
+      lines.push(modules.length > 0 ? "SFP modules:" : "SFP modules: none", ...modules);
     }
   }
 
@@ -216,6 +276,7 @@ function formatStatus(sections: Record<string, unknown>): string {
     .filter(([, v]) => v && typeof v === "object" && "_error" in (v as object))
     .map(([ep, v]) => `  ${ep}: ${(v as SectionError)._error}`);
   if (failed.length > 0) lines.push("Sections that failed to load:", ...failed);
+  if (notServed.length > 0) lines.push(`Not served by this switch: ${notServed.join(", ")}`);
 
   return lines.length > 0 ? lines.join("\n") : "No status retrieved.";
 }
@@ -237,20 +298,26 @@ const getSwosStatusTool: ToolDefinition = {
     const parsed = getStatusSchema.parse(params);
     const client = requireSwosClient(context);
     const sections: Record<string, unknown> = {};
+    const notServed: string[] = [];
     for (const ep of parsed.include) {
       try {
         sections[ep] = await client.get(ep);
       } catch (err) {
+        if (isNotServed(ep, err)) {
+          notServed.push(ep);
+          continue;
+        }
         log.warn({ ep, err }, "SwOS status section failed, skipping");
         sections[ep] = { _error: err instanceof Error ? err.message : String(err) };
       }
     }
     const sys = sectionOf(sections, "sys.b");
     return {
-      content: formatStatus(sections),
+      content: formatStatus(sections, notServed),
       structuredContent: {
         routerId: context.routerId,
         sections,
+        ...(notServed.length > 0 ? { notServed } : {}),
         ...(sys ? { compatibility: firmwareSupport(sys.model, sys.version) } : {}),
       },
     };
@@ -267,6 +334,27 @@ const getEndpointSchema = z
     endpoint: endpointEnum.describe("'.b' endpoint to fetch (see list_swos_endpoints)"),
   })
   .strict();
+
+/**
+ * The switch's port count, from link.b: full SwOS states it (`prt`), SwOS Lite
+ * reveals it through its per-port arrays. Undefined when link.b cannot be read;
+ * the decoder then falls back to the width it can infer from the blob itself.
+ */
+async function readPortCount(client: SwosClient): Promise<number | undefined> {
+  try {
+    const link = (await client.get("link.b")) as Record<string, unknown>;
+    if (typeof link.port_count === "number") return link.port_count;
+    return Array.isArray(link.link) ? link.link.length : undefined;
+  } catch (err) {
+    log.warn({ err }, "Could not read link.b for the port count");
+    return undefined;
+  }
+}
+
+/** Endpoints whose bitmasks the blob itself cannot size: record lists and sys.b. */
+function needsPortCount(endpoint: string): boolean {
+  return endpoint === "sys.b" || SWOS_SCHEMA[endpoint]?.isArray === true;
+}
 
 const getSwosEndpointTool: ToolDefinition = {
   name: "get_swos_endpoint",
@@ -285,7 +373,8 @@ const getSwosEndpointTool: ToolDefinition = {
     const parsed = getEndpointSchema.parse(params);
     const client = requireSwosClient(context);
     try {
-      const decoded = await client.get(parsed.endpoint);
+      const portCount = needsPortCount(parsed.endpoint) ? await readPortCount(client) : undefined;
+      const decoded = await client.get(parsed.endpoint, portCount);
       const rendered = JSON.stringify(decoded, null, 2);
       // Structured content always carries the full decode; only the human-readable
       // text is capped, so a wide endpoint (stats.b) can't flood the context.
@@ -313,8 +402,9 @@ const getSwosEndpointTool: ToolDefinition = {
 //   * record lists (vlan.b, host.b, acl.b) — a whole-blob field merge has no
 //     meaning for a list of rows, and writing one would replace the table
 //     rather than edit it.
+//   * per-port counter tables (stats.b) — decoded generically, read-only.
 const WRITABLE_ENDPOINTS = SWOS_ENDPOINTS.filter(
-  (ep) => !ep.startsWith("!") && !SWOS_SCHEMA[ep].isArray,
+  (ep) => !ep.startsWith("!") && !SWOS_SCHEMA[ep].isArray && !SWOS_SCHEMA[ep].genericPerPort,
 );
 
 const writeBlobSchema = z
@@ -334,7 +424,7 @@ const writeBlobSchema = z
         ]),
       )
       .describe(
-        "Values to set, keyed by decoded field name (from list_swos_endpoints) or by a raw wire key already present in the blob — anything else is rejected. Option fields take the enum name (e.g. 'auto'); text becomes a UTF-8 hex string; numbers and '0x...' strings are written as hex, padded to the width of the value they replace. A per-port field given a single value applies it to EVERY port.",
+        "Values to set, keyed by decoded field name (from list_swos_endpoints) or by a raw wire key already present in the blob — anything else is rejected. Option fields take the enum name (e.g. 'auto'); IP fields take a dotted quad (192.168.88.1) and MAC fields six hex pairs (64:d1:54:00:00:01); other text becomes a UTF-8 hex string; numbers and '0x...' strings are written as hex, padded to the width of the value they replace. A per-port field given a single value applies it to EVERY port.",
       ),
     dryRun: z
       .boolean()
@@ -343,11 +433,21 @@ const writeBlobSchema = z
   })
   .strict();
 
-/** Resolve a field definition by decoded name or raw wire key. */
-function resolveField(epKey: string, key: string): Field | undefined {
+/**
+ * Resolve a field definition by decoded name or raw wire key. A raw key the
+ * blob contains wins over a field of the same name: on full SwOS `ip` is the
+ * static address's wire key, while the decoded field `ip` (the current
+ * address) lives under `cip`.
+ */
+function resolveField(epKey: string, key: string, wire: DecodedBlob): Field | undefined {
   const ep = SWOS_SCHEMA[epKey];
   if (!ep) return undefined;
-  return ep.fields.find((field) => field.name === key || Object.values(field.keys).includes(key));
+  const byWireKey = (field: Field) => Object.values(field.keys).includes(key);
+  return (
+    ep.fields.find((field) => Object.hasOwn(wire, key) && byWireKey(field)) ??
+    ep.fields.find((field) => field.name === key) ??
+    ep.fields.find(byWireKey)
+  );
 }
 
 /**
@@ -360,7 +460,7 @@ function resolveField(epKey: string, key: string): Field | undefined {
  * sent — silently reporting success while changing nothing.
  */
 function resolveWireKey(field: Field, wire: DecodedBlob): string | undefined {
-  return Object.values(field.keys).find((key) => key in wire);
+  return Object.values(field.keys).find((key) => Object.hasOwn(wire, key));
 }
 
 function validationError(code: string, message: string, suggestedAction: string): MikroMCPError {
@@ -410,8 +510,35 @@ function coerceScalar(field: Field, value: unknown, existing: unknown): unknown 
     }
     return encodeLike(idx, existing);
   }
-  // Strings are either a verbatim hex token or text the firmware stores hex-encoded.
   const text = String(value);
+  if (field.kind === Kind.IP) {
+    // Dotted quad, stored as a little-endian 32-bit hex token (192.168.88.1 -> 0x0158a8c0).
+    if (isWireHex(value)) return value;
+    // Checked as text first: Number() reads "" as 0 and accepts "1e2" and "0x1", which
+    // would write a different management address than the one asked for.
+    const octets = /^\d{1,3}(\.\d{1,3}){3}$/.test(text) ? text.split(".").map(Number) : [];
+    if (octets.length !== 4 || octets.some((o) => o > 255)) {
+      throw validationError(
+        "SWOS_INVALID_VALUE",
+        `Field "${field.name}" takes an IPv4 address, not "${text}".`,
+        "Pass a dotted quad such as 192.168.88.1.",
+      );
+    }
+    return encodeLike(Buffer.from(octets.reverse()).readUInt32BE(0), existing);
+  }
+  if (field.kind === Kind.MAC) {
+    // Colon- or dash-separated, stored as twelve lowercase hex characters.
+    const digits = text.replace(/[:-]/g, "").toLowerCase();
+    if (!/^[0-9a-f]{12}$/.test(digits)) {
+      throw validationError(
+        "SWOS_INVALID_VALUE",
+        `Field "${field.name}" takes a MAC address, not "${text}".`,
+        "Pass six hex pairs such as 64:d1:54:00:00:01.",
+      );
+    }
+    return digits;
+  }
+  // Strings are either a verbatim hex token or text the firmware stores hex-encoded.
   return isWireHex(text) ? text : Buffer.from(text, "utf8").toString("hex");
 }
 
@@ -474,9 +601,13 @@ const writeSwosBlobTool: ToolDefinition = {
 
       const changes: Record<string, { from: unknown; to: unknown }> = {};
       for (const [key, value] of Object.entries(parsed.fields)) {
-        const field = resolveField(parsed.endpoint, key);
-        const targetKey = field ? resolveWireKey(field, wire) : key;
-        if (targetKey === undefined || !(targetKey in wire)) {
+        const field = resolveField(parsed.endpoint, key, wire);
+        const targetKey = Object.hasOwn(wire, key)
+          ? key
+          : field
+            ? resolveWireKey(field, wire)
+            : undefined;
+        if (targetKey === undefined || !Object.hasOwn(wire, targetKey)) {
           throw validationError(
             "SWOS_UNKNOWN_FIELD",
             field
@@ -487,10 +618,13 @@ const writeSwosBlobTool: ToolDefinition = {
         }
 
         const existing = wire[targetKey];
-        const next = field ? coerceValue(field, value, existing) : value;
-        assertShapeMatches(field?.perPort ?? false, key, next, existing);
+        // Coerce against the dialect the device speaks: full SwOS and Lite use
+        // different option lists for the same field (VLAN mode, speed).
+        const wireField = field ? fieldFor(field, targetKey) : undefined;
+        const next = wireField ? coerceValue(wireField, value, existing) : value;
+        assertShapeMatches(wireField?.perPort ?? false, key, next, existing);
 
-        if (field?.perPort && !Array.isArray(next) && Array.isArray(existing)) {
+        if (wireField?.perPort && !Array.isArray(next) && Array.isArray(existing)) {
           wire[targetKey] = existing.map(() => next);
         } else {
           wire[targetKey] = next;

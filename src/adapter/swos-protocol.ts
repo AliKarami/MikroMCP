@@ -25,6 +25,11 @@
 //   SwOS Lite (CSS610)     uses opaque iNN keys (i01, i0a, ...).
 //   `keys` maps profile -> wire key; select_key picks whichever key is present
 //   in the actual response, so one schema decodes both firmware families.
+//
+// The full-SwOS mnemonics are taken from the field declarations in the SwOS
+// 2.18 web UI script of a CSS326-24G-2S+ (the CSS318 runs the same dialect).
+// Where the two dialects encode a field differently (option lists, scale), the
+// difference is declared per profile in `profiles`.
 // ---------------------------------------------------------------------------
 
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
@@ -49,6 +54,11 @@ export const Kind = {
 
 export type Kind = (typeof Kind)[keyof typeof Kind];
 
+/** Encoding attributes a dialect may declare differently for the same field. */
+export type ProfileOverride = Partial<
+  Pick<Field, "kind" | "options" | "signed" | "bits" | "scale" | "unknown" | "note">
+>;
+
 export interface Field {
   name: string;
   keys: Partial<Record<SwosProfile, string>>;
@@ -60,6 +70,7 @@ export interface Field {
   perPort?: boolean;
   unknown?: boolean;
   note?: string;
+  profiles?: Partial<Record<SwosProfile, ProfileOverride>>;
 }
 
 /** Schema field constructor — every endpoint below is built from these. */
@@ -199,10 +210,14 @@ export function dumpBlob(data: unknown): string {
 // ---------------------------------------------------------------------------
 
 export const SPEED = ["10M", "100M", "1G", "10G", "200M", "2.5G", "5G", "down"] as const;
+export const SPEED_SWOS = ["10M", "100M", "1G", "10G", "5G", "2.5G", "40G"] as const;
 export const POE_OUT = ["off", "on", "auto"] as const;
 export const POE_VOLTAGE = ["auto", "low", "high"] as const;
 export const VLAN_MODE = ["disabled", "optional", "strict"] as const;
+// Full SwOS adds "enabled" (VLAN filtering without ingress checking) before strict.
+export const VLAN_MODE_SWOS = ["disabled", "optional", "enabled", "strict"] as const;
 export const VLAN_RECV = ["any", "only_tagged", "only_untagged"] as const;
+export const LAG_MODE = ["passive", "active", "static"] as const;
 
 // Index 0 observed = "none" for non-PoE (SFP) ports, NOT short-circuit.
 // (pkg-python3-mikrotik-swos guessed 0="short circuit"; corrected here.)
@@ -236,17 +251,36 @@ const LINK: Endpoint = {
     f("enabled", { swos: "en", swos_lite: "i01" }, Kind.BOOL),
     f("auto_neg", { swos: "an", swos_lite: "i02" }, Kind.BOOL),
     f("manual_duplex", { swos: "dpxc", swos_lite: "i03" }, Kind.BOOL),
-    f("manual_speed", { swos: "spd", swos_lite: "i05" }, Kind.OPTION, {
+    // Full SwOS: spdc is the configured speed (a select), spd the negotiated one.
+    f("manual_speed", { swos: "spdc", swos_lite: "i05" }, Kind.OPTION, {
       options: SPEED,
       perPort: true,
+      profiles: { swos: { options: SPEED_SWOS } },
     }),
     f("link", { swos: "lnk", swos_lite: "i06" }, Kind.BOOL),
     f("duplex", { swos: "dpx", swos_lite: "i07" }, Kind.BOOL),
-    f("speed", { swos: "spdc", swos_lite: "i08" }, Kind.OPTION, { options: SPEED, perPort: true }),
+    f("speed", { swos: "spd", swos_lite: "i08" }, Kind.OPTION, {
+      options: SPEED,
+      perPort: true,
+      profiles: { swos: { options: SPEED_SWOS } },
+    }),
     f("name", { swos: "nm", swos_lite: "i0a" }, Kind.STR, { perPort: true }),
     f("flow_rx", { swos: "fctr", swos_lite: "i12" }, Kind.BOOL),
     f("flow_tx", { swos: "fctc", swos_lite: "i16" }, Kind.BOOL),
     f("pause", { swos: "paus", swos_lite: "i15" }, Kind.BOOL),
+    f("sfp_rate_select", { swos: "sfpr" }, Kind.OPTION, {
+      options: ["low", "high"],
+      perPort: true,
+    }),
+    f("combo_mode", { swos: "cm" }, Kind.OPTION, {
+      options: ["auto", "copper", "sfp"],
+      perPort: true,
+    }),
+    f("port_count", { swos: "prt" }, Kind.INT, { note: "number of ports (full SwOS)" }),
+    f("sfp_count", { swos: "sfp" }, Kind.INT, { note: "number of SFP cages (full SwOS)" }),
+    f("sfp_offset", { swos: "sfpo" }, Kind.INT, {
+      note: "0-based index of the first SFP cage (full SwOS)",
+    }),
     f("cable_pairs", { swos_lite: "i11" }, Kind.INT, {
       perPort: true,
       note: "per-port cable-pair status; 0xffff = all pairs OK",
@@ -265,27 +299,37 @@ const LINK: Endpoint = {
     }),
     f("unknown_i0b", { swos_lite: "i0b" }, Kind.HEX, { unknown: true }),
     f("unknown_i0c", { swos_lite: "i0c" }, Kind.HEX, { unknown: true }),
-    f("diag_hops", { swos_lite: "i0d" }, Kind.HEX, { perPort: true, unknown: true }),
-    f("diag_last_hop", { swos_lite: "i0e" }, Kind.HEX, { perPort: true, unknown: true }),
-    f("diag_length", { swos_lite: "i0f" }, Kind.HEX, { perPort: true, unknown: true }),
-    f("diag_fault_at", { swos_lite: "i10" }, Kind.HEX, { perPort: true, unknown: true }),
+    f("diag_hops", { swos: "hop", swos_lite: "i0d" }, Kind.HEX, { perPort: true, unknown: true }),
+    f("diag_last_hop", { swos: "hops", swos_lite: "i0e" }, Kind.HEX, {
+      perPort: true,
+      unknown: true,
+    }),
+    f("diag_length", { swos: "len", swos_lite: "i0f" }, Kind.HEX, { perPort: true, unknown: true }),
+    f("diag_fault_at", { swos: "flt", swos_lite: "i10" }, Kind.HEX, {
+      perPort: true,
+      unknown: true,
+    }),
   ],
 };
 
 const SYS: Endpoint = {
   path: "sys.b",
   fields: [
-    f("uptime", { swos: "upt", swos_lite: "i01" }, Kind.INT, { note: "seconds" }),
+    // Full SwOS counts centiseconds (a CSS318 on 2.19 advanced 2,039 in 20.4 s).
+    f("uptime", { swos: "upt", swos_lite: "i01" }, Kind.INT, {
+      note: "seconds",
+      profiles: { swos: { scale: 100 } },
+    }),
     f("ip", { swos: "cip", swos_lite: "i02" }, Kind.IP),
     f("mac", { swos: "mac", swos_lite: "i03" }, Kind.MAC),
     f("serial", { swos: "sid", swos_lite: "i04" }, Kind.STR),
     f("identity", { swos: "id", swos_lite: "i05" }, Kind.STR),
     f("version", { swos: "ver", swos_lite: "i06" }, Kind.STR),
     f("model", { swos: "brd", swos_lite: "i07" }, Kind.STR),
-    f("discovery_protocol", { swos: "dsc", swos_lite: "i08" }, Kind.BOOL, {
+    f("discovery_protocol", { swos: "pdsc", swos_lite: "i08" }, Kind.BOOL, {
       note: "per-port bitmask of MikroTik discovery enabled",
     }),
-    f("static_ip", { swos: "sip", swos_lite: "i09" }, Kind.IP),
+    f("static_ip", { swos: "ip", swos_lite: "i09" }, Kind.IP),
     f("addr_acq", { swos: "iptp", swos_lite: "i0a" }, Kind.OPTION, { options: ADDR_ACQ }),
     f("build_number", { swos_lite: "i0b" }, Kind.INT, { unknown: true }),
     f("allow_from_ports", { swos: "allp", swos_lite: "i12" }, Kind.BOOL),
@@ -304,12 +348,28 @@ const SYS: Endpoint = {
       options: ["short", "long"],
     }),
     f("root_bridge_priority", { swos_lite: "i10" }, Kind.INT),
-    f("root_bridge_mac", { swos_lite: "i11" }, Kind.MAC),
     f("igmp_fast_leave", { swos: "igfl", swos_lite: "i27" }, Kind.BOOL),
     f("igmp_version", { swos: "igve", swos_lite: "i28" }, Kind.OPTION, { options: ["v2", "v3"] }),
     f("igmp_querier", { swos: "igmq", swos_lite: "i29" }, Kind.CHECKBOX),
     f("fwd_reserved_mc", { swos: "frmc", swos_lite: "i2a" }, Kind.CHECKBOX),
-    f("cpu_temp", { swos_lite: "i22" }, Kind.INT, { signed: true, bits: 16, note: "deg C" }),
+    f("independent_vlan_lookup", { swos: "ivl" }, Kind.CHECKBOX, {
+      note: "IVL; per-VLAN IGMP snooping needs it",
+    }),
+    f("eth_boot_port", { swos: "mgmt" }, Kind.CHECKBOX, { note: "ETH/BOOT port enabled (CRS)" }),
+    f("board_name", { swos: "mrkt" }, Kind.STR),
+    f("revision", { swos: "rev" }, Kind.STR),
+    f("root_bridge_mac", { swos: "rmac", swos_lite: "i11" }, Kind.MAC),
+    f("cpu_temp", { swos: "temp", swos_lite: "i22" }, Kind.INT, {
+      signed: true,
+      bits: 16,
+      note: "deg C",
+      profiles: { swos: { bits: 32 } },
+    }),
+    f("board_temp_1", { swos: "btm1" }, Kind.INT, { signed: true, bits: 32, note: "deg C" }),
+    f("board_temp_2", { swos: "btm2" }, Kind.INT, { signed: true, bits: 32, note: "deg C" }),
+    f("phy_temp", { swos: "phyt" }, Kind.INT, { signed: true, bits: 32, note: "deg C" }),
+    f("fan_1", { swos: "fan1" }, Kind.INT, { note: "RPM" }),
+    f("fan_2", { swos: "fan2" }, Kind.INT, { note: "RPM" }),
     f("power_consumption", { swos_lite: "i26" }, Kind.INT, {
       scale: 10,
       note: "watts (switch itself, excl. PoE)",
@@ -361,12 +421,16 @@ const LACP: Endpoint = {
       perPort: true,
       note: "per-port LACP active/member flag (0/1)",
     }),
-    f("trunk_id", { swos_lite: "i02" }, Kind.INT, {
+    f("mode", { swos: "mode" }, Kind.OPTION, { options: LAG_MODE, perPort: true }),
+    f("trunk_id", { swos: "grp", swos_lite: "i02" }, Kind.INT, {
       perPort: true,
       note: "static LAG / trunk id (observed 1, 2 and 3)",
     }),
-    f("group", { swos_lite: "i03" }, Kind.INT, { perPort: true, note: "LAG group, engine max 15" }),
-    f("partner_mac", { swos_lite: "i04" }, Kind.MAC, {
+    f("group", { swos: "sgrp", swos_lite: "i03" }, Kind.INT, {
+      perPort: true,
+      note: "LAG group, engine max 15",
+    }),
+    f("partner_mac", { swos: "mac", swos_lite: "i04" }, Kind.MAC, {
       perPort: true,
       note: "LACP partner/peer MAC (same value for both members of a LAG)",
     }),
@@ -379,12 +443,17 @@ const RSTP: Endpoint = {
     f("enabled", { swos: "ena", swos_lite: "i01" }, Kind.BOOL, {
       note: "per-port RSTP-enabled mask (0x3ff = all)",
     }),
-    f("role", { swos_lite: "i02" }, Kind.OPTION, {
+    f("role", { swos: "role", swos_lite: "i02" }, Kind.OPTION, {
       options: RSTP_ROLE,
       perPort: true,
       note: "per-port RSTP role",
     }),
-    f("root_path_cost", { swos_lite: "i03" }, Kind.INT, {
+    f("rstp_mode", { swos: "rstp" }, Kind.BOOL, {
+      note: "per-port mask: set = RSTP, clear = STP (full SwOS)",
+    }),
+    f("point_to_point", { swos: "p2p" }, Kind.BOOL, { note: "per-port mask (full SwOS)" }),
+    f("edge", { swos: "edge" }, Kind.BOOL, { note: "per-port mask (full SwOS)" }),
+    f("root_path_cost", { swos: "rpc", swos_lite: "i03" }, Kind.INT, {
       perPort: true,
       note: "per-port root path cost (0 = auto)",
     }),
@@ -405,10 +474,10 @@ const RSTP: Endpoint = {
       unknown: true,
       note: "0x324 here; paired mask for i06",
     }),
-    f("forwarding", { swos_lite: "i08" }, Kind.BOOL, {
+    f("forwarding", { swos: "fwd", swos_lite: "i08" }, Kind.BOOL, {
       note: "forwarding-state mask (port4 down -> bit clear)",
     }),
-    f("learning", { swos_lite: "i09" }, Kind.BOOL, {
+    f("learning", { swos: "lrn", swos_lite: "i09" }, Kind.BOOL, {
       note: "learning-state mask (port4 down -> bit clear)",
     }),
   ],
@@ -424,57 +493,82 @@ const SNMP: Endpoint = {
   ],
 };
 
+/** Upper bound for per-port key families (fp1..fpN); the largest SwOS switch has 54 ports. */
+export const MAX_SWOS_PORTS = 64;
+
 const FWD: Endpoint = {
   path: "fwd.b",
   fields: [
-    ...Array.from({ length: 10 }, (_, i) =>
+    // One "forward to" mask per source port. Lite numbers them i01..i0a (its
+    // ten ports); full SwOS names them fp1..fpN for however many ports it has.
+    ...Array.from({ length: MAX_SWOS_PORTS }, (_, i) =>
       f(
         `isolation_p${i + 1}`,
-        { swos_lite: `i${(i + 1).toString(16).padStart(2, "0")}` },
+        i < 10
+          ? { swos: `fp${i + 1}`, swos_lite: `i${(i + 1).toString(16).padStart(2, "0")}` }
+          : { swos: `fp${i + 1}` },
         Kind.BOOL,
         {
           note: "forwarding/isolation mask; bit n cleared",
         },
       ),
     ),
-    f("port_lock", { swos_lite: "i10" }, Kind.BOOL, {
+    f("port_lock", { swos: "lck", swos_lite: "i10" }, Kind.BOOL, {
       perPort: true,
       note: "port lock (disable learning)",
     }),
-    f("lock_on_first", { swos_lite: "i11" }, Kind.BOOL, {
+    f("lock_on_first", { swos: "lckf", swos_lite: "i11" }, Kind.BOOL, {
       perPort: true,
       note: "lock on first learned MAC",
     }),
-    f("mirror_ingress", { swos_lite: "i12" }, Kind.BOOL, { perPort: true }),
-    f("mirror_egress", { swos_lite: "i13" }, Kind.BOOL, { perPort: true }),
-    f("mirror_to", { swos_lite: "i14" }, Kind.BOOL, {
+    f("mirror_ingress", { swos: "imr", swos_lite: "i12" }, Kind.BOOL, { perPort: true }),
+    f("mirror_egress", { swos: "omr", swos_lite: "i13" }, Kind.BOOL, { perPort: true }),
+    f("mirror_to", { swos: "mrto", swos_lite: "i14" }, Kind.BOOL, {
       perPort: true,
       note: "egress mirror target port (scalar mask on this device)",
     }),
-    f("vlan_mode", { swos_lite: "i15" }, Kind.OPTION, { options: VLAN_MODE, perPort: true }),
-    f("vlan_recv_mode", { swos_lite: "i17" }, Kind.OPTION, { options: VLAN_RECV, perPort: true }),
-    f("default_vid", { swos_lite: "i18" }, Kind.INT, {
+    f("vlan_mode", { swos: "vlan", swos_lite: "i15" }, Kind.OPTION, {
+      options: VLAN_MODE,
+      perPort: true,
+      profiles: { swos: { options: VLAN_MODE_SWOS } },
+    }),
+    f("vlan_recv_mode", { swos: "vlni", swos_lite: "i17" }, Kind.OPTION, {
+      options: VLAN_RECV,
+      perPort: true,
+    }),
+    f("default_vid", { swos: "dvid", swos_lite: "i18" }, Kind.INT, {
       perPort: true,
       note: "default VLAN id per port",
     }),
-    f("force_vid", { swos_lite: "i19" }, Kind.BOOL, { perPort: true, note: "force VLAN id" }),
-    f("storm_rate", { swos_lite: "i1a" }, Kind.INT, {
+    f("force_vid", { swos: "fvid", swos_lite: "i19" }, Kind.BOOL, {
+      perPort: true,
+      note: "force VLAN id",
+    }),
+    f("storm_rate", { swos: "srt", swos_lite: "i1a" }, Kind.INT, {
       perPort: true,
       scale: 1e5,
       note: "storm limit (fraction of link)",
+      profiles: { swos: { scale: undefined, note: "storm limit in % of link speed (1..100)" } },
     }),
-    f("limit_unknown_ucast", { swos_lite: "i1b" }, Kind.BOOL, {
+    f("limit_unknown_ucast", { swos: "suni", swos_lite: "i1b" }, Kind.BOOL, {
       perPort: true,
       note: "limit unknown unicast",
     }),
-    f("flood_unknown_mcast", { swos_lite: "i1c" }, Kind.BOOL, {
+    f("flood_unknown_mcast", { swos: "fmc", swos_lite: "i1c" }, Kind.BOOL, {
       perPort: true,
       note: "flood unknown multicast",
     }),
-    f("ingress_rate", { swos_lite: "i1d" }, Kind.INT, {
+    f("ingress_rate", { swos: "ir", swos_lite: "i1d" }, Kind.INT, {
       perPort: true,
       scale: 1e5,
       note: "ingress rate limit (fraction of link)",
+      profiles: {
+        swos: {
+          scale: undefined,
+          unknown: true,
+          note: "ingress limit, raw (the web UI shows it multiplied by 0.001); unverified",
+        },
+      },
     }),
     f("egress_rate", { swos_lite: "i1e" }, Kind.INT, {
       perPort: true,
@@ -506,10 +600,14 @@ const HOST: Endpoint = {
   isArray: true,
   note: "Static host table (device had none)",
   fields: [
-    f("mac", { swos_lite: "i01" }, Kind.MAC),
-    f("port", { swos_lite: "i02" }, Kind.INT, {
+    f("mac", { swos: "adr", swos_lite: "i01" }, Kind.MAC),
+    f("port", { swos: "prt", swos_lite: "i02" }, Kind.INT, {
       note: "port id; 0x80 bit = SFP/combo, low nibble = 1-based port (interpretation unverified)",
+      profiles: { swos: { note: "port index (full SwOS); 0x80 + n = trunk n", unknown: true } },
     }),
+    f("vid", { swos: "vid" }, Kind.INT, { note: "VLAN id (full SwOS)" }),
+    f("drop", { swos: "drp" }, Kind.CHECKBOX),
+    f("mirror", { swos: "mir" }, Kind.CHECKBOX),
   ],
 };
 
@@ -525,9 +623,14 @@ const IGMP: Endpoint = {
   isArray: true,
   note: "IGMP snooping groups (device had none)",
   fields: [
-    f("group_address", { swos_lite: "i01" }, Kind.INT, { note: "multicast group IP (raw int)" }),
-    f("member_ports", { swos_lite: "i02" }, Kind.BOOL, { note: "per-port membership bitmask" }),
-    f("vlan", { swos_lite: "i03" }, Kind.INT, { note: "VLAN id" }),
+    f("group_address", { swos: "addr", swos_lite: "i01" }, Kind.INT, {
+      note: "multicast group IP (raw int)",
+      profiles: { swos: { kind: Kind.IP, note: "multicast group IP" } },
+    }),
+    f("member_ports", { swos: "prts", swos_lite: "i02" }, Kind.BOOL, {
+      note: "per-port membership bitmask",
+    }),
+    f("vlan", { swos: "vlan", swos_lite: "i03" }, Kind.INT, { note: "VLAN id" }),
   ],
 };
 
@@ -536,28 +639,44 @@ const ACL: Endpoint = {
   isArray: true,
   note: "ACL rules (device had none)",
   fields: [
-    f("from", { swos_lite: "i01" }, Kind.BOOL, { note: "source port bitmask" }),
-    f("mac_src", { swos_lite: "i02" }, Kind.MAC),
-    f("mac_src_mask", { swos_lite: "i03" }, Kind.MAC),
-    f("mac_dst", { swos_lite: "i04" }, Kind.MAC),
-    f("mac_dst_mask", { swos_lite: "i05" }, Kind.MAC),
-    f("ethertype", { swos_lite: "i06" }, Kind.INT),
-    f("vlan_present", { swos_lite: "i07" }, Kind.OPTION, { options: ACL_VLAN_PRESENT }),
-    f("vlan_id", { swos_lite: "i08" }, Kind.INT),
-    f("priority", { swos_lite: "i09" }, Kind.INT),
-    f("ip_src", { swos_lite: "i0a" }, Kind.INT, { note: "source IP (raw int)" }),
+    f("from", { swos: "frm", swos_lite: "i01" }, Kind.BOOL, { note: "source port bitmask" }),
+    f("mac_src", { swos: "smac", swos_lite: "i02" }, Kind.MAC),
+    f("mac_src_mask", { swos: "smsk", swos_lite: "i03" }, Kind.MAC),
+    f("mac_dst", { swos: "dmac", swos_lite: "i04" }, Kind.MAC),
+    f("mac_dst_mask", { swos: "dmsk", swos_lite: "i05" }, Kind.MAC),
+    f("ethertype", { swos: "et", swos_lite: "i06" }, Kind.INT),
+    f("vlan_present", { swos: "vtag", swos_lite: "i07" }, Kind.OPTION, {
+      options: ACL_VLAN_PRESENT,
+    }),
+    f("vlan_id", { swos: "vlan", swos_lite: "i08" }, Kind.INT),
+    f("priority", { swos: "prio", swos_lite: "i09" }, Kind.INT),
+    f("ip_src", { swos: "sip", swos_lite: "i0a" }, Kind.INT, {
+      note: "source IP (raw int)",
+      profiles: { swos: { kind: Kind.IP, note: "source IP" } },
+    }),
     f("ip_src_mask_hi", { swos_lite: "i0b" }, Kind.INT),
     f("ip_src_mask_lo", { swos_lite: "i0c" }, Kind.INT),
-    f("ip_dst", { swos_lite: "i0d" }, Kind.INT, { note: "dest IP (raw int)" }),
+    f("ip_src_prefix", { swos: "sipm" }, Kind.INT, { note: "source prefix length (full SwOS)" }),
+    f("port_src", { swos: "sprt" }, Kind.INT, { note: "source L4 port (full SwOS)" }),
+    f("ip_dst", { swos: "dip", swos_lite: "i0d" }, Kind.INT, {
+      note: "dest IP (raw int)",
+      profiles: { swos: { kind: Kind.IP, note: "dest IP" } },
+    }),
     f("ip_dst_mask_hi", { swos_lite: "i0e" }, Kind.INT),
     f("ip_dst_mask_lo", { swos_lite: "i0f" }, Kind.INT),
-    f("protocol", { swos_lite: "i10" }, Kind.INT),
-    f("dscp", { swos_lite: "i11" }, Kind.INT),
+    f("ip_dst_prefix", { swos: "dipm" }, Kind.INT, { note: "dest prefix length (full SwOS)" }),
+    f("port_dst", { swos: "dprt" }, Kind.INT, { note: "dest L4 port (full SwOS)" }),
+    f("protocol", { swos: "prot", swos_lite: "i10" }, Kind.INT),
+    f("dscp", { swos: "dscp", swos_lite: "i11" }, Kind.INT),
     f("drop", { swos_lite: "i12" }, Kind.CHECKBOX, { note: "drop matching packets" }),
     f("mirror_to", { swos_lite: "i13" }, Kind.OPTION, { note: "egress port / off" }),
-    f("redirect_to", { swos_lite: "i14" }, Kind.OPTION, { note: "egress port / off" }),
-    f("set_vlan_id", { swos_lite: "i15" }, Kind.INT),
-    f("set_priority", { swos_lite: "i16" }, Kind.INT),
+    f("redirect_to", { swos: "rdto", swos_lite: "i14" }, Kind.OPTION, {
+      note: "egress port / off",
+    }),
+    f("rate", { swos: "rate" }, Kind.INT, { note: "rate limit (full SwOS)" }),
+    f("hits", { swos: "pkts" }, Kind.INT, { note: "matched packets (full SwOS, read-only)" }),
+    f("set_vlan_id", { swos: "svid", swos_lite: "i15" }, Kind.INT),
+    f("set_priority", { swos: "spri", swos_lite: "i16" }, Kind.INT),
     f("set_dscp", { swos_lite: "i17" }, Kind.INT),
     f("account_as", { swos_lite: "i18" }, Kind.OPTION, { options: ACL_ACCOUNT_AS }),
   ],
@@ -577,11 +696,11 @@ const SFP: Endpoint = {
   path: "sfp.b",
   note: "per-cage SFP DOM diagnostics (text fields are UTF-8 over hex)",
   fields: [
-    f("vendor", { swos_lite: "i01" }, Kind.STR, { perPort: true }),
-    f("part_number", { swos_lite: "i02" }, Kind.STR, { perPort: true }),
-    f("revision", { swos_lite: "i03" }, Kind.STR, { perPort: true }),
-    f("serial", { swos_lite: "i04" }, Kind.STR, { perPort: true }),
-    f("date", { swos_lite: "i05" }, Kind.STR, { perPort: true }),
+    f("vendor", { swos: "vnd", swos_lite: "i01" }, Kind.STR, { perPort: true }),
+    f("part_number", { swos: "pnr", swos_lite: "i02" }, Kind.STR, { perPort: true }),
+    f("revision", { swos: "rev", swos_lite: "i03" }, Kind.STR, { perPort: true }),
+    f("serial", { swos: "ser", swos_lite: "i04" }, Kind.STR, { perPort: true }),
+    f("date", { swos: "dat", swos_lite: "i05" }, Kind.STR, { perPort: true }),
     f("type", { swos_lite: "i06" }, Kind.STR, { perPort: true, note: "xa:1 = hex-ascii" }),
     f("diag_extra", { swos_lite: "i07" }, Kind.INT, {
       perPort: true,
@@ -590,16 +709,28 @@ const SFP: Endpoint = {
     }),
     // Signed like sys.b cpu_temp. A cage with no DOM (passive copper DAC)
     // reports 0xff80 -> -128, which reads as "no reading" rather than 65408.
-    f("temperature", { swos_lite: "i08" }, Kind.INT, {
+    f("temperature", { swos: "tmp", swos_lite: "i08" }, Kind.INT, {
       perPort: true,
       signed: true,
       bits: 16,
       note: "deg C; -128 = no DOM data (e.g. passive DAC)",
     }),
-    f("voltage", { swos_lite: "i09" }, Kind.INT, { perPort: true, scale: 1000, note: "volts" }),
-    f("tx_bias", { swos_lite: "i0a" }, Kind.INT, { perPort: true, note: "mA" }),
-    f("tx_power", { swos_lite: "i0b" }, Kind.INT, { perPort: true, scale: 10000, note: "dBm" }),
-    f("rx_power", { swos_lite: "i0c" }, Kind.INT, { perPort: true, scale: 10000, note: "dBm" }),
+    f("voltage", { swos: "vcc", swos_lite: "i09" }, Kind.INT, {
+      perPort: true,
+      scale: 1000,
+      note: "volts",
+    }),
+    f("tx_bias", { swos: "tbs", swos_lite: "i0a" }, Kind.INT, { perPort: true, note: "mA" }),
+    f("tx_power", { swos: "tpw", swos_lite: "i0b" }, Kind.INT, {
+      perPort: true,
+      scale: 10000,
+      note: "dBm",
+    }),
+    f("rx_power", { swos: "rpw", swos_lite: "i0c" }, Kind.INT, {
+      perPort: true,
+      scale: 10000,
+      note: "dBm",
+    }),
   ],
 };
 
@@ -649,6 +780,41 @@ export const STATS_METRICS: Record<string, string> = {
   i0c: "pkt_256_511",
   i0d: "pkt_512_1023",
   i0e: "pkt_1024_max",
+  // Full SwOS mnemonics (Stats / Errors / Hist tabs of the SwOS web UI)
+  rb: "rx_bytes",
+  tb: "tx_bytes",
+  rup: "rx_unicasts",
+  tup: "tx_unicasts",
+  rbp: "rx_broadcasts",
+  tbp: "tx_broadcasts",
+  rmp: "rx_multicasts",
+  tmp: "tx_multicasts",
+  rtp: "rx_total_packets",
+  ttp: "tx_total_packets",
+  rrb: "rx_rate",
+  trb: "tx_rate",
+  rrp: "rx_packet_rate",
+  trp: "tx_packet_rate",
+  rpp: "rx_pauses",
+  rte: "rx_errors",
+  rfcs: "rx_fcs_errors",
+  rae: "rx_jabber",
+  rr: "rx_runt",
+  fr: "rx_fragments",
+  rov: "rx_overruns",
+  tpp: "tx_pauses",
+  tur: "tx_underruns",
+  tcl: "tx_collisions",
+  tmc: "tx_multiple_collisions",
+  tec: "tx_excessive_collisions",
+  tlc: "tx_late_collisions",
+  tdf: "tx_deferred",
+  p64: "pkt_64",
+  p65: "pkt_65_127",
+  p128: "pkt_128_255",
+  p256: "pkt_256_511",
+  p512: "pkt_512_1023",
+  p1k: "pkt_1024_max",
 };
 
 export const SWOS_SCHEMA: Record<string, Endpoint> = {
@@ -660,8 +826,10 @@ export const SWOS_SCHEMA: Record<string, Endpoint> = {
   "snmp.b": SNMP,
   "fwd.b": FWD,
   "vlan.b": VLAN,
-  // Only the "!" form exists on the device; a plain /stats.b 303s to /index.html.
+  // SwOS Lite only serves the "!" form (a plain /stats.b 303s to /index.html);
+  // the full SwOS web UI reads the plain path.
   "!stats.b": STATS,
+  "stats.b": { ...STATS, path: "stats.b" },
   "sfp.b": SFP,
   "host.b": HOST,
   "!dhost.b": DHOST,
@@ -791,6 +959,24 @@ export function selectKey(fieldDef: Field, data: Record<string, unknown>): strin
   return Object.values(fieldDef.keys).find((key) => key in data);
 }
 
+/** The dialect a wire key belongs to for this field. */
+export function profileOf(fieldDef: Field, key: string): SwosProfile | undefined {
+  const entry = Object.entries(fieldDef.keys).find(([, k]) => k === key);
+  return entry ? (entry[0] as SwosProfile) : undefined;
+}
+
+/**
+ * The field as the dialect behind `key` encodes it: the base definition with
+ * that dialect's overrides (option list, scale, width) applied. Decoding and
+ * encoding must both go through this, or a full-SwOS VLAN mode of 3 ("strict")
+ * would be read against the three-entry Lite list.
+ */
+export function fieldFor(fieldDef: Field, key: string | undefined): Field {
+  const profile = key === undefined ? undefined : profileOf(fieldDef, key);
+  const override = profile ? fieldDef.profiles?.[profile] : undefined;
+  return override ? { ...fieldDef, ...override } : fieldDef;
+}
+
 function hexToBoolList(value: number, length: number): boolean[] {
   const bits = value
     .toString(2)
@@ -827,8 +1013,9 @@ function decodeScalar(fieldDef: Field, value: unknown, portCount: number): unkno
     case Kind.INT: {
       let num = value as number;
       if (fieldDef.signed && fieldDef.bits) {
-        const half = 1 << (fieldDef.bits - 1);
-        if (num >= half) num -= 1 << fieldDef.bits;
+        // Not `1 << bits`: JS shifts are 32-bit, so 1 << 32 is 1 and 1 << 31 is negative.
+        const half = 2 ** (fieldDef.bits - 1);
+        if (num >= half) num -= 2 ** fieldDef.bits;
       }
       return fieldDef.scale ? num / fieldDef.scale : num;
     }
@@ -837,14 +1024,19 @@ function decodeScalar(fieldDef: Field, value: unknown, portCount: number): unkno
   }
 }
 
-function decodeObject(ep: Endpoint, data: Record<string, unknown>): DecodedBlob {
-  const portCount = inferPortCount(data) || inferPortCountFromMasks(ep, data);
+function decodeObject(
+  ep: Endpoint,
+  data: Record<string, unknown>,
+  knownPortCount?: number,
+): DecodedBlob {
+  const portCount = knownPortCount || inferPortCount(data) || inferPortCountFromMasks(ep, data);
   const out: DecodedBlob = {};
   const knownKeys = new Set<string>();
 
-  for (const fieldDef of ep.fields) {
-    const key = selectKey(fieldDef, data);
+  for (const baseDef of ep.fields) {
+    const key = selectKey(baseDef, data);
     if (key === undefined) continue;
+    const fieldDef = fieldFor(baseDef, key);
     knownKeys.add(key);
     const v = data[key];
     if (fieldDef.perPort || fieldDef.kind === Kind.BOOL) {
@@ -860,16 +1052,22 @@ function decodeObject(ep: Endpoint, data: Record<string, unknown>): DecodedBlob 
   return out;
 }
 
-function decodeRecords(ep: Endpoint, data: unknown[]): unknown[] {
+function decodeRecords(ep: Endpoint, data: unknown[], knownPortCount?: number): unknown[] {
   return data.map((item) => {
     const row: Record<string, unknown> = {};
     const itemObj = item as Record<string, unknown>;
     const knownKeys = new Set<string>();
-    for (const fieldDef of ep.fields) {
-      const key = selectKey(fieldDef, itemObj);
+    for (const baseDef of ep.fields) {
+      const key = selectKey(baseDef, itemObj);
       if (key === undefined) continue;
+      const fieldDef = fieldFor(baseDef, key);
       knownKeys.add(key);
-      row[fieldDef.name] = decodeScalar(fieldDef, itemObj[key], 0);
+      // A record's port bitmask (VLAN members, ACL "from") is only as wide as
+      // its highest set bit unless the caller knows the switch's port count.
+      const width =
+        knownPortCount ??
+        (typeof itemObj[key] === "number" ? (itemObj[key] as number).toString(2).length : 0);
+      row[fieldDef.name] = decodeScalar(fieldDef, itemObj[key], width);
     }
     row["_raw"] = Object.fromEntries(Object.entries(itemObj).filter(([k]) => !knownKeys.has(k)));
     return row;
@@ -902,11 +1100,16 @@ function decodeGenericPerPort(data: Record<string, unknown>): Record<string, unk
   return ports;
 }
 
-export function decodeEndpoint(path: string, rawText: string): unknown {
+/**
+ * Decode a blob into the schema. `portCount` sizes per-port bitmasks exactly;
+ * without it the width is inferred from the blob, which under-counts a mask
+ * whose highest ports are clear (sys.b and vlan.b carry no per-port arrays).
+ */
+export function decodeEndpoint(path: string, rawText: string, portCount?: number): unknown {
   const ep = SWOS_SCHEMA[path];
   if (!ep) throw new Error(`no SwOS schema for ${path}`);
   const data = parseBlob(rawText) as unknown;
-  if (ep.isArray) return decodeRecords(ep, data as unknown[]);
+  if (ep.isArray) return decodeRecords(ep, data as unknown[], portCount);
   if (ep.genericPerPort) return decodeGenericPerPort(data as Record<string, unknown>);
-  return decodeObject(ep, data as Record<string, unknown>);
+  return decodeObject(ep, data as Record<string, unknown>, portCount);
 }
