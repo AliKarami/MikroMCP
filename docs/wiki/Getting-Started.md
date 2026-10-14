@@ -129,6 +129,8 @@ mikromcp doctor
 
 This probes your router for REST API availability, tests authentication, and reports any issues with fix suggestions.
 
+For a SwOS switch (`deviceType: "swos"`), doctor reads `sys.b` over the switch's `.b` HTTP API instead and reports its identity, model and firmware. It skips the REST, SSH and FTP checks, which don't apply to SwOS. A wrong password is reported as an authentication failure, not as an unreachable switch.
+
 You can also test directly against the RouterOS REST API:
 
 ```bash

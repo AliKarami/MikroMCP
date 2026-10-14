@@ -5,7 +5,8 @@ import chalk from "chalk";
 import { RouterRegistry } from "../config/router-registry.js";
 import { privateKeyIsShared, privateKeyReadError } from "../config/ssh-key.js";
 import { getCredentials } from "../config/secrets.js";
-import { RouterOSRestClient } from "../adapter/rest-client.js";
+import { HttpError, RouterOSRestClient } from "../adapter/rest-client.js";
+import { SwosClient } from "../adapter/swos-client.js";
 import { loadAppConfig } from "../config/app-config.js";
 import { IdentityRegistry } from "../config/identity-registry.js";
 import { MikroMCPError } from "../domain/errors/error-types.js";
@@ -189,7 +190,61 @@ function checkDefaultRouter(defaultRouter: string | undefined, routers: RouterCo
 
 // ─── Per-router connectivity ───────────────────────────────────────────────
 
+/**
+ * SwOS switches have no REST API, SSH or FTP; they only speak the `.b` HTTP
+ * API (plain HTTP, digest auth). Read `sys.b` the way the swos_* tools do.
+ */
+async function checkSwosDevice(router: RouterConfig): Promise<void> {
+  console.log();
+  console.log(chalk.bold(`Switch: ${router.id} (${router.host}, SwOS)`));
+
+  let client: SwosClient;
+  try {
+    const creds = getCredentials(router);
+    client = new SwosClient(router.host, router.port, creds);
+  } catch (err) {
+    const msg = err instanceof MikroMCPError ? err.message : String(err);
+    indentFail(`Credentials error: ${msg}`);
+    results.push({ passed: false, warning: false });
+    return;
+  }
+
+  const startMs = Date.now();
+  try {
+    const sys = (await client.get("sys.b")) as Record<string, unknown>;
+    const latencyMs = Date.now() - startMs;
+    const details = [
+      typeof sys.identity === "string" && sys.identity ? `identity ${sys.identity}` : undefined,
+      typeof sys.model === "string" && sys.model ? sys.model : undefined,
+      typeof sys.version === "string" && sys.version ? `SwOS ${sys.version}` : undefined,
+      `${latencyMs}ms`,
+    ].filter((d): d is string => d !== undefined);
+    indentOk(`SwOS API reachable (${details.join(", ")})`);
+    results.push({ passed: true, warning: false });
+  } catch (err) {
+    const latencyMs = Date.now() - startMs;
+    if (err instanceof HttpError && err.statusCode === 401) {
+      indentFail(
+        `SwOS API authentication failed (HTTP 401 after ${latencyMs}ms) — check ` +
+          `the switch username/password`,
+      );
+    } else {
+      indentFail(
+        `SwOS API not reachable after ${latencyMs}ms — ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    results.push({ passed: false, warning: false });
+  } finally {
+    client.close();
+  }
+}
+
 async function checkRouter(router: RouterConfig): Promise<void> {
+  if (router.deviceType === "swos") {
+    await checkSwosDevice(router);
+    return;
+  }
+
   console.log();
   console.log(chalk.bold(`Router: ${router.id} (${router.host})`));
 

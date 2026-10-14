@@ -22,8 +22,13 @@ vi.mock("../../../src/config/secrets.js", () => ({
   getCredentials: vi.fn(),
 }));
 
-vi.mock("../../../src/adapter/rest-client.js", () => ({
-  RouterOSRestClient: vi.fn(),
+vi.mock("../../../src/adapter/rest-client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/adapter/rest-client.js")>();
+  return { HttpError: actual.HttpError, RouterOSRestClient: vi.fn() };
+});
+
+vi.mock("../../../src/adapter/swos-client.js", () => ({
+  SwosClient: vi.fn(),
 }));
 
 vi.mock("../../../src/config/identity-registry.js", () => ({
@@ -60,13 +65,15 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RouterRegistry } from "../../../src/config/router-registry.js";
 import { getCredentials } from "../../../src/config/secrets.js";
-import { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { HttpError, RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { SwosClient } from "../../../src/adapter/swos-client.js";
 import { IdentityRegistry } from "../../../src/config/identity-registry.js";
 import { loadAppConfig } from "../../../src/config/app-config.js";
 
 const MockRouterRegistry = vi.mocked(RouterRegistry);
 const mockGetCredentials = vi.mocked(getCredentials);
 const MockRouterOSRestClient = vi.mocked(RouterOSRestClient);
+const MockSwosClient = vi.mocked(SwosClient);
 const MockIdentityRegistry = vi.mocked(IdentityRegistry);
 const mockLoadAppConfig = vi.mocked(loadAppConfig);
 const mockExistsSync = vi.mocked(fsModule.existsSync);
@@ -376,6 +383,98 @@ describe("runDoctor", () => {
 
       const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
       expect(allOutput).toMatch(/⚠️.*SSH not reachable on port 2222/);
+    });
+  });
+
+  describe("SwOS switch connectivity", () => {
+    function makeSwitch() {
+      return {
+        id: "access-sw",
+        host: "192.168.88.2",
+        port: 80,
+        deviceType: "swos" as const,
+        tls: { enabled: false, rejectUnauthorized: true },
+        credentials: { source: "env" as const, envPrefix: "SWITCH_ACCESS" },
+        tags: [],
+        rosVersion: "swos",
+      };
+    }
+
+    function setupSwitch(get: ReturnType<typeof vi.fn>) {
+      const sw = makeSwitch();
+      mockExistsSync.mockReturnValue(true);
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [sw] }) as unknown as RouterRegistry,
+      );
+      mockGetCredentials.mockReturnValue({ username: "admin", password: "pass" });
+      const mockClient = { get, close: vi.fn() };
+      MockSwosClient.mockImplementation(() => mockClient as unknown as SwosClient);
+      mockCreateConnection.mockReturnValue(makeTcpSocket(false) as unknown as net.Socket);
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ mcpServers: { "mikrotik-mcp-server": {} } }),
+      );
+      process.env.SWITCH_ACCESS_USER = "test-user";
+      process.env.SWITCH_ACCESS_PASS = "test-pass";
+      return mockClient;
+    }
+
+    afterEach(() => {
+      delete process.env.SWITCH_ACCESS_USER;
+      delete process.env.SWITCH_ACCESS_PASS;
+    });
+
+    it("reads sys.b over the SwOS API and skips the RouterOS REST/SSH/FTP checks", async () => {
+      const client = setupSwitch(
+        vi
+          .fn()
+          .mockResolvedValue({ identity: "access-sw", model: "CSS106-5G-1S", version: "2.16" }),
+      );
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(MockSwosClient).toHaveBeenCalledWith("192.168.88.2", 80, {
+        username: "admin",
+        password: "pass",
+      });
+      expect(client.get).toHaveBeenCalledWith("sys.b");
+      expect(client.close).toHaveBeenCalled();
+      expect(MockRouterOSRestClient).not.toHaveBeenCalled();
+      expect(mockCreateConnection).not.toHaveBeenCalled();
+      expect(allOutput).toMatch(/Switch: access-sw \(192\.168\.88\.2, SwOS\)/);
+      expect(allOutput).toMatch(
+        /✅.*SwOS API reachable \(identity access-sw, CSS106-5G-1S, SwOS 2\.16, \d+ms\)/,
+      );
+      expect(allOutput).not.toMatch(/REST API/);
+      expect(allOutput).not.toMatch(/SSH not reachable|FTP not reachable/);
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("reports a 401 as an authentication failure, not as unreachable", async () => {
+      setupSwitch(vi.fn().mockRejectedValue(new HttpError(401, "digest authentication failed")));
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/❌.*SwOS API authentication failed \(HTTP 401/);
+      expect(allOutput).not.toMatch(/not reachable/);
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("reports an unreachable switch — does not throw", async () => {
+      setupSwitch(vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/❌.*SwOS API not reachable after \d+ms — ECONNREFUSED/);
+      expect(process.exitCode).toBe(1);
     });
   });
 
