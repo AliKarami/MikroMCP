@@ -2117,7 +2117,9 @@ List the `.b` endpoints supported by this server with their decoded field names.
 
 ### `get_swos_status` — Read
 
-Retrieve status from a SwOS switch: identity, model, firmware, uptime, per-port link state/speed/duplex, PoE mode/state/power, and SFP modules. The firmware line states whether the decode schema has been verified against that release.
+Retrieve status from a SwOS switch: identity, model, firmware, uptime (as days/hours/minutes/seconds), temperatures and fans where the switch reports them, per-port link state with the negotiated speed and duplex (a forced speed is marked; a port without link shows only `down`), PoE mode/state/power, and SFP modules. The firmware line states whether the decode schema has been verified against that release.
+
+A switch without PoE or SFP cages does not serve `poe.b` or `sfp.b`; those are listed under `notServed` instead of as failures. A failure to read `sys.b` or `link.b` is always reported as an error.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -2130,7 +2132,7 @@ Retrieve status from a SwOS switch: identity, model, firmware, uptime, per-port 
 
 ### `get_swos_endpoint` — Read
 
-Fetch and decode a single SwOS `.b` endpoint (`link.b`, `sys.b`, `poe.b`, `lacp.b`, `rstp.b`, `snmp.b`, `fwd.b`, `vlan.b`, `!stats.b`, `sfp.b`, `host.b`, `acl.b`, ...) as structured data. Unknown keys are preserved under `_raw`. Long decodes are truncated in the text response only — `structuredContent` always carries the full result.
+Fetch and decode a single SwOS `.b` endpoint (`link.b`, `sys.b`, `poe.b`, `lacp.b`, `rstp.b`, `snmp.b`, `fwd.b`, `vlan.b`, `!stats.b` on SwOS Lite or `stats.b` on full SwOS, `sfp.b`, `host.b`, `acl.b`, ...) as structured data. Unknown keys are preserved under `_raw`. Per-port bitmasks inside record lists (VLAN members, IGMP member ports, ACL source ports) decode to one flag per port; for those endpoints the tool also reads `link.b` to learn the port count. Long decodes are truncated in the text response only — `structuredContent` always carries the full result.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -2147,9 +2149,9 @@ Mutate a SwOS `.b` endpoint. The full blob is read, the given fields are merged 
 
 `dryRun` defaults to `true` — always preview first. Before a real write the pre-write blob is snapshotted, so the call can be undone with `rollback_change` using its journal ID. When every requested value already matches, the tool returns `no_change` and writes nothing.
 
-Values are given by decoded field name (from `list_swos_endpoints`) or by a raw wire key already present in the blob; anything else — including a schema field this device's firmware does not send — is rejected rather than injected. Option fields take the enum name (e.g. `auto` for PoE out mode). A per-port field given a single value applies it to **every** port — the firmware has no per-port addressing here, so partial-port changes require passing an array covering every port. Per-port bitmasks (`enabled`, `flow_rx`, …) are one number, not a list of flags.
+Values are given by decoded field name (from `list_swos_endpoints`) or by a raw wire key already present in the blob; anything else — including a schema field this device's firmware does not send — is rejected rather than injected. Option fields take the enum name (e.g. `auto` for PoE out mode), encoded for the SwOS dialect the switch speaks. IP fields take a dotted quad (`192.168.88.1`) and MAC fields six hex pairs (`64:d1:54:00:00:01`); anything else is refused. A per-port field given a single value applies it to **every** port — the firmware has no per-port addressing here, so partial-port changes require passing an array covering every port. Per-port bitmasks (`enabled`, `flow_rx`, …) are one number, not a list of flags.
 
-Device-generated tables (`!stats.b`, `!dhost.b`, `!igmp.b`, `!aclstats.b`) are read-only and cannot be targeted, and neither can record lists (`vlan.b`, `host.b`, `acl.b`) — a field merge cannot express "edit row 3", and writing one would replace the table rather than edit it.
+Device-generated tables (`!stats.b`, `stats.b`, `!dhost.b`, `!igmp.b`, `!aclstats.b`) are read-only and cannot be targeted, and neither can record lists (`vlan.b`, `host.b`, `acl.b`) — a field merge cannot express "edit row 3", and writing one would replace the table rather than edit it.
 
 Every result — dry run and real write — carries a `compatibility` verdict comparing the switch's model and firmware against the set the schema was validated on, plus any wire keys the schema does not map. It warns; it does not block. See [Configuration → Firmware compatibility](Configuration).
 

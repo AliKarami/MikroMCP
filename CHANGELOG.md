@@ -16,13 +16,14 @@ Each release section covers changes **since the previous release only**.
 
 ### Changed
 - An empty `{envPrefix}_PASS` is a password, not a missing one, for RouterOS routers as well as SwOS switches: a SwOS switch ships with `admin` and no password and could not be reached before. Only an unset variable is missing now; `mikromcp doctor` warns about an empty password on a RouterOS router.
-- `write_swos_blob` encodes option fields against the dialect the switch speaks (`strict` is written as 3 on full SwOS and 2 on SwOS Lite), resolves a raw wire key present in the blob before a decoded field of the same name (`ip` on full SwOS is the static address, not the current one), and no longer offers the per-port counter table `stats.b` as a write target.
+- `write_swos_blob` encodes option fields against the dialect the switch speaks (`strict` is written as 3 on full SwOS and 2 on SwOS Lite), resolves a raw wire key present in the blob before a decoded field of the same name (`ip` on full SwOS is the static address, not the current one), and does not offer the full-SwOS counter table `stats.b` as a write target (like `!stats.b`, it is read-only).
 
 ### Fixed
 - Full SwOS: the configured and negotiated speed keys were swapped (`spdc` is the configured speed, `spd` the negotiated one), the static IP was read from `sip` instead of `ip`, and MikroTik discovery from `dsc` instead of `pdsc`.
 - Port bitmasks inside record lists (VLAN members, IGMP member ports, ACL source ports) always decoded to an empty list; `get_swos_endpoint` sizes them, and the masks in `sys.b`, to the switch's port count read from `link.b`.
 - Signed 32-bit values decoded wrong: the sign extension used JavaScript bit shifts, which wrap at 32 bits, so a temperature of 42 °C read as 41.
-- `get_swos_status` on full SwOS: uptime is counted in centiseconds, so it read 100 times too long (and is now shown as days, hours, minutes and seconds); a port without link printed a stale speed code ("down (7 half)"); board and PHY temperatures of 0 from a switch without those sensors were listed; a switch without PoE reported `poe.b` as a failed section (HTTP 303); and empty SFP cages printed a bare "SFP modules:" heading.
+- `get_swos_status` on full SwOS: uptime is counted in centiseconds, so it read 100 times too long (and is now shown as days, hours, minutes and seconds); a port without link printed a stale speed code ("down (7 half)"); board and PHY temperatures of 0 from a switch without those sensors were listed; a switch without PoE reported `poe.b` as a failed section (HTTP 303); and empty SFP cages printed a bare "SFP modules:" heading. On SwOS Lite too, uptime is now shown as days, hours, minutes and seconds, and a port without link shows only `down`.
+- `write_swos_blob` wrote IP and MAC values given as text (`static_ip: "192.168.88.5"`) as the UTF-8 hex of the text, on SwOS Lite as well as full SwOS, so a write of `sys.b` sent a malformed management address. IP fields now take a dotted quad and MAC fields six hex pairs; anything else, including `1..2.3` or `1e2.0.0.1`, is refused. Field names inherited from JavaScript objects (`toString`) are no longer taken for wire keys.
 
 ## [1.13.2] - 2026-10-14
 

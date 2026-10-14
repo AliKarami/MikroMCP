@@ -424,7 +424,7 @@ const writeBlobSchema = z
         ]),
       )
       .describe(
-        "Values to set, keyed by decoded field name (from list_swos_endpoints) or by a raw wire key already present in the blob — anything else is rejected. Option fields take the enum name (e.g. 'auto'); text becomes a UTF-8 hex string; numbers and '0x...' strings are written as hex, padded to the width of the value they replace. A per-port field given a single value applies it to EVERY port.",
+        "Values to set, keyed by decoded field name (from list_swos_endpoints) or by a raw wire key already present in the blob — anything else is rejected. Option fields take the enum name (e.g. 'auto'); IP fields take a dotted quad (192.168.88.1) and MAC fields six hex pairs (64:d1:54:00:00:01); other text becomes a UTF-8 hex string; numbers and '0x...' strings are written as hex, padded to the width of the value they replace. A per-port field given a single value applies it to EVERY port.",
       ),
     dryRun: z
       .boolean()
@@ -444,7 +444,7 @@ function resolveField(epKey: string, key: string, wire: DecodedBlob): Field | un
   if (!ep) return undefined;
   const byWireKey = (field: Field) => Object.values(field.keys).includes(key);
   return (
-    ep.fields.find((field) => key in wire && byWireKey(field)) ??
+    ep.fields.find((field) => Object.hasOwn(wire, key) && byWireKey(field)) ??
     ep.fields.find((field) => field.name === key) ??
     ep.fields.find(byWireKey)
   );
@@ -460,7 +460,7 @@ function resolveField(epKey: string, key: string, wire: DecodedBlob): Field | un
  * sent — silently reporting success while changing nothing.
  */
 function resolveWireKey(field: Field, wire: DecodedBlob): string | undefined {
-  return Object.values(field.keys).find((key) => key in wire);
+  return Object.values(field.keys).find((key) => Object.hasOwn(wire, key));
 }
 
 function validationError(code: string, message: string, suggestedAction: string): MikroMCPError {
@@ -514,8 +514,10 @@ function coerceScalar(field: Field, value: unknown, existing: unknown): unknown 
   if (field.kind === Kind.IP) {
     // Dotted quad, stored as a little-endian 32-bit hex token (192.168.88.1 -> 0x0158a8c0).
     if (isWireHex(value)) return value;
-    const octets = text.split(".").map(Number);
-    if (octets.length !== 4 || octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) {
+    // Checked as text first: Number() reads "" as 0 and accepts "1e2" and "0x1", which
+    // would write a different management address than the one asked for.
+    const octets = /^\d{1,3}(\.\d{1,3}){3}$/.test(text) ? text.split(".").map(Number) : [];
+    if (octets.length !== 4 || octets.some((o) => o > 255)) {
       throw validationError(
         "SWOS_INVALID_VALUE",
         `Field "${field.name}" takes an IPv4 address, not "${text}".`,
@@ -600,8 +602,12 @@ const writeSwosBlobTool: ToolDefinition = {
       const changes: Record<string, { from: unknown; to: unknown }> = {};
       for (const [key, value] of Object.entries(parsed.fields)) {
         const field = resolveField(parsed.endpoint, key, wire);
-        const targetKey = key in wire ? key : field ? resolveWireKey(field, wire) : undefined;
-        if (targetKey === undefined || !(targetKey in wire)) {
+        const targetKey = Object.hasOwn(wire, key)
+          ? key
+          : field
+            ? resolveWireKey(field, wire)
+            : undefined;
+        if (targetKey === undefined || !Object.hasOwn(wire, targetKey)) {
           throw validationError(
             "SWOS_UNKNOWN_FIELD",
             field

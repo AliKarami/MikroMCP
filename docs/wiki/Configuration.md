@@ -102,6 +102,7 @@ routers:
 - One device type covers both firmware editions: SwOS and SwOS Lite speak the same API and differ only in how they name fields, which is detected per field from the device's own response. `deviceType: "swos-lite"` is accepted and normalised to `swos`.
 - `tls` and `rosVersion` are omitted — the firmware speaks plain HTTP only, and setting `tls.enabled: true` is rejected at config load.
 - Only the `swos_*` tools (plus `check_router_health`, `list_routers` and `rollback_change`) run against these devices. Any RouterOS tool aimed at a switch fails with `PLATFORM_MISMATCH`, and vice versa — including `plan_changes` and `apply_plan`, which are RouterOS-only. Preview a SwOS write with `write_swos_blob`'s `dryRun` (its default) instead.
+- A switch on its factory login (`admin` with no password) is reached by setting the password variable to an empty string, e.g. `SWITCH_CORE01_PASS=`. An empty `_PASS` is a real password; only an unset variable counts as missing. `mikromcp doctor` warns about an empty password on a RouterOS router, where it is almost always a mistake.
 - Credentials are never sent in the clear — digest auth hashes them — but the payload itself is unencrypted, and the digest is MD5. Keep switch management on a trusted VLAN.
 - Writes are whole-blob: the endpoint is read, the requested fields are merged in, and everything else is re-sent byte-for-byte. Fields the device did not send are refused rather than injected, so a firmware that renames or drops a key fails loudly instead of writing junk.
 - Every write and preview reports a **firmware compatibility** verdict — see below.
@@ -168,7 +169,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_CMD_ALLOW` | — | Global command allowlist for `run_command` (comma-separated patterns) |
 | `MIKROMCP_CMD_DENY` | — | Global command denylist for `run_command` (comma-separated patterns) |
 | `ROUTER_<PREFIX>_USER` | — | Router username (matches `envPrefix` in YAML) |
-| `ROUTER_<PREFIX>_PASS` | — | Router password (matches `envPrefix` in YAML) |
+| `ROUTER_<PREFIX>_PASS` | — | Router password (matches `envPrefix` in YAML). An empty value is a real (empty) password; only an unset variable counts as missing |
 
 ### Default router resolution
 

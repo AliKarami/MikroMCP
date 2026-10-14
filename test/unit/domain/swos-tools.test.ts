@@ -664,6 +664,35 @@ describe("swosTools", () => {
       ).rejects.toMatchObject({ code: "SWOS_INVALID_VALUE" });
     });
 
+    it.each(["1..2.3", "1e2.0.0.1", "0x1.2.3.4", " 1.2.3.4", "1.2.3.4 ", "1.2.3.256", "1.2.3"])(
+      "rejects the malformed IPv4 address %j instead of writing another address",
+      async (ip) => {
+        const swos = makeSwosClient({}, FULL_FIXTURES);
+        await expect(
+          writeTool.handler(params("sys.b", { static_ip: ip }), makeContext(swos)),
+        ).rejects.toMatchObject({ code: "SWOS_INVALID_VALUE" });
+        expect(swos.written).toHaveLength(0);
+      },
+    );
+
+    it.each(["64:d1:54:00:00", "64:d1:54:00:00:0g", "64d1.5400.0001"])(
+      "rejects the malformed MAC address %j",
+      async (mac) => {
+        const swos = makeSwosClient({}, FULL_FIXTURES);
+        await expect(
+          writeTool.handler(params("sys.b", { root_bridge_mac: mac }), makeContext(swos)),
+        ).rejects.toMatchObject({ code: "SWOS_INVALID_VALUE" });
+      },
+    );
+
+    it("does not treat inherited object names as wire keys", async () => {
+      const swos = makeSwosClient({}, FULL_FIXTURES);
+      await expect(
+        writeTool.handler(params("sys.b", { toString: "abc" }), makeContext(swos)),
+      ).rejects.toMatchObject({ code: "SWOS_UNKNOWN_FIELD" });
+      expect(swos.written).toHaveLength(0);
+    });
+
     it("does not offer the per-port counter table as a write target", () => {
       expect(() =>
         writeTool.inputSchema.parse({ routerId: "switch-01", endpoint: "stats.b", fields: {} }),
