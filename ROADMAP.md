@@ -404,6 +404,19 @@ Contributed by [@akuzin87](https://github.com/akuzin87).
 
 ---
 
+## ✅ v1.14 — Full SwOS Support (126 → 132 tools)
+
+**Goal:** Manage a full-SwOS switch (CSS318, CSS326) as safely as a router, not only read a SwOS Lite one.
+
+- **Correct readings on full SwOS.** The full-SwOS dialect, taken from the SwOS 2.18 web UI and verified on a CSS318-16G-2S+ at 2.19: negotiated speeds, uptime, VLAN members, temperatures and fans now read right.
+- **The whole switch as one document.** `get_swos_config` exports system settings, ports, VLANs and SNMP as YAML; `apply_swos_config` plans it against the switch, writes only what changes in a lockout-safe order, refuses changes that would cut a linked port off unless asked, and snapshots everything for `rollback_change`.
+- **Maintenance.** `save_swos_backup` / `restore_swos_backup`, `upgrade_swos_firmware` (latest stable from MikroTik over HTTPS) and `set_swos_password`.
+- **Secrets that stay put.** SNMP communities come from `MIKROMCP_SECRET_<NAME>` bound per switch in `routers.yaml` and never reach a response or the audit log; new passwords come from `MIKROMCP_PASSWORD_<NAME>`.
+
+Contributed by [@karamble](https://github.com/karamble).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

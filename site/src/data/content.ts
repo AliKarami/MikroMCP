@@ -25,6 +25,7 @@ export const features = [
   { icon: "lock", title: "Secure access", body: "HTTP bearer auth, SSH private keys, bcrypt token hashes, RBAC, router/tool restrictions, confirmation tokens." },
   { icon: "activity", title: "Diagnostics", body: "Router-originated ping, traceroute, torch, log filtering, guarded SSH command execution." },
   { icon: "shield", title: "Change safety", body: "Dry-run, idempotent writes, snapshots, write journal, plan_changes, apply_plan, rollback_change." },
+  { icon: "switch", title: "SwOS switches", body: "MikroTik SwOS and SwOS Lite switches over their .b HTTP API: port, PoE and SFP status, the whole switch config as one YAML document with dry-run and lockout checks, backups, firmware upgrades." },
   { icon: "layers", title: "Fleet operations", body: "Discover configured routers with list_routers, then fan a tool out across them by id or tag with bulk_execute, or with bulk_read, which runs read-only tools only." },
   { icon: "settings", title: "Production behavior", body: "Retries for read tools, per-router circuit breakers, correlation IDs, structured logs, audit logs." },
 ];
@@ -35,18 +36,18 @@ export const examples = [
   { label: "Safe Route Change", prompt: "Dry-run a route on core-01 for 10.20.0.0/16 via 192.168.88.1 in the main table. Show the exact planned diff and tell me whether an existing route conflicts." },
   { label: "WireGuard", prompt: "Show WireGuard peers on branch-02. Sort by last handshake age and flag peers that have not handshaken recently or have no transfer counters." },
   { label: "Fleet Audit", prompt: "List the routers MikroMCP is configured for, then check RouterOS version and pending upgrades on every router tagged edge. Summarize which ones are behind." },
-  { label: "SwOS Switch", prompt: "List the SwOS endpoints MikroMCP supports, then show the port status and PoE state on switch-01. Dry-run any change and show me the resulting blob before writing anything." },
+  { label: "SwOS Switch", prompt: "Export the config of switch-01, add VLAN 30 named IOT on ports 13 and 14, and dry-run the change. Show me the planned writes and any lockout warnings before applying anything." },
   { label: "Diagnostics", prompt: "Check interface health on edge-01, then run ping and traceroute from the router to 1.1.1.1. If packet loss is present, use torch on the WAN interface for a short traffic snapshot." },
   { label: "Plan / Apply / Rollback", prompt: "Create a change plan that adds a DNS record and a firewall address-list entry on edge-01. Use dry-run first, explain the plan, then wait for approval before applying anything." },
 ];
 
 export const faqs = [
-  { q: "What is MikroMCP?", a: `MikroMCP is an open-source Model Context Protocol (MCP) server that exposes MikroTik RouterOS as ${SITE.toolCount} typed, auditable tools — letting AI assistants inspect, diagnose, and safely operate routers in natural language instead of improvising CLI commands.` },
+  { q: "What is MikroMCP?", a: `MikroMCP is an open-source Model Context Protocol (MCP) server that exposes MikroTik RouterOS routers and SwOS switches as ${SITE.toolCount} typed, auditable tools — letting AI assistants inspect, diagnose, and safely operate them in natural language instead of improvising CLI commands.` },
   { q: "How is it different from the RouterOS API?", a: "The RouterOS REST/API exposes raw endpoints. MikroMCP wraps them in schema-validated, idempotent, dry-run-able tools with RBAC, audit logging, snapshots, and rollback — the safety layer an LLM needs before it touches production gear." },
   { q: "How is it different from SSH automation?", a: "Instead of brittle SSH scripts that screen-scrape CLI output, MikroMCP returns structured, typed results with confirmation gates and per-router circuit breakers. SSH is used only where REST can't reach — ping and guarded run_command." },
   { q: "Does it work with Claude, Cursor, and Codex?", a: "Yes. MikroMCP speaks MCP over stdio and HTTP/SSE, so Claude Desktop, Claude Code, Cursor, Codex, and any MCP-compatible client can drive RouterOS directly." },
   { q: "Can it manage more than one router?", a: "Yes. Routers are declared in routers.yaml with per-router credentials and tags. Every tool takes a routerId, list_routers enumerates what is configured, and bulk_execute fans a single tool call out across routers selected by id or tag." },
-  { q: "Does it work with MikroTik switches?", a: "Experimentally, yes. Devices declared with deviceType: \"swos\" speak MikroTik's undocumented .b HTTP API instead of the RouterOS REST API, covering SwOS and SwOS Lite. The schema is reverse-engineered and validated against a CSS610-8P-2S+ (SwOS Lite) and checked on a CSS318-16G-2S+ (full SwOS); other models decode best-effort and writes default to dry-run." },
+  { q: "Does it work with MikroTik switches?", a: "Yes. Devices declared with deviceType: \"swos\" speak MikroTik's undocumented .b HTTP API instead of the RouterOS REST API, covering SwOS and SwOS Lite: status, a switch's whole config as one YAML document (export, dry-run, apply with lockout checks), backups, firmware upgrades and password changes. The schema is reverse-engineered and validated against a CSS610-8P-2S+ (SwOS Lite) and checked on a CSS318-16G-2S+ (full SwOS); other models decode best-effort and writes default to dry-run." },
   { q: "Is it safe to run against production routers?", a: "MikroMCP is built for it: dry-run previews, idempotent writes, snapshots, rollback, confirmation tokens, per-router circuit breakers, RBAC, and audit logging. Use least-privilege RouterOS users and verified TLS." },
   { q: "Which RouterOS versions are supported?", a: "RouterOS 7.x, which provides the REST API MikroMCP uses." },
 ];

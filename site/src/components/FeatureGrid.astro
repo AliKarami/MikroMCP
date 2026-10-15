@@ -11,6 +11,7 @@ const icons: Record<string, string> = {
   shield: '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
   layers: '<polygon points="12 3 21 8 12 13 3 8 12 3"/><polyline points="3 13 12 18 21 13"/>',
+  switch: '<rect x="2" y="8" width="20" height="8" rx="2"/><path d="M6 12h.01M9.5 12h.01M13 12h.01M16.5 12h2"/>',
 };
 
 // Each tile samples a different span of the ramp, so the grid reads as one family
@@ -48,6 +49,8 @@ const tiles = [
 <style>
   .head { max-width: 640px; margin: 14px 0 42px; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  /* A card left alone on the last row takes the whole row. */
+  .grid > :last-child:nth-child(3n + 1) { grid-column: 1 / -1; }
   .card {
     position: relative; padding: 28px 26px 30px; border-radius: var(--radius);
     background: var(--bg-elev); border: 1px solid var(--border);
@@ -76,6 +79,9 @@ const tiles = [
   .card h3 { position: relative; font-size: 17px; margin-bottom: 9px; }
   .card p { position: relative; margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.65; }
 
-  @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .grid > :last-child:nth-child(3n + 1) { grid-column: auto; }
+  }
   @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
 </style>

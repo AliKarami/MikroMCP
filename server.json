@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.AliKarami/mikromcp",
   "title": "MikroMCP",
-  "description": "MCP server for MikroTik RouterOS: typed tools, dry-run, RBAC, audit logs, and rollback.",
+  "description": "MCP server for MikroTik RouterOS and SwOS: typed tools, dry-run, RBAC, audit logs, and rollback.",
   "repository": {
     "url": "https://github.com/AliKarami/MikroMCP",
     "source": "github"
   },
-  "version": "1.13.2",
+  "version": "1.14.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mikromcp",
-      "version": "1.13.2",
+      "version": "1.14.0",
       "transport": {
         "type": "stdio"
       },

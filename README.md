@@ -8,11 +8,11 @@
   </picture>
 </p>
 
-> **AI-native network automation for MikroTik RouterOS.** MikroMCP exposes RouterOS as a typed, auditable [Model Context Protocol](https://modelcontextprotocol.io) server so Claude, Cursor, Codex, and other MCP clients can inspect, diagnose, and safely operate MikroTik routers in natural language.
+> **AI-native network automation for MikroTik RouterOS and SwOS.** MikroMCP exposes RouterOS routers and SwOS switches as a typed, auditable [Model Context Protocol](https://modelcontextprotocol.io) server so Claude, Cursor, Codex, and other MCP clients can inspect, diagnose, and safely operate MikroTik gear in natural language.
 
 [![CI](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml)
 [![Release](https://github.com/AliKarami/MikroMCP/actions/workflows/release.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/release.yml)
-[![Version](https://img.shields.io/badge/version-v1.13.2-2DD4BF)](package.json)
+[![Version](https://img.shields.io/badge/version-v1.14.0-2DD4BF)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-339933)](package.json)
 [![RouterOS 7.x](https://img.shields.io/badge/RouterOS-7.x-293239)](https://help.mikrotik.com/docs/display/ROS/REST+API)
@@ -221,6 +221,7 @@ Please open an issue before large changes so maintainers can align on scope.
 ### Acknowledgements
 
 - [@f0086](https://github.com/f0086) — SwOS / SwOS Lite switch support (v1.9.0), which took MikroMCP beyond RouterOS for the first time.
+- [@karamble](https://github.com/karamble) — full SwOS support (v1.14.0): the full-SwOS dialect, whole-switch config apply, backups, firmware upgrades, password changes and switch-bound secrets.
 
 ---
 

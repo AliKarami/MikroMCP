@@ -1,6 +1,6 @@
 # MikroMCP
 
-A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives AI assistants safe, structured access to MikroTik RouterOS devices. 132 typed tools. Dry-run on every write. Idempotency built in.
+A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives AI assistants safe, structured access to MikroTik RouterOS routers and SwOS switches. 132 typed tools. Dry-run on every write. Idempotency built in.
 
 ---
 
