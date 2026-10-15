@@ -213,7 +213,13 @@ const getSwosConfigTool: ToolDefinition = {
 // ---------------------------------------------------------------------------
 
 /** The per-port settings and VLAN table changes that cannot be ordered with a management VLAN move. */
-const VLAN_PORT_SETTINGS = new Set(["vlan_mode", "vlan_receive", "default_vlan", "force_vlan", "forward_to"]);
+const VLAN_PORT_SETTINGS = new Set([
+  "vlan_mode",
+  "vlan_receive",
+  "default_vlan",
+  "force_vlan",
+  "forward_to",
+]);
 const VLAN_MEMBERSHIP = new Set(["add", "remove", "members"]);
 
 const applyConfigSchema = z
