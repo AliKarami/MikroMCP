@@ -454,6 +454,41 @@ describe("runDoctor", () => {
       expect(process.exitCode).toBe(0);
     });
 
+    it("warns about a bound secret whose variable is not set, and says when nothing is bound", async () => {
+      setupSwitch(
+        vi
+          .fn()
+          .mockResolvedValue({ identity: "access-sw", model: "CSS106-5G-1S", version: "2.16" }),
+      );
+      const bound = { ...makeSwitch(), secrets: ["SNMP_COMMUNITY"] };
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [bound] }) as unknown as RouterRegistry,
+      );
+      delete process.env.MIKROMCP_SECRET_SNMP_COMMUNITY;
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+      let allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(
+        /access-sw binds secret SNMP_COMMUNITY, but MIKROMCP_SECRET_SNMP_COMMUNITY is not set/,
+      );
+
+      consoleSpy.mockClear();
+      process.env.MIKROMCP_SECRET_SNMP_COMMUNITY = "c0mmunity";
+      try {
+        MockRouterRegistry.mockImplementation(
+          () => ({ listRouters: () => [makeSwitch()] }) as unknown as RouterRegistry,
+        );
+        await runDoctor();
+        allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+        expect(allOutput).not.toMatch(/binds secret/);
+        expect(allOutput).toMatch(
+          /access-sw has no secrets list in routers.yaml: any MIKROMCP_SECRET_\* applies to it/,
+        );
+      } finally {
+        delete process.env.MIKROMCP_SECRET_SNMP_COMMUNITY;
+      }
+    });
+
     it("reports a 401 as an authentication failure, not as unreachable", async () => {
       setupSwitch(vi.fn().mockRejectedValue(new HttpError(401, "digest authentication failed")));
 

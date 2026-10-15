@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { writeFileSync, mkdtempSync, chmodSync } from "node:fs";
+import { writeFileSync, mkdtempSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RouterRegistry } from "../../../src/config/router-registry.js";
@@ -382,5 +382,53 @@ routers:
       envPrefix: SWITCH_CORE
 `);
     expect(() => new RouterRegistry(path)).toThrow(/plain HTTP only/);
+  });
+});
+
+describe("switch config secrets binding", () => {
+  function load(yaml: string): RouterRegistry {
+    const path = join(tmpdir(), `routers-secrets-${Date.now()}-${Math.random()}.yaml`);
+    writeFileSync(path, yaml);
+    try {
+      return new RouterRegistry(path);
+    } finally {
+      rmSync(path, { force: true });
+    }
+  }
+
+  it("accepts a secrets list on a SwOS switch", () => {
+    const registry = load(`routers:
+  sw:
+    host: 10.0.0.2
+    port: 80
+    deviceType: swos
+    credentials: { source: env, envPrefix: SW }
+    secrets: [SNMP_COMMUNITY, OTHER_1]
+`);
+    expect(registry.getRouter("sw").secrets).toEqual(["SNMP_COMMUNITY", "OTHER_1"]);
+  });
+
+  it("refuses a secrets list on a RouterOS router and a name that is not a secret name", () => {
+    expect(() =>
+      load(`routers:
+  r:
+    host: 10.0.0.1
+    port: 443
+    tls: { enabled: true, rejectUnauthorized: true }
+    rosVersion: "7.14"
+    credentials: { source: env, envPrefix: R }
+    secrets: [SNMP_COMMUNITY]
+`),
+    ).toThrow(/secrets.*SwOS devices only/);
+    expect(() =>
+      load(`routers:
+  sw:
+    host: 10.0.0.2
+    port: 80
+    deviceType: swos
+    credentials: { source: env, envPrefix: SW }
+    secrets: ["snmp community"]
+`),
+    ).toThrow(/NAME of MIKROMCP_SECRET_/);
   });
 });

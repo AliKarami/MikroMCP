@@ -370,6 +370,72 @@ describe("swosConfigTools", () => {
       expect(sw.posts).toEqual(["sys.b"]);
     });
 
+    it("refuses a secret the switch is not bound to, before reading the switch", async () => {
+      const sw = makeSwitch();
+      const ctx = makeContext(sw, SECRETS);
+      ctx.routerConfig = { secrets: ["OTHER"] } as unknown as ToolContext["routerConfig"];
+      await expect(
+        applyTool.handler({ routerId: "switch-01", config: OFFICE }, ctx),
+      ).rejects.toMatchObject({ code: "SWOS_CONFIG_SECRET_NOT_BOUND" });
+      expect(sw.client.readBlobForWrite).not.toHaveBeenCalled();
+      const bound = makeContext(sw, SECRETS);
+      bound.routerConfig = {
+        secrets: ["SNMP_COMMUNITY"],
+      } as unknown as ToolContext["routerConfig"];
+      const result = await applyTool.handler({ routerId: "switch-01", config: OFFICE }, bound);
+      expect((result.structuredContent as { action: string }).action).toBe("dry_run");
+    });
+
+    it("refuses moving management to another VLAN in the same document that changes VLANs", async () => {
+      const sw = makeSwitch();
+      const both = {
+        version: 1,
+        system: { allow_from_vlan: 100 },
+        vlans: [{ id: 100, name: "MGMT", members: [8, 17] }],
+      };
+      const dry = await applyTool.handler(
+        { routerId: "switch-01", config: both, includeManagement: true },
+        makeContext(sw),
+      );
+      expect((dry.structuredContent as { warnings: string[] }).warnings).toContainEqual(
+        expect.stringMatching(/Management moves to VLAN 100 in the same document/),
+      );
+      await expect(
+        applyTool.handler(
+          {
+            routerId: "switch-01",
+            config: both,
+            dryRun: false,
+            includeManagement: true,
+            acceptLockoutRisk: true,
+          },
+          makeContext(sw),
+        ),
+      ).rejects.toMatchObject({ code: "SWOS_MANAGEMENT_MOVE_UNORDERED" });
+      expect(sw.client.postRaw).not.toHaveBeenCalled();
+      // In two steps it goes through: the VLAN first, the move second.
+      await applyTool.handler(
+        {
+          routerId: "switch-01",
+          config: { version: 1, vlans: both.vlans },
+          dryRun: false,
+          acceptLockoutRisk: true,
+        },
+        makeContext(sw),
+      );
+      await applyTool.handler(
+        {
+          routerId: "switch-01",
+          config: { version: 1, system: { allow_from_vlan: 100 } },
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
+        makeContext(sw),
+      );
+      expect(sw.posts).toContain("sys.b");
+    });
+
     it("names a missing secret before reading the switch", async () => {
       const sw = makeSwitch();
       await expect(

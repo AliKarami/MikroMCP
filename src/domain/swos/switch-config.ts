@@ -204,6 +204,13 @@ export interface ParseOptions {
    * are redacted there.
    */
   communityByReferenceOnly?: boolean;
+  /**
+   * The secret names this switch may reference (its `secrets` list in
+   * routers.yaml). Undefined = any configured secret.
+   */
+  allowedSecrets?: readonly string[];
+  /** Named in the refusal when a secret is not bound to the switch. */
+  routerId?: string;
 }
 
 /** What the logs hold instead of a config text that spells out a community. */
@@ -326,6 +333,14 @@ export function parseSwitchConfig(
         "SWOS_CONFIG_INVALID",
         "snmp.community must be either a value or exactly one ${NAME} reference.",
         "Write it as ${SNMP_COMMUNITY}.",
+      );
+    }
+    if (options.allowedSecrets && !options.allowedSecrets.includes(match[1])) {
+      const who = options.routerId ? `switch "${options.routerId}"` : "this switch";
+      throw configError(
+        "SWOS_CONFIG_SECRET_NOT_BOUND",
+        `The config references \${${match[1]}}, which is not bound to ${who} (its routers.yaml secrets list names ${options.allowedSecrets.length ? options.allowedSecrets.join(", ") : "nothing"}).`,
+        `Add ${match[1]} to the switch's \`secrets\` list in routers.yaml if it is meant for it, or reference one of the bound names.`,
       );
     }
     const resolved = secrets[match[1]];

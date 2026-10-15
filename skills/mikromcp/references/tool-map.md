@@ -284,6 +284,8 @@ It grows the VLAN table before the per-port writes and shrinks it after them,
 and refuses address/allow-from changes without `includeManagement: true` and
 any plan that would cut a linked port off (its untagged VLAN moved or dropped,
 a trunk losing tagged VLANs, the port disabled) without `acceptLockoutRisk:
-true` — on the management port that is a lockout. Save a
+true` — on the management port that is a lockout. A document that moves
+`allow_from_vlan` and changes VLANs at once is refused: VLAN changes first, the
+move second. Save a
 backup with `save_swos_backup` before firmware or restore operations; both
 reboot the switch.
