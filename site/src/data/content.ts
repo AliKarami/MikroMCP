@@ -6,7 +6,7 @@ export const SITE = {
   tagline: "Open Source MikroTik MCP Server for RouterOS",
   github: "https://github.com/AliKarami/MikroMCP",
   docs: "https://docs.mikromcp.com",
-  toolCount: 126,
+  toolCount: 132,
   version: VERSION,
 };
 
@@ -46,7 +46,7 @@ export const faqs = [
   { q: "How is it different from SSH automation?", a: "Instead of brittle SSH scripts that screen-scrape CLI output, MikroMCP returns structured, typed results with confirmation gates and per-router circuit breakers. SSH is used only where REST can't reach — ping and guarded run_command." },
   { q: "Does it work with Claude, Cursor, and Codex?", a: "Yes. MikroMCP speaks MCP over stdio and HTTP/SSE, so Claude Desktop, Claude Code, Cursor, Codex, and any MCP-compatible client can drive RouterOS directly." },
   { q: "Can it manage more than one router?", a: "Yes. Routers are declared in routers.yaml with per-router credentials and tags. Every tool takes a routerId, list_routers enumerates what is configured, and bulk_execute fans a single tool call out across routers selected by id or tag." },
-  { q: "Does it work with MikroTik switches?", a: "Experimentally, yes. Devices declared with deviceType: \"swos\" speak MikroTik's undocumented .b HTTP API instead of the RouterOS REST API, covering SwOS and SwOS Lite. The schema is reverse-engineered and validated against a CSS610-8P-2S+, so other models decode best-effort and writes default to dry-run." },
+  { q: "Does it work with MikroTik switches?", a: "Experimentally, yes. Devices declared with deviceType: \"swos\" speak MikroTik's undocumented .b HTTP API instead of the RouterOS REST API, covering SwOS and SwOS Lite. The schema is reverse-engineered and validated against a CSS610-8P-2S+ (SwOS Lite) and checked on a CSS318-16G-2S+ (full SwOS); other models decode best-effort and writes default to dry-run." },
   { q: "Is it safe to run against production routers?", a: "MikroMCP is built for it: dry-run previews, idempotent writes, snapshots, rollback, confirmation tokens, per-router circuit breakers, RBAC, and audit logging. Use least-privilege RouterOS users and verified TLS." },
   { q: "Which RouterOS versions are supported?", a: "RouterOS 7.x, which provides the REST API MikroMCP uses." },
 ];

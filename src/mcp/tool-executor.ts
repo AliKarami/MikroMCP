@@ -17,7 +17,11 @@ import { createLogger } from "../observability/logger.js";
 import { recordToolCall } from "../observability/metrics.js";
 import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { ToolContext, ToolDefinition } from "../domain/tools/tool-definition.js";
-import { snapshotPathsFor, unavailableCapability } from "../domain/tools/tool-definition.js";
+import {
+  snapshotPathsFor,
+  loggableParams,
+  unavailableCapability,
+} from "../domain/tools/tool-definition.js";
 import type { RouterRegistry } from "../config/router-registry.js";
 import type { RouterConfig } from "../types.js";
 import type { ConnectionPool } from "../adapter/connection-pool.js";
@@ -176,6 +180,9 @@ export async function executeToolCall(
   return withContext({ correlationId, tool: tool.name }, async () => {
     const startMs = Date.now();
     let journalId: string | undefined;
+    // What the audit log and the journal may hold, settled before anything can
+    // fail: a call refused by authz or the platform check is logged too.
+    let loggedArgs = loggableParams(tool, args);
 
     try {
       const identity =
@@ -204,6 +211,7 @@ export async function executeToolCall(
 
       const routerId = resolveRouterId(args.routerId as string | undefined, registry, config);
       args.routerId = routerId;
+      loggedArgs = { ...loggedArgs, routerId };
 
       checkAuthz(identity, tool.name, routerId);
 
@@ -229,7 +237,7 @@ export async function executeToolCall(
             tool: tool.name,
             routerId,
             phase: "attempt",
-            params: args,
+            params: loggedArgs,
           },
           config.auditLogPath,
         );
@@ -250,6 +258,7 @@ export async function executeToolCall(
       const { confirmationToken: _ct, ...handlerArgs } = args;
 
       const snapshotIds: string[] = [];
+      const snapshots = { taken: [] as string[], failed: [] as string[] };
       if (!tool.annotations.readOnlyHint) {
         for (const path of snapshotPathsFor(tool, handlerArgs)) {
           try {
@@ -260,21 +269,25 @@ export async function executeToolCall(
               config.snapshotDir,
             );
             snapshotIds.push(meta.id);
+            snapshots.taken.push(path);
             log.debug({ snapshotId: meta.id, path }, "Snapshot taken");
           } catch (err) {
+            snapshots.failed.push(path);
             log.warn({ err, path, routerId }, "Snapshot failed — proceeding without snapshot");
           }
         }
       }
+      toolContext.snapshots = snapshots;
 
       if (!tool.annotations.readOnlyHint && config.journalPath) {
+        const { confirmationToken: _token, ...journalArgs } = loggedArgs;
         journalId = recordAttempt({
           journalPath: config.journalPath,
           identityId: identity.id,
           role: identity.role,
           tool: tool.name,
           routerId,
-          params: handlerArgs,
+          params: journalArgs,
           snapshotIds,
         });
       }
@@ -307,7 +320,7 @@ export async function executeToolCall(
             tool: tool.name,
             routerId,
             phase: "success",
-            params: args,
+            params: loggedArgs,
             durationMs: Date.now() - startMs,
           },
           config.auditLogPath,
@@ -364,7 +377,7 @@ export async function executeToolCall(
             tool: tool.name,
             routerId,
             phase: "failure",
-            params: args,
+            params: loggedArgs,
             outcome: error.code,
             durationMs: Date.now() - startMs,
           },

@@ -83,7 +83,7 @@ maintenanceWindows:
 
 ## SwOS switches
 
-> **Experimental.** MikroTik does not document the `.b` API; MikroMCP's schema was reverse-engineered from a **CSS610-8P-2S+ on SwOS Lite 2.21** (the device's own `engine.js` plus live captures). Reads degrade gracefully on other models — unrecognised keys simply surface under `_raw`. Writes are model- and firmware-specific: preview with `dryRun` and keep the `rollback_change` journal ID before applying one to hardware this has not been tested on.
+> **Experimental.** MikroTik does not document the `.b` API; MikroMCP's schema was reverse-engineered from a **CSS610-8P-2S+ on SwOS Lite 2.21** (the device's own `engine.js` plus live captures). Full SwOS config writes are verified on a **CSS318-16G-2S+ on SwOS 2.19** (export, apply and read-back). Reads degrade gracefully on other models — unrecognised keys simply surface under `_raw`. Writes are model- and firmware-specific: preview with `dryRun` and keep the `rollback_change` journal ID before applying one to hardware this has not been tested on.
 
 MikroTik switches running **SwOS** or **SwOS Lite** (CSS326, CSS610 and friends) have no RouterOS REST API. They expose a `.b` HTTP API with digest auth instead. Declare them with `deviceType: "swos"`:
 
@@ -153,7 +153,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_TRANSPORT` | `stdio` | Transport mode: `stdio` or `http` |
 | `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry YAML |
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId`; falls back to the sole configured router when only one exists |
-| `MIKROMCP_DATA_DIR` | `~/.mikromcp/data` | Base directory for snapshots and the write journal |
+| `MIKROMCP_DATA_DIR` | `~/.mikromcp/data` | Base directory for snapshots, the write journal and `swos/` (SwOS backups and firmware images, owner-only) |
 | `MIKROMCP_LOG_LEVEL` | `info` | Log verbosity: `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP listen port (HTTP transport only) |
 | `MIKROMCP_BIND_HOST` | `127.0.0.1` | HTTP bind address (HTTP transport only) |
@@ -164,6 +164,8 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the per-router confirmation gate is off, and `bulk_execute` write fan-outs are still gated with tokens signed by a random per-process secret (valid only until restart, and only on the instance that issued them) |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | Path for NDJSON audit log file; omit to disable file sink |
 | `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
+| `MIKROMCP_SECRET_<NAME>` | — | A value a SwOS switch config may reference as `${NAME}` (e.g. `MIKROMCP_SECRET_SNMP_COMMUNITY` for `${SNMP_COMMUNITY}`). Only this prefix is resolvable from a config |
+| `MIKROMCP_PASSWORD_<NAME>`         | —                             | A new device password for `set_swos_password`, named as `NAME` in the call. Its own namespace: a switch config's `${NAME}` cannot reach it |
 | `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000` | Timeout in milliseconds for SSH commands (`run_command`, `ping`, etc.) |
 | `MIKROMCP_SSH_MAX_OUTPUT_BYTES` | `524288` (512 KB) | Maximum output size captured from SSH commands |
 | `MIKROMCP_CMD_ALLOW` | — | Global command allowlist for `run_command` (comma-separated patterns) |

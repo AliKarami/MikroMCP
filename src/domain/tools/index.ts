@@ -43,6 +43,8 @@ import { networkTestTools } from "./network-test-tools.js";
 import { containerConfigTools } from "./container-config-tools.js";
 import { interfaceListTools } from "./interface-list-tools.js";
 import { swosTools } from "./swos-tools.js";
+import { swosConfigTools } from "./swos-config-tools.js";
+import { swosMaintenanceTools } from "./swos-maintenance-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
 const baseTools: ToolDefinition[] = [
@@ -89,6 +91,8 @@ const baseTools: ToolDefinition[] = [
   ...containerConfigTools,
   ...interfaceListTools,
   ...swosTools,
+  ...swosConfigTools,
+  ...swosMaintenanceTools,
 ];
 
 export const allTools: ToolDefinition[] = [

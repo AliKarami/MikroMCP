@@ -264,6 +264,12 @@ tool aimed at a switch fails with `PLATFORM_MISMATCH`, and vice versa.
 | Status overview: links, PoE, SFP, identity | `get_swos_status` | `link.b`, `sys.b`, `poe.b`, `sfp.b` | read |
 | Read one endpoint decoded | `get_swos_endpoint` | any `.b` endpoint | read |
 | Mutate one endpoint (whole-blob write) | `write_swos_blob` | any writable `.b` endpoint | destructive |
+| Export the whole config as a YAML document | `get_swos_config` | `sys.b`, `link.b`, `fwd.b`, `lacp.b`, `vlan.b`, `snmp.b` | read |
+| Apply a config document (VLAN table, ports, SNMP, system) | `apply_swos_config` | `vlan.b`, `fwd.b`, `link.b`, `lacp.b`, `snmp.b`, `sys.b` | destructive |
+| Save the switch's backup.swb (writes a file on the server) | `save_swos_backup` | `backup.swb` | write |
+| Restore a backup.swb (switch reboots) | `restore_swos_backup` | `backup.swb` | destructive |
+| Upgrade firmware to the latest stable (switch reboots) | `upgrade_swos_firmware` | `pboot`, `upgrade` | destructive |
+| Change the admin password (new one from a server secret) | `set_swos_password` | `!pwd.b` | destructive |
 
 `write_swos_blob` defaults to `dryRun: true`, snapshots the pre-write blob, and
 is undoable via `rollback_change`. A per-port field given one value applies it to
@@ -271,3 +277,13 @@ every port; per-port bitmasks take one number, not a list of flags. `!`-prefixed
 endpoints (device-generated) and record lists (`vlan.b`, `host.b`, `acl.b`) are
 not writable. Results carry a `compatibility` verdict: an unverified firmware is
 a warning, not a block — read the dry-run diff before applying.
+
+For a whole switch, prefer `apply_swos_config` over many `write_swos_blob`
+calls: start from `get_swos_config`, edit the document, dry-run it, and apply.
+It grows the VLAN table before the per-port writes and shrinks it after them,
+and refuses address/allow-from changes without `includeManagement: true` and
+any plan that would cut a linked port off (its untagged VLAN moved or dropped,
+a trunk losing tagged VLANs, the port disabled) without `acceptLockoutRisk:
+true` — on the management port that is a lockout. Save a
+backup with `save_swos_backup` before firmware or restore operations; both
+reboot the switch.

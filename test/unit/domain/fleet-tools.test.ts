@@ -793,6 +793,52 @@ describe("fleet-tools", () => {
       expect(vi.mocked(recordOutcome).mock.calls.every((c) => c[0].phase === "success")).toBe(true);
     });
 
+    it("logs and journals each router's parameters through the inner tool's redaction", async () => {
+      vi.mocked(auditLog).mockClear();
+      mockWriteTool.redactParams = (params) => ({ ...params, config: "<withheld>" });
+      try {
+        vi.mocked(mockWriteTool.handler).mockRejectedValueOnce(new Error("boom"));
+        const ctx = writeFleetContext();
+        const args = {
+          toolName: "manage_route",
+          routerIds: ["r1", "r2"],
+          params: { config: "community: s3cr3t" },
+          concurrency: 5,
+        };
+        await bulkTool.handler({ ...args, confirmationToken: await fleetToken(args, ctx) }, ctx);
+      } finally {
+        delete mockWriteTool.redactParams;
+      }
+      const journaled = vi.mocked(recordAttempt).mock.calls.map((c) => c[0].params);
+      expect(journaled).toHaveLength(2);
+      const audited = vi.mocked(auditLog).mock.calls.map((c) => c[0]);
+      expect(audited.map((e) => e.phase)).toEqual(
+        expect.arrayContaining(["attempt", "success", "failure"]),
+      );
+      expect(JSON.stringify([journaled, audited])).not.toContain("s3cr3t");
+      // The handler still got the real parameters.
+      expect(vi.mocked(mockWriteTool.handler).mock.calls[0][0]).toMatchObject({
+        config: "community: s3cr3t",
+      });
+    });
+
+    it("tells the inner tool what was snapshotted before it ran", async () => {
+      vi.mocked(takeSnapshot).mockRejectedValueOnce(new Error("unreachable"));
+      const ctx = writeFleetContext();
+      const args = {
+        toolName: "manage_route",
+        routerIds: ["r1", "r2"],
+        params: {},
+        concurrency: 1,
+      };
+      await bulkTool.handler({ ...args, confirmationToken: await fleetToken(args, ctx) }, ctx);
+      const seen = vi.mocked(mockWriteTool.handler).mock.calls.map((c) => c[1].snapshots);
+      expect(seen).toEqual([
+        { taken: [], failed: ["ip/route"] },
+        { taken: ["ip/route"], failed: [] },
+      ]);
+    });
+
     it("records a failure outcome when the write tool throws", async () => {
       vi.mocked(mockWriteTool.handler).mockRejectedValueOnce(new Error("boom"));
       const ctx = writeFleetContext();

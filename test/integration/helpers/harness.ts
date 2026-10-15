@@ -60,6 +60,8 @@ export function createHarness(
     retry: { maxRetries: 3, baseDelayMs: 200, maxDelayMs: 5_000 },
     circuitBreaker: { failureThreshold: 5, cooldownMs: 30_000 },
     retention: { snapshotMaxAgeDays: 30 },
+    configSecrets: {},
+    passwordSecrets: {},
   };
 
   const routerConfig: RouterConfig = {

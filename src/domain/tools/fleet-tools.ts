@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { snapshotPathsFor } from "./tool-definition.js";
+import { loggableParams, snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { compactFields } from "./pagination.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
@@ -319,6 +319,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
   async function runForRouter(router: RouterConfig): Promise<BulkResult> {
     const start = Date.now();
     let journalId: string | undefined;
+    const loggedParams = loggableParams(targetTool, { ...input.params, routerId: router.id });
     try {
       checkAuthz(context.identity, input.toolName, router.id);
       // Authz first, so an unauthorized caller cannot learn a router's
@@ -336,6 +337,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
       const toolParams = { ...input.params, routerId: router.id };
 
       const snapshotIds: string[] = [];
+      const snapshots = { taken: [] as string[], failed: [] as string[] };
       if (isWrite) {
         for (const path of snapshotPathsFor(targetTool, toolParams as Record<string, unknown>)) {
           try {
@@ -346,7 +348,9 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
               snapshotDir,
             );
             snapshotIds.push(meta.id);
+            snapshots.taken.push(path);
           } catch (err) {
+            snapshots.failed.push(path);
             log.warn(
               { err, path, routerId: router.id },
               `${fleetTool} snapshot failed — proceeding without snapshot`,
@@ -362,13 +366,14 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
           role: context.identity.role,
           tool: input.toolName,
           routerId: router.id,
-          params: toolParams as Record<string, unknown>,
+          params: loggedParams,
           snapshotIds,
         });
       }
 
       const cb = getOrCreateBreaker(context.circuitBreakers!, router.id, context.appConfig);
       routerContext.circuitBreaker = cb;
+      routerContext.snapshots = snapshots;
       const runOnce = () =>
         targetTool.handler(toolParams as Record<string, unknown>, routerContext);
       const shouldRetry = targetTool.annotations.readOnlyHint && targetTool.retryable !== false;
@@ -395,7 +400,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
             tool: input.toolName,
             routerId: router.id,
             phase: "success",
-            params: input.params as Record<string, unknown>,
+            params: loggedParams,
             durationMs: elapsed,
           },
           context.appConfig.auditLogPath,
@@ -425,7 +430,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
             tool: input.toolName,
             routerId: router.id,
             phase: "failure",
-            params: input.params as Record<string, unknown>,
+            params: loggedParams,
             outcome: message,
             durationMs: elapsed,
           },

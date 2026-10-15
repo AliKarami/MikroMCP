@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { loadAppConfig } from "../../../src/config/app-config.js";
+import { configSecretsFrom, loadAppConfig } from "../../../src/config/app-config.js";
 
 afterEach(() => {
   delete process.env.MIKROMCP_BIND_HOST;
@@ -129,5 +129,26 @@ describe("loadAppConfig", () => {
       process.env.MIKROMCP_DATA_DIR = "/var/mikromcp";
       expect(loadAppConfig().journalPath).toBe("/var/mikromcp/write-journal.ndjson");
     });
+  });
+});
+
+describe("configSecretsFrom", () => {
+  it("exposes only MIKROMCP_SECRET_ variables, without the prefix", () => {
+    expect(
+      configSecretsFrom({
+        MIKROMCP_SECRET_SNMP_COMMUNITY: "c0mmunity",
+        ROUTER_CORE_PASS: "router-password",
+        MIKROMCP_DATA_DIR: "/data",
+      }),
+    ).toEqual({ SNMP_COMMUNITY: "c0mmunity" });
+  });
+
+  it("is filled from the environment by loadAppConfig", () => {
+    process.env.MIKROMCP_SECRET_TEST_VALUE = "x";
+    try {
+      expect(loadAppConfig().configSecrets.TEST_VALUE).toBe("x");
+    } finally {
+      delete process.env.MIKROMCP_SECRET_TEST_VALUE;
+    }
   });
 });

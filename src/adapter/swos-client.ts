@@ -17,7 +17,10 @@ import type { IncomingHttpHeaders, OutgoingHttpHeaders } from "node:http";
 import {
   decodeEndpoint,
   dumpBlob,
+  encodePasswordChange,
+  PASSWORD_CHANGE_BYTES,
   parseWireBlob,
+  presentableBlob,
   SWOS_SCHEMA,
   type DecodedBlob,
 } from "./swos-protocol.js";
@@ -111,12 +114,14 @@ interface RawResponse {
   statusCode: number;
   headers: IncomingHttpHeaders;
   body: string;
+  /** The body as received, for binary endpoints (backup.swb). */
+  raw: Buffer;
 }
 
 export class SwosClient {
   private readonly host: string;
   private readonly port: number;
-  private readonly credentials: Credentials;
+  private credentials: Credentials;
   private readonly requestTimeoutMs: number;
   private challenge?: DigestChallenge;
   private nonceCount = 0;
@@ -146,7 +151,8 @@ export class SwosClient {
     method: "GET" | "POST",
     path: string,
     headers: OutgoingHttpHeaders,
-    body?: string,
+    body?: string | Buffer,
+    timeoutMs = this.requestTimeoutMs,
   ): Promise<RawResponse> {
     return new Promise((resolve, reject) => {
       const req = httpRequest(
@@ -159,17 +165,22 @@ export class SwosClient {
           insecureHTTPParser: true,
         },
         (res) => {
-          res.setEncoding("utf8");
-          let data = "";
-          res.on("data", (chunk: string) => (data += chunk));
-          res.on("end", () =>
-            resolve({ statusCode: res.statusCode ?? 0, headers: res.headers, body: data }),
-          );
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            const raw = Buffer.concat(chunks);
+            resolve({
+              statusCode: res.statusCode ?? 0,
+              headers: res.headers,
+              body: raw.toString("utf8"),
+              raw,
+            });
+          });
           res.on("error", reject);
         },
       );
       req.on("error", reject);
-      req.setTimeout(this.requestTimeoutMs, () => {
+      req.setTimeout(timeoutMs, () => {
         // A timeout is ambiguous by design here: the CSS610 firmware applies
         // POSTed .b blobs without sending a response (verified: no answer even
         // after 70s), so a write that "timed out" may actually have landed.
@@ -182,7 +193,7 @@ export class SwosClient {
           new MikroMCPError({
             category: ErrorCategory.ROUTER_TIMEOUT,
             code: "SWOS_REQUEST_TIMEOUT",
-            message: `SwOS ${method} request to ${path} timed out after ${this.requestTimeoutMs}ms${
+            message: `SwOS ${method} request to ${path} timed out after ${timeoutMs}ms${
               isWrite ? " — the write may still have been applied" : ""
             }`,
             recoverability: isWrite
@@ -204,14 +215,20 @@ export class SwosClient {
     });
   }
 
-  private async doRequest(method: "GET" | "POST", path: string, body?: string): Promise<string> {
+  private async send(
+    method: "GET" | "POST",
+    path: string,
+    body?: string | Buffer,
+    contentType = "text/plain",
+    timeoutMs = this.requestTimeoutMs,
+  ): Promise<RawResponse> {
     for (let attempt = 0; attempt < 3; attempt++) {
       const headers: OutgoingHttpHeaders = {
         Accept: "text/plain",
         "Accept-Encoding": "identity",
       };
       if (body !== undefined) {
-        headers["Content-Type"] = "text/plain";
+        headers["Content-Type"] = contentType;
         headers["Content-Length"] = Buffer.byteLength(body);
       }
       if (this.challenge) {
@@ -225,7 +242,7 @@ export class SwosClient {
         );
       }
 
-      const response = await this.rawRequest(method, path, headers, body);
+      const response = await this.rawRequest(method, path, headers, body, timeoutMs);
 
       const rawChallengeHeader = response.headers["www-authenticate"];
       const rawChallenge = Array.isArray(rawChallengeHeader)
@@ -243,9 +260,13 @@ export class SwosClient {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw new HttpError(response.statusCode, response.body);
       }
-      return response.body;
+      return response;
     }
     throw new HttpError(401, "digest authentication failed");
+  }
+
+  private async doRequest(method: "GET" | "POST", path: string, body?: string): Promise<string> {
+    return (await this.send(method, path, body)).body;
   }
 
   /** GET a .b endpoint, return the raw broken-JSON text. */
@@ -290,7 +311,11 @@ export class SwosClient {
         category: ErrorCategory.VALIDATION,
         code: "SWOS_ROUNDTRIP_MISMATCH",
         message: `MikroMCP cannot re-encode ${endpoint} on this device byte-for-byte; refusing to write.`,
-        details: { endpoint, received: raw.trim(), reencoded },
+        details: {
+          endpoint,
+          received: presentableBlob(endpoint, raw.trim()),
+          reencoded: presentableBlob(endpoint, reencoded),
+        },
         recoverability: {
           retryable: false,
           suggestedAction:
@@ -305,6 +330,117 @@ export class SwosClient {
   async writeBlob(endpoint: string, wire: unknown): Promise<string> {
     assertKnownEndpoint(endpoint);
     return this.postRaw(endpoint, dumpBlob(wire));
+  }
+
+  /** GET a binary resource (the `backup.swb` configuration backup). */
+  async getBinary(path: string): Promise<Buffer> {
+    return (await this.send("GET", `/${path}`)).raw;
+  }
+
+  /**
+   * POST a file as multipart/form-data, the way the web UI uploads a backup
+   * (`backup.swb`, field "file") or firmware (`upgrade`, field "blob").
+   */
+  async postMultipart(
+    path: string,
+    field: string,
+    filename: string,
+    data: Buffer,
+    timeoutMs = this.requestTimeoutMs,
+  ): Promise<string> {
+    const boundary = `----MikroMCP${randomBytes(12).toString("hex")}`;
+    const body = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${field}"; filename="${filename}"\r\n` +
+          "Content-Type: application/octet-stream\r\n\r\n",
+      ),
+      data,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const response = await this.send(
+      "POST",
+      `/${path}`,
+      body,
+      `multipart/form-data; boundary=${boundary}`,
+      timeoutMs,
+    );
+    return response.body;
+  }
+
+  /**
+   * Change the admin password the way the web UI does: POST the encoded
+   * change to `/!pwd.b` (field `pwd` on SwOS, `i01` on SwOS Lite). On success
+   * the client authenticates with the new password from then on.
+   */
+  async changePassword(newPassword: string, field: "pwd" | "i01"): Promise<void> {
+    // The change travels as old password, NUL, new password in one 32-byte
+    // buffer; a long current password would silently cut the new one short.
+    const changeBytes =
+      Buffer.byteLength(this.credentials.password, "latin1") +
+      1 +
+      Buffer.byteLength(newPassword, "latin1");
+    if (changeBytes > PASSWORD_CHANGE_BYTES) {
+      throw new MikroMCPError({
+        category: ErrorCategory.VALIDATION,
+        code: "SWOS_PASSWORD_TOO_LONG",
+        message: `The current and the new password together take ${changeBytes} bytes; the switch's password change holds ${PASSWORD_CHANGE_BYTES} (current password, a separator, new password).`,
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "Shorten the new password, or change the password in two steps through a shorter one.",
+        },
+      });
+    }
+    const encoded = encodePasswordChange(this.credentials.password, newPassword);
+    const previous = this.credentials;
+    try {
+      await this.postRaw("!pwd.b", `{${field}:'${encoded}'}`);
+    } catch (err) {
+      // SwOS Lite applies a POSTed blob without answering it. When the request
+      // times out, the change may well have landed: try the new password before
+      // giving up, and keep the old one if it does not work.
+      if (err instanceof MikroMCPError && err.category === ErrorCategory.ROUTER_TIMEOUT) {
+        this.credentials = { ...previous, password: newPassword };
+        this.challenge = undefined;
+        this.nonceCount = 0;
+        try {
+          await this.getRaw("sys.b");
+          return;
+        } catch {
+          // Neither password is known to work now: say so, instead of the plain timeout.
+          this.credentials = previous;
+          this.challenge = undefined;
+          this.nonceCount = 0;
+          throw new MikroMCPError({
+            category: ErrorCategory.ROUTER_TIMEOUT,
+            code: "SWOS_PASSWORD_UNCONFIRMED",
+            message:
+              "The switch did not answer the password change, and a login with the new password failed too. The change may still have landed: the switch may now take either password. This client went back to the configured one.",
+            recoverability: {
+              retryable: false,
+              suggestedAction:
+                "Call get_swos_status. If it fails to authenticate, the new password is in force: update the router's password variable to it and restart the server.",
+            },
+          });
+        }
+      }
+      if (err instanceof HttpError && err.statusCode === 405) {
+        throw new MikroMCPError({
+          category: ErrorCategory.ROUTER_AUTH_FAILED,
+          code: "SWOS_PASSWORD_WRONG",
+          message:
+            "The switch refused the password change: the configured current password is wrong.",
+          recoverability: {
+            retryable: false,
+            suggestedAction: "Check the router's password environment variable against the switch.",
+          },
+        });
+      }
+      throw err;
+    }
+    this.credentials = { ...this.credentials, password: newPassword };
+    this.challenge = undefined;
+    this.nonceCount = 0;
   }
 
   /** No-op; SwOS uses plain HTTP with per-request connections. */

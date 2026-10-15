@@ -21,6 +21,8 @@ import {
   firmwareSupport,
   isWireHex,
   Kind,
+  presentableBlob,
+  SECRET_ENDPOINTS,
   unmappedWireKeys,
   type DecodedBlob,
   type Field,
@@ -36,7 +38,7 @@ const endpointEnum = z.enum(SWOS_ENDPOINTS as [string, ...string[]]);
 /** Cap on human-readable tool text; structuredContent is never truncated. */
 const MAX_CONTENT_CHARS = 8_000;
 
-function requireSwosClient(context: ToolContext): SwosClient {
+export function requireSwosClient(context: ToolContext): SwosClient {
   if (!context.swosClient) {
     throw new MikroMCPError({
       category: ErrorCategory.VALIDATION,
@@ -56,7 +58,7 @@ function requireSwosClient(context: ToolContext): SwosClient {
  * Identify the firmware behind a write. Never fails the call: an unreadable
  * `sys.b` makes the write *unverified*, not impossible.
  */
-async function readFirmwareSupport(client: SwosClient): Promise<FirmwareSupport> {
+export async function readFirmwareSupport(client: SwosClient): Promise<FirmwareSupport> {
   try {
     const sys = (await client.get("sys.b")) as Record<string, unknown>;
     return firmwareSupport(sys.model, sys.version);
@@ -351,6 +353,27 @@ async function readPortCount(client: SwosClient): Promise<number | undefined> {
   }
 }
 
+/** Fields that hold a credential; shown as a placeholder wherever a decode is printed. */
+const SECRET_FIELDS: ReadonlySet<string> = new Set(["community"]);
+const REDACTED = "<redacted>";
+
+/** A decoded blob with its credential fields replaced (snmp.b's community). */
+function redactSecrets(endpoint: string, decoded: unknown): unknown {
+  if (!SECRET_ENDPOINTS.has(endpoint) || !decoded || typeof decoded !== "object") return decoded;
+  const out: Record<string, unknown> = { ...(decoded as Record<string, unknown>) };
+  for (const key of SECRET_FIELDS) if (key in out) out[key] = REDACTED;
+  // The raw remainder may still hold the wire key of a field the schema lacks.
+  if (out._raw && typeof out._raw === "object") {
+    out._raw = Object.fromEntries(
+      Object.entries(out._raw as Record<string, unknown>).map(([k, v]) => [
+        k,
+        k === "com" ? REDACTED : v,
+      ]),
+    );
+  }
+  return out;
+}
+
 /** Endpoints whose bitmasks the blob itself cannot size: record lists and sys.b. */
 function needsPortCount(endpoint: string): boolean {
   return endpoint === "sys.b" || SWOS_SCHEMA[endpoint]?.isArray === true;
@@ -374,7 +397,7 @@ const getSwosEndpointTool: ToolDefinition = {
     const client = requireSwosClient(context);
     try {
       const portCount = needsPortCount(parsed.endpoint) ? await readPortCount(client) : undefined;
-      const decoded = await client.get(parsed.endpoint, portCount);
+      const decoded = redactSecrets(parsed.endpoint, await client.get(parsed.endpoint, portCount));
       const rendered = JSON.stringify(decoded, null, 2);
       // Structured content always carries the full decode; only the human-readable
       // text is capped, so a wide endpoint (stats.b) can't flood the context.
@@ -600,6 +623,8 @@ const writeSwosBlobTool: ToolDefinition = {
       const wire = (await client.readBlobForWrite(parsed.endpoint)) as DecodedBlob;
 
       const changes: Record<string, { from: unknown; to: unknown }> = {};
+      const before: Record<string, unknown> = {};
+      const targetKeys: Record<string, string> = {};
       for (const [key, value] of Object.entries(parsed.fields)) {
         const field = resolveField(parsed.endpoint, key, wire);
         const targetKey = Object.hasOwn(wire, key)
@@ -618,6 +643,8 @@ const writeSwosBlobTool: ToolDefinition = {
         }
 
         const existing = wire[targetKey];
+        before[key] = existing;
+        targetKeys[key] = targetKey;
         // Coerce against the dialect the device speaks: full SwOS and Lite use
         // different option lists for the same field (VLAN mode, speed).
         const wireField = field ? fieldFor(field, targetKey) : undefined;
@@ -629,11 +656,16 @@ const writeSwosBlobTool: ToolDefinition = {
         } else {
           wire[targetKey] = next;
         }
-        changes[key] = { from: existing, to: wire[targetKey] };
+        changes[key] =
+          wireField && SECRET_FIELDS.has(wireField.name) && SECRET_ENDPOINTS.has(parsed.endpoint)
+            ? { from: REDACTED, to: REDACTED }
+            : { from: existing, to: wire[targetKey] };
       }
 
-      const modified = Object.entries(changes).filter(
-        ([, c]) => JSON.stringify(c.from) !== JSON.stringify(c.to),
+      const modified = Object.entries(changes).filter(([key, c]) =>
+        c.from === REDACTED
+          ? JSON.stringify(before[key]) !== JSON.stringify(wire[targetKeys[key]])
+          : JSON.stringify(c.from) !== JSON.stringify(c.to),
       );
       if (modified.length === 0) {
         return {
@@ -650,7 +682,7 @@ const writeSwosBlobTool: ToolDefinition = {
       const diff = modified
         .map(([key, c]) => `  ${key}: ${JSON.stringify(c.from)} -> ${JSON.stringify(c.to)}`)
         .join("\n");
-      const preview = dumpBlob(wire);
+      const preview = presentableBlob(parsed.endpoint, dumpBlob(wire));
 
       // Compatibility is reported on every real write and every preview, so an
       // unverified firmware is stated before the change, not discovered after.

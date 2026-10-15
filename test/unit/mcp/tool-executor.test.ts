@@ -359,3 +359,78 @@ describe("executeToolCall", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 });
+
+describe("executeToolCall and the audit log", () => {
+  it("writes a tool's redacted parameters to every audit entry, the attempt included", async () => {
+    const { auditLog } = await import("../../../src/observability/audit-log.js");
+    vi.mocked(auditLog).mockClear();
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: {} }), {
+      name: "test_write",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      redactParams: (params) => ({ ...params, config: "community: <redacted>" }),
+    });
+    // A write builds the router context, which wants the router's credentials.
+    process.env.ROUTER_R1_USER = "admin";
+    process.env.ROUTER_R1_PASS = "pw";
+    try {
+      await executeToolCall(tool, { routerId: "r1", config: "community: s3cr3t" }, makeDeps());
+    } finally {
+      delete process.env.ROUTER_R1_USER;
+      delete process.env.ROUTER_R1_PASS;
+    }
+    const entries = vi.mocked(auditLog).mock.calls.map(([event]) => event);
+    expect(entries.map((e) => e.phase)).toEqual(["attempt", "success"]);
+    for (const event of entries) {
+      expect(event.params).toEqual({ routerId: "r1", config: "community: <redacted>" });
+    }
+    expect(JSON.stringify(entries)).not.toContain("s3cr3t");
+  });
+
+  it("redacts the parameters of a call refused before it runs", async () => {
+    const { auditLog } = await import("../../../src/observability/audit-log.js");
+    vi.mocked(auditLog).mockClear();
+    // A SwOS tool aimed at a RouterOS router is refused by the platform check.
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: {} }), {
+      name: "test_swos_write",
+      platform: "swos",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      redactParams: (params) => ({ ...params, config: "<withheld>" }),
+    });
+    await executeToolCall(tool, { routerId: "r1", config: "community: s3cr3t" }, makeDeps());
+    const entries = vi.mocked(auditLog).mock.calls.map(([event]) => event);
+    expect(entries.map((e) => [e.phase, e.outcome])).toEqual([["failure", "PLATFORM_MISMATCH"]]);
+    expect(entries[0].params).toEqual({ routerId: "r1", config: "<withheld>" });
+  });
+
+  it("logs no parameters when the tool's redaction itself fails", async () => {
+    const { auditLog } = await import("../../../src/observability/audit-log.js");
+    vi.mocked(auditLog).mockClear();
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: {} }), {
+      name: "test_swos_write",
+      platform: "swos",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      redactParams: () => {
+        throw new Error("boom");
+      },
+    });
+    await executeToolCall(tool, { routerId: "r1", config: "community: s3cr3t" }, makeDeps());
+    const entries = vi.mocked(auditLog).mock.calls.map(([event]) => event);
+    expect(JSON.stringify(entries)).not.toContain("s3cr3t");
+    expect(entries[0].params).toEqual({ routerId: "r1", params: "<withheld: redaction failed>" });
+  });
+});

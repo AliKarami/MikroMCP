@@ -27,6 +27,8 @@ function makeConfig(): AppConfig {
     retry: { maxRetries: 3, baseDelayMs: 200, maxDelayMs: 5000 },
     circuitBreaker: { failureThreshold: 5, cooldownMs: 30000 },
     retention: { snapshotMaxAgeDays: 30 },
+    configSecrets: {},
+    passwordSecrets: {},
   };
 }
 

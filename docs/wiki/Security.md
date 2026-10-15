@@ -17,7 +17,9 @@ An AI assistant with raw router CLI access can issue arbitrary, irreversible com
 ## Credentials
 
 - Keep router credentials in `~/.mikromcp/.env` (loaded at startup), **not** in `routers.yaml` or shell history.
-- Credentials are never logged and never included in tool responses; the audit log and write journal redact secret fields (including those nested in `apply_plan` / `bulk_execute` step arrays).
+- Credentials are never logged and never included in tool responses; the audit log and write journal redact secret fields (including those nested in `apply_plan` / `bulk_execute` step arrays), and a tool whose parameter can carry a secret inside a free-form value scrubs it before the first log entry, including for calls that are refused and for calls made through `bulk_execute`, `plan_changes` and `apply_plan`. `apply_swos_config` redacts a written-out `snmp.community` in an object config; a text config that writes the community out, or does not parse, is logged as a placeholder instead of the text.
+- SwOS secrets live in two environment namespaces that cannot reach each other: `MIKROMCP_SECRET_<NAME>` holds values a switch config may reference as `${NAME}` (the SNMP community), `MIKROMCP_PASSWORD_<NAME>` holds new device passwords for `set_swos_password`. A config can reference a secret only in `snmp.community`, a config given as text must reference it (a literal is refused, because the text reaches the audit log), and the community is redacted in every SwOS tool output, `get_swos_endpoint snmp.b` and `write_swos_blob` previews included.
+- `upgrade_swos_firmware` is the one tool that connects out: it fetches `<board>.LATEST` and the image from `https://download.mikrotik.com/swos/` with redirects refused and a size limit, then checks the image before flashing. A host without that egress passes the image as a named `file` from `<MIKROMCP_DATA_DIR>/swos/` instead. Backups saved there hold the switch's credentials, so the folder is created `0700` and its files `0600`.
 - The connection pool evicts a router's cached client on authentication failure so stale/rotated credentials are not reused.
 
 ## HTTP mode access control
