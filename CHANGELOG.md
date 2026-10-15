@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Fixed
+- RouterOS REST setup documentation now uses the `www-ssl`/`www` web services instead of the binary `api-ssl`/`api` services, requires an explicitly configured HTTPS certificate, and notes that HTTP REST access starts with RouterOS `7.9`.
+
 ## [1.14.0] - 2026-10-15
 
 This release is the work of [@karamble](https://github.com/karamble), who tested MikroMCP on a CSS318 running full SwOS, found that its readings were wrong, and then built full SwOS support: the dialect, six new tools that manage a switch's whole configuration, backups, firmware and password, and switch-bound secrets. The tools were checked on the device and went through four review rounds. Thank you, karamble.

@@ -20,11 +20,10 @@ This guide takes you from zero to a working AI ↔ router connection in about 15
 
 The REST API must be enabled on your router before MikroMCP can connect. See [RouterOS-API-Setup.md](RouterOS-API-Setup.md) for the full walkthrough including TLS, firewall rules, and user policies.
 
-Quick version using the RouterOS CLI:
+Quick version using the RouterOS CLI: HTTPS REST uses the `www-ssl` web service and requires a server certificate. First create or import a certificate with its private key; the example assumes it is named `rest-cert`. Replace that name with your certificate's name.
 
 ```
-/ip service enable api-ssl
-/ip service set api-ssl port=443
+/ip service set www-ssl certificate=rest-cert port=443 disabled=no
 /user add name=mcp-api group=full password=choose-a-strong-password
 ```
 
@@ -142,8 +141,8 @@ curl -sk https://10.0.0.1/rest/system/resource \
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Connection refused` | REST API not enabled or wrong port | Run `/ip service print` on the router; enable `api-ssl` |
-| `SSL handshake failed` | TLS mismatch | Set `rejectUnauthorized: false` in `routers.yaml` for self-signed certs |
+| `Connection refused` | REST API not enabled or wrong port | Run `/ip service print detail where name=www-ssl`; check the certificate, port, and `disabled=no` |
+| `SSL handshake failed` | Missing certificate or TLS trust mismatch | Check the `www-ssl` certificate and MikroMCP's TLS trust/pinning settings; see [TLS Configuration](RouterOS-API-Setup.md#tls-configuration) |
 | `401 Unauthorized` | Wrong credentials | Double-check `ROUTER_CORE01_USER` and `ROUTER_CORE01_PASS` |
 | `403 Forbidden` | User lacks `rest-api` policy | See [RouterOS-API-Setup.md](RouterOS-API-Setup.md) — required policies table |
 
@@ -203,7 +202,7 @@ You should see the assistant call MikroMCP tools and return real data from your 
 ## Troubleshooting
 
 **"Connection refused" on port 443**
-The RouterOS REST API (`api-ssl`) is not running, or a firewall is blocking the port. On the router: `/ip service print` — confirm `api-ssl` shows `enabled`. Add a firewall rule if MikroMCP runs on a separate host; see [RouterOS-API-Setup.md](RouterOS-API-Setup.md#firewall--allow-api-access).
+The RouterOS HTTPS REST service (`www-ssl`) is not running, its port differs from `routers.yaml`, or a firewall is blocking the port. On the router: `/ip service print detail where name=www-ssl` — confirm `disabled=no`, the configured certificate, and the matching port. See [RouterOS-API-Setup.md](RouterOS-API-Setup.md#firewall--allow-api-access) for firewall access.
 
 **"Authentication failed" / 401**
 Check that `ROUTER_CORE01_USER` and `ROUTER_CORE01_PASS` are exported in the environment where MikroMCP runs. Variable names must match the `envPrefix` in `routers.yaml` — prefix `ROUTER_CORE01` → variables `ROUTER_CORE01_USER` and `ROUTER_CORE01_PASS`.

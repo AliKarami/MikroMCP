@@ -6,38 +6,42 @@ This page covers everything on the router side: enabling the REST API, creating 
 
 ## Enable the REST API
 
-RouterOS exposes a REST API over the `api-ssl` (HTTPS) or `api` (HTTP, plaintext) service. Use `api-ssl` for all production setups.
+RouterOS exposes the REST API at `/rest` through the `www-ssl` (HTTPS, default port `443`) or `www` (HTTP, default port `80`, supported since RouterOS `7.9`) service. Use HTTPS for all production setups. The `api` and `api-ssl` services are the separate binary API, normally on ports `8728` and `8729`; changing their ports does not make them REST endpoints. See MikroTik's [REST API](https://help.mikrotik.com/docs/spaces/ROS/pages/47579162/REST%2BAPI) and [Services](https://help.mikrotik.com/docs/spaces/ROS/pages/103841820/Services) documentation.
+
+The web services also serve WebFig, so their port and source-address settings affect WebFig access too.
+
+HTTPS requires a server certificate with its private key, explicitly assigned to `www-ssl`. The examples below assume you have already created or imported a certificate named `rest-cert`; replace that name with your own. See [TLS Configuration](#tls-configuration) for certificate options.
 
 ### Using Winbox
 
 1. Open **Winbox** and connect to your router.
 2. Go to **IP → Services**.
-3. Find the `api-ssl` row and double-click it.
+3. Find the `www-ssl` row and double-click it.
 4. Set **Port** to `443` (or your preferred port).
-5. Check **Enabled**, then click **OK**.
+5. Select your server certificate (`rest-cert` in these examples) in **Certificate**.
+6. Enable the service, then click **OK**.
 
 To restrict which addresses can connect, set the **Available From** field to your MikroMCP host IP or subnet.
 
 ### Using the CLI
 
 ```
-/ip service enable api-ssl
-/ip service set api-ssl port=443
+/ip service set www-ssl certificate=rest-cert port=443 disabled=no
 ```
 
 To restrict access by source address:
 
 ```
-/ip service set api-ssl address=192.168.1.0/24
+/ip service set www-ssl address=192.168.1.0/24
 ```
 
-Confirm the service is running:
+Confirm the service configuration:
 
 ```
-/ip service print where name=api-ssl
+/ip service print detail where name=www-ssl
 ```
 
-You should see `api-ssl` with `disabled=no` and your chosen port.
+You should see `www-ssl` with `disabled=no`, your chosen port, and `certificate=rest-cert` (or your certificate's name). Set the same port in MikroMCP's `routers.yaml`.
 
 ---
 
@@ -100,11 +104,10 @@ Note: `reboot` policy must be added explicitly if you want the `reboot` tool —
 
 ### Option A: No TLS (port 80, plaintext — lab/local only)
 
-Enable the plain `api` service instead of `api-ssl`:
+On RouterOS `7.9` or newer, enable the plain `www` service for HTTP REST access:
 
 ```
-/ip service enable api
-/ip service set api port=80
+/ip service set www port=80 disabled=no
 ```
 
 In `routers.yaml`, set:
@@ -117,20 +120,22 @@ port: 80
 
 Do not use this on any network you do not fully control. Router credentials travel in cleartext.
 
-### Option B: Self-signed certificate (quickest HTTPS setup)
+### Option B: Self-signed certificate
 
-RouterOS generates a self-signed certificate by default for `api-ssl`. To use it, set `rejectUnauthorized: false` in `routers.yaml` and optionally pin the certificate fingerprint for security:
+Create or import a server certificate and its private key, then assign it to `www-ssl` as shown above. Enabling the service does not generate a certificate automatically. MikroTik's [WebFig HTTPS guide](https://help.mikrotik.com/docs/spaces/ROS/pages/328131/WebFig#WebFig-EnableHTTPS) explains certificate setup for this same web service.
+
+Trust your CA with `tls.ca` and `rejectUnauthorized: true`, or set `rejectUnauthorized: false` and pin the certificate's verified fingerprint:
 
 ```yaml
 tls:
   enabled: true
   rejectUnauthorized: false
-  fingerprint: "AA:BB:CC:..."    # optional but recommended — see below
+  fingerprint: "AA:BB:CC:..."    # replace with the verified SHA-256 fingerprint — see below
 ```
 
 ### Option C: Let's Encrypt certificate
 
-RouterOS 7.x supports Let's Encrypt via the `/certificate` menu if your router has a public hostname. Once a valid cert is installed, set `rejectUnauthorized: true` — no fingerprint needed.
+RouterOS 7.x supports Let's Encrypt via the `/certificate` menu if your router has a public hostname. Once a valid cert is installed, assign it to `www-ssl` using its certificate name and set `rejectUnauthorized: true` — no fingerprint needed. Set `host` in `routers.yaml` to a hostname covered by that certificate.
 
 ### Fingerprint pinning (recommended with self-signed certs)
 
