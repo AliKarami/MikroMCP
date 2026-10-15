@@ -159,10 +159,16 @@ describe("swosMaintenanceTools", () => {
   });
 
   describe("restore_swos_backup", () => {
+    // A file with the sidecar save_swos_backup writes beside its backups.
     const place = (name: string, data: Buffer) => {
       mkdirSync(swosDir(), { recursive: true });
       writeFileSync(join(swosDir(), name), data);
+      writeFileSync(
+        join(swosDir(), `${name}.json`),
+        JSON.stringify({ routerId: "switch-01", model: "CSS318-16G-2S+IN", version: "2.19" }),
+      );
     };
+    const BACKUP_NAME = /^switch-01_CSS318-16G-2S\+IN_2\.19_\d{8}-\d{6}\.swb$/;
 
     it("refuses anything but a plain file name", async () => {
       for (const file of ["../etc/passwd", "a/b.swb", "/abs.swb", ".hidden"]) {
@@ -184,9 +190,14 @@ describe("swosMaintenanceTools", () => {
         makeContext(sw),
       );
       expect(result.structuredContent).toMatchObject({ action: "sent_unconfirmed" });
-      expect((result.structuredContent as { safetyCopy: string }).safetyCopy).toMatch(
-        /pre-restore/,
-      );
+      const copy = (result.structuredContent as { safetyCopy: string }).safetyCopy;
+      expect(copy).toMatch(BACKUP_NAME);
+      // The safety copy is a backup like any other, with its origin beside it.
+      expect(JSON.parse(readFileSync(join(swosDir(), `${copy}.json`), "utf8"))).toMatchObject({
+        routerId: "switch-01",
+        model: "CSS318-16G-2S+IN",
+        reason: "pre-restore",
+      });
     });
 
     it("names the safety copy when the restore fails", async () => {
@@ -198,7 +209,7 @@ describe("swosMaintenanceTools", () => {
           { routerId: "switch-01", file: "golden.swb", dryRun: false },
           makeContext(sw),
         ),
-      ).rejects.toMatchObject({ details: { safetyCopy: expect.stringMatching(/pre-restore/) } });
+      ).rejects.toMatchObject({ details: { safetyCopy: expect.stringMatching(BACKUP_NAME) } });
     });
 
     it("names a file that is not in the SwOS folder", async () => {
@@ -272,18 +283,93 @@ describe("swosMaintenanceTools", () => {
       expect((forced.structuredContent as { action: string }).action).toBe("dry_run");
     });
 
-    it("accepts a backup from this switch and a file not named by save_swos_backup", async () => {
+    it("accepts a backup from this switch, by its name or by its sidecar", async () => {
       put("switch-01_CSS318-16G-2S+IN_2.19_20261014-120000.swb");
       put("golden.swb");
+      writeFileSync(
+        join(swosDir(), "golden.swb.json"),
+        JSON.stringify({ routerId: "switch-01", model: "CSS318-16G-2S+IN", version: "2.19" }),
+      );
       const sw = makeSwitch();
       for (const file of ["switch-01_CSS318-16G-2S+IN_2.19_20261014-120000.swb", "golden.swb"]) {
         const result = await restoreTool.handler({ routerId: "switch-01", file }, makeContext(sw));
         expect((result.structuredContent as { action: string }).action).toBe("dry_run");
       }
     });
+
+    it("refuses a file whose origin nothing says, unless forced", async () => {
+      put("renamed.swb");
+      put("switch-01_pre-restore_20261014-120000.swb");
+      const sw = makeSwitch();
+      for (const file of ["renamed.swb", "switch-01_pre-restore_20261014-120000.swb"]) {
+        await expect(
+          restoreTool.handler({ routerId: "switch-01", file }, makeContext(sw)),
+          file,
+        ).rejects.toMatchObject({ code: "SWOS_BACKUP_UNVERIFIED" });
+      }
+      const forced = await restoreTool.handler(
+        { routerId: "switch-01", file: "renamed.swb", force: true },
+        makeContext(sw),
+      );
+      expect((forced.structuredContent as { action: string }).action).toBe("dry_run");
+    });
+
+    it("trusts the sidecar over the file name and sees a wrong model in it", async () => {
+      put("switch-01_CSS318-16G-2S+IN_2.19_20261014-120000.swb");
+      writeFileSync(
+        join(swosDir(), "switch-01_CSS318-16G-2S+IN_2.19_20261014-120000.swb.json"),
+        JSON.stringify({ routerId: "switch-01", model: "CSS610-8G-2S+IN", version: "2.19" }),
+      );
+      await expect(
+        restoreTool.handler(
+          { routerId: "switch-01", file: "switch-01_CSS318-16G-2S+IN_2.19_20261014-120000.swb" },
+          makeContext(makeSwitch()),
+        ),
+      ).rejects.toMatchObject({ code: "SWOS_BACKUP_MISMATCH" });
+    });
   });
 
   describe("upgrade_swos_firmware", () => {
+    it("takes an explicit board with force: true even when the model string is odd", async () => {
+      stubDownloads();
+      const sw = makeSwitch();
+      sw.client.get.mockResolvedValue({ model: "CSS318 (weird)", version: "2.17" });
+      await expect(
+        upgradeTool.handler({ routerId: "switch-01" }, makeContext(sw)),
+      ).rejects.toMatchObject({ code: "SWOS_BOARD_UNKNOWN" });
+      const result = await upgradeTool.handler(
+        { routerId: "switch-01", board: "css318g", force: true },
+        makeContext(sw),
+      );
+      expect((result.structuredContent as { board: string }).board).toBe("css318g");
+    });
+
+    it("stops a download that passes the size cap even without a Content-Length", async () => {
+      const chunk = new Uint8Array(1024 * 1024);
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(chunk); // never ends on its own
+        },
+      });
+      const fetchMock = vi.fn(async (url: string) =>
+        url.endsWith(".LATEST") ? new Response("2.19") : new Response(stream),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(
+        upgradeTool.handler({ routerId: "switch-01" }, makeContext(makeSwitch())),
+      ).rejects.toMatchObject({ code: "SWOS_DOWNLOAD_TOO_LARGE" });
+    });
+
+    it("caps the .LATEST read as well", async () => {
+      const fetchMock = vi.fn(async (url: string) =>
+        url.endsWith(".LATEST") ? new Response("9".repeat(8192)) : new Response(FIRMWARE),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(
+        upgradeTool.handler({ routerId: "switch-01" }, makeContext(makeSwitch())),
+      ).rejects.toMatchObject({ code: "SWOS_DOWNLOAD_TOO_LARGE" });
+    });
+
     it("resolves the latest stable release and downloads it over HTTPS", async () => {
       const fetchMock = stubDownloads();
       const sw = makeSwitch({ version: "2.17p" });

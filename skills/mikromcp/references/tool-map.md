@@ -281,8 +281,9 @@ a warning, not a block — read the dry-run diff before applying.
 For a whole switch, prefer `apply_swos_config` over many `write_swos_blob`
 calls: start from `get_swos_config`, edit the document, dry-run it, and apply.
 It grows the VLAN table before the per-port writes and shrinks it after them,
-and refuses address/allow-from changes and any plan that would cut a port off
-(a strict port outside its default VLAN, a linked port disabled) without
-`includeManagement: true` — on the management port that is a lockout. Save a
+and refuses address/allow-from changes without `includeManagement: true` and
+any plan that would cut a linked port off (its untagged VLAN moved or dropped,
+a trunk losing tagged VLANs, the port disabled) without `acceptLockoutRisk:
+true` — on the management port that is a lockout. Save a
 backup with `save_swos_backup` before firmware or restore operations; both
 reboot the switch.

@@ -19,3 +19,4 @@ docs-site/src/content/docs/
 
 # Local dev-server preview config
 .claude/launch.json
+.review/

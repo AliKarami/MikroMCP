@@ -268,7 +268,7 @@ describe("SwosClient", () => {
     mock.state.hangPassword = true; // and no nextPassword: the switch kept the old one
     try {
       await expect(own.changePassword("n3w-pass", "i01")).rejects.toMatchObject({
-        code: "SWOS_REQUEST_TIMEOUT",
+        code: "SWOS_PASSWORD_UNCONFIRMED",
       });
       await expect(own.getRaw("sys.b")).resolves.toBe(sysBlob);
     } finally {

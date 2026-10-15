@@ -163,5 +163,66 @@ describe("CSS318-16G-2S+ on SwOS 2.19, as captured", () => {
         "Management is allowed from VLAN 10 only, and linked port(s) 17 would not be members of it.",
       );
     });
+
+    it("flags a linked trunk turned into an access port (judged from the state before)", () => {
+      // Port 15: linked, default VLAN 99 untagged, management VLAN 10 tagged, an allow-from port.
+      const plan = planSwitchConfig(
+        parseSwitchConfig({ version: 1, ports: { 15: { vlan_receive: "only_untagged" } } }),
+        current(),
+      );
+      expect(plan.warnings).toEqual([
+        "Port 15 has a link and would accept untagged frames only; tagged traffic in VLAN(s) 10 stops on this port.",
+      ]);
+    });
+
+    it("flags changes to where a linked port's untagged traffic lands", () => {
+      // Port 16 is the linked allow-from access port in management VLAN 10.
+      const doc = exportSwitchConfig(current());
+      const withPort16 = (doc.vlans as { id: number; members: number[] }[]).map((v) =>
+        v.id === 20 ? { ...v, members: [...v.members, 16] } : v,
+      );
+      const moved = planSwitchConfig(
+        parseSwitchConfig({ version: 1, ports: { 16: { default_vlan: 20 } }, vlans: withPort16 }),
+        current(),
+      );
+      expect(moved.warnings).toEqual([
+        "Port 16 has a link and its untagged traffic would move from VLAN 10 to VLAN 20; management is allowed from this port.",
+      ]);
+      // force_vlan on port 15 re-tags management traffic into VLAN 99.
+      const forced = planSwitchConfig(
+        parseSwitchConfig({ version: 1, ports: { 15: { force_vlan: true } } }),
+        current(),
+      );
+      expect(forced.warnings).toEqual([
+        "Port 15 has a link and would force every frame into VLAN 99; tagged traffic on it, management included, is re-tagged.",
+      ]);
+      // Port 7 (linked, strict in VLAN 20) loosened to optional and moved to VLAN 30.
+      const loosened = planSwitchConfig(
+        parseSwitchConfig({
+          version: 1,
+          ports: { 7: { vlan_mode: "optional", default_vlan: 30 } },
+        }),
+        current(),
+      );
+      expect(loosened.warnings).toEqual([
+        "Port 7 has a link and its untagged traffic would move from VLAN 20 to VLAN 30.",
+      ]);
+      // The same on an unlinked port cuts nobody off.
+      const spare = planSwitchConfig(
+        parseSwitchConfig({ version: 1, ports: { 9: { default_vlan: 20, force_vlan: true } } }),
+        current(),
+      );
+      expect(spare.warnings).toEqual([]);
+    });
+
+    it("does not gate a plain rename on problems the switch already has", () => {
+      // Port 18 is strict with default VLAN 1, which is not in the table: it has no link,
+      // and the plan does not introduce it.
+      const plan = planSwitchConfig(
+        parseSwitchConfig({ version: 1, ports: { 2: { name: "jetkvm" } } }),
+        current(),
+      );
+      expect(plan.warnings).toEqual([]);
+    });
   });
 });

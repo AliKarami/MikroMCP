@@ -30,6 +30,22 @@ describe("tool annotations", () => {
     }
   });
 
+  it("states whether each SwOS config and maintenance tool is idempotent", () => {
+    const expected: Record<string, boolean> = {
+      get_swos_config: true, // a read
+      apply_swos_config: true, // the same document applied twice changes nothing the second time
+      save_swos_backup: false, // every call writes another file
+      restore_swos_backup: false, // the switch reboots each time
+      upgrade_swos_firmware: true, // the same version a second time is a no-op
+      set_swos_password: false, // the second call runs with the old password already replaced
+    };
+    for (const [name, idempotent] of Object.entries(expected)) {
+      const tool = allTools.find((t) => t.name === name);
+      expect(tool, `${name} is not a registered tool`).toBeDefined();
+      expect(tool!.annotations.idempotentHint, name).toBe(idempotent);
+    }
+  });
+
   it("marks tools that run RouterOS script destructive", () => {
     const scriptRunners = [
       "run_command",

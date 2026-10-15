@@ -2,7 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { swosApplyTiming, swosConfigTools } from "../../../src/domain/tools/swos-config-tools.js";
-import { snapshotPathsFor, type ToolContext } from "../../../src/domain/tools/tool-definition.js";
+import {
+  snapshotPathsFor,
+  type ToolContext,
+  loggableParams,
+} from "../../../src/domain/tools/tool-definition.js";
 import type { SwosClient } from "../../../src/adapter/swos-client.js";
 import { decodeEndpoint, dumpBlob, parseWireBlob } from "../../../src/adapter/swos-protocol.js";
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
@@ -174,6 +178,7 @@ describe("swosConfigTools", () => {
         config: OFFICE,
         dryRun: false,
         includeManagement: true,
+        acceptLockoutRisk: true,
       };
       const result = await applyTool.handler(params, makeContext(sw, SECRETS));
       expect((result.structuredContent as Record<string, unknown>).action).toBe("applied");
@@ -193,7 +198,13 @@ describe("swosConfigTools", () => {
       const sw = makeSwitch();
       const yaml = "version: 1\nvlans:\n  - { id: 30, name: IOT, members: [13, 14, 17] }\n";
       await applyTool.handler(
-        { routerId: "switch-01", config: yaml, dryRun: false, includeManagement: true },
+        {
+          routerId: "switch-01",
+          config: yaml,
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
         makeContext(sw),
       );
       expect(sw.posts).toEqual(["vlan.b"]);
@@ -202,13 +213,25 @@ describe("swosConfigTools", () => {
     it("round-trips: applying the exported document changes nothing", async () => {
       const sw = makeSwitch();
       await applyTool.handler(
-        { routerId: "switch-01", config: OFFICE, dryRun: false, includeManagement: true },
+        {
+          routerId: "switch-01",
+          config: OFFICE,
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
         makeContext(sw, SECRETS),
       );
       const exported = await getTool.handler({ routerId: "switch-01" }, makeContext(sw));
       const { yaml } = exported.structuredContent as { yaml: string };
       const back = await applyTool.handler(
-        { routerId: "switch-01", config: yaml, dryRun: false, includeManagement: true },
+        {
+          routerId: "switch-01",
+          config: yaml,
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
         makeContext(sw),
       );
       expect((back.structuredContent as Record<string, unknown>).action).toBe("no_change");
@@ -230,6 +253,19 @@ describe("swosConfigTools", () => {
         makeContext(sw),
       );
       expect(result.content).not.toContain("plaintext-community");
+    });
+
+    it("scrubs a written-out community from what the executor logs", () => {
+      const text = "version: 1\nsnmp:\n  community: s3cr3t\n";
+      expect(loggableParams(applyTool, { routerId: "switch-01", config: text })).toEqual({
+        routerId: "switch-01",
+        config: "version: 1\nsnmp:\n  community: <redacted>\n",
+      });
+      expect(
+        loggableParams(applyTool, { routerId: "switch-01", config: { snmp: { community: "x" } } }),
+      ).toEqual({ routerId: "switch-01", config: { snmp: { community: "<redacted>" } } });
+      // Tools without a redactor log their parameters as they are.
+      expect(loggableParams(getTool, { routerId: "switch-01" })).toEqual({ routerId: "switch-01" });
     });
 
     it("gates a linked port that would accept tagged frames only", async () => {
@@ -280,7 +316,13 @@ describe("swosConfigTools", () => {
       expect(sw.client.postRaw).not.toHaveBeenCalled();
 
       await applyTool.handler(
-        { routerId: "switch-01", config, dryRun: false, includeManagement: true },
+        {
+          routerId: "switch-01",
+          config,
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
         makeContext(sw),
       );
       expect(sw.posts).toEqual(["sys.b"]);
@@ -299,7 +341,13 @@ describe("swosConfigTools", () => {
       const sw = makeSwitch("link.b");
       await expect(
         applyTool.handler(
-          { routerId: "switch-01", config: OFFICE, dryRun: false, includeManagement: true },
+          {
+            routerId: "switch-01",
+            config: OFFICE,
+            dryRun: false,
+            includeManagement: true,
+            acceptLockoutRisk: true,
+          },
           makeContext(sw, SECRETS),
         ),
       ).rejects.toMatchObject({
@@ -311,7 +359,13 @@ describe("swosConfigTools", () => {
     it("confirms an unanswered per-port write by reading back, and carries on", async () => {
       const sw = makeSwitch("fwd.b", true);
       const res = await applyTool.handler(
-        { routerId: "switch-01", config: OFFICE, dryRun: false, includeManagement: true },
+        {
+          routerId: "switch-01",
+          config: OFFICE,
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
         makeContext(sw, SECRETS),
       );
       const out = res.structuredContent as { action: string; written: string[] };
@@ -325,7 +379,13 @@ describe("swosConfigTools", () => {
       const sw = makeSwitch("fwd.b");
       await expect(
         applyTool.handler(
-          { routerId: "switch-01", config: OFFICE, dryRun: false, includeManagement: true },
+          {
+            routerId: "switch-01",
+            config: OFFICE,
+            dryRun: false,
+            includeManagement: true,
+            acceptLockoutRisk: true,
+          },
           makeContext(sw, SECRETS),
         ),
       ).rejects.toMatchObject({
@@ -339,7 +399,13 @@ describe("swosConfigTools", () => {
       const sw = makeSwitch("vlan.b", true);
       await expect(
         applyTool.handler(
-          { routerId: "switch-01", config: OFFICE, dryRun: false, includeManagement: true },
+          {
+            routerId: "switch-01",
+            config: OFFICE,
+            dryRun: false,
+            includeManagement: true,
+            acceptLockoutRisk: true,
+          },
           makeContext(sw, SECRETS),
         ),
       ).rejects.toMatchObject({
@@ -353,33 +419,40 @@ describe("swosConfigTools", () => {
       const sw = makeSwitch();
       const config = {
         version: 1,
-        ports: { "8": { vlan_mode: "strict", vlan_receive: "only_untagged", default_vlan: 100 } },
+        ports: { "1": { vlan_mode: "strict", vlan_receive: "only_untagged", default_vlan: 100 } },
         vlans: [{ id: 100, members: [17] }],
       };
       const result = await applyTool.handler({ routerId: "switch-01", config }, makeContext(sw));
-      expect((result.structuredContent as { warnings: string[] }).warnings).toHaveLength(1);
-      expect(result.content).toContain("Port 8 is strict with default VLAN 100");
+      expect((result.structuredContent as { warnings: string[] }).warnings).toHaveLength(2);
+      expect(result.content).toContain("Port 1 is strict with default VLAN 100");
     });
 
-    it("refuses a real apply that would cut a port off unless includeManagement is set", async () => {
+    it("refuses a real apply that would cut a port off unless acceptLockoutRisk is set", async () => {
       const sw = makeSwitch();
       const config = {
         version: 1,
-        ports: { "8": { vlan_mode: "strict", vlan_receive: "only_untagged", default_vlan: 100 } },
+        ports: { "1": { vlan_mode: "strict", vlan_receive: "only_untagged", default_vlan: 100 } },
         vlans: [{ id: 100, members: [17] }],
       };
       await expect(
         applyTool.handler({ routerId: "switch-01", config, dryRun: false }, makeContext(sw)),
       ).rejects.toMatchObject({ code: "SWOS_LOCKOUT_RISK" });
       expect(sw.client.postRaw).not.toHaveBeenCalled();
+      // The management flag does not silence a lockout warning.
+      await expect(
+        applyTool.handler(
+          { routerId: "switch-01", config, dryRun: false, includeManagement: true },
+          makeContext(sw),
+        ),
+      ).rejects.toMatchObject({ code: "SWOS_LOCKOUT_RISK" });
       await applyTool.handler(
-        { routerId: "switch-01", config, dryRun: false, includeManagement: true },
+        { routerId: "switch-01", config, dryRun: false, acceptLockoutRisk: true },
         makeContext(sw),
       );
       expect(sw.posts).toEqual(["vlan.b", "fwd.b"]);
     });
 
-    it("refuses forcing the speed of a linked port unless includeManagement is set", async () => {
+    it("refuses forcing the speed of a linked port unless acceptLockoutRisk is set", async () => {
       const sw = makeSwitch();
       const config = { version: 1, ports: { "17": { auto_negotiation: false, speed: "1G" } } };
       await expect(
@@ -388,7 +461,13 @@ describe("swosConfigTools", () => {
       expect(sw.client.postRaw).not.toHaveBeenCalled();
 
       await applyTool.handler(
-        { routerId: "switch-01", config, dryRun: false, includeManagement: true },
+        {
+          routerId: "switch-01",
+          config,
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
         makeContext(sw),
       );
       expect(sw.posts).toEqual(["link.b"]);
@@ -405,7 +484,13 @@ describe("swosConfigTools", () => {
         full_duplex: true,
       });
       const back = await applyTool.handler(
-        { routerId: "switch-01", config: yaml, dryRun: false, includeManagement: true },
+        {
+          routerId: "switch-01",
+          config: yaml,
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
         makeContext(sw),
       );
       expect((back.structuredContent as Record<string, unknown>).action).toBe("no_change");

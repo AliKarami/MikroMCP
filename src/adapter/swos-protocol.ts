@@ -912,6 +912,8 @@ export const SWOS_ENDPOINTS: string[] = Object.keys(SWOS_SCHEMA).sort();
 
 /** The web UI refuses longer passwords; the 32-byte change buffer holds two of them. */
 export const MAX_SWOS_PASSWORD_LENGTH = 15;
+/** The `/!pwd.b` change buffer: old password, NUL, new password. */
+export const PASSWORD_CHANGE_BYTES = 32;
 
 /**
  * The `/!pwd.b` payload that changes the admin password, as the SwOS web UI
@@ -920,9 +922,9 @@ export const MAX_SWOS_PASSWORD_LENGTH = 15;
  * (`*` when empty) repeated to 16 characters. Hex-encoded.
  */
 export function encodePasswordChange(oldPassword: string, newPassword: string): string {
-  const buf = new Uint8Array(32);
+  const buf = new Uint8Array(PASSWORD_CHANGE_BYTES);
   const bytes = [...Buffer.from(oldPassword, "latin1"), 0, ...Buffer.from(newPassword, "latin1")];
-  bytes.slice(0, 32).forEach((b, i) => (buf[i] = b));
+  bytes.slice(0, PASSWORD_CHANGE_BYTES).forEach((b, i) => (buf[i] = b));
 
   let keyText = oldPassword === "" ? "*" : oldPassword;
   while (keyText.length < 16) keyText += keyText;

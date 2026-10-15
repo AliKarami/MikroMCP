@@ -41,6 +41,13 @@ export interface ToolDefinition {
    * (e.g. the SwOS endpoint being written).
    */
   snapshotPaths?: string[] | ((params: Record<string, unknown>) => string[]);
+  /**
+   * Parameters as they may be written to the audit log and the write journal.
+   * The generic redaction drops well-known secret keys; a tool whose parameter
+   * can carry a secret inside a free-form value (a config document) scrubs it
+   * here, before anything is logged.
+   */
+  redactParams?: (params: Record<string, unknown>) => Record<string, unknown>;
   /** When true, tool-registry skips per-router setup (routerId, circuit breaker, client). Use for fleet tools that manage their own router contexts. */
   skipRouterContext?: boolean;
   /**
@@ -54,6 +61,14 @@ export interface ToolDefinition {
 
 /** Platform a tool targets: a concrete device type, or "any" for platform-aware tools. */
 export type ToolPlatform = DeviceType | "any";
+
+/** The parameters of one call as they may be logged. */
+export function loggableParams(
+  tool: ToolDefinition,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  return tool.redactParams ? tool.redactParams(params) : params;
+}
 
 /** Snapshot paths for one call, resolving the argument-derived form. */
 export function snapshotPathsFor(tool: ToolDefinition, params: Record<string, unknown>): string[] {
@@ -88,6 +103,8 @@ export interface ToolContext {
   circuitBreakers?: Map<string, CircuitBreaker>;
   /** Server-wide configuration. Use this instead of reading process.env in tool handlers. */
   appConfig: AppConfig;
+  /** What the executor snapshotted before this write, by path, and what it could not. */
+  snapshots?: { taken: string[]; failed: string[] };
 }
 
 export interface ToolResult {

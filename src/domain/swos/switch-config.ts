@@ -206,6 +206,30 @@ export interface ParseOptions {
   communityByReferenceOnly?: boolean;
 }
 
+/**
+ * A config as it may be logged: the SNMP community, when written out instead of
+ * referenced as `${NAME}`, is replaced in both the text and the object form.
+ */
+export function redactConfigParam(config: unknown): unknown {
+  if (typeof config === "string") {
+    return config.replace(
+      /^(\s*community\s*:\s*)(?!\$\{)\S.*$/gm,
+      (_m, head: string) => `${head}<redacted>`,
+    );
+  }
+  if (config && typeof config === "object" && !Array.isArray(config)) {
+    const doc = config as Record<string, unknown>;
+    const snmp = doc.snmp;
+    if (snmp && typeof snmp === "object" && !Array.isArray(snmp)) {
+      const community = (snmp as Record<string, unknown>).community;
+      if (typeof community === "string" && !community.startsWith("${")) {
+        return { ...doc, snmp: { ...(snmp as Record<string, unknown>), community: "<redacted>" } };
+      }
+    }
+  }
+  return config;
+}
+
 export function parseSwitchConfig(
   input: unknown,
   secrets: Record<string, string> = {},
@@ -214,11 +238,19 @@ export function parseSwitchConfig(
   let doc: unknown = input;
   if (typeof input === "string") {
     try {
-      doc = parseYaml(input);
+      // No pretty errors: those quote the offending source line, and a config
+      // line can hold a community.
+      doc = parseYaml(input, { prettyErrors: false });
     } catch (err) {
+      // The error's offset into the text, turned into a line and column.
+      const offset = (err as { pos?: number[] }).pos?.[0];
+      const where =
+        typeof offset === "number"
+          ? ` (line ${input.slice(0, offset).split("\n").length}, column ${offset - input.lastIndexOf("\n", offset - 1)})`
+          : "";
       throw configError(
         "SWOS_CONFIG_PARSE_ERROR",
-        `The switch config is not valid YAML: ${err instanceof Error ? err.message : String(err)}`,
+        `The switch config is not valid YAML${where}: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`,
         "Fix the YAML syntax and try again.",
       );
     }
@@ -717,6 +749,8 @@ interface PortState {
   mode: string;
   receive: string;
   dvid: number;
+  /** Force VLAN ID: every frame, tagged or not, is put into the default VLAN. */
+  forceVid: boolean;
   autoNeg: boolean;
   speed: string;
   fullDuplex: boolean;
@@ -732,11 +766,6 @@ function renegotiates(before: PortState, after: PortState): boolean {
   return !after.autoNeg && (before.speed !== after.speed || before.fullDuplex !== after.fullDuplex);
 }
 
-/**
- * Ports the applied config would cut off. Checked on the switch's state after
- * the whole plan, settings the document leaves out included, because a strict
- * port loses its untagged traffic the moment its default VLAN stops listing it.
- */
 /** How management access is restricted once the plan is applied (sys.b allow-from). */
 interface ManagementAccess {
   /** 0 = any VLAN. */
@@ -745,77 +774,44 @@ interface ManagementAccess {
   ports: number[];
 }
 
-function lockoutRisks(
-  before: PortState[],
-  after: PortState[],
-  membersBefore: Map<number, Set<number>>,
+/**
+ * Management cut off by a VLAN table: the allow-from VLAN gone, or a linked
+ * allow-from port no longer in it. `link` says which ports have a link.
+ */
+function managementRisks(
+  management: ManagementAccess | undefined,
   members: Map<number, Set<number>>,
-  management?: ManagementAccess,
+  link: PortState[],
+): string[] {
+  if (!management || management.vlan <= 0) return [];
+  const vlanMembers = members.get(management.vlan);
+  if (!vlanMembers) {
+    return [
+      `Management is allowed from VLAN ${management.vlan} only, which would no longer be in the VLAN table.`,
+    ];
+  }
+  const out = management.ports.filter((p) => link[p - 1]?.link && !vlanMembers.has(p));
+  return out.length > 0
+    ? [
+        `Management is allowed from VLAN ${management.vlan} only, and linked port(s) ${out.join(", ")} would not be members of it.`,
+      ]
+    : [];
+}
+
+/**
+ * Linked ports whose untagged traffic a VLAN table drops: a strict port that
+ * is not a member of its own default VLAN, or a filtering port whose default
+ * VLAN is not in the table. `link` says which ports have a link.
+ */
+function untaggedRisks(
+  ports: PortState[],
+  members: Map<number, Set<number>>,
+  link: PortState[],
 ): string[] {
   const risks: string[] = [];
-  if (management && management.vlan > 0) {
-    const vlanMembers = members.get(management.vlan);
-    if (!vlanMembers) {
-      risks.push(
-        `Management is allowed from VLAN ${management.vlan} only, which would no longer be in the VLAN table.`,
-      );
-    } else {
-      const out = management.ports.filter((p) => before[p - 1]?.link && !vlanMembers.has(p));
-      if (out.length > 0) {
-        risks.push(
-          `Management is allowed from VLAN ${management.vlan} only, and linked port(s) ${out.join(", ")} would not be members of it.`,
-        );
-      }
-    }
-  }
-  after.forEach((port, i) => {
+  ports.forEach((port, i) => {
     const n = i + 1;
-    if (before[i]?.link && before[i].receive !== "only_tagged" && port.receive === "only_tagged") {
-      risks.push(
-        `Port ${n} has a link and would accept tagged frames only; untagged traffic on it, management included, is dropped.`,
-      );
-    }
-    if (
-      before[i]?.link &&
-      port.enabled &&
-      port.mode !== "disabled" &&
-      port.receive !== "only_untagged"
-    ) {
-      // A trunk loses the tagged VLANs it is taken out of, pruned VLANs included.
-      // Its default VLAN carries the untagged traffic and is judged below.
-      const lost = [...membersBefore.entries()]
-        .filter(([vid, ports]) => ports.has(n) && !members.get(vid)?.has(n))
-        .map(([vid]) => vid)
-        .filter((vid) => vid !== port.dvid && vid !== before[i].dvid);
-      if (lost.length > 0) {
-        risks.push(
-          `Port ${n} has a link and would leave VLAN(s) ${lost.join(", ")}; tagged traffic in them stops on this port.`,
-        );
-      }
-    }
-    if (before[i]?.enabled && before[i]?.link && !port.enabled) {
-      risks.push(`Port ${n} has a link and would be disabled.`);
-    } else if (before[i]?.enabled && before[i]?.link && renegotiates(before[i], port)) {
-      risks.push(
-        `Port ${n} has a link and its negotiation would change; the link drops and may not come back.`,
-      );
-    }
-    if (before[i]?.link && port.enabled) {
-      const cut = before[i].forwardTo.filter(
-        (m) => before[m - 1]?.link && !port.forwardTo.includes(m),
-      );
-      if (cut.length > 0) {
-        risks.push(
-          `Port ${n} has a link and would stop forwarding to linked port(s) ${cut.join(", ")}.`,
-        );
-      }
-      if (before[i].lagMode !== port.lagMode || before[i].lagGroup !== port.lagGroup) {
-        risks.push(
-          `Port ${n} has a link and its link aggregation would change; it stops forwarding until the other end matches.`,
-        );
-      }
-    }
-    if (!port.enabled || port.receive === "only_tagged") return;
+    if (!link[i]?.link || !port.enabled || port.receive === "only_tagged") return;
     if (port.mode === "strict" && !members.get(port.dvid)?.has(n)) {
       risks.push(
         `Port ${n} is strict with default VLAN ${port.dvid}, but is not a member of VLAN ${port.dvid}: its untagged traffic will be dropped.`,
@@ -826,6 +822,113 @@ function lockoutRisks(
       );
     }
   });
+  return risks;
+}
+
+/**
+ * Ports the applied config would cut off, judged on the switch's state after
+ * the whole plan, settings the document leaves out included. Only ports with a
+ * link count (nobody is behind the others), and only risks the plan introduces:
+ * a problem the switch already has today is not a reason to refuse an
+ * unrelated change. Whether a port is a trunk is judged from its state before
+ * the plan, so turning a trunk into an access port is seen for what it is.
+ */
+function lockoutRisks(
+  before: PortState[],
+  after: PortState[],
+  membersBefore: Map<number, Set<number>>,
+  members: Map<number, Set<number>>,
+  managementBefore?: ManagementAccess,
+  managementAfter?: ManagementAccess,
+): string[] {
+  const introduced = (now: string[], already: string[]) =>
+    now.filter((risk) => !already.includes(risk));
+  const risks: string[] = introduced(
+    managementRisks(managementAfter, members, before),
+    managementRisks(managementBefore, membersBefore, before),
+  );
+  const allowFrom = (n: number) =>
+    managementAfter !== undefined && managementAfter.vlan > 0 && managementAfter.ports.includes(n);
+  after.forEach((port, i) => {
+    const was = before[i];
+    if (!was?.link) return;
+    const n = i + 1;
+    const live = was.enabled && port.enabled && port.mode !== "disabled";
+    if (was.receive !== "only_tagged" && port.receive === "only_tagged") {
+      risks.push(
+        `Port ${n} has a link and would accept tagged frames only; untagged traffic on it, management included, is dropped.`,
+      );
+    }
+    // A trunk is a port that takes tagged frames today; it loses the tagged
+    // VLANs it is taken out of, pruned ones included, and all of them when it
+    // becomes an access port. Its default VLAN carries the untagged traffic
+    // and is judged separately.
+    const trunk = was.enabled && was.mode !== "disabled" && was.receive !== "only_untagged";
+    if (trunk && live) {
+      const carried = [...membersBefore.entries()]
+        .filter(([, ports]) => ports.has(n))
+        .map(([vid]) => vid)
+        .filter((vid) => vid !== port.dvid && vid !== was.dvid);
+      if (port.receive === "only_untagged") {
+        if (carried.length > 0) {
+          risks.push(
+            `Port ${n} has a link and would accept untagged frames only; tagged traffic in VLAN(s) ${carried.join(", ")} stops on this port.`,
+          );
+        }
+      } else {
+        const lost = carried.filter((vid) => !members.get(vid)?.has(n));
+        if (lost.length > 0) {
+          risks.push(
+            `Port ${n} has a link and would leave VLAN(s) ${lost.join(", ")}; tagged traffic in them stops on this port.`,
+          );
+        }
+      }
+    }
+    // Where untagged traffic lands: a moved default VLAN or a forced VLAN, on a
+    // port somebody is behind. (Whether the new VLAN then drops it is judged by
+    // untaggedRisks below.)
+    if (live && port.receive !== "only_tagged" && was.dvid !== port.dvid) {
+      const note = allowFrom(n)
+        ? "; management is allowed from this port"
+        : managementAfter && managementAfter.vlan > 0 && was.dvid === managementAfter.vlan
+          ? "; VLAN " + was.dvid + " is the management VLAN"
+          : "";
+      risks.push(
+        `Port ${n} has a link and its untagged traffic would move from VLAN ${was.dvid} to VLAN ${port.dvid}${note}.`,
+      );
+    }
+    if (live && !was.forceVid && port.forceVid) {
+      risks.push(
+        `Port ${n} has a link and would force every frame into VLAN ${port.dvid}; tagged traffic on it, management included, is re-tagged.`,
+      );
+    }
+    if (was.enabled && !port.enabled) {
+      risks.push(`Port ${n} has a link and would be disabled.`);
+    } else if (was.enabled && renegotiates(was, port)) {
+      risks.push(
+        `Port ${n} has a link and its negotiation would change; the link drops and may not come back.`,
+      );
+    }
+    if (port.enabled) {
+      const cut = was.forwardTo.filter((m) => before[m - 1]?.link && !port.forwardTo.includes(m));
+      if (cut.length > 0) {
+        risks.push(
+          `Port ${n} has a link and would stop forwarding to linked port(s) ${cut.join(", ")}.`,
+        );
+      }
+      if (was.lagMode !== port.lagMode || was.lagGroup !== port.lagGroup) {
+        risks.push(
+          `Port ${n} has a link and its link aggregation would change; it stops forwarding until the other end matches.`,
+        );
+      }
+    }
+  });
+  risks.push(
+    ...introduced(
+      untaggedRisks(after, members, before),
+      untaggedRisks(before, membersBefore, before),
+    ),
+  );
   return risks;
 }
 
@@ -844,6 +947,7 @@ function portStates(
     mode: String(at(fwd?.vlan_mode, i) ?? "optional"),
     receive: String(at(fwd?.vlan_recv_mode, i) ?? "any"),
     dvid: Number(at(fwd?.default_vid, i) ?? 1),
+    forceVid: at(fwd?.force_vid, i) === true,
     autoNeg: at(link.auto_neg, i) !== false,
     speed: String(at(link.manual_speed, i) ?? ""),
     fullDuplex: at(link.manual_duplex, i) !== false,
@@ -1085,15 +1189,16 @@ export function planSwitchConfig(
   const linkAfter = linkAfterBlob
     ? (decodeEndpoint("link.b", linkAfterBlob, portCount) as Record<string, unknown>)
     : linkBefore;
+  const sysBefore = decodeCurrent("sys.b") ?? {};
   const sysAfter = sysBlob
     ? (decodeEndpoint("sys.b", sysBlob, portCount) as Record<string, unknown>)
-    : (decodeCurrent("sys.b") ?? {});
-  const managementAfter: ManagementAccess | undefined =
-    typeof sysAfter.allow_from_vlan === "number"
+    : sysBefore;
+  const managementOf = (sys: Record<string, unknown>): ManagementAccess | undefined =>
+    typeof sys.allow_from_vlan === "number"
       ? {
-          vlan: sysAfter.allow_from_vlan,
-          ports: Array.isArray(sysAfter.allow_from_ports)
-            ? portsOf(sysAfter.allow_from_ports as boolean[])
+          vlan: sys.allow_from_vlan,
+          ports: Array.isArray(sys.allow_from_ports)
+            ? portsOf(sys.allow_from_ports as boolean[])
             : [],
         }
       : undefined;
@@ -1102,7 +1207,8 @@ export function planSwitchConfig(
     portStates(linkAfter, fwdAfter, lacpAfter, portCount),
     membersBefore,
     members,
-    managementAfter,
+    managementOf(sysBefore),
+    managementOf(sysAfter),
   );
 
   return { dialect, portCount, endpoints: ordered, writes, management, warnings };

@@ -32,6 +32,7 @@ import {
   type CurrentBlobs,
   type FieldChange,
   type SwitchConfig,
+  redactConfigParam,
 } from "../swos/switch-config.js";
 
 const log = createLogger("swos-config-tools");
@@ -227,7 +228,13 @@ const applyConfigSchema = z
       .boolean()
       .default(false)
       .describe(
-        "Allow changes that can cut off the session applying them: address acquisition, static IP and the allow-from settings, and any plan whose warnings show a port losing its untagged traffic or a linked port being disabled. Refused unless this is true.",
+        "Allow changes to how the switch is reached: address acquisition, static IP and the allow-from settings. Refused unless this is true.",
+      ),
+    acceptLockoutRisk: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Apply a plan whose warnings show a linked port being cut off (its VLAN, untagged traffic, link, isolation or LAG changing). Refused unless this is true; a dry run shows the warnings without it.",
       ),
     pruneVlans: z
       .boolean()
@@ -281,7 +288,7 @@ const applySwosConfigTool: ToolDefinition = {
   name: "apply_swos_config",
   title: "Apply SwOS Config",
   description:
-    "Apply a switch config document (the format get_swos_config exports) to a SwOS switch. Plans every change against the switch first; dryRun defaults to true. Writes only the endpoints that change: the VLAN table grows first (new VLANs and members), then the per-port settings (VLAN, isolation, storm and flood control), port names/negotiation/enabled, LAG and SNMP, then the table shrinks (removed VLANs and members), then system — so no port loses its VLAN mid-apply. Refuses management changes (address, allow-from) and any plan that would cut a port off (a strict port outside its default VLAN; a linked port disabled, renegotiating, isolated from another linked port or moved in or out of a LAG) unless includeManagement is true. All six endpoints are snapshotted before a real apply, so rollback_change restores the previous state.",
+    "Apply a switch config document (the format get_swos_config exports) to a SwOS switch. Plans every change against the switch first; dryRun defaults to true. Writes only the endpoints that change: the VLAN table grows first (new VLANs and members), then the per-port settings (VLAN, isolation, storm and flood control), port names/negotiation/enabled, LAG and SNMP, then the table shrinks (removed VLANs and members), then system — so no port loses its VLAN mid-apply. Refuses management changes (address, allow-from) unless includeManagement is true, and any plan that would cut a linked port off (its untagged VLAN moved or dropped, a trunk losing tagged VLANs or becoming an access port, a forced VLAN, the port disabled, renegotiating, isolated from another linked port or moved in or out of a LAG; only risks the plan introduces) unless acceptLockoutRisk is true. All six endpoints are snapshotted before a real apply, so rollback_change restores the previous state; the result names any endpoint whose snapshot failed. Moving management to another VLAN cannot be ordered safely in one apply (sys.b is written last and the session is cut when it takes effect): do it in two applies, with the new VLAN reachable first.",
   inputSchema: applyConfigSchema,
   annotations: {
     readOnlyHint: false,
@@ -291,11 +298,14 @@ const applySwosConfigTool: ToolDefinition = {
   },
   platform: "swos",
   snapshotPaths: (params) => (params.dryRun === false ? [...CONFIG_ENDPOINTS] : []),
+  // The audit log and the journal see the config with a written-out community
+  // redacted, in the text and the object form; a `${NAME}` reference stays.
+  redactParams: (params) => ({ ...params, config: redactConfigParam(params.config) }),
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = applyConfigSchema.parse(params);
     const client = requireSwosClient(context);
-    // A config given as text reaches the audit log verbatim, so its community
-    // must be a ${NAME} reference; an object has its `community` key redacted.
+    // A config given as text travels through the conversation as it is, so its
+    // community must be a ${NAME} reference; an object may carry the value.
     const config = parseSwitchConfig(parsed.config, context.appConfig.configSecrets, {
       communityByReferenceOnly: typeof parsed.config === "string",
     });
@@ -329,7 +339,7 @@ const applySwosConfigTool: ToolDefinition = {
       });
     }
 
-    if (plan.warnings.length > 0 && !parsed.dryRun && !parsed.includeManagement) {
+    if (plan.warnings.length > 0 && !parsed.dryRun && !parsed.acceptLockoutRisk) {
       throw new MikroMCPError({
         category: ErrorCategory.VALIDATION,
         code: "SWOS_LOCKOUT_RISK",
@@ -338,7 +348,7 @@ const applySwosConfigTool: ToolDefinition = {
         recoverability: {
           retryable: false,
           suggestedAction:
-            "Fix the VLAN membership or default VLAN of the named ports. If the result is intended and this session does not depend on those ports, retry with includeManagement: true.",
+            "Fix the VLAN membership or default VLAN of the named ports. If the result is intended and this session does not depend on those ports, retry with acceptLockoutRisk: true.",
         },
       });
     }
@@ -417,16 +427,24 @@ const applySwosConfigTool: ToolDefinition = {
       }
     }
 
+    const snapshots = context.snapshots ?? { taken: [], failed: [] };
+    const snapshotNote =
+      snapshots.failed.length === 0
+        ? "The previous state of all six endpoints was snapshotted — undo with rollback_change using this call's journal ID."
+        : snapshots.taken.length === 0
+          ? "No endpoint could be snapshotted before the write, so rollback_change cannot restore the previous state; keep the switch's last save_swos_backup file at hand."
+          : `The previous state of ${snapshots.taken.join(", ")} was snapshotted, but not ${snapshots.failed.join(", ")}: rollback_change restores only the former.`;
     return {
       content:
         `Applied the config to ${context.routerId} (${written.join(", ")}):\n${summary}\n` +
         `${warnings ? `\n${warnings}\n` : ""}\n${banner}\n` +
-        "The previous state of all six endpoints was snapshotted — undo with rollback_change using this call's journal ID.",
+        snapshotNote,
       structuredContent: {
         routerId: context.routerId,
         action: "applied",
         dryRun: false,
         written,
+        snapshots,
         endpoints: changes,
         management: plan.management,
         warnings: plan.warnings,

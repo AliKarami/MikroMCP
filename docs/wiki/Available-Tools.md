@@ -1683,7 +1683,7 @@ Execute a sequence of write operations in order. Takes a snapshot of affected Ro
 
 ### `rollback_change` — Write · Destructive
 
-Restore the RouterOS section state captured before a previous `apply_plan` run. Uses the snapshot stored in the write journal.
+Restore the state captured before a previous write. On RouterOS that is the section state before an `apply_plan` run; on a SwOS switch the `.b` endpoints snapshotted before `apply_swos_config` or `write_swos_blob`, re-posted in a lockout-safe order (on full SwOS a VLAN table holding both the current and the old VLANs, then the per-port settings, then the old table). When one of those writes is not answered, the rest are still sent and the result is `SWOS_ROLLBACK_INCOMPLETE`, naming what was restored and what was not. Uses the snapshot stored in the write journal.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -2168,7 +2168,7 @@ Every result — dry run and real write — carries a `compatibility` verdict co
 
 ### `get_swos_config` — Read
 
-Export the switch's configuration as one YAML document: system settings (including how the switch is reached), every port's name, enabled state and VLAN settings, the VLAN table (full SwOS) and SNMP. The SNMP community is never exported. The document is exactly the input of `apply_swos_config`, so it doubles as a backup you can read, diff and commit.
+Export the switch's configuration as one YAML document: system settings (including how the switch is reached), every port's name, enabled state, speed and negotiation, VLAN settings, isolation (`forward_to`), storm and flood control and LAG, the VLAN table (full SwOS) and SNMP. The SNMP community is never exported. The document is exactly the input of `apply_swos_config`, so it doubles as a backup you can read, diff and commit.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -2182,7 +2182,7 @@ Export the switch's configuration as one YAML document: system settings (includi
 
 Apply a switch config document (`version: 1`, then any of `system`, `ports`, `vlans`, `snmp`) to a SwOS switch. A port takes `name`, `enabled`, `vlan_mode`, `vlan_receive`, `default_vlan`, `force_vlan`, `forward_to` (its Port Isolation row), `storm_rate` (1-100 %), `limit_unknown_unicast`, `flood_unknown_multicast`, `lag_mode` and `lag_group` (full SwOS only for storm rate and LAG), `auto_negotiation`, and — with `auto_negotiation: false` on the same port — a forced `speed` and `full_duplex` (copper ports 10M or 100M, SFP+ cages 1G to 10G, as SwOS 2.19 allows). Only the settings the document names change, down to single VLAN fields; everything else on the switch is re-sent byte-for-byte. The tool reads the switch, plans every change, and writes only the endpoints that change: the VLAN table grows first (new VLANs and new members), then the per-port VLAN settings, port names/enabled and SNMP, then the table shrinks (removed VLANs and members), then the system settings. No port loses its default VLAN halfway through.
 
-`dryRun` defaults to `true`. Two kinds of change can cut off the session applying them, and both are refused unless `includeManagement` is `true`: changes to how the switch is reached (`address_acquisition`, `static_ip`, `allow_from`, `allow_from_ports`, `allow_from_vlan`), and a plan whose `warnings` show a port losing its untagged traffic (a strict port outside its default VLAN, a filtering port whose default VLAN is gone), a linked port being disabled, renegotiating, losing forwarding to another linked port, or moving in or out of a LAG. These are checked on the switch's state after the whole plan, ports the document does not name included. `snmp.community` may be `${NAME}`, replaced by the server's `MIKROMCP_SECRET_<NAME>` value, so a committed config never holds it; no other field may reference a secret, and the community never appears in plans, errors or rollback previews. A real apply snapshots all six endpoints first; `rollback_change` restores them in a lockout-safe order (both VLAN tables, then per-port settings, then the old table). Writing the VLAN table needs full SwOS (SwOS Lite's `vlan.b` keys are unverified).
+`dryRun` defaults to `true`. Two kinds of change can cut off the session applying them, each behind its own flag. Changes to how the switch is reached (`address_acquisition`, `static_ip`, `allow_from`, `allow_from_ports`, `allow_from_vlan`) are refused unless `includeManagement` is `true`. A plan whose `warnings` show a linked port being cut off is refused unless `acceptLockoutRisk` is `true`: its untagged traffic moved to another VLAN or dropped (a strict port outside its default VLAN, a filtering port whose default VLAN is gone), a trunk losing tagged VLANs or becoming an access port, a forced VLAN, a port that starts filtering, the allow-from VLAN pruned or an allow-from port leaving it, a port disabled, renegotiating, losing forwarding to another linked port, or moving in or out of a LAG. The checks run on the switch's state after the whole plan, ports the document does not name included, but only ports with a link count and only risks the plan introduces: a problem the switch already has does not block an unrelated change. Moving management to another VLAN cannot be ordered safely in one apply, because the system settings are written last and the session is cut the moment they take effect; do it in two applies, with the new VLAN reachable first. `snmp.community` may be `${NAME}`, replaced by the server's `MIKROMCP_SECRET_<NAME>` value, so a committed config never holds it; no other field may reference a secret, and the community never appears in plans, errors or rollback previews. A community written out in the document is redacted before the call reaches the audit log and the write journal, and a YAML error names a line and column without quoting the line. A real apply snapshots all six endpoints first; the result names any endpoint whose snapshot failed, and `rollback_change` restores the ones it has in a lockout-safe order (both VLAN tables, then per-port settings, then the old table). Writing the VLAN table needs full SwOS (SwOS Lite's `vlan.b` keys are unverified).
 
 ```yaml
 version: 1
@@ -2206,7 +2206,8 @@ snmp:
 | `routerId` | string | — | Target switch |
 | `config` | string \| object | — | The config as YAML text or as an object |
 | `dryRun` | boolean | `true` | Plan and show every change without writing |
-| `includeManagement` | boolean | `false` | Allow address and allow-from changes and plans that would cut a port off |
+| `includeManagement` | boolean | `false` | Allow changes to how the switch is reached (address, allow-from) |
+| `acceptLockoutRisk` | boolean | `false` | Apply a plan whose warnings show a linked port being cut off |
 | `pruneVlans` | boolean | `true` | With a `vlans` list, remove VLANs the list does not name |
 
 **Example prompt:** "Plan applying the switch config in office-switch.yml to the core switch, show me every change, then apply it."
@@ -2235,7 +2236,7 @@ Restore a backup file from `<MIKROMCP_DATA_DIR>/swos/` onto the switch, as the w
 | `file` | string | — | Backup file name in the SwOS folder |
 | `dryRun` | boolean | `true` | Check the file and the switch without restoring |
 | `saveCurrentFirst` | boolean | `true` | Save the current backup before restoring |
-| `force` | boolean | `false` | Restore a file whose name says it came from another switch or model |
+| `force` | boolean | `false` | Restore a file from another switch or model, or one whose origin nothing says |
 
 **Example prompt:** "Restore the golden backup onto the core switch."
 
@@ -2261,7 +2262,7 @@ Upgrade the switch's firmware the way the web UI's Upgrade tab does. Without `ve
 
 ### `set_swos_password` — Write · Destructive
 
-Change the switch's admin password, as the web UI's Password Change does. The new password is read from the server secret `MIKROMCP_PASSWORD_<newPasswordSecret>`, so it never appears in the conversation and no switch config can reference it; the current one is the router's configured credential. Passwords are printable ASCII, at most 15 characters. After the change this call's client keeps working with the new password, but the server rebuilds the client from the router's configured credential (`<envPrefix>_PASS`) after any authentication failure or restart, so that variable must be updated right away. On SwOS Lite the switch does not answer the change; the result is confirmed by logging in with the new password. A switch that answers "wrong password" is reported as `SWOS_PASSWORD_WRONG`.
+Change the switch's admin password, as the web UI's Password Change does. The new password is read from the server secret `MIKROMCP_PASSWORD_<newPasswordSecret>`, so it never appears in the conversation and no switch config can reference it; the current one is the router's configured credential. Passwords are printable ASCII, at most 15 characters, and the current and the new one together must fit the switch's 32-byte change buffer (current password, a separator, new password), otherwise `SWOS_PASSWORD_TOO_LONG`. After the change this call's client keeps working with the new password, but the server rebuilds the client from the router's configured credential (`<envPrefix>_PASS`) after any authentication failure or restart, so that variable must be updated right away. On SwOS Lite the switch does not answer the change; the result is confirmed by logging in with the new password. If that login fails too, the result is `SWOS_PASSWORD_UNCONFIRMED`: the switch may already take the new password while this server went back to the configured one, so check with `get_swos_status` and update `<envPrefix>_PASS` if it no longer authenticates. A switch that answers "wrong password" is reported as `SWOS_PASSWORD_WRONG`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|

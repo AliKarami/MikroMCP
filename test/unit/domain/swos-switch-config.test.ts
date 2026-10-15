@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { decodeEndpoint, parseWireBlob } from "../../../src/adapter/swos-protocol.js";
 import {
   parseSwitchConfig,
+  redactConfigParam,
   planSwitchConfig,
   unionVlanBlob,
   type CurrentBlobs,
@@ -234,15 +235,20 @@ describe("planSwitchConfig safeguards", () => {
     expect(sys.allow_from_mask).toBe(24);
   });
 
-  it("warns when a strict access port is not in its own default VLAN", () => {
-    const config = parseSwitchConfig({
+  it("warns when a linked strict access port is not in its own default VLAN", () => {
+    const doc = (port: number) => ({
       version: 1,
-      ports: { 8: { vlan_mode: "strict", vlan_receive: "only_untagged", default_vlan: 100 } },
+      ports: { [port]: { vlan_mode: "strict", vlan_receive: "only_untagged", default_vlan: 100 } },
       vlans: [{ id: 100, members: [17] }],
     });
-    const plan = planSwitchConfig(config, factory());
-    expect(plan.warnings).toHaveLength(1);
-    expect(plan.warnings[0]).toMatch(/Port 8 .* not a member of VLAN 100/);
+    // Port 1 has a link: its untagged traffic moves to VLAN 100 and is then dropped there.
+    const plan = planSwitchConfig(parseSwitchConfig(doc(1)), factory());
+    expect(plan.warnings).toEqual([
+      "Port 1 has a link and its untagged traffic would move from VLAN 1 to VLAN 100.",
+      "Port 1 is strict with default VLAN 100, but is not a member of VLAN 100: its untagged traffic will be dropped.",
+    ]);
+    // Port 8 has no link: nobody is cut off, no warning.
+    expect(planSwitchConfig(parseSwitchConfig(doc(8)), factory()).warnings).toEqual([]);
   });
 
   it("keeps VLANs that are not in the config when pruning is off", () => {
@@ -369,11 +375,22 @@ describe("review regressions", () => {
       vlans: [{ id: 100, members: [8] }],
     });
     const plan = planSwitchConfig(config, vlanOneSwitch());
-    expect(plan.warnings.some((w) => w.startsWith("Port 5 is strict with default VLAN 1"))).toBe(
-      true,
+    // Port 5 (linked, not named) loses VLAN 1 under it; port 8 (linked, named) moves VLAN;
+    // the 16 unlinked ports in the same situation cut nobody off and stay quiet.
+    expect(plan.warnings).toEqual([
+      "Port 8 has a link and its untagged traffic would move from VLAN 1 to VLAN 100.",
+      "Port 5 is strict with default VLAN 1, but is not a member of VLAN 1: its untagged traffic will be dropped.",
+    ]);
+  });
+
+  it("does not gate on a problem the switch already has", () => {
+    // Port 5 is linked, strict, default VLAN 1, and VLAN 1 is already missing from the table.
+    const seeded = vlanOneSwitch();
+    seeded["vlan.b"] = parseWireBlob(
+      "[{vid:0x0064,nm:'',piso:0x01,lrn:0x01,mrr:0x00,igmp:0x00,mbr:0x000080}]",
     );
-    expect(plan.warnings.some((w) => w.startsWith("Port 8"))).toBe(false);
-    expect(plan.warnings).toHaveLength(17);
+    const rename = parseSwitchConfig({ version: 1, ports: { 2: { name: "jetkvm" } } });
+    expect(planSwitchConfig(rename, seeded).warnings).toEqual([]);
   });
 
   it("writes the table last when the plan only removes (nothing to grow first)", () => {
@@ -461,7 +478,8 @@ describe("review regressions", () => {
       "Port 1 has a link and would leave VLAN(s) 200; tagged traffic in them stops on this port.",
       "Port 17 has a link and would leave VLAN(s) 100, 200; tagged traffic in them stops on this port.",
     ]);
-    // An access port that takes untagged frames only is not a trunk: no warning.
+    // Turning the linked trunk into an access port in the same plan loses every
+    // tagged VLAN it carried; the trunk is judged from the state before the plan.
     const access = parseSwitchConfig({
       version: 1,
       ports: { 17: { vlan_receive: "only_untagged" } },
@@ -471,6 +489,15 @@ describe("review regressions", () => {
       ],
     });
     expect(planSwitchConfig(access, seeded).warnings).toEqual([
+      "Port 1 has a link and would leave VLAN(s) 200; tagged traffic in them stops on this port.",
+      "Port 17 has a link and would accept untagged frames only; tagged traffic in VLAN(s) 100, 200 stops on this port.",
+    ]);
+    // A port that already takes untagged frames only is no trunk: no warning for it.
+    const seededAccess = { ...seeded };
+    const fwd = { ...(seeded["fwd.b"] as Record<string, unknown>) };
+    fwd.vlni = Array.from({ length: 18 }, (_, i) => (i === 16 ? "0x02" : "0x00"));
+    seededAccess["fwd.b"] = fwd;
+    expect(planSwitchConfig(access, seededAccess).warnings).toEqual([
       "Port 1 has a link and would leave VLAN(s) 200; tagged traffic in them stops on this port.",
     ]);
   });
@@ -559,7 +586,7 @@ describe("review regressions", () => {
     const config = parseSwitchConfig({
       version: 1,
       ports: {
-        1: { vlan_mode: "enabled", vlan_receive: "any", default_vlan: 40 },
+        8: { vlan_mode: "enabled", vlan_receive: "any", default_vlan: 40 },
         5: { enabled: false },
       },
       vlans: [{ id: 100, members: [8] }],
@@ -567,7 +594,7 @@ describe("review regressions", () => {
     const plan = planSwitchConfig(config, vlanOneSwitch());
     expect(plan.warnings).toContain("Port 5 has a link and would be disabled.");
     expect(
-      plan.warnings.some((w) => w.startsWith("Port 1 filters VLANs with default VLAN 40")),
+      plan.warnings.some((w) => w.startsWith("Port 8 filters VLANs with default VLAN 40")),
     ).toBe(true);
   });
 
@@ -811,5 +838,34 @@ describe("isolation, storm control, flood control and LAG", () => {
         JSON.stringify(port),
       ).toThrowError(expect.objectContaining({ code: "SWOS_SETTING_UNSUPPORTED" }));
     }
+  });
+});
+
+describe("what reaches the logs", () => {
+  it("redacts a written-out community in a text config and in an object config", () => {
+    const text = "version: 1\nsnmp:\n  enabled: true\n  community: s3cr3t-c0mmunity\n";
+    expect(redactConfigParam(text)).toBe(
+      "version: 1\nsnmp:\n  enabled: true\n  community: <redacted>\n",
+    );
+    const referenced = "version: 1\nsnmp:\n  community: ${SNMP_COMMUNITY}\n";
+    expect(redactConfigParam(referenced)).toBe(referenced);
+    expect(
+      redactConfigParam({ version: 1, snmp: { enabled: true, community: "s3cr3t-c0mmunity" } }),
+    ).toEqual({ version: 1, snmp: { enabled: true, community: "<redacted>" } });
+    const ref = { version: 1, snmp: { community: "${SNMP_COMMUNITY}" } };
+    expect(redactConfigParam(ref)).toEqual(ref);
+    expect(redactConfigParam({ version: 1, ports: {} })).toEqual({ version: 1, ports: {} });
+  });
+
+  it("reports a YAML error by position, without quoting the source line", () => {
+    const broken = "version: 1\nsnmp:\n  community: [s3cr3t-c0mmunity\n";
+    let message = "";
+    try {
+      parseSwitchConfig(broken);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/not valid YAML \(line \d+, column \d+\)/);
+    expect(message).not.toContain("s3cr3t");
   });
 });

@@ -18,6 +18,7 @@ import {
   decodeEndpoint,
   dumpBlob,
   encodePasswordChange,
+  PASSWORD_CHANGE_BYTES,
   parseWireBlob,
   presentableBlob,
   SWOS_SCHEMA,
@@ -372,6 +373,24 @@ export class SwosClient {
    * the client authenticates with the new password from then on.
    */
   async changePassword(newPassword: string, field: "pwd" | "i01"): Promise<void> {
+    // The change travels as old password, NUL, new password in one 32-byte
+    // buffer; a long current password would silently cut the new one short.
+    const changeBytes =
+      Buffer.byteLength(this.credentials.password, "latin1") +
+      1 +
+      Buffer.byteLength(newPassword, "latin1");
+    if (changeBytes > PASSWORD_CHANGE_BYTES) {
+      throw new MikroMCPError({
+        category: ErrorCategory.VALIDATION,
+        code: "SWOS_PASSWORD_TOO_LONG",
+        message: `The current and the new password together take ${changeBytes} bytes; the switch's password change holds ${PASSWORD_CHANGE_BYTES} (current password, a separator, new password).`,
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "Shorten the new password, or change the password in two steps through a shorter one.",
+        },
+      });
+    }
     const encoded = encodePasswordChange(this.credentials.password, newPassword);
     const previous = this.credentials;
     try {
@@ -388,10 +407,21 @@ export class SwosClient {
           await this.getRaw("sys.b");
           return;
         } catch {
+          // Neither password is known to work now: say so, instead of the plain timeout.
           this.credentials = previous;
           this.challenge = undefined;
           this.nonceCount = 0;
-          throw err;
+          throw new MikroMCPError({
+            category: ErrorCategory.ROUTER_TIMEOUT,
+            code: "SWOS_PASSWORD_UNCONFIRMED",
+            message:
+              "The switch did not answer the password change, and a login with the new password failed too. The change may still have landed: the switch may now take either password. This client went back to the configured one.",
+            recoverability: {
+              retryable: false,
+              suggestedAction:
+                "Call get_swos_status. If it fails to authenticate, the new password is in force: update the router's password variable to it and restart the server.",
+            },
+          });
         }
       }
       if (err instanceof HttpError && err.statusCode === 405) {

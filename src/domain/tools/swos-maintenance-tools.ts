@@ -11,7 +11,7 @@
 
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
@@ -113,13 +113,62 @@ async function readLocal(context: ToolContext, name: string): Promise<Buffer> {
   }
 }
 
-/** Backups hold the switch's credentials: the folder and its files are owner-only. */
+/**
+ * Backups hold the switch's credentials: the folder and its files are owner-only,
+ * a pre-existing folder or file included (mkdir and writeFile leave those alone).
+ */
 async function saveLocal(context: ToolContext, name: string, data: Buffer): Promise<string> {
   const path = insideSwosDir(context, name);
-  await mkdir(swosDir(context), { recursive: true, mode: 0o700 });
+  const dir = swosDir(context);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await chmod(dir, 0o700);
   await writeFile(path, data, { mode: 0o600 });
+  await chmod(path, 0o600);
   return path;
 }
+
+/** What a backup file came from; written beside it, so a renamed file still says. */
+interface BackupOrigin {
+  routerId: string;
+  model: string;
+  version: string;
+  savedAt: string;
+  sha256: string;
+  reason: "backup" | "pre-restore";
+}
+
+const originName = (file: string) => `${file}.json`;
+
+async function saveOrigin(context: ToolContext, file: string, origin: BackupOrigin): Promise<void> {
+  await saveLocal(context, originName(file), Buffer.from(JSON.stringify(origin, null, 2) + "\n"));
+}
+
+/**
+ * The origin of a backup file: its sidecar, or, for a file saved before sidecars
+ * existed, the switch and model in its name. Undefined when neither says.
+ */
+async function backupOrigin(
+  context: ToolContext,
+  file: string,
+): Promise<Pick<BackupOrigin, "routerId" | "model"> | undefined> {
+  try {
+    const raw = JSON.parse(
+      (await readLocal(context, originName(file))).toString("utf8"),
+    ) as unknown;
+    if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>;
+      if (typeof o.routerId === "string" && typeof o.model === "string") {
+        return { routerId: o.routerId, model: o.model };
+      }
+    }
+  } catch {
+    // no sidecar: fall back to the file name
+  }
+  const named = BACKUP_FILE.exec(file);
+  return named ? { routerId: named[1], model: named[2] } : undefined;
+}
+
+const safeName = (text: string) => text.replace(/[^A-Za-z0-9._+-]/g, "_");
 
 interface SwitchIdentity {
   model: string;
@@ -205,6 +254,46 @@ async function fetchOk(url: string, what: string, maxBytes?: number): Promise<Re
   return response;
 }
 
+/** The largest answer MikroTik's .LATEST pointer may be: a version number and little else. */
+const LATEST_MAX_BYTES = 4096;
+
+/**
+ * The body, read in chunks and refused the moment it passes `maxBytes`: a
+ * response without Content-Length (or lying about it) cannot fill memory.
+ */
+async function readCapped(
+  response: Response,
+  maxBytes: number,
+  what: string,
+  url: string,
+): Promise<Buffer> {
+  const tooLarge = (bytes: number) =>
+    swosError(
+      ErrorCategory.VALIDATION,
+      "SWOS_DOWNLOAD_TOO_LARGE",
+      `The ${what} at ${url} is more than ${bytes} bytes, more than it can be.`,
+      "Check the URL; a firmware image is well under 8 MB and the .LATEST pointer a few bytes.",
+      { url, limit: maxBytes },
+    );
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) throw tooLarge(maxBytes);
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+    if (total > maxBytes) await response.body.cancel().catch(() => undefined);
+  }
+  return Buffer.concat(chunks);
+}
+
 // ---------------------------------------------------------------------------
 // save_swos_backup
 // ---------------------------------------------------------------------------
@@ -236,12 +325,17 @@ const saveSwosBackupTool: ToolDefinition = {
           structuredContent: { routerId: context.routerId, action: "default_config" },
         };
       }
-      const file = `${context.routerId}_${model}_${version}_${stamp()}.swb`.replace(
-        /[^A-Za-z0-9._+-]/g,
-        "_",
-      );
+      const file = safeName(`${context.routerId}_${model}_${version}_${stamp()}.swb`);
       const path = await saveLocal(context, file, data);
       const hash = sha256(data);
+      await saveOrigin(context, file, {
+        routerId: context.routerId,
+        model,
+        version,
+        savedAt: new Date().toISOString(),
+        sha256: hash,
+        reason: "backup",
+      });
       log.info({ routerId: context.routerId, path, bytes: data.length }, "SwOS backup saved");
       return {
         content: `Saved the backup of ${context.routerId} (${model}, SwOS ${version}) as ${file} (${data.length} bytes, sha256 ${hash}).`,
@@ -279,7 +373,7 @@ const restoreBackupSchema = z
       .boolean()
       .default(false)
       .describe(
-        "Restore a backup whose file name says it came from another switch or model (as named by save_swos_backup).",
+        "Restore a backup that came from another switch or model, or whose origin cannot be told (no sidecar from save_swos_backup and not named by it).",
       ),
   })
   .strict();
@@ -312,16 +406,27 @@ const restoreSwosBackupTool: ToolDefinition = {
     let safetyCopy: string | undefined;
     try {
       const { model, version } = await identify(client);
-      const named = BACKUP_FILE.exec(parsed.file);
-      if (named && !parsed.force) {
-        const [, fileRouter, fileModel] = named;
-        const safeModel = model.replace(/[^A-Za-z0-9._+-]/g, "_");
-        const mismatch =
-          fileRouter !== context.routerId
-            ? `switch "${fileRouter}", not "${context.routerId}"`
-            : fileModel !== safeModel
-              ? `model ${fileModel}, not ${safeModel}`
-              : undefined;
+      if (!parsed.force) {
+        // Every file is checked, the tool's own safety copies and renamed files
+        // included: the sidecar says where it came from, or the name does.
+        const origin = await backupOrigin(context, parsed.file);
+        if (!origin) {
+          throw swosError(
+            ErrorCategory.VALIDATION,
+            "SWOS_BACKUP_UNVERIFIED",
+            `${parsed.file} has no sidecar from save_swos_backup and is not named by it, so which switch it came from cannot be told.`,
+            "Restore a file save_swos_backup wrote (with its .json sidecar), or pass force: true if you know it belongs to this switch and model.",
+            { file: parsed.file, routerId: context.routerId, model },
+          );
+        }
+        const sameRouter =
+          origin.routerId === context.routerId || origin.routerId === safeName(context.routerId);
+        const sameModel = origin.model === model || origin.model === safeName(model);
+        const mismatch = !sameRouter
+          ? `switch "${origin.routerId}", not "${context.routerId}"`
+          : !sameModel
+            ? `model ${origin.model}, not ${model}`
+            : undefined;
         if (mismatch) {
           throw swosError(
             ErrorCategory.VALIDATION,
@@ -352,8 +457,17 @@ const restoreSwosBackupTool: ToolDefinition = {
       if (parsed.saveCurrentFirst) {
         const current = await client.getBinary("backup.swb");
         if (current.length > 0) {
-          safetyCopy = `${context.routerId}_pre-restore_${stamp()}.swb`;
+          // Named and described like any other backup, so it restores under the same checks.
+          safetyCopy = safeName(`${context.routerId}_${model}_${version}_${stamp()}.swb`);
           await saveLocal(context, safetyCopy, current);
+          await saveOrigin(context, safetyCopy, {
+            routerId: context.routerId,
+            model,
+            version,
+            savedAt: new Date().toISOString(),
+            sha256: sha256(current),
+            reason: "pre-restore",
+          });
         }
       }
       try {
@@ -461,17 +575,24 @@ const upgradeSwosFirmwareTool: ToolDefinition = {
     const client = requireSwosClient(context);
     try {
       const { model, version: current } = await identify(client);
-      const derived = derivedBoard(model);
-      if (parsed.board !== undefined && parsed.board !== derived && !parsed.force) {
-        throw swosError(
-          ErrorCategory.VALIDATION,
-          "SWOS_FIRMWARE_MODEL_MISMATCH",
-          `board ${parsed.board} does not match this ${model}, which takes ${derived}.`,
-          "Drop `board`, or pass force: true if the derived name is wrong for this model.",
-          { model, derived, board: parsed.board },
-        );
+      // An explicit board with force: true stands on its own, so an odd model
+      // string (which derivedBoard refuses) can still be upgraded.
+      let board: string;
+      if (parsed.board !== undefined && parsed.force) {
+        board = parsed.board;
+      } else {
+        const derived = derivedBoard(model);
+        if (parsed.board !== undefined && parsed.board !== derived) {
+          throw swosError(
+            ErrorCategory.VALIDATION,
+            "SWOS_FIRMWARE_MODEL_MISMATCH",
+            `board ${parsed.board} does not match this ${model}, which takes ${derived}.`,
+            "Drop `board`, or pass force: true if the derived name is wrong for this model.",
+            { model, derived, board: parsed.board },
+          );
+        }
+        board = parsed.board ?? derived;
       }
-      const board = parsed.board ?? derived;
 
       let target = parsed.version;
       let data: Buffer;
@@ -511,7 +632,12 @@ const upgradeSwosFirmwareTool: ToolDefinition = {
       } else {
         if (target === undefined) {
           const latestUrl = `${DOWNLOAD_BASE}/${board}.LATEST`;
-          target = stripBuild(await (await fetchOk(latestUrl, "latest version")).text());
+          const latest = await fetchOk(latestUrl, "latest version", LATEST_MAX_BYTES);
+          target = stripBuild(
+            (await readCapped(latest, LATEST_MAX_BYTES, "latest version", latestUrl)).toString(
+              "utf8",
+            ),
+          );
         }
         if (!VERSION.test(target)) {
           throw swosError(
@@ -523,9 +649,8 @@ const upgradeSwosFirmwareTool: ToolDefinition = {
         }
         file = `swos-${board}-${target}.bin`;
         source = `${DOWNLOAD_BASE}/${target}/${file}`;
-        data = Buffer.from(
-          await (await fetchOk(source, "firmware", FIRMWARE_MAX_BYTES)).arrayBuffer(),
-        );
+        const image = await fetchOk(source, "firmware", FIRMWARE_MAX_BYTES);
+        data = await readCapped(image, FIRMWARE_MAX_BYTES, "firmware", source);
       }
 
       if (/[a-z]/.test(target) && !parsed.allowPrerelease) {
@@ -682,7 +807,14 @@ const setSwosPasswordTool: ToolDefinition = {
           structuredContent: { routerId: context.routerId, action: "dry_run", dryRun: true, field },
         };
       }
-      await client.changePassword(newPassword, field);
+      try {
+        await client.changePassword(newPassword, field);
+      } catch (err) {
+        if (err instanceof MikroMCPError && err.code === "SWOS_PASSWORD_UNCONFIRMED") {
+          err.recoverability.suggestedAction = `Call get_swos_status. If it fails to authenticate, the new password is in force: ${updateHint}`;
+        }
+        throw err;
+      }
       log.info({ routerId: context.routerId }, "SwOS admin password changed");
       return {
         content: `Changed the admin password of ${context.routerId}; this server now authenticates with the new one. ${updateHint}`,
