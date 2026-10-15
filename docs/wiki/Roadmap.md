@@ -204,6 +204,16 @@ Contributed by [@akuzin87](https://github.com/akuzin87).
 
 ---
 
+## ✅ v1.14 — Full SwOS Support
+
+Full-SwOS switches such as the CSS318 and CSS326 now read correctly (verified on a CSS318 at SwOS 2.19) and can be configured. `get_swos_config` and `apply_swos_config` handle a switch's whole configuration as one YAML document: the apply is a dry run by default, writes in a lockout-safe order, refuses changes that would cut a linked port off unless asked, and is undone with `rollback_change`.
+
+`save_swos_backup`, `restore_swos_backup`, `upgrade_swos_firmware` and `set_swos_password` cover the web UI's maintenance pages. SNMP communities and new passwords come from environment secrets bound per switch and never reach a response or the audit log.
+
+Contributed by [@karamble](https://github.com/karamble).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

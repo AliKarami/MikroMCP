@@ -1,8 +1,8 @@
 {
   "name": "mikromcp",
-  "version": "1.13.2",
+  "version": "1.14.0",
   "mcpName": "io.github.AliKarami/mikromcp",
-  "description": "Production-grade MCP server for MikroTik RouterOS",
+  "description": "Production-grade MCP server for MikroTik RouterOS routers and SwOS switches",
   "type": "module",
   "main": "dist/main.js",
   "bin": {
