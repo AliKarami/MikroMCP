@@ -224,14 +224,13 @@ describe("swosConfigTools", () => {
       expect(partial.content).toContain("but not snmp.b");
       expect((partial.structuredContent as Record<string, unknown>).snapshotted).toBe("partial");
 
-      // A step of bulk_execute or apply_plan: the executor snapshotted nothing
-      // for it and the context does not say so; that is "none", not "all six".
+      // A context that records no snapshot is "none", not "all six".
       for (const snapshots of [undefined, { taken: [], failed: [] }]) {
         const none = await applyTool.handler(params, {
           ...makeContext(makeSwitch(), SECRETS),
           snapshots,
         } as ToolContext);
-        expect(none.content).toContain("No snapshot was taken before this write");
+        expect(none.content).toContain("No snapshot was recorded for this write");
         expect(none.content).not.toContain("all six");
         expect((none.structuredContent as Record<string, unknown>).snapshotted).toBe("none");
       }

@@ -40,7 +40,7 @@ export interface RouterConfig {
   cmdAllow?: string[];
   cmdDeny?: string[];
   maintenanceWindows?: MaintenanceWindow[];
-  /** SwOS: the config secrets (`MIKROMCP_SECRET_<NAME>`) a switch config applied to this switch may reference. Unset = any. */
+  /** SwOS: the config secrets (`MIKROMCP_SECRET_<NAME>`) a switch config applied to this switch may reference. Unset = none. */
   secrets?: string[];
 }
 
