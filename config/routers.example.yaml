@@ -44,6 +44,7 @@
 #       source: "env"
 #       envPrefix: "SWITCH_CORE01" # -> SWITCH_CORE01_USER, SWITCH_CORE01_PASS
 #     tags: ["access", "layer2"]
+#     secrets: [SNMP_COMMUNITY]   # the MIKROMCP_SECRET_<NAME> names a switch config may reference; none without this list
 
 routers:
   core-01:

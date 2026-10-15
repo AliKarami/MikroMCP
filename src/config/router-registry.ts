@@ -69,6 +69,13 @@ const RouterConfigSchema = z
       .optional(),
     cmdAllow: z.array(z.string()).optional(),
     cmdDeny: z.array(z.string()).optional(),
+    // SwOS only: the MIKROMCP_SECRET_<NAME> values a switch config applied to
+    // this switch may reference. Without the list it may reference none.
+    secrets: z
+      .array(
+        z.string().regex(/^[A-Z0-9_]+$/, "a secret name is the NAME of MIKROMCP_SECRET_<NAME>"),
+      )
+      .optional(),
     maintenanceWindows: z
       .array(
         z
@@ -101,6 +108,13 @@ const RouterConfigSchema = z
           code: z.ZodIssueCode.custom,
           path: ["rosVersion"],
           message: "rosVersion is required for RouterOS devices",
+        });
+      }
+      if (config.secrets) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["secrets"],
+          message: "secrets binds switch config secrets and applies to SwOS devices only",
         });
       }
       return;

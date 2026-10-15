@@ -876,6 +876,35 @@ describe("isolation, storm control, flood control and LAG", () => {
   });
 });
 
+describe("secrets bound to a switch", () => {
+  const doc = { version: 1, snmp: { community: "${SNMP_COMMUNITY}" } };
+  const secrets = { SNMP_COMMUNITY: "c0mmunity", OTHER: "x" };
+
+  it("resolves a bound name, refuses an unbound one before looking it up, and leaves references unrestricted when no list is given (the tool passes the switch's list or an empty one)", () => {
+    expect(
+      parseSwitchConfig(doc, secrets, { allowedSecrets: ["SNMP_COMMUNITY"] }).snmp?.community,
+    ).toBe("c0mmunity");
+    expect(parseSwitchConfig(doc, secrets).snmp?.community).toBe("c0mmunity");
+    expect(() =>
+      parseSwitchConfig(doc, secrets, { allowedSecrets: ["OTHER"], routerId: "sw-1" }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "SWOS_CONFIG_SECRET_NOT_BOUND",
+        message: expect.stringContaining('switch "sw-1"'),
+      }),
+    );
+    // An unbound name is refused even when the secret does not exist at all.
+    expect(() =>
+      parseSwitchConfig({ version: 1, snmp: { community: "${NOPE}" } }, secrets, {
+        allowedSecrets: [],
+      }),
+    ).toThrow(expect.objectContaining({ code: "SWOS_CONFIG_SECRET_NOT_BOUND" }));
+    expect(() =>
+      parseSwitchConfig({ version: 1, snmp: { community: "${NOPE}" } }, secrets),
+    ).toThrow(expect.objectContaining({ code: "SWOS_CONFIG_SECRET_MISSING" }));
+  });
+});
+
 describe("what reaches the logs", () => {
   it("withholds a text config that writes the community out, and keeps one that references it", () => {
     const text = "version: 1\nsnmp:\n  enabled: true\n  community: s3cr3t-c0mmunity\n";

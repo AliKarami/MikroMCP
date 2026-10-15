@@ -212,6 +212,16 @@ const getSwosConfigTool: ToolDefinition = {
 // apply_swos_config
 // ---------------------------------------------------------------------------
 
+/** The per-port settings and VLAN table changes that cannot be ordered with a management VLAN move. */
+const VLAN_PORT_SETTINGS = new Set([
+  "vlan_mode",
+  "vlan_receive",
+  "default_vlan",
+  "force_vlan",
+  "forward_to",
+]);
+const VLAN_MEMBERSHIP = new Set(["add", "remove", "members"]);
+
 const applyConfigSchema = z
   .object({
     routerId,
@@ -288,7 +298,7 @@ const applySwosConfigTool: ToolDefinition = {
   name: "apply_swos_config",
   title: "Apply SwOS Config",
   description:
-    "Apply a switch config document (the format get_swos_config exports) to a SwOS switch. Plans every change against the switch first; dryRun defaults to true. Writes only the endpoints that change: the VLAN table grows first (new VLANs and members), then the per-port settings (VLAN, isolation, storm and flood control), port names/negotiation/enabled, LAG and SNMP, then the table shrinks (removed VLANs and members), then system — so no port loses its VLAN mid-apply. Refuses management changes (address, allow-from) unless includeManagement is true, and any plan that would cut a linked port off (its untagged VLAN moved or dropped, a trunk losing tagged VLANs or becoming an access port, a forced VLAN, a port that starts filtering VLANs, the port disabled, renegotiating, isolated from another linked port or moved in or out of a LAG, every linked port dropped from allow_from_ports; only risks the plan introduces) unless acceptLockoutRisk is true. All six endpoints are snapshotted before a real apply, so rollback_change restores the previous state; the result names any endpoint whose snapshot failed, and says so when none was recorded. Moving management to another VLAN cannot be ordered safely in one apply (sys.b is written last and the session is cut when it takes effect): do it in two applies, with the new VLAN reachable first.",
+    "Apply a switch config document (the format get_swos_config exports) to a SwOS switch. Plans every change against the switch first; dryRun defaults to true. Writes only the endpoints that change: the VLAN table grows first (new VLANs and members), then the per-port settings (VLAN, isolation, storm and flood control), port names/negotiation/enabled, LAG and SNMP, then the table shrinks (removed VLANs and members), then system — so no port loses its VLAN mid-apply. Refuses management changes (address, allow-from) unless includeManagement is true, and any plan that would cut a linked port off (its untagged VLAN moved or dropped, a trunk losing tagged VLANs or becoming an access port, a forced VLAN, a port that starts filtering VLANs, the port disabled, renegotiating, isolated from another linked port or moved in or out of a LAG, every linked port dropped from allow_from_ports; only risks the plan introduces) unless acceptLockoutRisk is true. All six endpoints are snapshotted before a real apply, so rollback_change restores the previous state; the result names any endpoint whose snapshot failed, and says so when none was recorded. A document that moves management to another VLAN (allow_from_vlan) and changes a port's VLAN settings or the VLAN table's membership at the same time is refused, because that cannot be written in a safe order (sys.b goes last and cuts the session): apply the VLAN changes first, then the move. `snmp.community` may reference only the secrets bound to the switch (its `secrets` list in routers.yaml); a switch without a list may reference none.",
   inputSchema: applyConfigSchema,
   annotations: {
     readOnlyHint: false,
@@ -308,6 +318,9 @@ const applySwosConfigTool: ToolDefinition = {
     // community must be a ${NAME} reference; an object may carry the value.
     const config = parseSwitchConfig(parsed.config, context.appConfig.configSecrets, {
       communityByReferenceOnly: typeof parsed.config === "string",
+      // A switch references only the secrets bound to it; none without a list.
+      allowedSecrets: context.routerConfig?.secrets ?? [],
+      routerId: context.routerId,
     });
 
     let plan: ConfigPlan;
@@ -321,6 +334,36 @@ const applySwosConfigTool: ToolDefinition = {
       sys = decodeEndpoint("sys.b", dumpBlob(current["sys.b"])) as Decoded;
     } catch (err) {
       throw toolError(err, context, "apply_swos_config");
+    }
+
+    // Moving management to another VLAN cannot be ordered with VLAN changes in
+    // one apply: sys.b is written last and the session is cut when it takes
+    // effect, so the VLAN work before it can never be checked from the new VLAN.
+    const vlanMove = plan.management.find(
+      (c) => c.setting === "allow_from_vlan" && typeof c.to === "number" && c.to > 0,
+    );
+    // Only the VLAN work is unorderable: a port's VLAN settings and the table's
+    // membership. Names, storm and flood control, LAG or identity go with a move.
+    const vlanWork = plan.endpoints.some((e) =>
+      e.changes.some(
+        (c) =>
+          (c.endpoint === "fwd.b" && VLAN_PORT_SETTINGS.has(c.setting.replace(/^port \d+ /, ""))) ||
+          (c.endpoint === "vlan.b" && VLAN_MEMBERSHIP.has(c.setting)),
+      ),
+    );
+    const unordered = vlanMove && vlanWork;
+    if (unordered && !parsed.dryRun) {
+      throw new MikroMCPError({
+        category: ErrorCategory.VALIDATION,
+        code: "SWOS_MANAGEMENT_MOVE_UNORDERED",
+        message: `The config moves management to VLAN ${String(vlanMove.to)} and changes a port's VLAN settings or the VLAN table's membership in the same document; that cannot be written in a safe order (the system settings go last and cut the session). Nothing was written.`,
+        details: { management: plan.management },
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "Apply the VLAN changes first, check that the switch answers from the new VLAN, then move management (allow_from_vlan) in a second apply with includeManagement: true.",
+        },
+      });
     }
 
     if (plan.management.length > 0 && !parsed.includeManagement) {
@@ -355,7 +398,13 @@ const applySwosConfigTool: ToolDefinition = {
 
     const compatibility = firmwareSupport(sys.model, sys.version);
     const banner = `${compatibility.verified ? "Firmware" : "⚠️  Firmware"}: ${compatibility.note}`;
-    const warnings = plan.warnings.map((w) => `⚠️  ${w}`).join("\n");
+    const planWarnings = unordered
+      ? [
+          ...plan.warnings,
+          `Management moves to VLAN ${String(vlanMove.to)} in the same document that changes a port's VLAN settings or VLAN membership; a real apply refuses this, do the VLAN changes first and the move second.`,
+        ]
+      : plan.warnings;
+    const warnings = planWarnings.map((w) => `⚠️  ${w}`).join("\n");
     const summary = describePlan(plan);
     const changes = plan.endpoints.map((e) => ({ endpoint: e.endpoint, changes: e.changes }));
     const toWrite = plan.writes;
@@ -374,7 +423,7 @@ const applySwosConfigTool: ToolDefinition = {
           dialect: plan.dialect,
           endpoints: changes,
           management: plan.management,
-          warnings: plan.warnings,
+          warnings: planWarnings,
           compatibility,
         },
       };
