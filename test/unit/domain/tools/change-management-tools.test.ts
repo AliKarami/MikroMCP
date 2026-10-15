@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createChangeManagementTools } from "../../../../src/domain/tools/change-management-tools.js";
 import type { ToolDefinition, ToolContext } from "../../../../src/domain/tools/tool-definition.js";
+import { loggableParams } from "../../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../../src/adapter/rest-client.js";
 
 vi.mock("node:fs", () => ({
@@ -269,6 +270,42 @@ describe("apply_plan", () => {
     const structured = result.structuredContent as Record<string, unknown>;
     expect(structured.status).toBe("failed");
     expect(structured.failedStep).toBe(0);
+  });
+});
+
+describe("plan steps in the logs", () => {
+  function makeRedactingTool(): ToolDefinition {
+    return {
+      ...makeManageRoute("applied"),
+      redactParams: (params) => ({ ...params, config: "<withheld>" }),
+    };
+  }
+  const steps = [{ tool: "manage_route", params: { config: "community: s3cr3t" } }];
+
+  it("logs each step's parameters as that step's tool would", () => {
+    const tools = createChangeManagementTools([makeRedactingTool()]);
+    for (const name of ["plan_changes", "apply_plan"]) {
+      const tool = tools.find((t) => t.name === name)!;
+      expect(loggableParams(tool, { routerId: "edge-01", steps })).toEqual({
+        routerId: "edge-01",
+        steps: [{ tool: "manage_route", params: { config: "<withheld>" } }],
+      });
+    }
+  });
+
+  it("journals an applied step through its tool's redaction", async () => {
+    const inner = makeRedactingTool();
+    const applyTool = createChangeManagementTools([inner]).find((t) => t.name === "apply_plan")!;
+    vi.mocked(nodeFsp.appendFile).mockClear();
+    await applyTool.handler({ routerId: "edge-01", steps }, makeContext());
+    await vi.waitFor(() => expect(vi.mocked(nodeFsp.appendFile)).toHaveBeenCalled());
+    const journal = vi.mocked(nodeFsp.appendFile).mock.calls.map((c) => String(c[1]));
+    expect(journal.length).toBeGreaterThan(0);
+    expect(journal.join("")).not.toContain("s3cr3t");
+    expect(inner.handler).toHaveBeenCalledWith(
+      expect.objectContaining({ config: "community: s3cr3t" }),
+      expect.anything(),
+    );
   });
 });
 

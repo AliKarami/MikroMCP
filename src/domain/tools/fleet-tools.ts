@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { snapshotPathsFor } from "./tool-definition.js";
+import { loggableParams, snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { compactFields } from "./pagination.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
@@ -319,6 +319,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
   async function runForRouter(router: RouterConfig): Promise<BulkResult> {
     const start = Date.now();
     let journalId: string | undefined;
+    const loggedParams = loggableParams(targetTool, { ...input.params, routerId: router.id });
     try {
       checkAuthz(context.identity, input.toolName, router.id);
       // Authz first, so an unauthorized caller cannot learn a router's
@@ -362,7 +363,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
           role: context.identity.role,
           tool: input.toolName,
           routerId: router.id,
-          params: toolParams as Record<string, unknown>,
+          params: loggedParams,
           snapshotIds,
         });
       }
@@ -395,7 +396,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
             tool: input.toolName,
             routerId: router.id,
             phase: "success",
-            params: input.params as Record<string, unknown>,
+            params: loggedParams,
             durationMs: elapsed,
           },
           context.appConfig.auditLogPath,
@@ -425,7 +426,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
             tool: input.toolName,
             routerId: router.id,
             phase: "failure",
-            params: input.params as Record<string, unknown>,
+            params: loggedParams,
             outcome: message,
             durationMs: elapsed,
           },

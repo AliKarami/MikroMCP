@@ -9,6 +9,7 @@ import {
 } from "../../../src/domain/tools/tool-definition.js";
 import type { SwosClient } from "../../../src/adapter/swos-client.js";
 import { decodeEndpoint, dumpBlob, parseWireBlob } from "../../../src/adapter/swos-protocol.js";
+import { WITHHELD_CONFIG_TEXT } from "../../../src/domain/swos/switch-config.js";
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 const FULL = join(import.meta.dirname, "../../fixtures/swos-full");
@@ -259,7 +260,7 @@ describe("swosConfigTools", () => {
       const text = "version: 1\nsnmp:\n  community: s3cr3t\n";
       expect(loggableParams(applyTool, { routerId: "switch-01", config: text })).toEqual({
         routerId: "switch-01",
-        config: "version: 1\nsnmp:\n  community: <redacted>\n",
+        config: WITHHELD_CONFIG_TEXT,
       });
       expect(
         loggableParams(applyTool, { routerId: "switch-01", config: { snmp: { community: "x" } } }),

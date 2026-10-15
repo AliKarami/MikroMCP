@@ -5,6 +5,7 @@ import { decodeEndpoint, parseWireBlob } from "../../../src/adapter/swos-protoco
 import {
   parseSwitchConfig,
   redactConfigParam,
+  WITHHELD_CONFIG_TEXT,
   planSwitchConfig,
   unionVlanBlob,
   type CurrentBlobs,
@@ -842,16 +843,40 @@ describe("isolation, storm control, flood control and LAG", () => {
 });
 
 describe("what reaches the logs", () => {
-  it("redacts a written-out community in a text config and in an object config", () => {
+  it("withholds a text config that writes the community out, and keeps one that references it", () => {
     const text = "version: 1\nsnmp:\n  enabled: true\n  community: s3cr3t-c0mmunity\n";
-    expect(redactConfigParam(text)).toBe(
-      "version: 1\nsnmp:\n  enabled: true\n  community: <redacted>\n",
-    );
+    expect(redactConfigParam(text)).toBe(WITHHELD_CONFIG_TEXT);
     const referenced = "version: 1\nsnmp:\n  community: ${SNMP_COMMUNITY}\n";
     expect(redactConfigParam(referenced)).toBe(referenced);
+    const noSnmp = "version: 1\nports:\n  3:\n    name: uplink\n";
+    expect(redactConfigParam(noSnmp)).toBe(noSnmp);
+  });
+
+  it.each([
+    ["a flow map", "version: 1\nsnmp: {community: s3cr3t}\n"],
+    ["JSON as text", '{"version": 1, "snmp": {"community": "s3cr3t"}}'],
+    ["a quoted key", "version: 1\nsnmp:\n  'community': s3cr3t\n"],
+    ["a block scalar", "version: 1\nsnmp:\n  community: |\n    s3cr3t\n"],
+    ["an alias", "version: 1\nx: &c s3cr3t\nsnmp:\n  community: *c\n"],
+    ["a comment before the value", "version: 1\nsnmp:\n  community: # note\n    s3cr3t\n"],
+    ["a reference with text after it", "version: 1\nsnmp:\n  community: ${A}s3cr3t\n"],
+    ["the wrong place", "version: 1\nports:\n  3:\n    community: s3cr3t\n"],
+    ["text that does not parse", "version: 1\nsnmp:\n  community: [s3cr3t\n"],
+  ])("withholds a text config with the community in %s", (_form, text) => {
+    expect(redactConfigParam(text)).toBe(WITHHELD_CONFIG_TEXT);
+  });
+
+  it("redacts a written-out community in an object config, wherever it sits", () => {
     expect(
       redactConfigParam({ version: 1, snmp: { enabled: true, community: "s3cr3t-c0mmunity" } }),
     ).toEqual({ version: 1, snmp: { enabled: true, community: "<redacted>" } });
+    expect(redactConfigParam({ version: 1, snmp: { community: "${A}s3cr3t" } })).toEqual({
+      version: 1,
+      snmp: { community: "<redacted>" },
+    });
+    expect(redactConfigParam({ ports: { 3: { community: "s3cr3t" } } })).toEqual({
+      ports: { 3: { community: "<redacted>" } },
+    });
     const ref = { version: 1, snmp: { community: "${SNMP_COMMUNITY}" } };
     expect(redactConfigParam(ref)).toEqual(ref);
     expect(redactConfigParam({ version: 1, ports: {} })).toEqual({ version: 1, ports: {} });

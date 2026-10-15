@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { readFileSync } from "node:fs";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { snapshotPathsFor } from "./tool-definition.js";
+import { loggableParams, snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
@@ -183,6 +183,25 @@ export async function restoreSwosBlobs(
 export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDefinition[] {
   const toolMap = new Map(baseTools.map((t) => [t.name, t]));
 
+  // A plan's steps as their own tools would log them: a step can carry a secret
+  // its tool redacts (a switch config), and these tools call handlers directly.
+  function loggableSteps(params: Record<string, unknown>): Record<string, unknown> {
+    if (!Array.isArray(params.steps)) return params;
+    return {
+      ...params,
+      steps: params.steps.map((step: unknown) => {
+        const { tool: name, params: stepParams } = (step ?? {}) as Record<string, unknown>;
+        const tool = typeof name === "string" ? toolMap.get(name) : undefined;
+        return tool && stepParams && typeof stepParams === "object"
+          ? {
+              ...(step as object),
+              params: loggableParams(tool, stepParams as Record<string, unknown>),
+            }
+          : step;
+      }),
+    };
+  }
+
   function requireTool(name: string): ToolDefinition {
     const tool = toolMap.get(name);
     if (!tool) {
@@ -205,6 +224,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     description:
       "Preview a sequence of write operations: each step runs with dryRun=true against live state, returning affected paths and the predicted action per step. Use apply_plan to execute the same steps for real.",
     inputSchema: planChangesInputSchema,
+    redactParams: loggableSteps,
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -269,6 +289,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     description:
       "Execute write operations in order, stopping on first failure. Each step is snapshotted and journaled individually. Non-admin identities need a confirmationToken (same two-step flow as other destructive tools). Undo individual steps via rollback_change with the returned journal IDs.",
     inputSchema: applyPlanInputSchema,
+    redactParams: loggableSteps,
     snapshotPaths: [],
     annotations: {
       readOnlyHint: false,
@@ -313,7 +334,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
           role: context.identity.role,
           tool: step.tool,
           routerId: context.routerId,
-          params: stepParams,
+          params: loggableParams(tool, stepParams),
           snapshotIds,
         });
         const stepStartMs = Date.now();

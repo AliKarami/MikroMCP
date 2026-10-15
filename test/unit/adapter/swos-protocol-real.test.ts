@@ -175,6 +175,23 @@ describe("CSS318-16G-2S+ on SwOS 2.19, as captured", () => {
       ]);
     });
 
+    it("flags a tagged-only trunk leaving the VLAN it is moved into as its default", () => {
+      // Port 17 takes tagged frames only, so its default VLAN carries no untagged
+      // traffic there: leaving VLAN 20 drops 20's tagged traffic even if 20 becomes
+      // the default.
+      const doc = exportSwitchConfig(current());
+      const without17 = (doc.vlans as { id: number; members: number[] }[]).map((v) =>
+        v.id === 20 ? { ...v, members: v.members.filter((p) => p !== 17) } : v,
+      );
+      const plan = planSwitchConfig(
+        parseSwitchConfig({ version: 1, ports: { 17: { default_vlan: 20 } }, vlans: without17 }),
+        current(),
+      );
+      expect(plan.warnings).toContain(
+        "Port 17 has a link and would leave VLAN(s) 20; tagged traffic in them stops on this port.",
+      );
+    });
+
     it("flags changes to where a linked port's untagged traffic lands", () => {
       // Port 16 is the linked allow-from access port in management VLAN 10.
       const doc = exportSwitchConfig(current());

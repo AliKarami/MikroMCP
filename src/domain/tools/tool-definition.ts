@@ -45,7 +45,8 @@ export interface ToolDefinition {
    * Parameters as they may be written to the audit log and the write journal.
    * The generic redaction drops well-known secret keys; a tool whose parameter
    * can carry a secret inside a free-form value (a config document) scrubs it
-   * here, before anything is logged.
+   * here, before anything is logged. It must return a new object and leave the
+   * one passed in untouched: the handler and the confirmation token use it.
    */
   redactParams?: (params: Record<string, unknown>) => Record<string, unknown>;
   /** When true, tool-registry skips per-router setup (routerId, circuit breaker, client). Use for fleet tools that manage their own router contexts. */
@@ -67,7 +68,13 @@ export function loggableParams(
   tool: ToolDefinition,
   params: Record<string, unknown>,
 ): Record<string, unknown> {
-  return tool.redactParams ? tool.redactParams(params) : params;
+  if (!tool.redactParams) return params;
+  try {
+    return tool.redactParams(params);
+  } catch {
+    // A redactor that fails must not leave the raw parameters to the log.
+    return { routerId: params.routerId, params: "<withheld: redaction failed>" };
+  }
 }
 
 /** Snapshot paths for one call, resolving the argument-derived form. */

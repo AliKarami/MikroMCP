@@ -390,4 +390,47 @@ describe("executeToolCall and the audit log", () => {
     }
     expect(JSON.stringify(entries)).not.toContain("s3cr3t");
   });
+
+  it("redacts the parameters of a call refused before it runs", async () => {
+    const { auditLog } = await import("../../../src/observability/audit-log.js");
+    vi.mocked(auditLog).mockClear();
+    // A SwOS tool aimed at a RouterOS router is refused by the platform check.
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: {} }), {
+      name: "test_swos_write",
+      platform: "swos",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      redactParams: (params) => ({ ...params, config: "<withheld>" }),
+    });
+    await executeToolCall(tool, { routerId: "r1", config: "community: s3cr3t" }, makeDeps());
+    const entries = vi.mocked(auditLog).mock.calls.map(([event]) => event);
+    expect(entries.map((e) => [e.phase, e.outcome])).toEqual([["failure", "PLATFORM_MISMATCH"]]);
+    expect(entries[0].params).toEqual({ routerId: "r1", config: "<withheld>" });
+  });
+
+  it("logs no parameters when the tool's redaction itself fails", async () => {
+    const { auditLog } = await import("../../../src/observability/audit-log.js");
+    vi.mocked(auditLog).mockClear();
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: {} }), {
+      name: "test_swos_write",
+      platform: "swos",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      redactParams: () => {
+        throw new Error("boom");
+      },
+    });
+    await executeToolCall(tool, { routerId: "r1", config: "community: s3cr3t" }, makeDeps());
+    const entries = vi.mocked(auditLog).mock.calls.map(([event]) => event);
+    expect(JSON.stringify(entries)).not.toContain("s3cr3t");
+    expect(entries[0].params).toEqual({ routerId: "r1", params: "<withheld: redaction failed>" });
+  });
 });

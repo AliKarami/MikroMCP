@@ -206,28 +206,54 @@ export interface ParseOptions {
   communityByReferenceOnly?: boolean;
 }
 
+/** What the logs hold instead of a config text that spells out a community. */
+export const WITHHELD_CONFIG_TEXT =
+  "<withheld: the config writes the SNMP community out or could not be parsed; reference it as ${NAME}>";
+
+const isSecretRef = (value: unknown) => typeof value === "string" && SECRET_REF.test(value);
+
+/** A `community` key anywhere in a parsed document whose value is not a `${NAME}` reference. */
+function holdsLiteralCommunity(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some(holdsLiteralCommunity);
+  if (node && typeof node === "object") {
+    return Object.entries(node).some(([key, value]) =>
+      key.toLowerCase() === "community" ? !isSecretRef(value) : holdsLiteralCommunity(value),
+    );
+  }
+  return false;
+}
+
+function redactCommunities(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(redactCommunities);
+  if (node && typeof node === "object") {
+    return Object.fromEntries(
+      Object.entries(node).map(([key, value]) =>
+        key.toLowerCase() === "community" && !isSecretRef(value)
+          ? [key, "<redacted>"]
+          : [key, redactCommunities(value)],
+      ),
+    );
+  }
+  return node;
+}
+
 /**
- * A config as it may be logged: the SNMP community, when written out instead of
- * referenced as `${NAME}`, is replaced in both the text and the object form.
+ * A config as it may be logged. Text is judged on the parsed document, not by
+ * pattern: YAML can spell a key in too many ways (flow maps, JSON, quoted keys,
+ * block scalars, aliases) for a line match to catch. A text that holds a
+ * written-out community, or that does not parse, is withheld whole.
  */
 export function redactConfigParam(config: unknown): unknown {
   if (typeof config === "string") {
-    return config.replace(
-      /^(\s*community\s*:\s*)(?!\$\{)\S.*$/gm,
-      (_m, head: string) => `${head}<redacted>`,
-    );
-  }
-  if (config && typeof config === "object" && !Array.isArray(config)) {
-    const doc = config as Record<string, unknown>;
-    const snmp = doc.snmp;
-    if (snmp && typeof snmp === "object" && !Array.isArray(snmp)) {
-      const community = (snmp as Record<string, unknown>).community;
-      if (typeof community === "string" && !community.startsWith("${")) {
-        return { ...doc, snmp: { ...(snmp as Record<string, unknown>), community: "<redacted>" } };
-      }
+    let doc: unknown;
+    try {
+      doc = parseYaml(config, { prettyErrors: false, logLevel: "error" });
+    } catch {
+      return WITHHELD_CONFIG_TEXT;
     }
+    return holdsLiteralCommunity(doc) ? WITHHELD_CONFIG_TEXT : config;
   }
-  return config;
+  return redactCommunities(config);
 }
 
 export function parseSwitchConfig(
@@ -240,7 +266,7 @@ export function parseSwitchConfig(
     try {
       // No pretty errors: those quote the offending source line, and a config
       // line can hold a community.
-      doc = parseYaml(input, { prettyErrors: false });
+      doc = parseYaml(input, { prettyErrors: false, logLevel: "error" });
     } catch (err) {
       // The error's offset into the text, turned into a line and column.
       const offset = (err as { pos?: number[] }).pos?.[0];
@@ -862,13 +888,16 @@ function lockoutRisks(
     // A trunk is a port that takes tagged frames today; it loses the tagged
     // VLANs it is taken out of, pruned ones included, and all of them when it
     // becomes an access port. Its default VLAN carries the untagged traffic
-    // and is judged separately.
+    // and is judged separately, but only on a port that accepts untagged
+    // frames: on a tagged-only port the default VLAN is carried tagged too.
     const trunk = was.enabled && was.mode !== "disabled" && was.receive !== "only_untagged";
     if (trunk && live) {
+      const untaggedVid = (state: PortState) =>
+        state.receive === "only_tagged" ? undefined : state.dvid;
       const carried = [...membersBefore.entries()]
         .filter(([, ports]) => ports.has(n))
         .map(([vid]) => vid)
-        .filter((vid) => vid !== port.dvid && vid !== was.dvid);
+        .filter((vid) => vid !== untaggedVid(port) && vid !== untaggedVid(was));
       if (port.receive === "only_untagged") {
         if (carried.length > 0) {
           risks.push(

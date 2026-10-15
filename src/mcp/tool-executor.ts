@@ -180,7 +180,9 @@ export async function executeToolCall(
   return withContext({ correlationId, tool: tool.name }, async () => {
     const startMs = Date.now();
     let journalId: string | undefined;
-    let loggedArgs: Record<string, unknown> = args;
+    // What the audit log and the journal may hold, settled before anything can
+    // fail: a call refused by authz or the platform check is logged too.
+    let loggedArgs = loggableParams(tool, args);
 
     try {
       const identity =
@@ -209,6 +211,7 @@ export async function executeToolCall(
 
       const routerId = resolveRouterId(args.routerId as string | undefined, registry, config);
       args.routerId = routerId;
+      loggedArgs = { ...loggedArgs, routerId };
 
       checkAuthz(identity, tool.name, routerId);
 
@@ -222,9 +225,6 @@ export async function executeToolCall(
         await checkConfirmation(tool.name, routerId, args, identity, config.confirmationSecret);
       }
 
-      // What the audit log and the journal may hold: the tool's own redaction
-      // runs before the first entry is written.
-      loggedArgs = loggableParams(tool, args);
       const shouldAudit = tool.annotations.destructiveHint || !tool.annotations.readOnlyHint;
       if (shouldAudit) {
         auditLog(
