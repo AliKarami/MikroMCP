@@ -104,7 +104,7 @@ const manageIpServiceTool: ToolDefinition = {
   name: "manage_ip_service",
   title: "Manage IP Service",
   description:
-    "Enable or disable a RouterOS IP service (api, api-ssl, ssh, telnet, www, www-ssl, winbox, ftp). Port number changes are intentionally not supported to prevent accidental lockout.",
+    "Enable or disable a RouterOS IP service (api, api-ssl, ssh, telnet, www, www-ssl, winbox, ftp). Port number changes are intentionally not supported to prevent accidental lockout. MikroMCP reaches RouterOS through the REST API on www-ssl (or www for plaintext): disabling the service its connection uses cuts MikroMCP off from the router, including any later call to re-enable it.",
   inputSchema: manageIpServiceInputSchema,
   annotations: {
     readOnlyHint: false,

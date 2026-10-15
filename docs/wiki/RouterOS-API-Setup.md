@@ -10,7 +10,7 @@ RouterOS exposes the REST API at `/rest` through the `www-ssl` (HTTPS, default p
 
 The web services also serve WebFig, so their port and source-address settings affect WebFig access too.
 
-HTTPS requires a server certificate with its private key, explicitly assigned to `www-ssl`. The examples below assume you have already created or imported a certificate named `rest-cert`; replace that name with your own. See [TLS Configuration](#tls-configuration) for certificate options.
+HTTPS requires a server certificate with its private key, explicitly assigned to `www-ssl`. RouterOS does not create one when the service is enabled. The examples below use a certificate named `rest-cert`: create it with the self-signed commands in [Option B](#option-b-self-signed-certificate), or import your own and replace the name. See [TLS Configuration](#tls-configuration) for all certificate options.
 
 ### Using Winbox
 
@@ -34,6 +34,8 @@ To restrict access by source address:
 ```
 /ip service set www-ssl address=192.168.1.0/24
 ```
+
+The allowlist applies to WebFig over HTTPS too. Include the subnet you manage the router from, or you lose WebFig access as soon as the command runs.
 
 Confirm the service configuration:
 
@@ -66,7 +68,7 @@ Never use the `admin` account for automation. Create a named user so you can rev
 If you want fine-grained control, create a custom group with exactly the policies you need:
 
 ```
-/user group add name=mcp-group policy=read,write,api,rest-api,test,ssh,sniff,ftp
+/user group add name=mcp-group policy=read,write,rest-api,test,ssh,sniff,ftp
 /user add name=mcp-api group=mcp-group password=choose-a-strong-password
 ```
 
@@ -93,8 +95,10 @@ See the required policies table below to decide which policies to include.
 The simplest all-in-one policy set for full coverage:
 
 ```
-read, write, api, rest-api, test, ssh, sniff, ftp
+read, write, rest-api, test, ssh, sniff, ftp
 ```
+
+The `api` policy is not needed: it grants the binary API (`api`/`api-ssl`), which MikroMCP does not use.
 
 Note: `reboot` policy must be added explicitly if you want the `reboot` tool — it is not included in the `full` group's default policy set on all ROS versions.
 
@@ -122,9 +126,36 @@ Do not use this on any network you do not fully control. Router credentials trav
 
 ### Option B: Self-signed certificate
 
-Create or import a server certificate and its private key, then assign it to `www-ssl` as shown above. Enabling the service does not generate a certificate automatically. MikroTik's [WebFig HTTPS guide](https://help.mikrotik.com/docs/spaces/ROS/pages/328131/WebFig#WebFig-EnableHTTPS) explains certificate setup for this same web service.
+Enabling `www-ssl` does not generate a certificate, so create one on the router. Replace `10.0.0.1` with the address MikroMCP connects to, the `host` in `routers.yaml`:
 
-Trust your CA with `tls.ca` and `rejectUnauthorized: true`, or set `rejectUnauthorized: false` and pin the certificate's verified fingerprint:
+```
+/certificate add name=rest-ca common-name=rest-ca key-usage=key-cert-sign,crl-sign days-valid=3650
+/certificate sign rest-ca
+/certificate add name=rest-cert common-name=10.0.0.1 subject-alt-name=IP:10.0.0.1 key-usage=digital-signature,key-encipherment,tls-server days-valid=825
+/certificate sign rest-cert ca=rest-ca
+/ip service set www-ssl certificate=rest-cert port=443 disabled=no
+```
+
+Signing can take a minute on low-end hardware. For a DNS name use `subject-alt-name=DNS:router.example.lan` instead. MikroTik's [Certificates](https://help.mikrotik.com/docs/spaces/ROS/pages/2555969/Certificates) and [WebFig HTTPS](https://help.mikrotik.com/docs/spaces/ROS/pages/328131/WebFig#WebFig-EnableHTTPS) pages cover the options.
+
+Then choose one of two ways for MikroMCP to trust it.
+
+**Trust the router's CA** (verifies the certificate and the hostname). Export the CA and copy the file from the router's **Files** to the MikroMCP host:
+
+```
+/certificate export-certificate rest-ca
+```
+
+```yaml
+tls:
+  enabled: true
+  rejectUnauthorized: true
+  ca: "/etc/mikromcp/cert_export_rest-ca.crt"
+```
+
+With `rejectUnauthorized: true`, Node also checks that the certificate's subject alternative name covers the `host` in `routers.yaml`. A certificate with only a common name, or with a SAN for a different address, fails with `ERR_TLS_CERT_ALTNAME_INVALID` even when the CA is trusted.
+
+**Pin the fingerprint** (no hostname check):
 
 ```yaml
 tls:
@@ -167,7 +198,7 @@ MikroMCP will reject any connection where the server certificate does not match 
 
 ## Firewall — Allow API Access
 
-If your RouterOS firewall has a default-deny input policy (common on production gear), you must explicitly allow the MikroMCP host to reach the API port.
+If your RouterOS firewall has a default-deny input policy (common on production gear), you must explicitly allow the MikroMCP host to reach the REST port. The example uses `443`; set `dst-port` to the port of the service MikroMCP uses (`www-ssl`, or `www` on `80` for plaintext) — the same `port` as in `routers.yaml`.
 
 ```
 /ip firewall filter add \

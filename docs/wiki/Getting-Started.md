@@ -20,14 +20,18 @@ This guide takes you from zero to a working AI ↔ router connection in about 15
 
 The REST API must be enabled on your router before MikroMCP can connect. See [RouterOS-API-Setup.md](RouterOS-API-Setup.md) for the full walkthrough including TLS, firewall rules, and user policies.
 
-Quick version using the RouterOS CLI: HTTPS REST uses the `www-ssl` web service and requires a server certificate. First create or import a certificate with its private key; the example assumes it is named `rest-cert`. Replace that name with your certificate's name.
+Quick version using the RouterOS CLI: HTTPS REST uses the `www-ssl` web service and requires a server certificate, which RouterOS does not create for you. The commands below make a self-signed one; replace `10.0.0.1` with the router address MikroMCP will connect to. To use a certificate you already have, skip the `/certificate` lines and put its name in place of `rest-cert`.
 
 ```
+/certificate add name=rest-cert common-name=10.0.0.1 subject-alt-name=IP:10.0.0.1 key-usage=digital-signature,key-encipherment,tls-server days-valid=825
+/certificate sign rest-cert
 /ip service set www-ssl certificate=rest-cert port=443 disabled=no
 /user add name=mcp-api group=full password=choose-a-strong-password
 ```
 
 For a read-only setup (list/inspect tools only), use `group=read` instead.
+
+This certificate is self-signed, so MikroMCP connects with `rejectUnauthorized: false` (as in the config in Step 3); pin its fingerprint with `tls.fingerprint` before production use. To verify it against a CA instead, see [TLS Configuration](RouterOS-API-Setup.md#tls-configuration).
 
 ---
 
@@ -142,7 +146,7 @@ curl -sk https://10.0.0.1/rest/system/resource \
 | Symptom | Cause | Fix |
 |---|---|---|
 | `Connection refused` | REST API not enabled or wrong port | Run `/ip service print detail where name=www-ssl`; check the certificate, port, and `disabled=no` |
-| `SSL handshake failed` | Missing certificate or TLS trust mismatch | Check the `www-ssl` certificate and MikroMCP's TLS trust/pinning settings; see [TLS Configuration](RouterOS-API-Setup.md#tls-configuration) |
+| `SSL handshake failed` | Missing certificate or TLS trust mismatch | Check that `www-ssl` has a certificate assigned. For a self-signed cert set `tls.rejectUnauthorized: false` and pin `tls.fingerprint`; with `rejectUnauthorized: true`, trust its CA with `tls.ca` and make sure its SAN covers `host`. See [TLS Configuration](RouterOS-API-Setup.md#tls-configuration) |
 | `401 Unauthorized` | Wrong credentials | Double-check `ROUTER_CORE01_USER` and `ROUTER_CORE01_PASS` |
 | `403 Forbidden` | User lacks `rest-api` policy | See [RouterOS-API-Setup.md](RouterOS-API-Setup.md) — required policies table |
 

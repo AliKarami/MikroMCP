@@ -10,7 +10,7 @@ An AI assistant with raw router CLI access can issue arbitrary, irreversible com
 
 ## RouterOS-side hardening
 
-- **Least-privilege users.** Create a dedicated RouterOS user per deployment with only the policies your tools need. A read-only setup needs just `read,api,rest-api`; full coverage adds `write,test,ssh,sniff,ftp`. See [RouterOS API Setup](RouterOS-API-Setup#required-policies-by-tool-category).
+- **Least-privilege users.** Create a dedicated RouterOS user per deployment with only the policies your tools need. A read-only setup needs just `read,rest-api` (the `api` policy is for the binary API, which MikroMCP does not use); full coverage adds `write,test,ssh,sniff,ftp`. See [RouterOS API Setup](RouterOS-API-Setup#required-policies-by-tool-category).
 - **Prefer verified TLS.** Run the REST API over `www-ssl`/HTTPS with an explicitly configured server certificate. Set `tls.rejectUnauthorized: true` with a valid CA, or pin the certificate with `tls.fingerprint` for self-signed certs. Plaintext (`tls.enabled: false`) is for lab/local use only.
 - **Restrict API exposure.** Limit the REST/SSH services to management subnets with RouterOS firewall rules and the IP service `address` allowlist.
 

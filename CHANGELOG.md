@@ -11,7 +11,10 @@ Each release section covers changes **since the previous release only**.
 ## [Unreleased]
 
 ### Fixed
-- RouterOS REST setup documentation now uses the `www-ssl`/`www` web services instead of the binary `api-ssl`/`api` services, requires an explicitly configured HTTPS certificate, and notes that HTTP REST access starts with RouterOS `7.9`.
+- RouterOS REST setup documentation now uses the `www-ssl`/`www` web services instead of the binary `api-ssl`/`api` services, requires an explicitly configured HTTPS certificate, and notes that HTTP REST access starts with RouterOS `7.9`. The setup pages now include the commands that create the self-signed `rest-cert`, explain the hostname (SAN) check when trusting a CA with `rejectUnauthorized: true`, match the firewall example to the configured port, warn that the `www-ssl` address allowlist also limits WebFig, and drop the unneeded `api` policy from the least-privilege examples.
+
+### Changed
+- `manage_ip_service` description now warns that disabling `www-ssl`/`www` cuts MikroMCP off from the router.
 
 ## [1.14.0] - 2026-10-15
 
