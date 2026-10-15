@@ -52,13 +52,19 @@ function makeSwitch(failOn?: string, appliesAnyway = false) {
   return { client, posts, store };
 }
 
-function makeContext(sw?: ReturnType<typeof makeSwitch>, secrets: Record<string, string> = {}) {
+function makeContext(
+  sw?: ReturnType<typeof makeSwitch>,
+  secrets: Record<string, string> = {},
+  bound: string[] = Object.keys(secrets),
+) {
   return {
     routerId: "switch-01",
     correlationId: "test-corr",
     swosClient: sw?.client as unknown as SwosClient | undefined,
     deviceClient: sw?.client,
     appConfig: { configSecrets: secrets },
+    // The switch's `secrets` list: by default every configured secret is bound.
+    routerConfig: { secrets: bound },
   } as unknown as ToolContext;
 }
 
@@ -384,6 +390,17 @@ describe("swosConfigTools", () => {
       } as unknown as ToolContext["routerConfig"];
       const result = await applyTool.handler({ routerId: "switch-01", config: OFFICE }, bound);
       expect((result.structuredContent as { action: string }).action).toBe("dry_run");
+      // A switch without a list may reference no secret, however it is configured.
+      for (const routerConfig of [{}, undefined]) {
+        const unbound = makeContext(sw, SECRETS);
+        unbound.routerConfig = routerConfig as unknown as ToolContext["routerConfig"];
+        await expect(
+          applyTool.handler({ routerId: "switch-01", config: OFFICE }, unbound),
+        ).rejects.toMatchObject({
+          code: "SWOS_CONFIG_SECRET_NOT_BOUND",
+          message: expect.stringContaining("has no secrets list"),
+        });
+      }
     });
 
     it("refuses moving management to another VLAN in the same document that changes VLANs", async () => {
@@ -436,10 +453,36 @@ describe("swosConfigTools", () => {
       expect(sw.posts).toContain("sys.b");
     });
 
+    it("lets a management VLAN move go with names, storm control or LAG changes", async () => {
+      // Only a port's VLAN settings and the table's membership are unorderable
+      // with the move; the identity, a port name and storm control are not.
+      const sw = makeSwitch();
+      const result = await applyTool.handler(
+        {
+          routerId: "switch-01",
+          config: {
+            version: 1,
+            system: { identity: "renamed", allow_from_vlan: 1 },
+            ports: { 1: { name: "desk", storm_rate: 50 } },
+          },
+          dryRun: false,
+          includeManagement: true,
+          acceptLockoutRisk: true,
+        },
+        makeContext(sw),
+      );
+      expect((result.structuredContent as { action: string }).action).toBe("applied");
+      expect(sw.posts).toContain("sys.b");
+      expect(sw.posts).toContain("fwd.b");
+    });
+
     it("names a missing secret before reading the switch", async () => {
       const sw = makeSwitch();
       await expect(
-        applyTool.handler({ routerId: "switch-01", config: OFFICE }, makeContext(sw)),
+        applyTool.handler(
+          { routerId: "switch-01", config: OFFICE },
+          makeContext(sw, {}, ["SNMP_COMMUNITY"]),
+        ),
       ).rejects.toMatchObject({ code: "SWOS_CONFIG_SECRET_MISSING" });
       expect(sw.client.readBlobForWrite).not.toHaveBeenCalled();
       expect(sw.client.readBlob).not.toHaveBeenCalled();

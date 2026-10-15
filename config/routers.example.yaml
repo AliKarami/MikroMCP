@@ -44,6 +44,7 @@
 #       source: "env"
 #       envPrefix: "SWITCH_CORE01" # -> SWITCH_CORE01_USER, SWITCH_CORE01_PASS
 #     tags: ["access", "layer2"]
+#     secrets: [SNMP_COMMUNITY]   # the MIKROMCP_SECRET_<NAME> names a switch config may reference; none without this list
 
 routers:
   core-01:
@@ -67,7 +68,6 @@ routers:
     #   - "/ip/route/print*"
     # cmdDeny:                     # Additional deny patterns beyond builtins
     #   - "/tool/fetch*"
-    # secrets: [SNMP_COMMUNITY]     # SwOS only: the MIKROMCP_SECRET_<NAME> names a switch config may reference; unset = any
     # maintenanceWindows:           # Destructive tools blocked outside these windows
     #   - days: ["Sat", "Sun"]      # Days when maintenance is permitted
     #     startTime: "02:00"        # 24-hour HH:MM in the specified timezone

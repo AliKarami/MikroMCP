@@ -70,7 +70,7 @@ const RouterConfigSchema = z
     cmdAllow: z.array(z.string()).optional(),
     cmdDeny: z.array(z.string()).optional(),
     // SwOS only: the MIKROMCP_SECRET_<NAME> values a switch config applied to
-    // this switch may reference. Without the list every secret applies.
+    // this switch may reference. Without the list it may reference none.
     secrets: z
       .array(
         z.string().regex(/^[A-Z0-9_]+$/, "a secret name is the NAME of MIKROMCP_SECRET_<NAME>"),

@@ -880,7 +880,7 @@ describe("secrets bound to a switch", () => {
   const doc = { version: 1, snmp: { community: "${SNMP_COMMUNITY}" } };
   const secrets = { SNMP_COMMUNITY: "c0mmunity", OTHER: "x" };
 
-  it("resolves a bound name, refuses an unbound one before looking it up, and binds nothing without a list", () => {
+  it("resolves a bound name, refuses an unbound one before looking it up, and leaves references unrestricted when no list is given (the tool passes the switch's list or an empty one)", () => {
     expect(
       parseSwitchConfig(doc, secrets, { allowedSecrets: ["SNMP_COMMUNITY"] }).snmp?.community,
     ).toBe("c0mmunity");

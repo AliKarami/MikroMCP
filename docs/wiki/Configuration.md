@@ -65,7 +65,7 @@ The file is validated strictly at startup — an unknown key or a missing requir
 | `sshFingerprint` | no | SHA-256 fingerprint of the SSH host key to pin: `SHA256:<base64>` as `ssh-keygen -l` prints it, or hex (colons optional). Checked at startup; SSH and SFTP refuse any other key — see [Pinning the SSH host key](#pinning-the-ssh-host-key) |
 | `cmdAllow` / `cmdDeny` | no | Per-router `run_command` glob policy — see [Per-Router SSH, SFTP, and FTP](#per-router-ssh-sftp-and-ftp) |
 | `maintenanceWindows` | no | Windows outside of which destructive tools are refused — see below |
-| `secrets` | no, SwOS only | The `MIKROMCP_SECRET_<NAME>` names a switch config applied to this switch may reference as `${NAME}`, e.g. `[SNMP_COMMUNITY]`. A reference to any other name is refused (`SWOS_CONFIG_SECRET_NOT_BOUND`). Without the list every configured secret applies to the switch |
+| `secrets` | no, SwOS only | The `MIKROMCP_SECRET_<NAME>` names a switch config applied to this switch may reference as `${NAME}`, e.g. `[SNMP_COMMUNITY]`. A reference to any other name is refused (`SWOS_CONFIG_SECRET_NOT_BOUND`), and a switch without the list may reference none |
 
 ### Maintenance windows
 
@@ -98,6 +98,7 @@ routers:
       source: "env"
       envPrefix: "SWITCH_CORE01"  # reads SWITCH_CORE01_USER + SWITCH_CORE01_PASS
     tags: ["access", "layer2"]
+    secrets: ["SNMP_COMMUNITY"]  # the MIKROMCP_SECRET_<NAME> names a config applied here may reference
 ```
 
 - One device type covers both firmware editions: SwOS and SwOS Lite speak the same API and differ only in how they name fields, which is detected per field from the device's own response. `deviceType: "swos-lite"` is accepted and normalised to `swos`.
@@ -165,7 +166,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the per-router confirmation gate is off, and `bulk_execute` write fan-outs are still gated with tokens signed by a random per-process secret (valid only until restart, and only on the instance that issued them) |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | Path for NDJSON audit log file; omit to disable file sink |
 | `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
-| `MIKROMCP_SECRET_<NAME>` | — | A value a SwOS switch config may reference as `${NAME}` (e.g. `MIKROMCP_SECRET_SNMP_COMMUNITY` for `${SNMP_COMMUNITY}`). Only this prefix is resolvable from a config, and a switch with a `secrets` list in `routers.yaml` resolves only the names on it |
+| `MIKROMCP_SECRET_<NAME>` | — | A value a SwOS switch config may reference as `${NAME}` (e.g. `MIKROMCP_SECRET_SNMP_COMMUNITY` for `${SNMP_COMMUNITY}`). Only this prefix is resolvable from a config, and only the names on the switch's `secrets` list in `routers.yaml` (none without the list) |
 | `MIKROMCP_PASSWORD_<NAME>`         | —                             | A new device password for `set_swos_password`, named as `NAME` in the call. Its own namespace: a switch config's `${NAME}` cannot reach it |
 | `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000` | Timeout in milliseconds for SSH commands (`run_command`, `ping`, etc.) |
 | `MIKROMCP_SSH_MAX_OUTPUT_BYTES` | `524288` (512 KB) | Maximum output size captured from SSH commands |

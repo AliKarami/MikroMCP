@@ -212,6 +212,10 @@ const getSwosConfigTool: ToolDefinition = {
 // apply_swos_config
 // ---------------------------------------------------------------------------
 
+/** The per-port settings and VLAN table changes that cannot be ordered with a management VLAN move. */
+const VLAN_PORT_SETTINGS = new Set(["vlan_mode", "vlan_receive", "default_vlan", "force_vlan", "forward_to"]);
+const VLAN_MEMBERSHIP = new Set(["add", "remove", "members"]);
+
 const applyConfigSchema = z
   .object({
     routerId,
@@ -308,7 +312,8 @@ const applySwosConfigTool: ToolDefinition = {
     // community must be a ${NAME} reference; an object may carry the value.
     const config = parseSwitchConfig(parsed.config, context.appConfig.configSecrets, {
       communityByReferenceOnly: typeof parsed.config === "string",
-      allowedSecrets: context.routerConfig?.secrets,
+      // A switch references only the secrets bound to it; none without a list.
+      allowedSecrets: context.routerConfig?.secrets ?? [],
       routerId: context.routerId,
     });
 
@@ -331,13 +336,21 @@ const applySwosConfigTool: ToolDefinition = {
     const vlanMove = plan.management.find(
       (c) => c.setting === "allow_from_vlan" && typeof c.to === "number" && c.to > 0,
     );
-    const vlanWork = plan.writes.some((w) => w.endpoint === "vlan.b" || w.endpoint === "fwd.b");
+    // Only the VLAN work is unorderable: a port's VLAN settings and the table's
+    // membership. Names, storm and flood control, LAG or identity go with a move.
+    const vlanWork = plan.endpoints.some((e) =>
+      e.changes.some(
+        (c) =>
+          (c.endpoint === "fwd.b" && VLAN_PORT_SETTINGS.has(c.setting.replace(/^port \d+ /, ""))) ||
+          (c.endpoint === "vlan.b" && VLAN_MEMBERSHIP.has(c.setting)),
+      ),
+    );
     const unordered = vlanMove && vlanWork;
     if (unordered && !parsed.dryRun) {
       throw new MikroMCPError({
         category: ErrorCategory.VALIDATION,
         code: "SWOS_MANAGEMENT_MOVE_UNORDERED",
-        message: `The config moves management to VLAN ${String(vlanMove.to)} and changes VLANs or per-port VLAN settings in the same document; that cannot be written in a safe order (the system settings go last and cut the session). Nothing was written.`,
+        message: `The config moves management to VLAN ${String(vlanMove.to)} and changes a port's VLAN settings or the VLAN table's membership in the same document; that cannot be written in a safe order (the system settings go last and cut the session). Nothing was written.`,
         details: { management: plan.management },
         recoverability: {
           retryable: false,
@@ -382,7 +395,7 @@ const applySwosConfigTool: ToolDefinition = {
     const planWarnings = unordered
       ? [
           ...plan.warnings,
-          `Management moves to VLAN ${String(vlanMove.to)} in the same document that changes VLANs; a real apply refuses this, do the VLAN changes first and the move second.`,
+          `Management moves to VLAN ${String(vlanMove.to)} in the same document that changes a port's VLAN settings or VLAN membership; a real apply refuses this, do the VLAN changes first and the move second.`,
         ]
       : plan.warnings;
     const warnings = planWarnings.map((w) => `⚠️  ${w}`).join("\n");

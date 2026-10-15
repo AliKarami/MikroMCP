@@ -454,7 +454,7 @@ describe("runDoctor", () => {
       expect(process.exitCode).toBe(0);
     });
 
-    it("warns about a bound secret whose variable is not set, and says when nothing is bound", async () => {
+    it("warns about a bound secret whose variable is unset or empty, and about a switch with no list", async () => {
       setupSwitch(
         vi
           .fn()
@@ -469,8 +469,13 @@ describe("runDoctor", () => {
       await runDoctor();
       let allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
       expect(allOutput).toMatch(
-        /access-sw binds secret SNMP_COMMUNITY, but MIKROMCP_SECRET_SNMP_COMMUNITY is not set/,
+        /access-sw binds secret SNMP_COMMUNITY, but MIKROMCP_SECRET_SNMP_COMMUNITY is not set or empty/,
       );
+      consoleSpy.mockClear();
+      process.env.MIKROMCP_SECRET_SNMP_COMMUNITY = "";
+      await runDoctor();
+      allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(/MIKROMCP_SECRET_SNMP_COMMUNITY is not set or empty/);
 
       consoleSpy.mockClear();
       process.env.MIKROMCP_SECRET_SNMP_COMMUNITY = "c0mmunity";
@@ -482,7 +487,7 @@ describe("runDoctor", () => {
         allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
         expect(allOutput).not.toMatch(/binds secret/);
         expect(allOutput).toMatch(
-          /access-sw has no secrets list in routers.yaml: any MIKROMCP_SECRET_\* applies to it/,
+          /access-sw has no secrets list in routers.yaml: a config referencing \$\{NAME\} is refused on it/,
         );
       } finally {
         delete process.env.MIKROMCP_SECRET_SNMP_COMMUNITY;
