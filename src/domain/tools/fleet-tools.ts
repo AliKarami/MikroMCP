@@ -337,6 +337,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
       const toolParams = { ...input.params, routerId: router.id };
 
       const snapshotIds: string[] = [];
+      const snapshots = { taken: [] as string[], failed: [] as string[] };
       if (isWrite) {
         for (const path of snapshotPathsFor(targetTool, toolParams as Record<string, unknown>)) {
           try {
@@ -347,7 +348,9 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
               snapshotDir,
             );
             snapshotIds.push(meta.id);
+            snapshots.taken.push(path);
           } catch (err) {
+            snapshots.failed.push(path);
             log.warn(
               { err, path, routerId: router.id },
               `${fleetTool} snapshot failed — proceeding without snapshot`,
@@ -370,6 +373,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
 
       const cb = getOrCreateBreaker(context.circuitBreakers!, router.id, context.appConfig);
       routerContext.circuitBreaker = cb;
+      routerContext.snapshots = snapshots;
       const runOnce = () =>
         targetTool.handler(toolParams as Record<string, unknown>, routerContext);
       const shouldRetry = targetTool.annotations.readOnlyHint && targetTool.retryable !== false;

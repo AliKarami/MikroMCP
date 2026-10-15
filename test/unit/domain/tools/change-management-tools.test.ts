@@ -148,9 +148,23 @@ describe("apply_plan", () => {
 
     expect(manageRoute.handler).toHaveBeenCalledWith(
       expect.objectContaining({ action: "add", routerId: "edge-01" }),
-      ctx,
+      expect.objectContaining({ routerId: ctx.routerId, correlationId: ctx.correlationId }),
     );
     expect(result.content).toContain("1/1");
+  });
+
+  it("tells each step's tool what was snapshotted before it ran", async () => {
+    const manageRoute = makeManageRoute("created");
+    const applyTool = createChangeManagementTools([manageRoute]).find(
+      (t) => t.name === "apply_plan",
+    )!;
+    await applyTool.handler(
+      { routerId: "edge-01", steps: [{ tool: "manage_route", params: { action: "add" } }] },
+      makeContext(),
+    );
+    // The test context has no device client, so the snapshot fails, and says so.
+    const stepContext = vi.mocked(manageRoute.handler).mock.calls[0][1];
+    expect(stepContext.snapshots).toEqual({ taken: [], failed: ["ip/route"] });
   });
 
   it("stops on first failure and reports which step failed", async () => {

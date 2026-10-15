@@ -822,6 +822,23 @@ describe("fleet-tools", () => {
       });
     });
 
+    it("tells the inner tool what was snapshotted before it ran", async () => {
+      vi.mocked(takeSnapshot).mockRejectedValueOnce(new Error("unreachable"));
+      const ctx = writeFleetContext();
+      const args = {
+        toolName: "manage_route",
+        routerIds: ["r1", "r2"],
+        params: {},
+        concurrency: 1,
+      };
+      await bulkTool.handler({ ...args, confirmationToken: await fleetToken(args, ctx) }, ctx);
+      const seen = vi.mocked(mockWriteTool.handler).mock.calls.map((c) => c[1].snapshots);
+      expect(seen).toEqual([
+        { taken: [], failed: ["ip/route"] },
+        { taken: ["ip/route"], failed: [] },
+      ]);
+    });
+
     it("records a failure outcome when the write tool throws", async () => {
       vi.mocked(mockWriteTool.handler).mockRejectedValueOnce(new Error("boom"));
       const ctx = writeFleetContext();

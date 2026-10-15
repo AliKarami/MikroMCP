@@ -311,6 +311,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         const stepParams = { ...step.params, routerId: parsed.routerId };
 
         const snapshotIds: string[] = [];
+        const snapshots = { taken: [] as string[], failed: [] as string[] };
         for (const path of snapshotPathsFor(tool, stepParams)) {
           try {
             const meta = await takeSnapshot(
@@ -320,7 +321,9 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
               snapshotDir,
             );
             snapshotIds.push(meta.id);
+            snapshots.taken.push(path);
           } catch (err) {
+            snapshots.failed.push(path);
             log.warn(
               { err, path, routerId: context.routerId, step: i },
               "apply_plan step snapshot failed — proceeding without snapshot",
@@ -340,7 +343,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         const stepStartMs = Date.now();
 
         try {
-          const runStep = () => tool.handler(stepParams, context);
+          const runStep = () => tool.handler(stepParams, { ...context, snapshots });
           const result = context.circuitBreaker
             ? await context.circuitBreaker.execute(runStep)
             : await runStep();
