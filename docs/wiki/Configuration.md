@@ -49,7 +49,7 @@ The file is validated strictly at startup — an unknown key or a missing requir
 | Field | Required | Description |
 |---|---|---|
 | `host` | yes | IP address or hostname |
-| `port` | yes | REST API port — `443` for `api-ssl`, `80` for plain `api` or SwOS |
+| `port` | yes | Match the RouterOS REST service port: default `443` for `www-ssl` (HTTPS), `80` for `www` (HTTP, RouterOS `7.9`+). SwOS uses `80` |
 | `deviceType` | no | `routeros` (default) or `swos`; `swos-lite` is accepted as an alias of `swos` |
 | `tls.enabled` | RouterOS | `true` for HTTPS. Must be `false` or omitted for SwOS |
 | `tls.rejectUnauthorized` | with `tls` | Verify the server certificate against the system CA store (or `tls.ca`). `false` only for self-signed certificates |
