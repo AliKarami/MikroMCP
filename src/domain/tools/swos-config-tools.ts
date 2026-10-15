@@ -288,7 +288,7 @@ const applySwosConfigTool: ToolDefinition = {
   name: "apply_swos_config",
   title: "Apply SwOS Config",
   description:
-    "Apply a switch config document (the format get_swos_config exports) to a SwOS switch. Plans every change against the switch first; dryRun defaults to true. Writes only the endpoints that change: the VLAN table grows first (new VLANs and members), then the per-port settings (VLAN, isolation, storm and flood control), port names/negotiation/enabled, LAG and SNMP, then the table shrinks (removed VLANs and members), then system — so no port loses its VLAN mid-apply. Refuses management changes (address, allow-from) unless includeManagement is true, and any plan that would cut a linked port off (its untagged VLAN moved or dropped, a trunk losing tagged VLANs or becoming an access port, a forced VLAN, the port disabled, renegotiating, isolated from another linked port or moved in or out of a LAG; only risks the plan introduces) unless acceptLockoutRisk is true. All six endpoints are snapshotted before a real apply, so rollback_change restores the previous state; the result names any endpoint whose snapshot failed. Moving management to another VLAN cannot be ordered safely in one apply (sys.b is written last and the session is cut when it takes effect): do it in two applies, with the new VLAN reachable first.",
+    "Apply a switch config document (the format get_swos_config exports) to a SwOS switch. Plans every change against the switch first; dryRun defaults to true. Writes only the endpoints that change: the VLAN table grows first (new VLANs and members), then the per-port settings (VLAN, isolation, storm and flood control), port names/negotiation/enabled, LAG and SNMP, then the table shrinks (removed VLANs and members), then system — so no port loses its VLAN mid-apply. Refuses management changes (address, allow-from) unless includeManagement is true, and any plan that would cut a linked port off (its untagged VLAN moved or dropped, a trunk losing tagged VLANs or becoming an access port, a forced VLAN, a port that starts filtering VLANs, the port disabled, renegotiating, isolated from another linked port or moved in or out of a LAG, every linked port dropped from allow_from_ports; only risks the plan introduces) unless acceptLockoutRisk is true. All six endpoints are snapshotted before a real apply, so rollback_change restores the previous state; the result names any endpoint whose snapshot failed, and says so when none was taken (a step of bulk_execute or apply_plan is not snapshotted). Moving management to another VLAN cannot be ordered safely in one apply (sys.b is written last and the session is cut when it takes effect): do it in two applies, with the new VLAN reachable first.",
   inputSchema: applyConfigSchema,
   annotations: {
     readOnlyHint: false,
@@ -427,13 +427,22 @@ const applySwosConfigTool: ToolDefinition = {
       }
     }
 
+    // What the executor snapshotted before this write. A call that ran as a
+    // step of bulk_execute or apply_plan never had a snapshot taken (those
+    // tools do not snapshot a switch), and the context says nothing about it:
+    // that is "none", not "all six".
     const snapshots = context.snapshots ?? { taken: [], failed: [] };
+    const missing = CONFIG_ENDPOINTS.filter((ep) => !snapshots.taken.includes(ep));
+    const snapshotted: "all" | "partial" | "none" =
+      missing.length === 0 ? "all" : snapshots.taken.length === 0 ? "none" : "partial";
     const snapshotNote =
-      snapshots.failed.length === 0
+      snapshotted === "all"
         ? "The previous state of all six endpoints was snapshotted — undo with rollback_change using this call's journal ID."
-        : snapshots.taken.length === 0
-          ? "No endpoint could be snapshotted before the write, so rollback_change cannot restore the previous state; keep the switch's last save_swos_backup file at hand."
-          : `The previous state of ${snapshots.taken.join(", ")} was snapshotted, but not ${snapshots.failed.join(", ")}: rollback_change restores only the former.`;
+        : snapshotted === "none"
+          ? snapshots.failed.length > 0
+            ? "No endpoint could be snapshotted before the write, so rollback_change cannot restore the previous state; keep the switch's last save_swos_backup file at hand."
+            : "No snapshot was taken before this write (a step of bulk_execute or apply_plan is not snapshotted), so rollback_change cannot restore the previous state; keep the switch's last save_swos_backup file at hand."
+          : `The previous state of ${snapshots.taken.join(", ")} was snapshotted, but not ${missing.join(", ")}: rollback_change restores only the former.`;
     return {
       content:
         `Applied the config to ${context.routerId} (${written.join(", ")}):\n${summary}\n` +
@@ -445,6 +454,7 @@ const applySwosConfigTool: ToolDefinition = {
         dryRun: false,
         written,
         snapshots,
+        snapshotted,
         endpoints: changes,
         management: plan.management,
         warnings: plan.warnings,

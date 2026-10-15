@@ -583,6 +583,40 @@ describe("review regressions", () => {
     expect(plan.writes.map((w) => `${w.endpoint}:${w.phase}`)).toEqual(["vlan.b:grow"]);
   });
 
+  it("flags a linked port that starts filtering VLANs, and an allow-from list that keeps no linked port", () => {
+    // Ports 1 and 17 have a link; port 1 is set to VLAN mode `disabled` here.
+    const blobs = factory();
+    const fwd = { ...(blobs["fwd.b"] as Record<string, unknown>) };
+    fwd.vlan = ["0x00", ...Array(17).fill("0x01")];
+    blobs["fwd.b"] = fwd;
+    const filtering = planSwitchConfig(
+      parseSwitchConfig({ version: 1, ports: { 1: { vlan_mode: "strict" } } }),
+      blobs,
+    );
+    expect(filtering.warnings).toContain(
+      "Port 1 has a link and would start filtering VLANs (strict); traffic in VLANs it is not a member of stops on this port.",
+    );
+    // Leaving the mode at `disabled` while renaming the port is not a risk.
+    const renamed = planSwitchConfig(
+      parseSwitchConfig({ version: 1, ports: { 1: { name: "uplink" } } }),
+      blobs,
+    );
+    expect(renamed.warnings).toEqual([]);
+    // Management allowed from unlinked ports only, or from none.
+    const unlinked = planSwitchConfig(
+      parseSwitchConfig({ version: 1, system: { allow_from_ports: [2, 3] } }),
+      factory(),
+    );
+    expect(unlinked.warnings).toEqual([
+      "Management would be allowed from port(s) 2, 3 only, none of which has a link.",
+    ]);
+    const none = planSwitchConfig(
+      parseSwitchConfig({ version: 1, system: { allow_from_ports: [] } }),
+      factory(),
+    );
+    expect(none.warnings).toEqual(["Management would be allowed from no port at all."]);
+  });
+
   it("flags a filtering port whose default VLAN is not in the table, and a linked port being disabled", () => {
     const config = parseSwitchConfig({
       version: 1,

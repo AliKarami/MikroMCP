@@ -195,6 +195,47 @@ describe("swosConfigTools", () => {
       expect(sw.posts).toHaveLength(5);
     });
 
+    it("reports whether the write was snapshotted, and says so when it was not", async () => {
+      const params = {
+        routerId: "switch-01",
+        config: OFFICE,
+        dryRun: false,
+        includeManagement: true,
+        acceptLockoutRisk: true,
+      };
+      const six = ["vlan.b", "fwd.b", "link.b", "lacp.b", "snmp.b", "sys.b"];
+      const all = await applyTool.handler(params, {
+        ...makeContext(makeSwitch(), SECRETS),
+        snapshots: { taken: six, failed: [] },
+      } as ToolContext);
+      expect(all.content).toContain("all six endpoints was snapshotted");
+      expect((all.structuredContent as Record<string, unknown>).snapshotted).toBe("all");
+
+      const partial = await applyTool.handler(params, {
+        ...makeContext(makeSwitch(), SECRETS),
+        snapshots: { taken: six.filter((ep) => ep !== "snmp.b"), failed: ["snmp.b"] },
+      } as ToolContext);
+      expect(partial.content).toContain("but not snmp.b");
+      expect((partial.structuredContent as Record<string, unknown>).snapshotted).toBe("partial");
+
+      // A step of bulk_execute or apply_plan: the executor snapshotted nothing
+      // for it and the context does not say so; that is "none", not "all six".
+      for (const snapshots of [undefined, { taken: [], failed: [] }]) {
+        const none = await applyTool.handler(params, {
+          ...makeContext(makeSwitch(), SECRETS),
+          snapshots,
+        } as ToolContext);
+        expect(none.content).toContain("No snapshot was taken before this write");
+        expect(none.content).not.toContain("all six");
+        expect((none.structuredContent as Record<string, unknown>).snapshotted).toBe("none");
+      }
+      const failed = await applyTool.handler(params, {
+        ...makeContext(makeSwitch(), SECRETS),
+        snapshots: { taken: [], failed: six },
+      } as ToolContext);
+      expect(failed.content).toContain("No endpoint could be snapshotted");
+    });
+
     it("accepts the config as YAML text", async () => {
       const sw = makeSwitch();
       const yaml = "version: 1\nvlans:\n  - { id: 30, name: IOT, members: [13, 14, 17] }\n";

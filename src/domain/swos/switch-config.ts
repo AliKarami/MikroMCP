@@ -873,6 +873,19 @@ function lockoutRisks(
     managementRisks(managementAfter, members, before),
     managementRisks(managementBefore, membersBefore, before),
   );
+  // Management is reached through an allow-from port with a link; a list that
+  // keeps none of them (or no port at all) cuts every session off.
+  const allowFromPortRisks = (m: ManagementAccess | undefined): string[] => {
+    if (!m || m.ports.some((p) => before[p - 1]?.link)) return [];
+    return [
+      m.ports.length === 0
+        ? "Management would be allowed from no port at all."
+        : `Management would be allowed from port(s) ${m.ports.join(", ")} only, none of which has a link.`,
+    ];
+  };
+  risks.push(
+    ...introduced(allowFromPortRisks(managementAfter), allowFromPortRisks(managementBefore)),
+  );
   const allowFrom = (n: number) =>
     managementAfter !== undefined && managementAfter.vlan > 0 && managementAfter.ports.includes(n);
   after.forEach((port, i) => {
@@ -924,6 +937,13 @@ function lockoutRisks(
           : "";
       risks.push(
         `Port ${n} has a link and its untagged traffic would move from VLAN ${was.dvid} to VLAN ${port.dvid}${note}.`,
+      );
+    }
+    // A port whose VLAN mode leaves `disabled` starts filtering: frames in
+    // VLANs it is not a member of stop, tagged management traffic included.
+    if (live && was.mode === "disabled" && port.mode !== "disabled") {
+      risks.push(
+        `Port ${n} has a link and would start filtering VLANs (${port.mode}); traffic in VLANs it is not a member of stops on this port.`,
       );
     }
     if (live && !was.forceVid && port.forceVid) {

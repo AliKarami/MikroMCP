@@ -232,6 +232,24 @@ describe("CSS318-16G-2S+ on SwOS 2.19, as captured", () => {
       expect(spare.warnings).toEqual([]);
     });
 
+    it("flags an allow-from port list that keeps no linked port", () => {
+      // Management is allowed from ports 15-17, which carry the links; port 2 has none.
+      const plan = planSwitchConfig(
+        parseSwitchConfig({ version: 1, system: { allow_from_ports: [2] } }),
+        current(),
+      );
+      expect(plan.management.map((c) => c.setting)).toEqual(["allow_from_ports"]);
+      expect(plan.warnings).toEqual([
+        "Management would be allowed from port(s) 2 only, none of which has a link.",
+      ]);
+      // Keeping one linked port is a management change, not a lockout.
+      const kept = planSwitchConfig(
+        parseSwitchConfig({ version: 1, system: { allow_from_ports: [2, 16] } }),
+        current(),
+      );
+      expect(kept.warnings).toEqual([]);
+    });
+
     it("does not gate a plain rename on problems the switch already has", () => {
       // Port 18 is strict with default VLAN 1, which is not in the table: it has no link,
       // and the plan does not introduce it.
