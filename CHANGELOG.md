@@ -10,6 +10,10 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-10-17
+
+Both fixes in this release come from [@alexpostnik](https://github.com/alexpostnik). Thank you.
+
 ### Fixed
 - `manage_wireguard_peer` now splits endpoints such as `192.0.2.1:51820`, `vpn.example.com:51820` and `[2001:db8::1]:51820` into RouterOS `endpoint-address` and `endpoint-port`. Dry-run previews the same fields. Repeated adds compare explicitly requested endpoint/port and allowed addresses and return `CONFLICT` for different settings; numeric ports and equivalent IPv6/allowed-address formatting compare correctly. `list_wireguard_peers` text output now includes `endpoint-port`.
 - RouterOS REST setup documentation now uses the `www-ssl`/`www` web services instead of the binary `api-ssl`/`api` services, requires an explicitly configured HTTPS certificate, and notes that HTTP REST access starts with RouterOS `7.9`. The setup pages now include the commands that create the self-signed `rest-cert`, explain the hostname (SAN) check when trusting a CA with `rejectUnauthorized: true`, match the firewall example to the configured port, warn that the `www-ssl` address allowlist also limits WebFig, and drop the unneeded `api` policy from the least-privilege examples.
