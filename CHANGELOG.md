@@ -11,10 +11,11 @@ Each release section covers changes **since the previous release only**.
 ## [Unreleased]
 
 ### Fixed
-- `manage_wireguard_peer` now splits an endpoint such as `192.0.2.1:51820` into RouterOS `endpoint-address` and `endpoint-port`, including DNS names and bracketed IPv6. Dry-run previews the same fields, and malformed endpoints are rejected before peer lookup or mutation in the handler. Address-only IPv4/DNS inputs remain supported.
+- `manage_wireguard_peer` now splits endpoints such as `192.0.2.1:51820`, `vpn.example.com:51820` and `[2001:db8::1]:51820` into RouterOS `endpoint-address` and `endpoint-port`. Dry-run previews the same fields. Repeated adds compare explicitly requested endpoint/port and allowed addresses and return `CONFLICT` for different settings; numeric ports and equivalent IPv6/allowed-address formatting compare correctly. `list_wireguard_peers` text output now includes `endpoint-port`.
 - RouterOS REST setup documentation now uses the `www-ssl`/`www` web services instead of the binary `api-ssl`/`api` services, requires an explicitly configured HTTPS certificate, and notes that HTTP REST access starts with RouterOS `7.9`. The setup pages now include the commands that create the self-signed `rest-cert`, explain the hostname (SAN) check when trusting a CA with `rejectUnauthorized: true`, match the firewall example to the configured port, warn that the `www-ssl` address allowlist also limits WebFig, and drop the unneeded `api` policy from the least-privilege examples.
 
 ### Changed
+- `manage_wireguard_peer` validates endpoints only for `add`, before peer lookup or mutation; `remove` ignores any carried endpoint string. Hostname labels with underscores and address-only IPv4/DNS/IPv6 (bare or bracketed) remain supported. IPv6 with a port must use brackets. Address-only inputs leave the RouterOS port default unchanged and do not guarantee a nonzero port or outbound initiation; supply a port when needed. Omitted settings do not conflict with an existing peer.
 - `manage_ip_service` description now warns that disabling `www-ssl`/`www` cuts MikroMCP off from the router.
 
 ## [1.14.0] - 2026-10-15

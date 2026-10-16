@@ -477,6 +477,21 @@ describe("wireguardTools", () => {
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
     });
 
+    it.each([
+      { stored: "10.8.0.2/32", allowedAddress: "10.8.0.2" },
+      { stored: "2001:db8::2/128", allowedAddress: "2001:0DB8:0:0:0:0:0:2" },
+      { stored: "2001:db8::2/128,10.8.0.2/32", allowedAddress: "10.8.0.2/32, 2001:db8::2/128" },
+      { stored: "", allowedAddress: "" },
+    ])(
+      "recognizes equivalent allowed-address lists $allowedAddress",
+      async ({ stored, allowedAddress }) => {
+        const ctx = makeContext(fromWire([{ ...existingPeer, "allowed-address": stored }]));
+        const result = await managePeerTool.handler({ ...addParams, allowedAddress }, ctx);
+        expect(result.structuredContent?.action).toBe("already_exists");
+        expect(ctx.routerClient.create).not.toHaveBeenCalled();
+      },
+    );
+
     it("returns already_exists when peer with same public key exists", async () => {
       const ctx = makeContext([{ ".id": "*1", interface: "wg0", "public-key": testPublicKey }]);
       const result = await managePeerTool.handler(

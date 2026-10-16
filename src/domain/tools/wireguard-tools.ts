@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isIP } from "node:net";
+import { sameValue } from "../../adapter/response-parser.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -114,6 +115,7 @@ const listPeersTool: ToolDefinition = {
               "interface",
               "public-key",
               "endpoint-address",
+              "endpoint-port",
               "allowed-address",
               "disabled",
             ]),
@@ -134,21 +136,22 @@ const listPeersTool: ToolDefinition = {
 };
 
 function parsePeerEndpoint(endpoint: string): Record<string, string> | undefined {
-  if (/\s/.test(endpoint)) return undefined;
-  const ipv6 = /^\[([^\]]+)\]:(\d+)$/.exec(endpoint);
+  if (/\s/.test(endpoint) || endpoint.includes("%")) return undefined;
+  if (isIP(endpoint) === 6) return { "endpoint-address": endpoint };
+  const ipv6 = /^\[([^\]]+)\](?::(\d+))?$/.exec(endpoint);
   const host = /^([^:]+)(?::(\d+))?$/.exec(endpoint);
   const match = ipv6 ?? host;
   if (!match) return undefined;
 
   const [, address, port] = match;
   if (ipv6) {
-    if (isIP(address) !== 6 || address.includes("%")) return undefined;
+    if (isIP(address) !== 6) return undefined;
   } else if (isIP(address) !== 4) {
     const hostname = address.endsWith(".") ? address.slice(0, -1) : address;
     if (
       hostname.length > 253 ||
       /^[\d.]+$/.test(hostname) ||
-      !hostname.split(".").every((label) => /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(label))
+      !hostname.split(".").every((label) => /^[a-z\d_](?:[a-z\d_-]{0,61}[a-z\d_])?$/i.test(label))
     ) {
       return undefined;
     }
@@ -159,6 +162,39 @@ function parsePeerEndpoint(endpoint: string): Record<string, string> | undefined
     "endpoint-address": address,
     ...(port === undefined ? {} : { "endpoint-port": String(Number(port)) }),
   };
+}
+
+const peerEndpointSchema = z.string().transform((endpoint, ctx) => {
+  const fields = parsePeerEndpoint(endpoint);
+  if (fields) return fields;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message:
+      "Use IPv4:port, hostname:port or [IPv6]:port with port 1–65535, or an address without a port",
+  });
+  return z.NEVER;
+});
+
+function canonicalPeerAddress(value: unknown): string {
+  const address = String(value);
+  if (isIP(address) === 6) return new URL(`http://[${address}]/`).hostname;
+  return address.toLowerCase().replace(/\.$/, "");
+}
+
+function canonicalAllowedAddresses(value: unknown): string {
+  const addresses = String(value ?? "")
+    .split(",")
+    .map((item) => {
+      const cidr = item.trim();
+      const [address, prefix] = cidr.split("/");
+      const family = isIP(address);
+      if (!family || (prefix !== undefined && !/^\d+$/.test(prefix))) return cidr;
+      const bits = family === 4 ? 32 : 128;
+      const length = Number(prefix ?? bits);
+      if (length > bits || cidr.split("/").length > 2) return cidr;
+      return `${canonicalPeerAddress(address)}/${length}`;
+    });
+  return [...new Set(addresses)].sort().join(",");
 }
 
 const managePeerInputSchema = z
@@ -173,13 +209,9 @@ const managePeerInputSchema = z
       .describe("Allowed IP address/CIDR for this peer (e.g. 10.0.0.2/32)"),
     endpoint: z
       .string()
-      .refine((value) => parsePeerEndpoint(value) !== undefined, {
-        message:
-          "Use IPv4:port, hostname:port or [IPv6]:port with port 1–65535, or an IPv4/hostname without a port",
-      })
       .optional()
       .describe(
-        "Peer endpoint as IPv4:port, hostname:port or [IPv6]:port (port 1–65535). IPv4/hostname without a port is also accepted; omit for a roaming peer.",
+        "Add only: IPv4:port, hostname:port or [IPv6]:port (port 1–65535); hostname labels may contain underscores. Address-only IPv4/hostname/IPv6 (bare or bracketed) leaves the RouterOS port default unchanged, which may not allow initiation. Ignored for remove; omit for a roaming peer.",
       ),
     comment: z.string().max(255).optional().describe("Optional comment"),
     dryRun,
@@ -190,7 +222,7 @@ const managePeerTool: ToolDefinition = {
   name: "manage_wireguard_peer",
   title: "Manage WireGuard Peer",
   description:
-    "Add or remove a WireGuard peer. Idempotent by public key: add returns already_exists if a peer with the same public key already exists on the interface.",
+    "Add or remove a WireGuard peer. Add returns already_exists when the public key and explicitly requested endpoint/allowed addresses match; different settings produce CONFLICT without changing the peer. Omitted settings are left unchanged.",
   inputSchema: managePeerInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -201,18 +233,58 @@ const managePeerTool: ToolDefinition = {
   snapshotPaths: ["interface/wireguard/peers"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = managePeerInputSchema.parse(params);
-    const endpointFields = parsed.endpoint ? parsePeerEndpoint(parsed.endpoint)! : {};
     log.info(
       { routerId: context.routerId, action: parsed.action, interface: parsed.interface },
       "Managing WireGuard peer",
     );
     try {
+      const endpointFields =
+        parsed.action === "add" && parsed.endpoint !== undefined
+          ? peerEndpointSchema.parse(parsed.endpoint)
+          : {};
       const existing = await context.routerClient.get<RouterOSRecord>("interface/wireguard/peers", {
         filter: { interface: parsed.interface, "public-key": parsed.publicKey },
       });
 
       if (parsed.action === "add") {
         if (existing.length > 0) {
+          const rec = existing[0];
+          const requestedFields = {
+            ...endpointFields,
+            ...(parsed.allowedAddress === undefined
+              ? {}
+              : { "allowed-address": parsed.allowedAddress }),
+          };
+          const mismatched = Object.entries(requestedFields).filter(([property, desired]) => {
+            if (property === "endpoint-address") {
+              return canonicalPeerAddress(rec[property]) !== canonicalPeerAddress(desired);
+            }
+            if (property === "allowed-address") {
+              return (
+                canonicalAllowedAddresses(rec[property]) !== canonicalAllowedAddresses(desired)
+              );
+            }
+            return !sameValue(rec[property], desired);
+          });
+          if (mismatched.length > 0) {
+            throw new MikroMCPError({
+              category: ErrorCategory.CONFLICT,
+              code: "WIREGUARD_PEER_CONFLICT",
+              message: `WireGuard peer already exists on "${parsed.interface}" with different requested settings.`,
+              details: {
+                existing: Object.fromEntries(
+                  mismatched.map(([property]) => [property, rec[property]]),
+                ),
+                requested: Object.fromEntries(mismatched),
+              },
+              recoverability: {
+                retryable: false,
+                suggestedAction:
+                  "Inspect the peer with list_wireguard_peers, then remove it before adding different settings.",
+                alternativeTools: ["list_wireguard_peers", "manage_wireguard_peer"],
+              },
+            });
+          }
           return {
             content: `WireGuard peer with this public key already exists on "${parsed.interface}". No changes made.`,
             structuredContent: { action: "already_exists", peer: existing[0] },
@@ -222,7 +294,7 @@ const managePeerTool: ToolDefinition = {
           const diff = [
             { property: "interface", before: null, after: parsed.interface },
             { property: "public-key", before: null, after: parsed.publicKey },
-            ...(parsed.allowedAddress
+            ...(parsed.allowedAddress !== undefined
               ? [{ property: "allowed-address", before: null, after: parsed.allowedAddress }]
               : []),
             ...Object.entries(endpointFields).map(([property, after]) => ({
@@ -241,7 +313,7 @@ const managePeerTool: ToolDefinition = {
           "public-key": parsed.publicKey,
           ...endpointFields,
         };
-        if (parsed.allowedAddress) body["allowed-address"] = parsed.allowedAddress;
+        if (parsed.allowedAddress !== undefined) body["allowed-address"] = parsed.allowedAddress;
         if (parsed.comment) body.comment = parsed.comment.replace(/[\x00-\x1f\x7f]/g, "");
 
         const created = await context.routerClient.create("interface/wireguard/peers", body);
