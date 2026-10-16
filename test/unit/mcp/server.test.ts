@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServerFactory, SERVER_INSTRUCTIONS } from "../../../src/mcp/server.js";
@@ -58,6 +60,31 @@ describe("createServerFactory", () => {
     // received our string rather than reaching into SDK internals by name.
     const instructions = (server.server as unknown as { _instructions?: string })._instructions;
     expect(instructions).toBe(SERVER_INSTRUCTIONS);
+  });
+
+  it("registers the WireGuard peer object schema with native confirmation support", () => {
+    const register = vi.spyOn(McpServer.prototype, "registerTool");
+    try {
+      const factory = createServerFactory(makeConfig(), identityRegistry);
+      const server = factory.makeServer();
+      const registration = register.mock.calls.find(([name]) => name === "manage_wireguard_peer");
+      expect(registration).toBeDefined();
+      const schema = registration?.[1].inputSchema;
+      expect(schema).toBeInstanceOf(z.ZodObject);
+      expect(
+        (schema as z.ZodObject<z.ZodRawShape>).parse({
+          routerId: "test-router",
+          action: "remove",
+          interface: "wg0",
+          publicKey: "test-key",
+          endpoint: "https://old.invalid",
+          confirmationToken: "test-confirmation",
+        }),
+      ).toMatchObject({ confirmationToken: "test-confirmation" });
+      void server.close();
+    } finally {
+      register.mockRestore();
+    }
   });
 
   it("builds a server without throwing when config paths are absent", () => {

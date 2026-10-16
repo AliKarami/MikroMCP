@@ -507,7 +507,7 @@ List WireGuard interfaces and their listen port and running state.
 
 ### `list_wireguard_peers` — Read
 
-List WireGuard peers with last handshake time and transfer statistics.
+List WireGuard peers with configured endpoint address and port, last handshake time and transfer statistics.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -522,7 +522,7 @@ List WireGuard peers with last handshake time and transfer statistics.
 
 ### `manage_wireguard_peer` — Write · Destructive · Idempotent
 
-Add or remove a WireGuard peer. Idempotent by public key: `add` returns `already_exists` if a peer with the same public key already exists on the interface.
+Add or remove a WireGuard peer. `add` returns `already_exists` when the same public key exists on the interface and all explicitly requested endpoint/port and allowed addresses match. A different requested setting returns `CONFLICT` without modifying the peer; inspect and remove the existing peer before adding different settings. Omitted settings are not compared. Equivalent IPv6 spelling, DNS case/trailing dot, allowed-address list order and host `/32` or `/128` notation do not cause a conflict.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -531,7 +531,7 @@ Add or remove a WireGuard peer. Idempotent by public key: `add` returns `already
 | `interface` | string | — | WireGuard interface name (e.g. `wg0`) |
 | `publicKey` | string | — | Peer public key in base64 format (44 chars) |
 | `allowedAddress` | string | — | Allowed IP/CIDR for this peer (e.g. `10.0.0.2/32`) |
-| `endpoint` | string | — | Peer endpoint as `IP:port` (e.g. `1.2.3.4:51820`) |
+| `endpoint` | string | — | For `add`: `IPv4:port`, `hostname:port` or `[IPv6]:port`, with port `1–65535` (e.g. `192.0.2.1:51820`, `wg_gw.corp.example:51820`, `[2001:db8::1]:51820`). Hostname labels may contain underscores. Address-only IPv4/hostname/IPv6 is accepted, including `2001:db8::1` and `[2001:db8::1]`; a valid bare IPv6 is always an address, never split into a port. Without a port, RouterOS keeps its default: this does not guarantee a nonzero endpoint port or outbound initiation. Supply a port to initiate to a known endpoint; omit for a roaming peer. `remove` ignores this field, even if its string is malformed. |
 | `comment` | string | — | Optional comment |
 | `dryRun` | boolean | `false` | Preview without applying |
 
