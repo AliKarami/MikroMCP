@@ -466,6 +466,29 @@ describe("wireguardTools", () => {
     });
 
     it.each([
+      { stored: undefined, endpoint: "undefined" },
+      { stored: null, endpoint: "null" },
+      { stored: undefined, endpoint: "null" },
+      { stored: null, endpoint: "undefined" },
+    ])(
+      "does not match missing address $stored to literal hostname $endpoint",
+      async ({ stored, endpoint }) => {
+        const [peer] = fromWire([{ ".id": "*1", interface: "wg0", "public-key": testPublicKey }]);
+        const ctx = makeContext([
+          { ...peer, ...(stored === undefined ? {} : { "endpoint-address": stored }) },
+        ]);
+        await expect(managePeerTool.handler({ ...addParams, endpoint }, ctx)).rejects.toMatchObject(
+          {
+            category: ErrorCategory.CONFLICT,
+            code: "WIREGUARD_PEER_CONFLICT",
+          },
+        );
+        expect(ctx.routerClient.create).not.toHaveBeenCalled();
+        expect(ctx.routerClient.remove).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
       { stored: "2001:db8::1", endpoint: "[2001:0DB8:0:0:0:0:0:1]:51820" },
       { stored: "2001:db8::1", endpoint: "2001:0DB8:0:0:0:0:0:1" },
       { stored: "::ffff:c000:201", endpoint: "[::ffff:192.0.2.1]:51820" },
