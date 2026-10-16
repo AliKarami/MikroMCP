@@ -11,6 +11,7 @@ Each release section covers changes **since the previous release only**.
 ## [Unreleased]
 
 ### Fixed
+- `manage_wireguard_peer` now splits an endpoint such as `192.0.2.1:51820` into RouterOS `endpoint-address` and `endpoint-port`, including DNS names and bracketed IPv6. Dry-run previews the same fields, and malformed endpoints are rejected before router requests. Address-only IPv4/DNS inputs remain supported.
 - RouterOS REST setup documentation now uses the `www-ssl`/`www` web services instead of the binary `api-ssl`/`api` services, requires an explicitly configured HTTPS certificate, and notes that HTTP REST access starts with RouterOS `7.9`. The setup pages now include the commands that create the self-signed `rest-cert`, explain the hostname (SAN) check when trusting a CA with `rejectUnauthorized: true`, match the firewall example to the configured port, warn that the `www-ssl` address allowlist also limits WebFig, and drop the unneeded `api` policy from the least-privilege examples.
 
 ### Changed

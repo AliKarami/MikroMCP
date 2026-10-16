@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isIP } from "node:net";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
@@ -132,6 +133,34 @@ const listPeersTool: ToolDefinition = {
   },
 };
 
+function parsePeerEndpoint(endpoint: string): Record<string, string> | undefined {
+  if (/\s/.test(endpoint)) return undefined;
+  const ipv6 = /^\[([^\]]+)\]:(\d+)$/.exec(endpoint);
+  const host = /^([^:]+)(?::(\d+))?$/.exec(endpoint);
+  const match = ipv6 ?? host;
+  if (!match) return undefined;
+
+  const [, address, port] = match;
+  if (ipv6) {
+    if (isIP(address) !== 6 || address.includes("%")) return undefined;
+  } else if (isIP(address) !== 4) {
+    const hostname = address.endsWith(".") ? address.slice(0, -1) : address;
+    if (
+      hostname.length > 253 ||
+      /^[\d.]+$/.test(hostname) ||
+      !hostname.split(".").every((label) => /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(label))
+    ) {
+      return undefined;
+    }
+  }
+  if (port !== undefined && (Number(port) < 1 || Number(port) > 65535)) return undefined;
+
+  return {
+    "endpoint-address": address,
+    ...(port === undefined ? {} : { "endpoint-port": String(Number(port)) }),
+  };
+}
+
 const managePeerInputSchema = z
   .object({
     routerId,
@@ -142,7 +171,16 @@ const managePeerInputSchema = z
       .string()
       .optional()
       .describe("Allowed IP address/CIDR for this peer (e.g. 10.0.0.2/32)"),
-    endpoint: z.string().optional().describe("Peer endpoint as IP:port (e.g. 1.2.3.4:51820)"),
+    endpoint: z
+      .string()
+      .refine((value) => parsePeerEndpoint(value) !== undefined, {
+        message:
+          "Use IPv4:port, hostname:port or [IPv6]:port with port 1–65535, or an IPv4/hostname without a port",
+      })
+      .optional()
+      .describe(
+        "Peer endpoint as IPv4:port, hostname:port or [IPv6]:port (port 1–65535). IPv4/hostname without a port is also accepted; omit for a roaming peer.",
+      ),
     comment: z.string().max(255).optional().describe("Optional comment"),
     dryRun,
   })
@@ -163,6 +201,7 @@ const managePeerTool: ToolDefinition = {
   snapshotPaths: ["interface/wireguard/peers"],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = managePeerInputSchema.parse(params);
+    const endpointFields = parsed.endpoint ? parsePeerEndpoint(parsed.endpoint)! : {};
     log.info(
       { routerId: context.routerId, action: parsed.action, interface: parsed.interface },
       "Managing WireGuard peer",
@@ -186,9 +225,11 @@ const managePeerTool: ToolDefinition = {
             ...(parsed.allowedAddress
               ? [{ property: "allowed-address", before: null, after: parsed.allowedAddress }]
               : []),
-            ...(parsed.endpoint
-              ? [{ property: "endpoint-address", before: null, after: parsed.endpoint }]
-              : []),
+            ...Object.entries(endpointFields).map(([property, after]) => ({
+              property,
+              before: null,
+              after,
+            })),
           ];
           return {
             content: `Dry run: Would add WireGuard peer on "${parsed.interface}".`,
@@ -198,9 +239,9 @@ const managePeerTool: ToolDefinition = {
         const body: Record<string, string> = {
           interface: parsed.interface,
           "public-key": parsed.publicKey,
+          ...endpointFields,
         };
         if (parsed.allowedAddress) body["allowed-address"] = parsed.allowedAddress;
-        if (parsed.endpoint) body["endpoint-address"] = parsed.endpoint;
         if (parsed.comment) body.comment = parsed.comment.replace(/[\x00-\x1f\x7f]/g, "");
 
         const created = await context.routerClient.create("interface/wireguard/peers", body);

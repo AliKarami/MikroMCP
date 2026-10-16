@@ -531,7 +531,7 @@ Add or remove a WireGuard peer. Idempotent by public key: `add` returns `already
 | `interface` | string | — | WireGuard interface name (e.g. `wg0`) |
 | `publicKey` | string | — | Peer public key in base64 format (44 chars) |
 | `allowedAddress` | string | — | Allowed IP/CIDR for this peer (e.g. `10.0.0.2/32`) |
-| `endpoint` | string | — | Peer endpoint as `IP:port` (e.g. `1.2.3.4:51820`) |
+| `endpoint` | string | — | Peer endpoint as `IPv4:port`, `hostname:port` or `[IPv6]:port`, with port `1–65535` (e.g. `192.0.2.1:51820`, `vpn.example.com:51820`, `[2001:db8::1]:51820`). IPv4/hostname without a port is also accepted and leaves the RouterOS port default unchanged. Omit for a roaming peer. |
 | `comment` | string | — | Optional comment |
 | `dryRun` | boolean | `false` | Preview without applying |
 
