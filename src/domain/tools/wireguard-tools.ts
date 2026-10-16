@@ -176,7 +176,7 @@ const peerEndpointSchema = z.string().transform((endpoint, ctx) => {
 });
 
 function canonicalPeerAddress(value: unknown): string {
-  const address = String(value);
+  const address = String(value ?? "");
   if (isIP(address) === 6) return new URL(`http://[${address}]/`).hostname;
   return address.toLowerCase().replace(/\.$/, "");
 }
