@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Changed
+- Usage skill and security guide: require verified encrypted RouterOS backups in each target router's persistent storage before configuration changes and after successful read-back and functional verification, with distinct paths, storage inspection, safe password handling and explicit authorization for download, deletion or retention changes. Per-tool snapshots and `.rsc` exports do not replace these backups; this is operator guidance, not automatic server-side enforcement.
+
 ## [1.14.1] - 2026-10-17
 
 Both fixes in this release come from [@alexpostnik](https://github.com/alexpostnik). Thank you.

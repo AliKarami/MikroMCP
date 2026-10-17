@@ -43,6 +43,12 @@ RouterOS documentation — when you need to know what a RouterOS field means, se
    `rollback_change` with the journal ID. Know this before bulk changes.
 6. **Prefer dedicated tools over `run_command`.** Use `run_command` only when no
    dedicated tool covers the need.
+7. **Keep encrypted RouterOS backups before and after changes.** Before the first
+   real configuration change, inspect storage and save and verify a binary
+   `.backup` in that router's persistent storage (`flash/` when present).
+   After the change is verified, save and verify a second, distinctly named backup.
+   Follow `references/safety-and-recovery.md` for password handling and retention;
+   per-tool snapshots and `.rsc` exports do not replace these backups.
 
 ## Intent → tool quick index
 
@@ -69,11 +75,16 @@ Full enumeration of every tool by family: `references/tool-map.md`.
 ### Make a safe config change
 1. `list_*` the area to capture current state.
 2. Call the `manage_*` tool with `dryRun: true`; read the returned diff.
-3. If a confirmation token is required, re-issue with `confirmationToken`.
-4. Apply for real; confirm the `action` in the result (`created`/`updated`).
-5. Note the journal ID in case you need `rollback_change`.
-6. Re-read with the same `list_*` and compare with the intent — RouterOS has no
+3. Before the first real configuration change, create and verify the encrypted
+   pre-change backup in verified persistent storage (see
+   `references/safety-and-recovery.md`).
+4. If a confirmation token is required, re-issue with `confirmationToken`.
+5. Apply for real; confirm the `action` in the result (`created`/`updated`).
+6. Note the journal ID in case you need `rollback_change`.
+7. Re-read with the same `list_*` and compare with the intent — RouterOS has no
    commit step, so this is the only check that the change landed as meant.
+8. Verify the intended function, then create and verify the encrypted post-change
+   backup. Keep both backups on the router.
 
 Several dependent writes (a routing table, then a route in it, then a rule that
 uses it): `plan_changes` (up to 10 steps, all dry-run) → review → `apply_plan`.
@@ -88,11 +99,16 @@ It stops at the first failed step and journals each step separately.
 ### Fleet rollout
 1. Capture current state across the fleet with `bulk_read` (read-only tools
    only; it refuses writes and `ping`/`traceroute`/`torch`/`bandwidth_test`).
-2. Validate the change on ONE router first (dry-run → apply).
-3. `bulk_execute` with the tool + params, targeting routerIds or a tag.
-4. For any write tool, complete the fleet confirmation-token step: tell the user which
+2. Validate the change on ONE router first using the safe config-change workflow,
+   including the pre-change backup and the post-verification backup.
+3. Create and verify an encrypted pre-change backup on every remaining RouterOS
+   target before its first configuration write.
+4. `bulk_execute` with the tool + params, targeting routerIds or a tag.
+5. For any write tool, complete the fleet confirmation-token step: tell the user which
    routers and what change the token covers, and re-submit only after they agree.
-5. Review per-router succeeded/failed counts; `rollback_change` per-router if needed.
+6. Review per-router succeeded/failed counts; `rollback_change` per-router if needed.
+7. Re-read and verify each successful target, then save and verify its encrypted
+   post-change backup. One router's backup does not cover the rest of the fleet.
 
 ### Advise on an upgrade or version-specific behaviour
 1. Take the exact version from `get_system_status`, not `rosVersion` from
