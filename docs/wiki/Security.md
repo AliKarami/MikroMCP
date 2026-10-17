@@ -51,6 +51,7 @@ Define identities for distinct consumers (a read-only dashboard vs. an automatio
 - **Fleet reads vs. fleet writes.** `bulk_read` fans out only read-only tools and refuses everything else on the server, so a client that approves tools by name (for example Claude Code permission rules) can allow `bulk_read` and keep `bulk_execute` behind a prompt.
 - **Maintenance windows.** Routers can declare windows during which destructive operations are permitted; calls outside them are rejected with `PERMISSION_DENIED`.
 - **Snapshots & rollback.** Write tools snapshot affected config and append a journal entry before applying, so a change can be reversed with `rollback_change`.
+- **RouterOS backups before and after changes.** As an operator workflow, inspect storage first, then save an encrypted binary `.backup` in each target router's persistent storage before the first real configuration change. Use `flash/` when that directory is present; on other devices establish the persistent location instead of inventing that path. Save a second, distinctly named backup there after re-reading the settings and verifying the intended function. Check both exact paths and nonzero sizes with `list_files`, and retain both on the router. A `.rsc` export and per-tool snapshots do not replace these backups. Do not put a real backup password in the conversation or model-visible tool arguments; if the client cannot inject it outside conversation/tool history, have the operator create the encrypted backup in a trusted RouterOS UI. Do not download, delete or change retention without explicit authorization. See the [usage skill's backup workflow](https://github.com/AliKarami/MikroMCP/blob/main/skills/mikromcp/references/safety-and-recovery.md#routeros-backups-before-and-after-changes) for details. This guidance adds no automatic server-side backup enforcement.
 
 ## Auditing
 
@@ -66,6 +67,7 @@ Define identities for distinct consumers (a read-only dashboard vs. an automatio
 - [ ] Identities scoped with minimal `allowedRouters` / `allowedToolPatterns`
 - [ ] Audit logging enabled
 - [ ] Write changes previewed with `dryRun: true` before applying
+- [ ] Encrypted RouterOS backups verified in persistent router storage before changes and after successful verification
 
 ## Reporting a vulnerability
 
