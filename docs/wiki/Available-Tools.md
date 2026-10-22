@@ -736,7 +736,7 @@ List DHCP client configurations — which interfaces obtain their IP address via
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `interface` | string | — | Filter by interface name |
+| `interface` | string | — | Filter by interface or display name (exact match) |
 | `status` | `enum` | `"all"` | Filter by status: `bound`, `searching`, `requesting`, `init`, `all` |
 | `limit` | integer | `100` | Results per page (1–500) |
 | `offset` | integer | `0` | Pagination offset |
@@ -747,13 +747,13 @@ List DHCP client configurations — which interfaces obtain their IP address via
 
 ### `manage_dhcp_client` — Write · Destructive · Idempotent
 
-Add, remove, enable, or disable a DHCP client on an interface. Idempotent by `interface`.
+Add, remove, enable, or disable a DHCP client on an interface. Idempotent by `interface`; a client's display name (what RouterOS printouts show after an interface rename) also matches.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
-| `interface` | string | — | Interface name (idempotency key) |
+| `interface` | string | — | Interface name (idempotency key); a client's display name (e.g. `ether1[uplink]` on a renamed interface) also matches |
 | `usePeerDns` | `boolean` | `true` | Use DNS servers advertised by DHCP server (add only) |
 | `usePeerNtp` | `boolean` | `false` | Use NTP servers advertised by DHCP server (add only) |
 | `addDefaultRoute` | `boolean` | `true` | Install default route from DHCP offer (add only) |

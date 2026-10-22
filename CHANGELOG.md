@@ -13,6 +13,9 @@ Each release section covers changes **since the previous release only**.
 ### Changed
 - `list_routers` no longer presents `rosVersion` as live fact: the description and a `note` in the result now state it comes from `routers.yaml` and may be stale, pointing to `get_system_status` for the live version.
 
+### Fixed
+- `manage_dhcp_client` now resolves display names: a caller passing what RouterOS printouts show (a renamed interface's display name, e.g. `ether1[uplink]`) finds the client instead of a `not_found` that listed the very entry it was looking for. The underlying `interface` field matches first; the display name is the fallback, and `remove` that matches nothing now returns the existing clients as candidates. `list_dhcp_clients`'s `interface` filter matches both too.
+
 ## [1.14.1] - 2026-10-17
 
 Both fixes in this release come from [@alexpostnik](https://github.com/alexpostnik). Thank you.
