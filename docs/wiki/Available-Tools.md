@@ -1703,7 +1703,7 @@ Restore the state captured before a previous write. On RouterOS that is the sect
 
 ### `list_routers` — Read
 
-List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`.
+List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`. The `rosVersion` is what `routers.yaml` states — it can lag a router upgrade, so ask `get_system_status` when the live version matters (e.g. before version-dependent commands).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
