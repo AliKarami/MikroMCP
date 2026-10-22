@@ -307,6 +307,12 @@ export async function executeToolCall(
           phase: "success",
           durationMs: Date.now() - startMs,
         });
+        // Surface the journal ID on the result. Without it only apply_plan
+        // steps ever returned one, so a client that lost the ID had no way
+        // to recover it — and rollback_change needs it.
+        if (result.structuredContent) {
+          result.structuredContent = { ...result.structuredContent, journalId };
+        }
       }
 
       if (shouldAudit) {

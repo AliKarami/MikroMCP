@@ -39,10 +39,12 @@ RouterOS documentation — when you need to know what a RouterOS field means, se
 4. **Writes are idempotent.** `already_exists` and `no_change` are SUCCESS, not
    errors. A `CONFLICT` means the resource exists with different config — resolve
    it deliberately (see `references/safety-and-recovery.md`).
-5. **Rollback exists.** Write tools snapshot+journal first. To undo, use
-   `rollback_change` with the journal ID. Know this before bulk changes.
+5. **Rollback exists.** Write tools snapshot+journal first, and every write
+   result carries its `journalId`. To undo, use `rollback_change` with it;
+   `list_journal` recovers a lost ID. Know this before bulk changes.
 6. **Prefer dedicated tools over `run_command`.** Use `run_command` only when no
-   dedicated tool covers the need.
+   dedicated tool covers the need. Its writes journal but never snapshot, so
+   they cannot be rolled back — record the manual undo yourself.
 
 ## Intent → tool quick index
 

@@ -92,6 +92,40 @@ describe("executeToolCall", () => {
     expect(result.content[0].text).toContain("ok");
   });
 
+  it("a journaled write surfaces its journalId in the result", async () => {
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: { x: 1 } }), {
+      name: "test_write",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    });
+    const deps = makeDeps();
+    (deps.config as { journalPath?: string }).journalPath =
+      "/tmp/test-mikromcp/write-journal.ndjson";
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+    expect(result.isError).toBeFalsy();
+    const sc = result.structuredContent as Record<string, unknown>;
+    // recordAttempt is mocked to return "j1"
+    expect(sc.journalId).toBe("j1");
+    expect(sc.x).toBe(1);
+  });
+
+  it("a read tool carries no journalId even with a journal configured", async () => {
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: { x: 1 } }));
+    const deps = makeDeps();
+    (deps.config as { journalPath?: string }).journalPath =
+      "/tmp/test-mikromcp/write-journal.ndjson";
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+    expect((result.structuredContent as Record<string, unknown>).journalId).toBeUndefined();
+  });
+
   it("missing routerId — returns isError with MISSING_ROUTER_ID code", async () => {
     const tool = makeReadTool(async () => ({ content: "never", structuredContent: {} }));
     const deps = makeDeps();

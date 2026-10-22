@@ -47,6 +47,126 @@ const applyPlanInputSchema = z
   })
   .strict();
 
+const listJournalInputSchema = z
+  .object({
+    routerId: z.string().optional().describe("Only entries for this router id"),
+    tool: z.string().optional().describe("Only entries written by this tool"),
+    limit: z.number().int().min(1).max(500).default(20).describe("Max entries to return"),
+  })
+  .strict();
+
+const listJournalTool: ToolDefinition = {
+  name: "list_journal",
+  title: "List Write Journal",
+  description:
+    "List recent entries from the server's write journal (write-journal.ndjson): every journaled write with its journalId, timestamp, tool, router, parameters (as redacted at write time), snapshot ids and outcome — newest first. Read-only. Use it to recover a lost journalId for rollback_change, or to audit what was written when. run_command entries appear here too, but carry no snapshots and cannot be rolled back.",
+  inputSchema: listJournalInputSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  skipRouterContext: true,
+  async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const parsed = listJournalInputSchema.parse(params);
+    const journalPath = context.appConfig.journalPath;
+    if (!journalPath) {
+      return {
+        content: "Write journal is disabled (no journal path configured on this server).",
+        structuredContent: { journalEnabled: false, entries: [], total: 0, returned: 0 },
+      };
+    }
+
+    let raw: string;
+    try {
+      raw = readFileSync(journalPath, "utf-8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        raw = "";
+      } else {
+        throw new MikroMCPError({
+          category: ErrorCategory.INTERNAL,
+          code: "JOURNAL_READ_FAILED",
+          message: `Could not read the write journal: ${(err as Error).message}`,
+          details: { journalPath },
+          recoverability: {
+            retryable: false,
+            suggestedAction: "Check the file's permissions under the MikroMCP data directory.",
+          },
+        });
+      }
+    }
+
+    const outcomes = new Map<string, { phase: string; outcome?: string; durationMs?: number }>();
+    const attempts: Record<string, unknown>[] = [];
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue;
+      // A crash can tear the last line mid-write; it must not lose the rest.
+      let entry: Record<string, unknown>;
+      try {
+        entry = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (entry.phase === "attempt") attempts.push(entry);
+      else
+        outcomes.set(entry.id as string, {
+          phase: entry.phase as string,
+          outcome: entry.outcome as string | undefined,
+          durationMs: entry.durationMs as number | undefined,
+        });
+    }
+
+    let entries = attempts
+      .map((a) => {
+        const outcome = outcomes.get(a.id as string);
+        return {
+          journalId: a.id,
+          ts: a.ts,
+          tool: a.tool,
+          routerId: a.routerId,
+          identityId: a.identityId,
+          role: a.role,
+          params: a.params ?? {},
+          snapshotIds: a.snapshotIds ?? [],
+          status: outcome ? outcome.phase : "unknown",
+          outcomeCode: outcome?.outcome,
+          durationMs: outcome?.durationMs,
+        };
+      })
+      .reverse();
+    if (parsed.routerId) entries = entries.filter((e) => e.routerId === parsed.routerId);
+    if (parsed.tool) entries = entries.filter((e) => e.tool === parsed.tool);
+    // Mirror checkAuthz's router scope: a restricted identity must not read
+    // other routers' write history (list_routers filters the same way).
+    const scope = context.identity.allowedRouters;
+    if (scope.length > 0) entries = entries.filter((e) => scope.includes(e.routerId as string));
+
+    const total = entries.length;
+    const returned = entries.slice(0, parsed.limit);
+    const header =
+      total === 0
+        ? "Write journal: no entries."
+        : `Write journal: ${returned.length} of ${total}, newest first.`;
+    const lines = returned.map(
+      (e) =>
+        `  ${String(e.journalId)} ${String(e.tool)} ${String(e.routerId)} → ${e.status}${e.outcomeCode ? ` (${e.outcomeCode})` : ""} [${String(e.ts)}]`,
+    );
+
+    return {
+      content: total === 0 ? header : [header, ...lines].join("\n"),
+      structuredContent: {
+        journalEnabled: true,
+        entries: returned,
+        total,
+        returned: returned.length,
+        note: "Pass a journalId to rollback_change to restore that write. Entries with empty snapshotIds (e.g. run_command) cannot be rolled back.",
+      },
+    };
+  },
+};
+
 const rollbackChangeInputSchema = z
   .object({
     routerId,
@@ -501,5 +621,5 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     },
   };
 
-  return [planChangesTool, applyPlanTool, rollbackChangeTool];
+  return [planChangesTool, applyPlanTool, rollbackChangeTool, listJournalTool];
 }

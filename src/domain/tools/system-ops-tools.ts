@@ -226,7 +226,7 @@ const runCommandTool: ToolDefinition = {
   name: "run_command",
   title: "Run Command",
   description:
-    "Execute an arbitrary RouterOS console command via SSH. Guarded by an allow/deny policy (built-in deny list blocks destructive commands; tighten via cmdAllow in routers.yaml or MIKROMCP_CMD_ALLOW). Prefer dedicated tools (reboot, etc.) where available. Output capped at 4000 characters.",
+    "Execute an arbitrary RouterOS console command via SSH. Guarded by an allow/deny policy (built-in deny list blocks destructive commands; tighten via cmdAllow in routers.yaml or MIKROMCP_CMD_ALLOW). Prefer dedicated tools (reboot, etc.) where available. Output capped at 4000 characters. Journaled for audit like every write, but never snapshotted: arbitrary commands touch unknown config sections, so the journal ID it returns cannot be rolled back via rollback_change — prefer a dedicated tool when one exists, and note the manual undo command in your own records.",
   inputSchema: runCommandInputSchema,
   annotations: {
     readOnlyHint: false,
