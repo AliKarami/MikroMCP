@@ -10,11 +10,13 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+<<<<<<< HEAD
 ### Changed
 - `list_routers` no longer presents `rosVersion` as live fact: the description and a `note` in the result now state it comes from `routers.yaml` and may be stale, pointing to `get_system_status` for the live version.
 
 ### Fixed
 - `manage_dhcp_client` now resolves display names: a caller passing what RouterOS printouts show (a renamed interface's display name, e.g. `ether1[uplink]`) finds the client instead of a `not_found` that listed the very entry it was looking for. The underlying `interface` field matches first; the display name is the fallback for `remove`/`enable`/`disable` (`add` still checks the interface only), and `remove` that matches nothing now returns the existing clients as candidates. `list_dhcp_clients`'s `interface` filter matches both too, and its text output now shows each client's `name`.
+- `manage_vlan` and `manage_bridge` no longer refuse names longer than 15 characters (or containing dots) on every action. The old schema limit blocked `remove`/`enable`/`disable` of existing VLANs and bridges RouterOS itself had accepted — e.g. a VLAN named `vlan200-office-iot` (18 chars) or a bridge named `bridge-lan.guest`. Name rules (letters, digits, dot, hyphen, underscore; max 64 chars) now apply only when creating (`add`/`create`), enforced with a typed `VLAN_NAME_INVALID`/`BRIDGE_NAME_INVALID` error; the referencing actions take any existing name verbatim.
 
 ## [1.14.1] - 2026-10-17
 

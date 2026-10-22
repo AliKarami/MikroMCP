@@ -363,7 +363,7 @@ Add, remove, enable, or disable a VLAN sub-interface. Idempotent by `name`. `add
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
-| `name` | string | — | Interface name (e.g. `vlan100`) |
+| `name` | string | — | Interface name — idempotency key. `add`: letters/digits/`.`/`-`/`_`, max 64 chars; `remove`/`enable`/`disable`: any existing name verbatim |
 | `vlanId` | integer | — | VLAN ID (1–4094); required for `add` |
 | `parentInterface` | string | — | Parent interface (e.g. `ether1`); required for `add` |
 | `mtu` | `number` | `1500` | MTU size (68–9000; applies on add only) |
@@ -399,7 +399,7 @@ Create or remove a bridge interface. Returns `already_exists` if the bridge alre
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `create` \| `remove` | — | Operation to perform |
-| `name` | string | — | Bridge interface name (alphanumeric, `-`, `_`; max 15 chars) |
+| `name` | string | — | Bridge interface name. `create`: letters/digits/`.`/`-`/`_`, max 64 chars; `remove`: any existing name verbatim |
 | `comment` | string | — | Optional comment |
 | `disabled` | boolean | `false` | Create the bridge in disabled state |
 | `dryRun` | boolean | `false` | Preview without applying |
