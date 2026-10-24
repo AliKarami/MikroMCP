@@ -214,6 +214,16 @@ Contributed by [@karamble](https://github.com/karamble).
 
 ---
 
+## ✅ v1.15 — Write Journal Visibility & Name Fixes
+
+`list_journal` lists the server's write journal, newest first, filterable by router and tool and scoped to the caller, so a lost `journalId` can be found again for `rollback_change`. A write that can be rolled back now returns its `journalId` directly. The journal records whether a call was really a dry run, and `rollback_change` refuses a dry-run entry rather than restoring a stale snapshot.
+
+`manage_vlan` and `manage_bridge` accept existing names of any length, `manage_dhcp_client` finds a client by its display name after an interface rename, and `list_routers` marks `rosVersion` as config-time rather than live.
+
+Contributed by [@f0086](https://github.com/f0086).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

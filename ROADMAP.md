@@ -417,6 +417,19 @@ Contributed by [@karamble](https://github.com/karamble).
 
 ---
 
+## ✅ v1.15 — Write Journal Visibility & Name Fixes (132 → 133 tools)
+
+**Goal:** Never lose the way back from a write, and manage interfaces and DHCP clients by the names RouterOS actually shows.
+
+- **Recoverable journal IDs.** `list_journal` lists the write journal (newest first, filterable by router and tool, scoped to the caller), marking each entry as a dry run and as rollbackable or not. A write that can be rolled back returns its `journalId` directly, in the structured and the text result.
+- **Safer rollback.** The journal records whether a call was really a dry run (SwOS tools default to one), and `rollback_change` refuses a dry-run entry instead of restoring a stale snapshot.
+- **Names as RouterOS has them.** `manage_vlan` and `manage_bridge` accept existing names of any length; `manage_dhcp_client` finds a client by its display name after an interface rename.
+- **Honest version info.** `list_routers` marks `rosVersion` as config-time and points to `get_system_status` for the live value.
+
+Contributed by [@f0086](https://github.com/f0086).
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

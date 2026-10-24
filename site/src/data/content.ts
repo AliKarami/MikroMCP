@@ -24,7 +24,7 @@ export const features = [
   { icon: "route", title: "Routing visibility", body: "Static routes, routing tables, BGP peers, OSPF neighbors." },
   { icon: "lock", title: "Secure access", body: "HTTP bearer auth, SSH private keys, bcrypt token hashes, RBAC, router/tool restrictions, confirmation tokens." },
   { icon: "activity", title: "Diagnostics", body: "Router-originated ping, traceroute, torch, log filtering, guarded SSH command execution." },
-  { icon: "shield", title: "Change safety", body: "Dry-run, idempotent writes, snapshots, write journal, plan_changes, apply_plan, rollback_change." },
+  { icon: "shield", title: "Change safety", body: "Dry-run, idempotent writes, snapshots, a searchable write journal (list_journal), plan_changes, apply_plan, rollback_change." },
   { icon: "switch", title: "SwOS switches", body: "MikroTik SwOS and SwOS Lite switches over their .b HTTP API: port, PoE and SFP status, the whole switch config as one YAML document with dry-run and lockout checks, backups, firmware upgrades." },
   { icon: "layers", title: "Fleet operations", body: "Discover configured routers with list_routers, then fan a tool out across them by id or tag with bulk_execute, or with bulk_read, which runs read-only tools only." },
   { icon: "settings", title: "Production behavior", body: "Retries for read tools, per-router circuit breakers, correlation IDs, structured logs, audit logs." },
