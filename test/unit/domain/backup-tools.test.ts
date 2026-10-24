@@ -132,6 +132,90 @@ describe("backupTools", () => {
     });
   });
 
+  describe("handler — create_backup passwordSecret", () => {
+    const SECRET = "s3cr3t-backup-pw";
+
+    function secretContext(bound: string[] | undefined, secrets: Record<string, string>) {
+      return {
+        ...makeContext({}),
+        routerConfig: { secrets: bound } as RouterConfig,
+        appConfig: { configSecrets: secrets } as unknown as ToolContext["appConfig"],
+      } as ToolContext;
+    }
+
+    it("encrypts with the bound secret's value and never echoes it", async () => {
+      const ctx = secretContext(["BACKUP"], { BACKUP: SECRET });
+      const result = await createBackupTool.handler(
+        { routerId: "test-router", name: "pre", passwordSecret: "BACKUP" },
+        ctx,
+      );
+      expect(ctx.routerClient.execute).toHaveBeenCalledWith("system/backup/save", {
+        name: "pre",
+        password: SECRET,
+      });
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.encrypted).toBe(true);
+      expect(JSON.stringify(sc) + result.content).not.toContain(SECRET);
+    });
+
+    it("dry run resolves the secret without touching the router", async () => {
+      const ctx = secretContext(["BACKUP"], { BACKUP: SECRET });
+      const result = await createBackupTool.handler(
+        { routerId: "test-router", passwordSecret: "BACKUP", dryRun: true },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc).toMatchObject({ action: "dry_run", encrypted: true });
+      expect(JSON.stringify(sc) + result.content).not.toContain(SECRET);
+      expect(ctx.routerClient.execute).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        "a secret not bound to the router",
+        ["OTHER"],
+        { BACKUP: SECRET },
+        "BACKUP_SECRET_NOT_BOUND",
+      ],
+      ["a router without a secrets list", undefined, { BACKUP: SECRET }, "BACKUP_SECRET_NOT_BOUND"],
+      ["an unset secret", ["BACKUP"], {}, "BACKUP_SECRET_MISSING"],
+      ["an empty secret", ["BACKUP"], { BACKUP: "" }, "BACKUP_SECRET_MISSING"],
+    ])("refuses %s, even in a dry run", async (_label, bound, secrets, code) => {
+      for (const dryRun of [true, false]) {
+        const ctx = secretContext(bound, secrets);
+        await expect(
+          createBackupTool.handler(
+            { routerId: "test-router", passwordSecret: "BACKUP", dryRun },
+            ctx,
+          ),
+        ).rejects.toMatchObject({ code });
+        expect(ctx.routerClient.execute).not.toHaveBeenCalled();
+      }
+    });
+
+    it("refuses password and passwordSecret together", async () => {
+      const ctx = secretContext(["BACKUP"], { BACKUP: SECRET });
+      await expect(
+        createBackupTool.handler(
+          { routerId: "test-router", password: "x", passwordSecret: "BACKUP" },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ code: "BACKUP_PASSWORD_CONFLICT" });
+    });
+
+    it("rejects a passwordSecret that is not a secret name", () => {
+      expect(
+        createBackupTool.inputSchema.safeParse({ routerId: "r1", passwordSecret: "backup-pw" })
+          .success,
+      ).toBe(false);
+    });
+
+    it("reports an unencrypted backup as such", async () => {
+      const result = await createBackupTool.handler({ routerId: "test-router" }, makeContext({}));
+      expect((result.structuredContent as Record<string, unknown>).encrypted).toBe(false);
+    });
+  });
+
   describe("handler — export_config", () => {
     it("uses SSH for inline export and returns script text", async () => {
       const ctx = makeContext({}, "# RouterOS export\n/ip address add address=1.2.3.4/24");

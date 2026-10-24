@@ -136,11 +136,20 @@ function checkEnvVars(routers: RouterConfig[], transport: string): void {
     );
   }
 
-  // Switch config secrets: a bound name without its variable can never resolve,
-  // and a switch without a list may reference no secret at all.
+  // Bound secrets: a bound name without its variable can never resolve, and a
+  // switch without a list may reference no secret at all.
   const secretNames = Object.keys(process.env).filter((k) => k.startsWith("MIKROMCP_SECRET_"));
   for (const router of routers) {
-    if (router.deviceType !== "swos") continue;
+    if (router.deviceType !== "swos") {
+      for (const name of router.secrets ?? []) {
+        if (!process.env[`MIKROMCP_SECRET_${name}`]) {
+          warn(
+            `${router.id} binds secret ${name}, but MIKROMCP_SECRET_${name} is not set or empty — create_backup with passwordSecret ${name} will be refused`,
+          );
+        }
+      }
+      continue;
+    }
     if (router.secrets) {
       for (const name of router.secrets) {
         if (!process.env[`MIKROMCP_SECRET_${name}`]) {

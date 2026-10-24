@@ -255,6 +255,37 @@ describe("runDoctor", () => {
       expect(allOutput).toMatch(/✅.*Config.*1 router/);
     });
 
+    it("warns about a RouterOS router binding a secret whose variable is unset", async () => {
+      const router = { ...makeRouter(), secrets: ["BACKUP"] };
+      mockExistsSync.mockImplementation(() => true);
+      MockRouterRegistry.mockImplementation(
+        () => ({ listRouters: () => [router] }) as unknown as RouterRegistry,
+      );
+      mockGetCredentials.mockReturnValue({ username: "admin", password: "secret" });
+      MockRouterOSRestClient.mockImplementation(
+        () =>
+          ({
+            get: vi.fn().mockResolvedValue([{ version: "7.14" }]),
+            close: vi.fn(),
+          }) as unknown as RouterOSRestClient,
+      );
+      mockCreateConnection.mockReturnValue(makeTcpSocket(true) as unknown as net.Socket);
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockReadFileSync.mockReturnValue(JSON.stringify({ mcpServers: {} }));
+      delete process.env.MIKROMCP_SECRET_BACKUP;
+
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+
+      const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(allOutput).toMatch(
+        /core-01 binds secret BACKUP, but MIKROMCP_SECRET_BACKUP is not set or empty — create_backup/,
+      );
+      expect(allOutput).not.toMatch(/core-01 has no secrets list/);
+    });
+
     it("reports error when config file has parse errors", async () => {
       mockExistsSync.mockReturnValue(true);
       MockRouterRegistry.mockImplementation(() => {
