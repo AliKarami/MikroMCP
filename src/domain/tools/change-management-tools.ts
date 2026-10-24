@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { readFileSync } from "node:fs";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isEffectiveDryRun, loggableParams, snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
@@ -9,7 +8,7 @@ import { createLogger } from "../../observability/logger.js";
 import { takeSnapshot, loadSnapshot } from "../snapshot/snapshot-engine.js";
 import type { StoredSnapshot } from "../snapshot/snapshot-engine.js";
 import { computeRestorePlan, applyRestorePlan } from "../snapshot/diff-engine.js";
-import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
+import { readJournalEntries, recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 import type { RouterOSRecord } from "../../types.js";
 import type { SwosClient } from "../../adapter/swos-client.js";
 import { parseWireBlob, presentableBlob } from "../../adapter/swos-protocol.js";
@@ -88,37 +87,25 @@ const listJournalTool: ToolDefinition = {
       };
     }
 
-    let raw: string;
+    let journal: Record<string, unknown>[];
     try {
-      raw = readFileSync(journalPath, "utf-8");
+      journal = readJournalEntries(journalPath);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        raw = "";
-      } else {
-        throw new MikroMCPError({
-          category: ErrorCategory.INTERNAL,
-          code: "JOURNAL_READ_FAILED",
-          message: `Could not read the write journal: ${(err as Error).message}`,
-          details: { journalPath },
-          recoverability: {
-            retryable: false,
-            suggestedAction: "Check the file's permissions under the MikroMCP data directory.",
-          },
-        });
-      }
+      throw new MikroMCPError({
+        category: ErrorCategory.INTERNAL,
+        code: "JOURNAL_READ_FAILED",
+        message: `Could not read the write journal: ${(err as Error).message}`,
+        details: { journalPath },
+        recoverability: {
+          retryable: false,
+          suggestedAction: "Check the file's permissions under the MikroMCP data directory.",
+        },
+      });
     }
 
     const outcomes = new Map<string, { phase: string; outcome?: string; durationMs?: number }>();
     const attempts: Record<string, unknown>[] = [];
-    for (const line of raw.split("\n")) {
-      if (!line.trim()) continue;
-      // A crash can tear the last line mid-write; it must not lose the rest.
-      let entry: Record<string, unknown>;
-      try {
-        entry = JSON.parse(line) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
+    for (const entry of journal) {
       if (entry.phase === "attempt") attempts.push(entry);
       else
         outcomes.set(entry.id as string, {
@@ -534,11 +521,9 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     journalPath: string,
     journalId: string,
   ): { snapshotIds: string[]; dryRun: boolean } {
-    const raw = readFileSync(journalPath, "utf-8");
-    const lines = raw.split("\n").filter(Boolean);
-    const entry = lines
-      .map((l) => JSON.parse(l) as Record<string, unknown>)
-      .find((e) => e.id === journalId && e.phase === "attempt");
+    const entry = readJournalEntries(journalPath).find(
+      (e) => e.id === journalId && e.phase === "attempt",
+    );
     if (!entry) {
       throw new MikroMCPError({
         category: ErrorCategory.NOT_FOUND,

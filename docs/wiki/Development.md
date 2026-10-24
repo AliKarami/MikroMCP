@@ -76,7 +76,7 @@ src/
 │       ├── snapshot-engine.ts     # Capture RouterOS section state (or the raw SwOS blob) before writes
 │       ├── diff-engine.ts         # Before/after diff normalisation and restore planning
 │       ├── write-journal.ts       # Append-only write record with rollback metadata
-│       └── retention.ts           # Prunes snapshots older than MIKROMCP_SNAPSHOT_RETENTION_DAYS
+│       └── retention.ts           # Prunes snapshots; rotates the journal and prunes old segments
 │
 ├── adapter/
 │   ├── rest-client.ts             # RouterOS REST client — get, getOne, create, update, remove, execute

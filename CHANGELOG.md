@@ -13,6 +13,12 @@ Each release section covers changes **since the previous release only**.
 ### Security
 - `allowedToolPatterns` now applies to `bulk_read`, `bulk_execute` and `list_routers` by their own name. The executor skipped authorization for these fleet tools, so an identity limited to, say, `get_*` could still call them; `bulk_read`/`bulk_execute` already checked each tool they fan out, which they still do. `list_journal` checked itself and now relies on the same executor check. **Action needed:** an identity with a non-empty pattern list that uses `bulk_read` or `bulk_execute` must now list them (`list_*` already covers `list_routers`) ([#122](https://github.com/AliKarami/MikroMCP/issues/122)).
 
+### Changed
+- The write journal (`write-journal.ndjson`) no longer grows without bound. At startup, once its oldest entry is a day old it is renamed to a dated segment (`write-journal.<time>-<random>.ndjson`) and a new file starts. Segments rotated and last written more than `MIKROMCP_SNAPSHOT_RETENTION_DAYS` ago (default 30) are deleted, the age at which their snapshots are gone and nothing in them can be rolled back. No file is ever rewritten, so an append from another server process sharing the data directory is never lost: one racing the rename lands in the segment. `list_journal` and `rollback_change` read the segments and the current file. The audit log remains the long-term record ([#123](https://github.com/AliKarami/MikroMCP/issues/123)).
+
+### Fixed
+- `rollback_change` no longer fails on a write journal whose last line was torn by a crash, and reports `JOURNAL_ENTRY_NOT_FOUND` instead of an internal error when no journal exists yet. `list_journal` and `rollback_change` now share one tolerant journal parser.
+
 ## [1.15.0] - 2026-10-24
 
 All four changes in this release come from [@f0086](https://github.com/f0086). Thank you.

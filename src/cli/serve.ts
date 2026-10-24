@@ -5,7 +5,7 @@ import { connectHttp } from "../mcp/transports/http.js";
 import { IdentityRegistry } from "../config/identity-registry.js";
 import { getStdioIdentity, withIdentity } from "../middleware/auth.js";
 import { createLogger } from "../observability/logger.js";
-import { pruneSnapshots } from "../domain/snapshot/retention.js";
+import { pruneSnapshots, rotateAndPruneJournal } from "../domain/snapshot/retention.js";
 
 const log = createLogger("main");
 
@@ -14,6 +14,7 @@ export async function runServe(): Promise<void> {
   log.info({ transport: config.transport, logLevel: config.logLevel }, "Starting MikroMCP server");
 
   void pruneSnapshots(config.snapshotDir, config.retention.snapshotMaxAgeDays);
+  void rotateAndPruneJournal(config.journalPath, config.retention.snapshotMaxAgeDays);
 
   const identityRegistry = new IdentityRegistry(config.identitiesPath);
 

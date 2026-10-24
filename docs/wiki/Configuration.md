@@ -165,7 +165,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport; omit for built-in superadmin |
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the per-router confirmation gate is off, and `bulk_execute` write fan-outs are still gated with tokens signed by a random per-process secret (valid only until restart, and only on the instance that issued them) |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | Path for NDJSON audit log file; omit to disable file sink |
-| `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
+| `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots, and the rotated write-journal segments that point to them, are pruned at startup |
 | `MIKROMCP_SECRET_<NAME>` | — | A value a SwOS switch config may reference as `${NAME}` (e.g. `MIKROMCP_SECRET_SNMP_COMMUNITY` for `${SNMP_COMMUNITY}`). Only this prefix is resolvable from a config, and only the names on the switch's `secrets` list in `routers.yaml` (none without the list) |
 | `MIKROMCP_PASSWORD_<NAME>`         | —                             | A new device password for `set_swos_password`, named as `NAME` in the call. Its own namespace: a switch config's `${NAME}` cannot reach it |
 | `MIKROMCP_SSH_COMMAND_TIMEOUT_MS` | `30000` | Timeout in milliseconds for SSH commands (`run_command`, `ping`, etc.) |
