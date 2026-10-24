@@ -36,7 +36,7 @@ Each identity declares the smallest practical scope:
 
 - `role` — `readonly` and `operator` must confirm destructive tools; `admin` and `superadmin` skip the gate. The role does not limit which tools can be called — use the pattern list for that.
 - `allowedRouters` — which routers this identity may touch. An empty list means all; entries are exact router ids, not globs.
-- `allowedToolPatterns` — which tools it may call, as `*` globs (e.g. `list_*`, `get_*`, `ping` for a read-only identity). An empty list means all. Fleet tools (`bulk_read`, `bulk_execute`, `check_router_health`, `list_routers`, `list_journal`) are matched by their own name, and the bulk tools also check each tool they fan out. A broad pattern such as `manage_*` includes `manage_script` and `manage_scheduled_job`, which run arbitrary RouterOS script — see [Change safety](#change-safety).
+- `allowedToolPatterns` — which tools it may call, as `*` globs (e.g. `list_*`, `get_*`, `ping` for a read-only identity). An empty list means all. Fleet tools (`bulk_read`, `bulk_execute`, `list_routers`, `list_journal`) are matched by their own name too, and the bulk tools also check each tool they fan out. A broad pattern such as `manage_*` includes `manage_script` and `manage_scheduled_job`, which run arbitrary RouterOS script — see [Change safety](#change-safety).
 
 See [Configuration → Identities](Configuration#identities-http-transport) for the file format.
 

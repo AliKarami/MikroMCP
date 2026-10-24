@@ -11,7 +11,7 @@ Each release section covers changes **since the previous release only**.
 ## [Unreleased]
 
 ### Security
-- `allowedToolPatterns` now applies to fleet tools (`bulk_read`, `bulk_execute`, `check_router_health`, `list_routers`, `list_journal`) by their own name. The executor skipped authorization for them, so an identity limited to, say, `get_*` could still call them; `bulk_read`/`bulk_execute` already checked each tool they fan out, which they still do. **Action needed:** an identity with a non-empty pattern list that uses these tools must now match them — `list_*` covers `list_routers` and `list_journal`; add `bulk_read`, `bulk_execute` or `check_router_health` explicitly ([#122](https://github.com/AliKarami/MikroMCP/issues/122)).
+- `allowedToolPatterns` now applies to `bulk_read`, `bulk_execute` and `list_routers` by their own name. The executor skipped authorization for these fleet tools, so an identity limited to, say, `get_*` could still call them; `bulk_read`/`bulk_execute` already checked each tool they fan out, which they still do. `list_journal` checked itself and now relies on the same executor check. **Action needed:** an identity with a non-empty pattern list that uses `bulk_read` or `bulk_execute` must now list them (`list_*` already covers `list_routers`) ([#122](https://github.com/AliKarami/MikroMCP/issues/122)).
 
 ## [1.15.0] - 2026-10-24
 
