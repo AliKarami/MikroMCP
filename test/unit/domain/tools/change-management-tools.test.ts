@@ -6,6 +6,7 @@ import type { RouterOSRestClient } from "../../../../src/adapter/rest-client.js"
 
 vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
+  readdirSync: vi.fn().mockReturnValue([]),
   existsSync: vi.fn().mockReturnValue(true),
   appendFileSync: vi.fn(),
   mkdirSync: vi.fn(),
@@ -392,6 +393,34 @@ describe("rollback_change", () => {
     ).rejects.toMatchObject({ code: "JOURNAL_ENTRY_NOT_FOUND" });
   });
 
+  it("finds an entry even when the journal's last line is torn", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${JOURNAL_LINE_ATTEMPT}\n${JOURNAL_LINE_SUCCESS}\n{"id":"j-zzz","ts":"2026-05`,
+    );
+    (nodeFsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(SNAPSHOT_CONTENT);
+    const rollbackTool = createChangeManagementTools([]).find((t) => t.name === "rollback_change")!;
+
+    const result = await rollbackTool.handler(
+      { routerId: "edge-01", journalId: "j-abc", dryRun: true },
+      makeContext([ROUTE_RECORD]),
+    );
+
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+  });
+
+  it("reports NOT_FOUND when no journal file exists yet", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      const err = new Error("ENOENT") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      throw err;
+    });
+    const rollbackTool = createChangeManagementTools([]).find((t) => t.name === "rollback_change")!;
+
+    await expect(
+      rollbackTool.handler({ routerId: "edge-01", journalId: "j-abc" }, makeContext()),
+    ).rejects.toMatchObject({ code: "JOURNAL_ENTRY_NOT_FOUND" });
+  });
+
   it.each([
     ["recorded by the executor", { dryRun: true, params: { action: "add" } }],
     ["passed explicitly in older entries", { params: { action: "add", dryRun: true } }],
@@ -495,6 +524,28 @@ describe("list_journal", () => {
     expect(entries[0].dryRun).toBe(true);
     expect(entries[0].rollbackable).toBe(false);
     expect(result.content).toContain("dry-run");
+  });
+
+  it("reads the current file and rotated segments, newest entry first", async () => {
+    (nodeFs.readdirSync as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce([
+      "write-journal.ndjson",
+      "write-journal.20261020T000000Z-7.ndjson",
+      "unrelated.txt",
+    ]);
+    const readFile = nodeFs.readFileSync as ReturnType<typeof vi.fn>;
+    const callsBefore = readFile.mock.calls.length;
+    // The current file is read first, then the listed segments.
+    readFile
+      .mockReturnValueOnce(`${ATTEMPT_B}\n${FAILURE_B}\n`)
+      .mockReturnValueOnce(`${ATTEMPT_A}\n${SUCCESS_A}\n`);
+    const result = await makeTool().handler({}, makeContext());
+    const sc = result.structuredContent as Record<string, unknown>;
+    const entries = sc.entries as Array<Record<string, unknown>>;
+    expect(entries.map((e) => e.journalId)).toEqual(["j-b", "j-a"]);
+    expect(readFile.mock.calls.slice(callsBefore).map((c) => c[0])).toEqual([
+      "/tmp/test-mikromcp/write-journal.ndjson",
+      "/tmp/test-mikromcp/write-journal.20261020T000000Z-7.ndjson",
+    ]);
   });
 
   it("marks a torn trailing line's attempt as unknown and skips the fragment", async () => {

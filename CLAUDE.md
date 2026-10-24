@@ -228,7 +228,7 @@ Two transports:
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport (omit for built-in superadmin) |
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret for confirmation tokens (**required** in HTTP mode when identities with role `readonly` or `operator` are configured) |
 | `MIKROMCP_AUDIT_LOG_PATH` | — | NDJSON audit log file path (omit to disable file sink) |
-| `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots are pruned at startup |
+| `MIKROMCP_SNAPSHOT_RETENTION_DAYS` | `30` | Age in days after which config snapshots, and the rotated write-journal segments that point to them, are pruned at startup |
 | `MIKROMCP_SECRET_<NAME>` | — | A value a SwOS switch config may reference as `${NAME}` (e.g. `MIKROMCP_SECRET_SNMP_COMMUNITY` for `${SNMP_COMMUNITY}`). Only this prefix is resolvable from a config |
 | `MIKROMCP_PASSWORD_<NAME>` | — | A new device password for `set_swos_password`; a separate namespace a switch config cannot reference |
 | `ROUTER_<PREFIX>_USER` | — | Per-router credential (matches `envPrefix` in YAML) |
