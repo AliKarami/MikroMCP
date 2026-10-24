@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { loggableParams, snapshotPathsFor } from "./tool-definition.js";
+import { isEffectiveDryRun, loggableParams, snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { compactFields } from "./pagination.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
@@ -379,6 +379,7 @@ async function fanOut(req: FanOutRequest): Promise<ToolResult> {
           routerId: router.id,
           params: loggedParams,
           snapshotIds,
+          dryRun: isEffectiveDryRun(targetTool, toolParams as Record<string, unknown>),
         });
       }
 

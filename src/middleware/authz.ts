@@ -20,6 +20,14 @@ export function checkAuthz(identity: Identity, toolName: string, routerId: strin
     });
   }
 
+  checkToolAllowed(identity, toolName);
+}
+
+/**
+ * The tool half of checkAuthz. The executor skips checkAuthz for fleet tools
+ * (skipRouterContext), so one that exposes data calls this itself.
+ */
+export function checkToolAllowed(identity: Identity, toolName: string): void {
   if (identity.allowedToolPatterns.length > 0) {
     const allowed = identity.allowedToolPatterns.some((p) => matchesPattern(toolName, p));
     if (!allowed) {

@@ -67,7 +67,7 @@ Trigger a controlled router reboot with an optional delay. Use this instead of `
 
 ### `run_command` — Write · Destructive
 
-Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write, but **never snapshotted**: arbitrary commands touch unknown config sections, so the `journalId` it returns cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
+Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1683,7 +1683,7 @@ Execute a sequence of write operations in order. Takes a snapshot of affected Ro
 
 ### `rollback_change` — Write · Destructive
 
-Restore the state captured before a previous write. On RouterOS that is the section state before an `apply_plan` run; on a SwOS switch the `.b` endpoints snapshotted before `apply_swos_config` or `write_swos_blob`, re-posted in a lockout-safe order (on full SwOS a VLAN table holding both the current and the old VLANs, then the per-port settings, then the old table). When one of those writes is not answered, the rest are still sent and the result is `SWOS_ROLLBACK_INCOMPLETE`, naming what was restored and what was not. Uses the snapshot stored in the write journal.
+Restore the state captured before a previous write. On RouterOS that is the section state before an `apply_plan` run; on a SwOS switch the `.b` endpoints snapshotted before `apply_swos_config` or `write_swos_blob`, re-posted in a lockout-safe order (on full SwOS a VLAN table holding both the current and the old VLANs, then the per-port settings, then the old table). When one of those writes is not answered, the rest are still sent and the result is `SWOS_ROLLBACK_INCOMPLETE`, naming what was restored and what was not. Uses the snapshot stored in the write journal. The `journalId` comes from the write's result or from `list_journal`; a dry-run entry returns `dry_run_entry` and restores nothing, since its snapshot would undo any change made after the preview.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1701,7 +1701,7 @@ Restore the state captured before a previous write. On RouterOS that is the sect
 
 ### `list_journal` — Read
 
-List recent entries from the server's write journal — every journaled write with its `journalId`, timestamp, tool, router, parameters (as redacted at write time), snapshot ids and outcome, newest first. Use it to recover a lost `journalId` for `rollback_change` or to audit what was written when. Entries with empty `snapshotIds` (`run_command` writes) cannot be rolled back.
+List recent entries from the server's write journal — every journaled write with its `journalId`, timestamp, tool, router, parameters (as redacted at write time), snapshot ids and outcome, newest first. Use it to recover a lost `journalId` for `rollback_change` or to audit what was written when. Each entry carries `dryRun` and `rollbackable`; only `rollbackable: true` entries can be rolled back — dry runs and writes without snapshots (`run_command`, `plan_changes`) cannot. Results are scoped to the caller's `allowedRouters`, and the tool honours `allowedToolPatterns`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|

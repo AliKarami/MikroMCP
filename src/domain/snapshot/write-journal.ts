@@ -14,6 +14,8 @@ interface AttemptArgs {
   routerId: string;
   params: Record<string, unknown>;
   snapshotIds: string[];
+  /** The effective dryRun, schema defaults applied — params alone can't tell. */
+  dryRun?: boolean;
 }
 
 interface OutcomeArgs {
@@ -44,6 +46,7 @@ export function recordAttempt(args: AttemptArgs): string {
     routerId: args.routerId,
     params: redactParams(args.params),
     snapshotIds: args.snapshotIds,
+    ...(args.dryRun ? { dryRun: true } : {}),
     phase: "attempt",
   });
   return id;

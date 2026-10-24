@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { readFileSync } from "node:fs";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { loggableParams, snapshotPathsFor } from "./tool-definition.js";
+import { isEffectiveDryRun, loggableParams, snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
@@ -14,6 +14,7 @@ import type { RouterOSRecord } from "../../types.js";
 import type { SwosClient } from "../../adapter/swos-client.js";
 import { parseWireBlob, presentableBlob } from "../../adapter/swos-protocol.js";
 import { unionVlanBlob } from "../swos/switch-config.js";
+import { checkToolAllowed } from "../../middleware/authz.js";
 
 const log = createLogger("change-management");
 
@@ -47,6 +48,16 @@ const applyPlanInputSchema = z
   })
   .strict();
 
+/**
+ * Whether a journal attempt was a dry run. The executor records the effective
+ * value (schema defaults applied); entries written before that carry it only in
+ * params, when the caller passed it explicitly.
+ */
+function journalEntryWasDryRun(entry: Record<string, unknown>): boolean {
+  const params = (entry.params ?? {}) as Record<string, unknown>;
+  return entry.dryRun === true || params.dryRun === true;
+}
+
 const listJournalInputSchema = z
   .object({
     routerId: z.string().optional().describe("Only entries for this router id"),
@@ -59,7 +70,7 @@ const listJournalTool: ToolDefinition = {
   name: "list_journal",
   title: "List Write Journal",
   description:
-    "List recent entries from the server's write journal (write-journal.ndjson): every journaled write with its journalId, timestamp, tool, router, parameters (as redacted at write time), snapshot ids and outcome — newest first. Read-only. Use it to recover a lost journalId for rollback_change, or to audit what was written when. run_command entries appear here too, but carry no snapshots and cannot be rolled back.",
+    "List recent entries from the server's write journal (write-journal.ndjson): every journaled write with its journalId, timestamp, tool, router, parameters (as redacted at write time), snapshot ids and outcome — newest first. Read-only. Use it to recover a lost journalId for rollback_change, or to audit what was written when. Only entries with rollbackable: true can be rolled back — dry runs and writes without snapshots (run_command, plan_changes) cannot.",
   inputSchema: listJournalInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -70,6 +81,7 @@ const listJournalTool: ToolDefinition = {
   skipRouterContext: true,
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listJournalInputSchema.parse(params);
+    checkToolAllowed(context.identity, "list_journal");
     const journalPath = context.appConfig.journalPath;
     if (!journalPath) {
       return {
@@ -121,6 +133,8 @@ const listJournalTool: ToolDefinition = {
     let entries = attempts
       .map((a) => {
         const outcome = outcomes.get(a.id as string);
+        const snapshotIds = Array.isArray(a.snapshotIds) ? (a.snapshotIds as string[]) : [];
+        const dryRun = journalEntryWasDryRun(a);
         return {
           journalId: a.id,
           ts: a.ts,
@@ -129,7 +143,9 @@ const listJournalTool: ToolDefinition = {
           identityId: a.identityId,
           role: a.role,
           params: a.params ?? {},
-          snapshotIds: a.snapshotIds ?? [],
+          snapshotIds,
+          dryRun,
+          rollbackable: !dryRun && snapshotIds.length > 0,
           status: outcome ? outcome.phase : "unknown",
           outcomeCode: outcome?.outcome,
           durationMs: outcome?.durationMs,
@@ -151,7 +167,7 @@ const listJournalTool: ToolDefinition = {
         : `Write journal: ${returned.length} of ${total}, newest first.`;
     const lines = returned.map(
       (e) =>
-        `  ${String(e.journalId)} ${String(e.tool)} ${String(e.routerId)} → ${e.status}${e.outcomeCode ? ` (${e.outcomeCode})` : ""} [${String(e.ts)}]`,
+        `  ${String(e.journalId)} ${String(e.tool)} ${String(e.routerId)} → ${e.status}${e.outcomeCode ? ` (${e.outcomeCode})` : ""}${e.dryRun ? " dry-run" : e.rollbackable ? "" : " not-rollbackable"} [${String(e.ts)}]`,
     );
 
     return {
@@ -161,7 +177,7 @@ const listJournalTool: ToolDefinition = {
         entries: returned,
         total,
         returned: returned.length,
-        note: "Pass a journalId to rollback_change to restore that write. Entries with empty snapshotIds (e.g. run_command) cannot be rolled back.",
+        note: "Pass the journalId of an entry with rollbackable: true to rollback_change to restore that write. Dry runs and entries without snapshots (e.g. run_command) cannot be rolled back.",
       },
     };
   },
@@ -459,6 +475,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
           routerId: context.routerId,
           params: loggableParams(tool, stepParams),
           snapshotIds,
+          dryRun: isEffectiveDryRun(tool, stepParams),
         });
         const stepStartMs = Date.now();
 
@@ -515,7 +532,10 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     },
   };
 
-  function findJournalEntry(journalPath: string, journalId: string): { snapshotIds: string[] } {
+  function findJournalEntry(
+    journalPath: string,
+    journalId: string,
+  ): { snapshotIds: string[]; dryRun: boolean } {
     const raw = readFileSync(journalPath, "utf-8");
     const lines = raw.split("\n").filter(Boolean);
     const entry = lines
@@ -533,7 +553,10 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
         },
       });
     }
-    return { snapshotIds: (entry.snapshotIds as string[]) ?? [] };
+    return {
+      snapshotIds: (entry.snapshotIds as string[]) ?? [],
+      dryRun: journalEntryWasDryRun(entry),
+    };
   }
 
   const rollbackChangeTool: ToolDefinition = {
@@ -556,7 +579,19 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
 
       log.info({ routerId: context.routerId, journalId: parsed.journalId }, "Rolling back change");
 
-      const { snapshotIds } = findJournalEntry(journalPath, parsed.journalId);
+      const { snapshotIds, dryRun: entryWasDryRun } = findJournalEntry(
+        journalPath,
+        parsed.journalId,
+      );
+
+      // A dry run changed nothing, but its snapshot is real: restoring it would
+      // undo whatever was written after the preview.
+      if (entryWasDryRun) {
+        return {
+          content: `Journal entry "${parsed.journalId}" was a dry run — nothing was changed, so there is nothing to roll back.`,
+          structuredContent: { action: "dry_run_entry", journalId: parsed.journalId },
+        };
+      }
 
       if (snapshotIds.length === 0) {
         return {

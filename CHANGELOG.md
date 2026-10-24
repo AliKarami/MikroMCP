@@ -16,6 +16,7 @@ Each release section covers changes **since the previous release only**.
 ### Changed
 - `list_routers` no longer presents `rosVersion` as live fact: the description and a `note` in the result now state it comes from `routers.yaml` and may be stale, pointing to `get_system_status` for the live version.
 - A write that can be rolled back — applied for real (not a dry run) with at least one snapshot taken — now returns its `journalId`, in `structuredContent` and as a line in the text result. Until now only `apply_plan` steps returned one, so a client that lost the ID of a directly-issued write had no way to recover it.
+- Write-journal attempt entries now record `dryRun: true` when the call ran as a dry run, schema defaults applied (several SwOS tools default to a dry run), and `rollback_change` refuses a dry-run entry with `dry_run_entry` instead of restoring its snapshot — that snapshot shows the device at preview time, so restoring it would undo any change made since.
 - `run_command`'s description now states explicitly that it is journaled for audit but never snapshotted — arbitrary commands touch unknown config sections, so it cannot be rolled back — and to prefer a dedicated tool where one exists. The usage skill was updated to match.
 
 ### Fixed

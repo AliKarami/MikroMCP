@@ -21,6 +21,7 @@ import {
   snapshotPathsFor,
   loggableParams,
   unavailableCapability,
+  isEffectiveDryRun,
 } from "../domain/tools/tool-definition.js";
 import type { RouterRegistry } from "../config/router-registry.js";
 import type { RouterConfig } from "../types.js";
@@ -279,6 +280,8 @@ export async function executeToolCall(
       }
       toolContext.snapshots = snapshots;
 
+      const dryRun = !tool.annotations.readOnlyHint && isEffectiveDryRun(tool, handlerArgs);
+
       if (!tool.annotations.readOnlyHint && config.journalPath) {
         const { confirmationToken: _token, ...journalArgs } = loggedArgs;
         journalId = recordAttempt({
@@ -289,6 +292,7 @@ export async function executeToolCall(
           routerId,
           params: journalArgs,
           snapshotIds,
+          dryRun,
         });
       }
 
@@ -307,11 +311,13 @@ export async function executeToolCall(
           phase: "success",
           durationMs: Date.now() - startMs,
         });
-        // Surface the journal ID on the result. Without it only apply_plan
-        // steps ever returned one, so a client that lost the ID had no way
-        // to recover it — and rollback_change needs it.
-        if (result.structuredContent) {
+        // Surface the journal ID only when rollback_change could use it: a real
+        // write with at least one snapshot. Dry runs, plan_changes, apply_plan's
+        // own entry and run_command journal too, but have nothing to restore —
+        // and a dry run's snapshot would roll back any change made since.
+        if (!dryRun && snapshotIds.length > 0) {
           result.structuredContent = { ...result.structuredContent, journalId };
+          result.content += `\nJournal ID: ${journalId} (pass to rollback_change to undo).`;
         }
       }
 

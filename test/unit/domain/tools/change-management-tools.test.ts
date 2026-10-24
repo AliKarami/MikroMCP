@@ -391,6 +391,24 @@ describe("rollback_change", () => {
       ),
     ).rejects.toMatchObject({ code: "JOURNAL_ENTRY_NOT_FOUND" });
   });
+
+  it.each([
+    ["recorded by the executor", { dryRun: true, params: { action: "add" } }],
+    ["passed explicitly in older entries", { params: { action: "add", dryRun: true } }],
+  ])("refuses to restore a dry-run entry (%s)", async (_label, fields) => {
+    const attempt = JSON.stringify({ ...JSON.parse(JOURNAL_LINE_ATTEMPT), ...fields });
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(`${attempt}\n`);
+    const rollbackTool = createChangeManagementTools([]).find((t) => t.name === "rollback_change")!;
+    const ctx = makeContext([ROUTE_RECORD]);
+
+    const result = await rollbackTool.handler(
+      { routerId: "edge-01", journalId: "j-abc", dryRun: false },
+      ctx,
+    );
+
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run_entry");
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
 });
 
 describe("list_journal", () => {
@@ -462,6 +480,31 @@ describe("list_journal", () => {
     expect(entries[1].status).toBe("success");
     expect(entries[1].durationMs).toBe(42);
     expect(entries[1].snapshotIds).toEqual(["snap-1"]);
+    expect(entries[1].rollbackable).toBe(true);
+    // run_command: no snapshots
+    expect(entries[0].rollbackable).toBe(false);
+  });
+
+  it("flags dry-run entries as not rollbackable even with snapshots", async () => {
+    const dryAttempt = JSON.stringify({ ...JSON.parse(ATTEMPT_A), dryRun: true });
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(`${dryAttempt}\n`);
+    const result = await makeTool().handler({}, makeContext());
+    const entries = (result.structuredContent as Record<string, unknown>).entries as Array<
+      Record<string, unknown>
+    >;
+    expect(entries[0].dryRun).toBe(true);
+    expect(entries[0].rollbackable).toBe(false);
+    expect(result.content).toContain("dry-run");
+  });
+
+  it("honours the identity's allowedToolPatterns", async () => {
+    const ctx = {
+      ...makeContext(),
+      identity: { id: "ro", role: "viewer", allowedRouters: [], allowedToolPatterns: ["get_*"] },
+    } as unknown as ToolContext;
+    await expect(makeTool().handler({}, ctx)).rejects.toMatchObject({
+      code: "TOOL_NOT_ALLOWED",
+    });
   });
 
   it("marks a torn trailing line's attempt as unknown and skips the fragment", async () => {

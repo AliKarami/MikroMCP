@@ -61,6 +61,26 @@ describe("recordAttempt", () => {
     const line = (fsp.appendFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
     expect(line).not.toContain("secret");
   });
+
+  it("records dryRun only when the call was a dry run", async () => {
+    const base = {
+      journalPath: "/tmp/journal.ndjson",
+      identityId: "alice",
+      role: "admin",
+      tool: "write_swos_blob",
+      routerId: "sw-01",
+      params: {},
+      snapshotIds: ["snap-1"],
+    };
+    recordAttempt({ ...base, dryRun: true });
+    recordAttempt({ ...base, dryRun: false });
+    await vi.waitFor(() => {
+      expect(fsp.appendFile).toHaveBeenCalledTimes(2);
+    });
+    const calls = (fsp.appendFile as ReturnType<typeof vi.fn>).mock.calls;
+    expect(JSON.parse((calls[0][1] as string).trim()).dryRun).toBe(true);
+    expect(JSON.parse((calls[1][1] as string).trim())).not.toHaveProperty("dryRun");
+  });
 });
 
 describe("recordOutcome", () => {
