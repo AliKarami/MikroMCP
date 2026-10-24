@@ -236,6 +236,103 @@ describe("vlanTools", () => {
     });
   });
 
+  describe("manage_vlan - name rules (regression: schema used to cap names at 15 chars)", () => {
+    it("add accepts a name longer than the old 15-char limit", async () => {
+      const ctx = makeContext([]);
+      const result = await manageTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "vlan11-office-iot",
+          vlanId: 11,
+          parentInterface: "ether1",
+        },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("created");
+    });
+
+    it("add accepts a dotted name", async () => {
+      const ctx = makeContext([]);
+      const result = await manageTool.handler(
+        {
+          routerId: "test-router",
+          action: "add",
+          name: "vlan.10",
+          vlanId: 10,
+          parentInterface: "ether1",
+        },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("created");
+    });
+
+    it("add rejects a name longer than 64 chars", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        manageTool.handler(
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "v".repeat(65),
+            vlanId: 10,
+            parentInterface: "ether1",
+          },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "VLAN_NAME_INVALID" });
+    });
+
+    it("add rejects characters outside the add charset", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        manageTool.handler(
+          {
+            routerId: "test-router",
+            action: "add",
+            name: "vlan 10",
+            vlanId: 10,
+            parentInterface: "ether1",
+          },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "VLAN_NAME_INVALID" });
+    });
+
+    it("remove accepts a 26-char existing name the old schema rejected", async () => {
+      const ctx = makeContext([
+        { ".id": "*7", name: "wireguard-back-to-home-vpn", "vlan-id": "99", interface: "ether1" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", name: "wireguard-back-to-home-vpn" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("removed");
+      expect(ctx.routerClient.remove).toHaveBeenCalledWith("interface/vlan", "*7");
+    });
+
+    it("remove accepts a name with characters outside the add charset", async () => {
+      const ctx = makeContext([
+        { ".id": "*8", name: "ether10[macvlan1]", "vlan-id": "10", interface: "ether10" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", name: "ether10[macvlan1]" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("removed");
+    });
+
+    it("the input schema itself no longer rejects a name longer than 15 chars", () => {
+      expect(() =>
+        manageTool.inputSchema.parse({ action: "remove", name: "vlan200-office-iot" }),
+      ).not.toThrow();
+    });
+  });
+
   describe("manage_vlan - enable/disable", () => {
     it("disables an existing vlan", async () => {
       const ctx = makeContext([

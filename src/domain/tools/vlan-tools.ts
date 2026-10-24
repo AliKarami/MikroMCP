@@ -2,6 +2,7 @@ import { z } from "zod";
 import { sameValue } from "../../adapter/response-parser.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
+import { assertNewInterfaceName } from "./interface-name.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -20,10 +21,9 @@ const manageVlanInputSchema = z
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
     name: z
       .string()
-      .regex(/^[a-zA-Z0-9_-]+$/)
-      .max(15)
+      .min(1)
       .describe(
-        "VLAN interface name — idempotency key (alphanumeric, hyphens, underscores, max 15 chars)",
+        "VLAN interface name — idempotency key, taken verbatim for remove/enable/disable; add accepts letters, digits, dot, hyphen, underscore, up to 64 chars",
       ),
     vlanId: z
       .number()
@@ -76,6 +76,11 @@ const manageVlanTool: ToolDefinition = {
       );
 
       if (parsed.action === "add") {
+        assertNewInterfaceName(parsed.name, {
+          kind: "VLAN",
+          action: "add",
+          code: "VLAN_NAME_INVALID",
+        });
         if (parsed.vlanId === undefined) {
           throw new MikroMCPError({
             category: ErrorCategory.VALIDATION,

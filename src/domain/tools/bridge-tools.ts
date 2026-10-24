@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
+import { assertNewInterfaceName } from "./interface-name.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -167,9 +168,10 @@ const manageBridgeInputSchema = z
     action: z.enum(["create", "remove"]).describe("Action to perform"),
     name: z
       .string()
-      .regex(/^[a-zA-Z0-9_-]+$/)
-      .max(15)
-      .describe("Bridge interface name"),
+      .min(1)
+      .describe(
+        "Bridge interface name, taken verbatim for remove; create accepts letters, digits, dot, hyphen, underscore, up to 64 chars",
+      ),
     comment: z.string().max(255).optional().describe("Optional comment"),
     disabled: z.boolean().default(false).describe("Whether the bridge should be disabled"),
     dryRun,
@@ -201,6 +203,11 @@ const manageBridgeTool: ToolDefinition = {
       });
 
       if (parsed.action === "create") {
+        assertNewInterfaceName(parsed.name, {
+          kind: "Bridge",
+          action: "create",
+          code: "BRIDGE_NAME_INVALID",
+        });
         if (existing.length > 0) {
           return {
             content: `Bridge "${parsed.name}" already exists. No changes made.`,

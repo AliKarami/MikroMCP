@@ -6,6 +6,7 @@ import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
+import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
 
 function makeRouterConfig(): RouterConfig {
   return {
@@ -123,6 +124,62 @@ describe("bridgeTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("already_exists");
+    });
+
+    it("create accepts a 19-char name the old 15-char schema limit rejected", async () => {
+      const ctx: ToolContext = {
+        routerId: "test-router",
+        correlationId: "corr",
+        routerConfig: makeRouterConfig(),
+        credentials: { username: "admin", password: "secret" },
+        routerClient: {
+          get: vi.fn().mockResolvedValue([]),
+          create: vi.fn().mockResolvedValue({ ".id": "*2" }),
+        } as unknown as RouterOSRestClient,
+      };
+      const result = await manageBridgeTool.handler(
+        { routerId: "test-router", action: "create", name: "bonding-core-switch" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("created");
+    });
+
+    it("create rejects a name longer than 64 chars", async () => {
+      const ctx: ToolContext = {
+        routerId: "test-router",
+        correlationId: "corr",
+        routerConfig: makeRouterConfig(),
+        credentials: { username: "admin", password: "secret" },
+        routerClient: { get: vi.fn().mockResolvedValue([]) } as unknown as RouterOSRestClient,
+      };
+      await expect(
+        manageBridgeTool.handler(
+          { routerId: "test-router", action: "create", name: "b".repeat(65) },
+          ctx,
+        ),
+      ).rejects.toMatchObject({ category: ErrorCategory.VALIDATION, code: "BRIDGE_NAME_INVALID" });
+    });
+
+    it("remove accepts a 26-char existing name the old 15-char schema limit rejected", async () => {
+      const remove = vi.fn().mockResolvedValue(undefined);
+      const ctx: ToolContext = {
+        routerId: "test-router",
+        correlationId: "corr",
+        routerConfig: makeRouterConfig(),
+        credentials: { username: "admin", password: "secret" },
+        routerClient: {
+          get: vi.fn().mockResolvedValue([{ ".id": "*3", name: "wireguard-back-to-home-vpn" }]),
+          remove,
+        } as unknown as RouterOSRestClient,
+      };
+      const result = await manageBridgeTool.handler(
+        { routerId: "test-router", action: "remove", name: "wireguard-back-to-home-vpn" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("removed");
+      expect(remove).toHaveBeenCalledWith("interface/bridge", "*3");
     });
   });
 
