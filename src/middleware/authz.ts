@@ -24,8 +24,8 @@ export function checkAuthz(identity: Identity, toolName: string, routerId: strin
 }
 
 /**
- * The tool half of checkAuthz. The executor skips checkAuthz for fleet tools
- * (skipRouterContext), so one that exposes data calls this itself.
+ * The tool half of checkAuthz, for fleet tools (skipRouterContext) that have no
+ * single router to check.
  */
 export function checkToolAllowed(identity: Identity, toolName: string): void {
   if (identity.allowedToolPatterns.length > 0) {

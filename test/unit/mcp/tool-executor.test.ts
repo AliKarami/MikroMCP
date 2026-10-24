@@ -6,6 +6,8 @@ import { createSshClient } from "../../../src/adapter/adapter-factory.js";
 import { diagnosticTools } from "../../../src/domain/tools/diagnostic-tools.js";
 import { takeSnapshot } from "../../../src/domain/snapshot/snapshot-engine.js";
 import { recordAttempt } from "../../../src/domain/snapshot/write-journal.js";
+import { withIdentity } from "../../../src/middleware/auth.js";
+import type { Identity } from "../../../src/types.js";
 import { z } from "zod";
 
 // Stub modules that require real I/O or external state
@@ -308,6 +310,44 @@ describe("executeToolCall", () => {
     expect(handlerRan).toBe(true);
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain("fleet-ok");
+  });
+
+  describe("skipRouterContext — allowedToolPatterns", () => {
+    function scoped(patterns: string[]) {
+      return {
+        id: "dash",
+        role: "readonly",
+        allowedRouters: [],
+        allowedToolPatterns: patterns,
+      } as Identity;
+    }
+
+    it("refuses a fleet tool the identity's patterns don't match, without running it", async () => {
+      const handler = vi.fn().mockResolvedValue({ content: "fleet-ok", structuredContent: {} });
+      const tool = makeReadTool(handler, { name: "bulk_read", skipRouterContext: true });
+
+      const result = await withIdentity(scoped(["get_*"]), () =>
+        executeToolCall(tool, {}, makeDeps()),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("TOOL_NOT_ALLOWED");
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("runs a fleet tool the identity's patterns match", async () => {
+      const tool = makeReadTool(async () => ({ content: "fleet-ok", structuredContent: {} }), {
+        name: "list_journal",
+        skipRouterContext: true,
+      });
+
+      const result = await withIdentity(scoped(["list_*"]), () =>
+        executeToolCall(tool, {}, makeDeps()),
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain("fleet-ok");
+    });
   });
 
   it("prepends a verify-state hint when a write times out", async () => {

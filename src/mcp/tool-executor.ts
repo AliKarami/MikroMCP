@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { withContext } from "../observability/correlation.js";
 import { getCurrentIdentity, getStdioIdentity } from "../middleware/auth.js";
-import { checkAuthz } from "../middleware/authz.js";
+import { checkAuthz, checkToolAllowed } from "../middleware/authz.js";
 import { checkConfirmation } from "../middleware/confirmation.js";
 import { auditLog } from "../observability/audit-log.js";
 import { takeSnapshot } from "../domain/snapshot/snapshot-engine.js";
@@ -190,6 +190,9 @@ export async function executeToolCall(
         getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
 
       if (tool.skipRouterContext) {
+        // No single router to scope, but the tool itself must still be allowed;
+        // router scope is the fleet tool's own job (per target, or by filtering).
+        checkToolAllowed(identity, tool.name);
         const fleetContext: ToolContext = {
           routerClient: fleetUnavailable<ToolContext["routerClient"]>("routerClient"),
           deviceClient: fleetUnavailable<ToolContext["deviceClient"]>("deviceClient"),
