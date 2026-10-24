@@ -408,18 +408,20 @@ describe("switch config secrets binding", () => {
     expect(registry.getRouter("sw").secrets).toEqual(["SNMP_COMMUNITY", "OTHER_1"]);
   });
 
-  it("refuses a secrets list on a RouterOS router and a name that is not a secret name", () => {
-    expect(() =>
-      load(`routers:
+  it("accepts a secrets list on a RouterOS router (create_backup passwordSecret)", () => {
+    const registry = load(`routers:
   r:
     host: 10.0.0.1
     port: 443
     tls: { enabled: true, rejectUnauthorized: true }
     rosVersion: "7.14"
     credentials: { source: env, envPrefix: R }
-    secrets: [SNMP_COMMUNITY]
-`),
-    ).toThrow(/secrets.*SwOS devices only/);
+    secrets: [BACKUP]
+`);
+    expect(registry.getRouter("r").secrets).toEqual(["BACKUP"]);
+  });
+
+  it("refuses a name that is not a secret name", () => {
     expect(() =>
       load(`routers:
   sw:

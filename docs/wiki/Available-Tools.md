@@ -145,16 +145,17 @@ Trigger a RouterOS package update check or start an upgrade installation. The `i
 
 ### `create_backup` — Write · Destructive
 
-Create a binary RouterOS configuration backup file on the router filesystem. Optionally encrypt with a password.
+Create a binary RouterOS configuration backup file on the router filesystem. Optionally encrypt it. Prefer `passwordSecret`: it names a `MIKROMCP_SECRET_<NAME>` on the server that is bound to the router by its `secrets` list in `routers.yaml`, so the password never enters the conversation or the client's tool history. A literal `password` is redacted from MikroMCP's audit log and journal, but stays in the client's history. A secret that is not bound to the router (`BACKUP_SECRET_NOT_BOUND`), or whose variable is unset or empty (`BACKUP_SECRET_MISSING`), is refused, in a dry run too, so a dry run shows that the secret resolves. The result reports `encrypted` and never the password.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router identifier |
 | `name` | string | `backup` | Backup file name (without .backup extension) |
-| `password` | string | — | Optional encryption password |
+| `password` | string | — | Literal encryption password; prefer `passwordSecret` |
+| `passwordSecret` | string | — | Name of a router-bound `MIKROMCP_SECRET_<NAME>` to encrypt with (`[A-Z0-9_]+`); not with `password` |
 | `dryRun` | boolean | false | Preview without creating |
 
-**Example prompt:** "Create an encrypted backup named 'pre-upgrade' on router home-gw"
+**Example prompt:** "Create an encrypted backup named 'pre-upgrade' on router home-gw using the BACKUP password secret"
 
 ---
 
