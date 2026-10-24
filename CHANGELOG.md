@@ -10,6 +10,9 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Changed
+- `list_routers` no longer presents `rosVersion` as live fact: the description and a `note` in the result now state it comes from `routers.yaml` and may be stale, pointing to `get_system_status` for the live version.
+
 ## [1.14.1] - 2026-10-17
 
 Both fixes in this release come from [@alexpostnik](https://github.com/alexpostnik). Thank you.

@@ -303,6 +303,25 @@ describe("fleet-tools", () => {
       expect(serialized).not.toContain("ROUTER_TEST");
     });
 
+    it("flags rosVersion as config-time metadata that may be stale", async () => {
+      const ctx = listCtx([taggedRouter("r1", [], { rosVersion: "7.15" })]);
+      const result = await listRoutersTool.handler({}, ctx);
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.note).toMatch(/routers\.yaml/);
+      expect(sc.note).toMatch(/get_system_status/);
+    });
+
+    it("omits the rosVersion note when no RouterOS device is listed", async () => {
+      const empty = await listRoutersTool.handler({}, listCtx([]));
+      expect(empty.structuredContent).not.toHaveProperty("note");
+
+      const switchOnly = listCtx([
+        taggedRouter("sw1", [], { deviceType: "swos", rosVersion: "swos" }),
+      ]);
+      const swos = await listRoutersTool.handler({}, switchOnly);
+      expect(swos.structuredContent).not.toHaveProperty("note");
+    });
+
     it("marks the configured default router as isDefault", async () => {
       const ctx = listCtx([taggedRouter("r1", []), taggedRouter("r2", [])], {
         appConfig: { defaultRouter: "r2" } as unknown as AppConfig,

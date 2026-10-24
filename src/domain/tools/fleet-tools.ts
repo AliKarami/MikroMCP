@@ -94,7 +94,7 @@ const listRoutersTool: ToolDefinition = {
   name: "list_routers",
   title: "List Routers",
   description:
-    "List the routers configured in the registry (routers.yaml): id, host, port, TLS status, tags, ROS version, and which is the default. Read-only reflection of local config — no RouterOS API call, no credentials in the response. Use it to discover valid routerId values and tags for targeting other tools (including bulk_read and bulk_execute).",
+    "List the routers configured in the registry (routers.yaml): id, host, port, TLS status, tags, ROS version, and which is the default. Read-only reflection of local config — no RouterOS API call, no credentials in the response. rosVersion is what routers.yaml states and may lag a router upgrade — ask get_system_status for the live version. Use it to discover valid routerId values and tags for targeting other tools (including bulk_read and bulk_execute).",
   inputSchema: listRoutersInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -149,9 +149,20 @@ const listRoutersTool: ToolDefinition = {
         ])}`,
     );
 
+    const hasRouterOS = rows.some((r) => r.deviceType === "routeros");
+
     return {
       content: total === 0 ? header : [header, ...lines].join("\n"),
-      structuredContent: { routers: rows, total, returned: total },
+      structuredContent: {
+        routers: rows,
+        total,
+        returned: total,
+        ...(hasRouterOS
+          ? {
+              note: "rosVersion comes from routers.yaml and may be stale; use get_system_status for the live version.",
+            }
+          : {}),
+      },
     };
   },
 };
