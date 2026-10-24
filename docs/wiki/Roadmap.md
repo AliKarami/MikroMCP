@@ -224,6 +224,12 @@ Contributed by [@f0086](https://github.com/f0086).
 
 ---
 
+## ✅ v1.16 — Tighter Fleet Authz, Bounded Journal, Backup Secrets
+
+`bulk_read`, `bulk_execute` and `list_routers` now honour an identity's `allowedToolPatterns` by their own name. The write journal rotates into dated segments, and old segments are deleted with the snapshot retention period, without ever rewriting a file another server process may be writing. `create_backup` can encrypt with `passwordSecret`, a server-side secret bound to the router, so the backup password never enters the conversation.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
