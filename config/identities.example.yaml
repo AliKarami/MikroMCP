@@ -19,6 +19,8 @@
 #
 # allowedRouters:  [] means all routers are accessible.
 # allowedToolPatterns: [] means all tools are accessible. Supports * wildcard.
+#   Fleet tools (bulk_read, bulk_execute, check_router_health) must match by
+#   their own name; bulk_read/bulk_execute also check each tool they fan out.
 
 identities:
   # CI pipeline: operator access to specific routers, limited tool set

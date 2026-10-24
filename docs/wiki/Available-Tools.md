@@ -1701,7 +1701,7 @@ Restore the state captured before a previous write. On RouterOS that is the sect
 
 ### `list_journal` — Read
 
-List recent entries from the server's write journal — every journaled write with its `journalId`, timestamp, tool, router, parameters (as redacted at write time), snapshot ids and outcome, newest first. Use it to recover a lost `journalId` for `rollback_change` or to audit what was written when. Each entry carries `dryRun` and `rollbackable`; only `rollbackable: true` entries can be rolled back — dry runs and writes without snapshots (`run_command`, `plan_changes`) cannot. Results are scoped to the caller's `allowedRouters`, and the tool honours `allowedToolPatterns`.
+List recent entries from the server's write journal — every journaled write with its `journalId`, timestamp, tool, router, parameters (as redacted at write time), snapshot ids and outcome, newest first. Use it to recover a lost `journalId` for `rollback_change` or to audit what was written when. Each entry carries `dryRun` and `rollbackable`; only `rollbackable: true` entries can be rolled back — dry runs and writes without snapshots (`run_command`, `plan_changes`) cannot. Results are scoped to the caller's `allowedRouters`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|

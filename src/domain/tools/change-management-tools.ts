@@ -14,7 +14,6 @@ import type { RouterOSRecord } from "../../types.js";
 import type { SwosClient } from "../../adapter/swos-client.js";
 import { parseWireBlob, presentableBlob } from "../../adapter/swos-protocol.js";
 import { unionVlanBlob } from "../swos/switch-config.js";
-import { checkToolAllowed } from "../../middleware/authz.js";
 
 const log = createLogger("change-management");
 
@@ -81,7 +80,6 @@ const listJournalTool: ToolDefinition = {
   skipRouterContext: true,
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listJournalInputSchema.parse(params);
-    checkToolAllowed(context.identity, "list_journal");
     const journalPath = context.appConfig.journalPath;
     if (!journalPath) {
       return {

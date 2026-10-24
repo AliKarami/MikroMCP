@@ -497,16 +497,6 @@ describe("list_journal", () => {
     expect(result.content).toContain("dry-run");
   });
 
-  it("honours the identity's allowedToolPatterns", async () => {
-    const ctx = {
-      ...makeContext(),
-      identity: { id: "ro", role: "viewer", allowedRouters: [], allowedToolPatterns: ["get_*"] },
-    } as unknown as ToolContext;
-    await expect(makeTool().handler({}, ctx)).rejects.toMatchObject({
-      code: "TOOL_NOT_ALLOWED",
-    });
-  });
-
   it("marks a torn trailing line's attempt as unknown and skips the fragment", async () => {
     (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
       `${ATTEMPT_B}\n{"id":"j-c","ts":"2026-10-22T12:00:00Z","params":{"command":"/ip addr`,

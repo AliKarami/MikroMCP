@@ -208,7 +208,7 @@ The file is validated strictly at startup: `identities` must be a map keyed by i
 | `token` | yes | bcrypt hash of the raw bearer token |
 | `role` | yes | `readonly`, `operator`, `admin`, or `superadmin` — see [Roles](#roles) |
 | `allowedRouters` | no | Router ids this identity may target. **An empty list (the default) means all routers.** Entries are matched exactly — `"*"` is not a wildcard here and would lock the identity out of every router |
-| `allowedToolPatterns` | no | Tool-name globs this identity may call (`*` wildcard, case-insensitive). Empty list means all tools |
+| `allowedToolPatterns` | no | Tool-name globs this identity may call (`*` wildcard, case-insensitive). Empty list means all tools. Fleet tools are checked by their own name too — add `bulk_read`, `bulk_execute` or `check_router_health` to use them (`list_routers` and `list_journal` already match `list_*`); `bulk_read`/`bulk_execute` then also check the tool they fan out |
 
 ### Roles
 
