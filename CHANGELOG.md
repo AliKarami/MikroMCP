@@ -10,6 +10,12 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-10-24
+
+All four changes in this release come from [@f0086](https://github.com/f0086). Thank you.
+
+**Upgrading from 1.14.** Nothing to change in config. A write that can be rolled back now returns its `journalId` (in `structuredContent` and as a `Journal ID: …` line in the text result), and `rollback_change` refuses a dry-run journal entry. An identity with `allowedToolPatterns` needs a matching pattern to call the new `list_journal`.
+
 ### Added
 - `list_journal` tool — read the server's write journal: every journaled write with its `journalId`, timestamp, tool, router, redacted parameters, snapshot ids and outcome, newest first, filterable by router and tool. A lost `journalId` — previously unrecoverable from the client side — can now be looked up for `rollback_change`. Entries with empty snapshot ids (`run_command`, dry runs, `plan_changes`) cannot be rolled back. Scoped to the caller's `allowedRouters` and checked against its `allowedToolPatterns`.
 
