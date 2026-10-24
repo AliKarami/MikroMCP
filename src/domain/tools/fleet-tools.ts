@@ -149,13 +149,19 @@ const listRoutersTool: ToolDefinition = {
         ])}`,
     );
 
+    const hasRouterOS = rows.some((r) => r.deviceType === "routeros");
+
     return {
       content: total === 0 ? header : [header, ...lines].join("\n"),
       structuredContent: {
         routers: rows,
         total,
         returned: total,
-        note: "rosVersion comes from routers.yaml and may be stale; use get_system_status for the live version.",
+        ...(hasRouterOS
+          ? {
+              note: "rosVersion comes from routers.yaml and may be stale; use get_system_status for the live version.",
+            }
+          : {}),
       },
     };
   },
