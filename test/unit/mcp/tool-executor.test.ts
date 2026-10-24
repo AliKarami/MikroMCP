@@ -4,6 +4,9 @@ import type { ToolDefinition } from "../../../src/domain/tools/tool-definition.j
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 import { createSshClient } from "../../../src/adapter/adapter-factory.js";
 import { diagnosticTools } from "../../../src/domain/tools/diagnostic-tools.js";
+import { takeSnapshot } from "../../../src/domain/snapshot/snapshot-engine.js";
+import { recordAttempt } from "../../../src/domain/snapshot/write-journal.js";
+import { z } from "zod";
 
 // Stub modules that require real I/O or external state
 vi.mock("../../../src/observability/audit-log.js", () => ({ auditLog: vi.fn() }));
@@ -90,6 +93,99 @@ describe("executeToolCall", () => {
 
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain("ok");
+  });
+
+  describe("journalId on write results", () => {
+    function makeWriteTool(snapshotPaths: string[]) {
+      return makeReadTool(async () => ({ content: "ok", structuredContent: { x: 1 } }), {
+        name: "test_write",
+        snapshotPaths,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      });
+    }
+
+    function journalDeps() {
+      const deps = makeDeps();
+      (deps.config as { journalPath?: string }).journalPath =
+        "/tmp/test-mikromcp/write-journal.ndjson";
+      return deps;
+    }
+
+    it("a snapshotted write surfaces its journalId in structuredContent and text", async () => {
+      vi.mocked(takeSnapshot).mockResolvedValueOnce({ id: "s1" } as Awaited<
+        ReturnType<typeof takeSnapshot>
+      >);
+
+      const result = await executeToolCall(
+        makeWriteTool(["ip/address"]),
+        { routerId: "r1" },
+        journalDeps(),
+      );
+
+      expect(result.isError).toBeFalsy();
+      const sc = result.structuredContent as Record<string, unknown>;
+      // recordAttempt is mocked to return "j1"
+      expect(sc.journalId).toBe("j1");
+      expect(sc.x).toBe(1);
+      expect(result.content[0].text).toContain("Journal ID: j1");
+    });
+
+    it("a dry run carries no journalId even though it was snapshotted", async () => {
+      vi.mocked(takeSnapshot).mockResolvedValueOnce({ id: "s1" } as Awaited<
+        ReturnType<typeof takeSnapshot>
+      >);
+
+      const result = await executeToolCall(
+        makeWriteTool(["ip/address"]),
+        { routerId: "r1", dryRun: true },
+        journalDeps(),
+      );
+
+      expect((result.structuredContent as Record<string, unknown>).journalId).toBeUndefined();
+      expect(result.content[0].text).not.toContain("Journal ID");
+    });
+
+    it("treats a schema-defaulted dryRun as a dry run (SwOS tools default to true)", async () => {
+      vi.mocked(takeSnapshot).mockResolvedValueOnce({ id: "s1" } as Awaited<
+        ReturnType<typeof takeSnapshot>
+      >);
+      vi.mocked(recordAttempt).mockClear();
+      const tool = makeWriteTool(["ip/address"]);
+      tool.inputSchema = z.object({
+        routerId: z.string(),
+        dryRun: z.boolean().default(true),
+      }) as unknown as ToolDefinition["inputSchema"];
+
+      const result = await executeToolCall(tool, { routerId: "r1" }, journalDeps());
+
+      expect((result.structuredContent as Record<string, unknown>).journalId).toBeUndefined();
+      expect(vi.mocked(recordAttempt)).toHaveBeenCalledWith(
+        expect.objectContaining({ dryRun: true }),
+      );
+    });
+
+    it("a write without snapshots (e.g. run_command) carries no journalId", async () => {
+      const result = await executeToolCall(makeWriteTool([]), { routerId: "r1" }, journalDeps());
+
+      expect((result.structuredContent as Record<string, unknown>).journalId).toBeUndefined();
+      expect(result.content[0].text).not.toContain("Journal ID");
+    });
+  });
+
+  it("a read tool carries no journalId even with a journal configured", async () => {
+    const tool = makeReadTool(async () => ({ content: "ok", structuredContent: { x: 1 } }));
+    const deps = makeDeps();
+    (deps.config as { journalPath?: string }).journalPath =
+      "/tmp/test-mikromcp/write-journal.ndjson";
+
+    const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+    expect((result.structuredContent as Record<string, unknown>).journalId).toBeUndefined();
   });
 
   it("missing routerId — returns isError with MISSING_ROUTER_ID code", async () => {

@@ -1,6 +1,6 @@
 # Available Tools
 
-All 132 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 133 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
 
@@ -67,7 +67,7 @@ Trigger a controlled router reboot with an optional delay. Use this instead of `
 
 ### `run_command` — Write · Destructive
 
-Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage.
+Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1683,7 +1683,7 @@ Execute a sequence of write operations in order. Takes a snapshot of affected Ro
 
 ### `rollback_change` — Write · Destructive
 
-Restore the state captured before a previous write. On RouterOS that is the section state before an `apply_plan` run; on a SwOS switch the `.b` endpoints snapshotted before `apply_swos_config` or `write_swos_blob`, re-posted in a lockout-safe order (on full SwOS a VLAN table holding both the current and the old VLANs, then the per-port settings, then the old table). When one of those writes is not answered, the rest are still sent and the result is `SWOS_ROLLBACK_INCOMPLETE`, naming what was restored and what was not. Uses the snapshot stored in the write journal.
+Restore the state captured before a previous write. On RouterOS that is the section state before an `apply_plan` run; on a SwOS switch the `.b` endpoints snapshotted before `apply_swos_config` or `write_swos_blob`, re-posted in a lockout-safe order (on full SwOS a VLAN table holding both the current and the old VLANs, then the per-port settings, then the old table). When one of those writes is not answered, the rest are still sent and the result is `SWOS_ROLLBACK_INCOMPLETE`, naming what was restored and what was not. Uses the snapshot stored in the write journal. The `journalId` comes from the write's result or from `list_journal`; a dry-run entry returns `dry_run_entry` and restores nothing, since its snapshot would undo any change made after the preview.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1696,6 +1696,20 @@ Restore the state captured before a previous write. On RouterOS that is the sect
 > **Diffing behaviour:** rollback identifies which records to update, create, or remove by matching snapshot records to current records using a per-RouterOS-path semantic key (e.g. `name` for most named resources, `host` for netwatch entries). For singleton settings resources without a natural identity field — notably `system/clock` — no semantic key is defined and rollback falls back to whole-record signature matching, which may reapply a changed record as a delete-then-create rather than an in-place update.
 >
 > **Safety limits:** snapshots store only restorable configuration — dynamic (router-generated) records are excluded and runtime/counter fields (`bytes`, `packets`, `dynamic`, `rx-byte`, uptime, …) are stripped, so counters never cause spurious diffs and are never written back. For order-sensitive paths (`ip/firewall/filter`, `ip/firewall/nat`, `ip/firewall/mangle`, `routing/rule`) the restore re-creates removed entries at the **end** of the list — rule **order is not restored**, and the plan returns a warning to review ordering manually. Deleted **users are never recreated** (passwords are not stored in snapshots; recreation would produce a password-less login) — the plan warns instead. Warnings appear in both the dry-run and applied result.
+
+---
+
+### `list_journal` — Read
+
+List recent entries from the server's write journal — every journaled write with its `journalId`, timestamp, tool, router, parameters (as redacted at write time), snapshot ids and outcome, newest first. Use it to recover a lost `journalId` for `rollback_change` or to audit what was written when. Each entry carries `dryRun` and `rollbackable`; only `rollbackable: true` entries can be rolled back — dry runs and writes without snapshots (`run_command`, `plan_changes`) cannot. Results are scoped to the caller's `allowedRouters`, and the tool honours `allowedToolPatterns`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Only entries for this router id (filter, not target) |
+| `tool` | string | — | Only entries written by this tool |
+| `limit` | integer | `20` | Max entries to return (1–500) |
+
+**Example prompt:** "Show me the last 10 writes on edge-01 — I lost the journal ID of the firewall change and need to roll it back."
 
 ---
 

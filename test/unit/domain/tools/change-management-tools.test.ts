@@ -391,4 +391,251 @@ describe("rollback_change", () => {
       ),
     ).rejects.toMatchObject({ code: "JOURNAL_ENTRY_NOT_FOUND" });
   });
+
+  it.each([
+    ["recorded by the executor", { dryRun: true, params: { action: "add" } }],
+    ["passed explicitly in older entries", { params: { action: "add", dryRun: true } }],
+  ])("refuses to restore a dry-run entry (%s)", async (_label, fields) => {
+    const attempt = JSON.stringify({ ...JSON.parse(JOURNAL_LINE_ATTEMPT), ...fields });
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(`${attempt}\n`);
+    const rollbackTool = createChangeManagementTools([]).find((t) => t.name === "rollback_change")!;
+    const ctx = makeContext([ROUTE_RECORD]);
+
+    const result = await rollbackTool.handler(
+      { routerId: "edge-01", journalId: "j-abc", dryRun: false },
+      ctx,
+    );
+
+    expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run_entry");
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+});
+
+describe("list_journal", () => {
+  const ATTEMPT_A = JSON.stringify({
+    id: "j-a",
+    ts: "2026-10-22T10:00:00Z",
+    identityId: "superadmin-builtin",
+    role: "superadmin",
+    tool: "manage_vlan",
+    routerId: "edge-01",
+    params: { action: "add", name: "vlan10" },
+    snapshotIds: ["snap-1"],
+    phase: "attempt",
+  });
+  const ATTEMPT_B = JSON.stringify({
+    id: "j-b",
+    ts: "2026-10-22T11:00:00Z",
+    identityId: "superadmin-builtin",
+    role: "superadmin",
+    tool: "run_command",
+    routerId: "edge-02",
+    params: { command: "/interface/vlan/print" },
+    snapshotIds: [],
+    phase: "attempt",
+  });
+  const SUCCESS_A = JSON.stringify({
+    id: "j-a",
+    ts: "2026-10-22T10:00:01Z",
+    phase: "success",
+    durationMs: 42,
+  });
+  const FAILURE_B = JSON.stringify({
+    id: "j-b",
+    ts: "2026-10-22T11:00:01Z",
+    phase: "failure",
+    outcome: "VLAN_NAME_INVALID",
+    durationMs: 7,
+  });
+
+  function makeTool() {
+    const tools = createChangeManagementTools([]);
+    const tool = tools.find((t) => t.name === "list_journal");
+    expect(tool).toBeDefined();
+    return tool!;
+  }
+
+  it("is read-only and fleet-scoped", () => {
+    const tool = makeTool();
+    expect(tool.annotations.readOnlyHint).toBe(true);
+    expect(tool.skipRouterContext).toBe(true);
+  });
+
+  it("rejects unknown input fields (strict schema)", async () => {
+    await expect(makeTool().handler({ bogus: 1 }, makeContext())).rejects.toThrow();
+  });
+
+  it("pairs attempts with outcomes, newest first", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${ATTEMPT_A}\n${SUCCESS_A}\n${ATTEMPT_B}\n${FAILURE_B}\n`,
+    );
+    const result = await makeTool().handler({}, makeContext());
+    const sc = result.structuredContent as Record<string, unknown>;
+    const entries = sc.entries as Array<Record<string, unknown>>;
+    expect(sc.total).toBe(2);
+    expect(entries[0].journalId).toBe("j-b");
+    expect(entries[0].status).toBe("failure");
+    expect(entries[0].outcomeCode).toBe("VLAN_NAME_INVALID");
+    expect(entries[1].journalId).toBe("j-a");
+    expect(entries[1].status).toBe("success");
+    expect(entries[1].durationMs).toBe(42);
+    expect(entries[1].snapshotIds).toEqual(["snap-1"]);
+    expect(entries[1].rollbackable).toBe(true);
+    // run_command: no snapshots
+    expect(entries[0].rollbackable).toBe(false);
+  });
+
+  it("flags dry-run entries as not rollbackable even with snapshots", async () => {
+    const dryAttempt = JSON.stringify({ ...JSON.parse(ATTEMPT_A), dryRun: true });
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(`${dryAttempt}\n`);
+    const result = await makeTool().handler({}, makeContext());
+    const entries = (result.structuredContent as Record<string, unknown>).entries as Array<
+      Record<string, unknown>
+    >;
+    expect(entries[0].dryRun).toBe(true);
+    expect(entries[0].rollbackable).toBe(false);
+    expect(result.content).toContain("dry-run");
+  });
+
+  it("honours the identity's allowedToolPatterns", async () => {
+    const ctx = {
+      ...makeContext(),
+      identity: { id: "ro", role: "viewer", allowedRouters: [], allowedToolPatterns: ["get_*"] },
+    } as unknown as ToolContext;
+    await expect(makeTool().handler({}, ctx)).rejects.toMatchObject({
+      code: "TOOL_NOT_ALLOWED",
+    });
+  });
+
+  it("marks a torn trailing line's attempt as unknown and skips the fragment", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${ATTEMPT_B}\n{"id":"j-c","ts":"2026-10-22T12:00:00Z","params":{"command":"/ip addr`,
+    );
+    const result = await makeTool().handler({}, makeContext());
+    const sc = result.structuredContent as Record<string, unknown>;
+    const entries = sc.entries as Array<Record<string, unknown>>;
+    expect(sc.total).toBe(1);
+    expect(entries[0].journalId).toBe("j-b");
+    expect(entries[0].status).toBe("unknown");
+  });
+
+  it("filters by routerId and tool", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${ATTEMPT_A}\n${SUCCESS_A}\n${ATTEMPT_B}\n${FAILURE_B}\n`,
+    );
+    const byRouter = await makeTool().handler({ routerId: "edge-02" }, makeContext());
+    expect(
+      (byRouter.structuredContent as Record<string, unknown>).entries as unknown[],
+    ).toHaveLength(1);
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${ATTEMPT_A}\n${SUCCESS_A}\n${ATTEMPT_B}\n${FAILURE_B}\n`,
+    );
+    const byTool = await makeTool().handler({ tool: "run_command" }, makeContext());
+    const entries = (byTool.structuredContent as Record<string, unknown>).entries as Array<
+      Record<string, unknown>
+    >;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].journalId).toBe("j-b");
+  });
+
+  it("respects the limit", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${ATTEMPT_A}\n${ATTEMPT_B}\n`,
+    );
+    const result = await makeTool().handler({ limit: 1 }, makeContext());
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.total).toBe(2);
+    expect(sc.returned).toBe(1);
+  });
+
+  it("returns empty for a journal file that does not exist yet", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      const err = new Error("ENOENT") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      throw err;
+    });
+    const result = await makeTool().handler({}, makeContext());
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.journalEnabled).toBe(true);
+    expect(sc.total).toBe(0);
+  });
+
+  it("reports a disabled journal when no path is configured", async () => {
+    const ctx = {
+      ...makeContext(),
+      appConfig: { journalPath: undefined },
+    } as unknown as ToolContext;
+    const result = await makeTool().handler({}, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.journalEnabled).toBe(false);
+    expect(sc.entries).toEqual([]);
+  });
+
+  it("throws JOURNAL_READ_FAILED for an unreadable journal", async () => {
+    (nodeFs.readFileSync as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      const err = new Error("EACCES: permission denied") as NodeJS.ErrnoException;
+      err.code = "EACCES";
+      throw err;
+    });
+    await expect(makeTool().handler({}, makeContext())).rejects.toMatchObject({
+      code: "JOURNAL_READ_FAILED",
+    });
+  });
+});
+
+describe("list_journal - identity scope", () => {
+  const ATTEMPT_R1 = JSON.stringify({
+    id: "j-r1",
+    ts: "2026-10-22T10:00:00Z",
+    tool: "manage_vlan",
+    routerId: "edge-01",
+    params: {},
+    snapshotIds: ["snap-1"],
+    phase: "attempt",
+  });
+  const ATTEMPT_R2 = JSON.stringify({
+    id: "j-r2",
+    ts: "2026-10-22T11:00:00Z",
+    tool: "manage_vlan",
+    routerId: "edge-02",
+    params: {},
+    snapshotIds: [],
+    phase: "attempt",
+  });
+
+  it("hides entries for routers outside the identity's allowedRouters", async () => {
+    const nodeFs2 = await import("node:fs");
+    (nodeFs2.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${ATTEMPT_R1}\n${ATTEMPT_R2}\n`,
+    );
+    const tools = createChangeManagementTools([]);
+    const tool = tools.find((t) => t.name === "list_journal")!;
+    const ctx = {
+      ...makeContext(),
+      identity: {
+        id: "op",
+        role: "operator",
+        allowedRouters: ["edge-01"],
+        allowedToolPatterns: [],
+      },
+    } as unknown as ToolContext;
+
+    const result = await tool.handler({}, ctx);
+    const sc = result.structuredContent as Record<string, unknown>;
+    const entries = sc.entries as Array<Record<string, unknown>>;
+    expect(sc.total).toBe(1);
+    expect(entries[0].journalId).toBe("j-r1");
+  });
+
+  it("an unrestricted identity (empty allowedRouters) sees all entries", async () => {
+    const nodeFs2 = await import("node:fs");
+    (nodeFs2.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      `${ATTEMPT_R1}\n${ATTEMPT_R2}\n`,
+    );
+    const tools = createChangeManagementTools([]);
+    const tool = tools.find((t) => t.name === "list_journal")!;
+    const result = await tool.handler({}, makeContext());
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect(sc.total).toBe(2);
+  });
 });

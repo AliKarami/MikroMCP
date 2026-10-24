@@ -77,6 +77,19 @@ export function loggableParams(
   }
 }
 
+/**
+ * Whether a call will run as a dry run, schema defaults applied: several SwOS
+ * tools default dryRun to true, so the raw arguments alone can't tell. An
+ * argument set the schema rejects never reaches the router either way.
+ */
+export function isEffectiveDryRun(tool: ToolDefinition, params: Record<string, unknown>): boolean {
+  try {
+    return (tool.inputSchema.parse(params) as Record<string, unknown>).dryRun === true;
+  } catch {
+    return params.dryRun === true;
+  }
+}
+
 /** Snapshot paths for one call, resolving the argument-derived form. */
 export function snapshotPathsFor(tool: ToolDefinition, params: Record<string, unknown>): string[] {
   return typeof tool.snapshotPaths === "function"

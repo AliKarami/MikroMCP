@@ -7,7 +7,7 @@ export default defineConfig({
     starlight({
       title: "MikroMCP Docs",
       description:
-        "Documentation for MikroMCP — an MCP server exposing MikroTik RouterOS routers and SwOS switches as 132 typed, auditable tools for AI assistants.",
+        "Documentation for MikroMCP — an MCP server exposing MikroTik RouterOS routers and SwOS switches as 133 typed, auditable tools for AI assistants.",
       logo: {
         src: "./public/assets/MikroMCP-logo-transparent.png",
         alt: "MikroMCP",
