@@ -747,13 +747,13 @@ List DHCP client configurations — which interfaces obtain their IP address via
 
 ### `manage_dhcp_client` — Write · Destructive · Idempotent
 
-Add, remove, enable, or disable a DHCP client on an interface. Idempotent by `interface`; a client's display name (what RouterOS printouts show after an interface rename) also matches.
+Add, remove, enable, or disable a DHCP client on an interface. Idempotent by `interface`; for `remove`, `enable` and `disable` a client's display name (what RouterOS printouts show after an interface rename) also matches. `add` checks the interface only.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
-| `interface` | string | — | Interface name (idempotency key); a client's display name (e.g. `ether1[uplink]` on a renamed interface) also matches |
+| `interface` | string | — | Interface name (idempotency key); for `remove`/`enable`/`disable` a client's display name (e.g. `ether1[uplink]` on a renamed interface) also matches |
 | `usePeerDns` | `boolean` | `true` | Use DNS servers advertised by DHCP server (add only) |
 | `usePeerNtp` | `boolean` | `false` | Use NTP servers advertised by DHCP server (add only) |
 | `addDefaultRoute` | `boolean` | `true` | Install default route from DHCP offer (add only) |

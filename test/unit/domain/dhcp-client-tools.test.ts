@@ -275,12 +275,40 @@ describe("dhcpClientTools", () => {
         { ".id": "*1", interface: "ether1", name: "ether9", disabled: "false" },
         { ".id": "*2", interface: "ether2", name: "ether1", disabled: "false" },
       ]);
-      const result = await manageTool.handler(
+      await manageTool.handler(
         { routerId: "test-router", action: "remove", interface: "ether1" },
         ctx,
       );
       expect(ctx.routerClient.remove).toHaveBeenCalledWith("ip/dhcp-client", "*1");
-      void result;
+    });
+
+    it("add matches by interface only, not by another client's display name", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether1", name: "ether2", disabled: "false" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "add", interface: "ether2" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("created");
+      expect(ctx.routerClient.create).toHaveBeenCalledWith(
+        "ip/dhcp-client",
+        expect.objectContaining({ interface: "ether2" }),
+      );
+    });
+
+    it("remove dry-run reports the matched client's real interface", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether1", name: "ether1[uplink]", disabled: "false" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", interface: "ether1[uplink]", dryRun: true },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.diff).toEqual([{ property: "interface", before: "ether1", after: null }]);
+      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
     });
 
     it("not_found lists the existing clients as candidates", async () => {
@@ -310,6 +338,7 @@ describe("dhcpClientTools", () => {
       );
       const sc = result.structuredContent as Record<string, unknown>;
       expect((sc.clients as unknown[]).length).toBe(1);
+      expect(result.content).toContain("name=ether1[uplink]");
     });
   });
 
