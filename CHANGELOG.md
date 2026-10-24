@@ -10,6 +10,12 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-24
+
+Follow-ups to the 1.15.0 review: three issues found while reviewing #117 and #120, each reviewed with Codex before merging.
+
+**Upgrading from 1.15.** An identity with a non-empty `allowedToolPatterns` list that uses `bulk_read` or `bulk_execute` must now list them, e.g. add `"bulk_read"` to the patterns. Identities with an empty list (all tools) are unaffected, and `list_*` already covers `list_routers`. Existing write journals are kept and rotate on the first start after their oldest entry is a day old. To encrypt backups without a literal password, bind a secret to the router (`secrets: [BACKUP]` in `routers.yaml`), set `MIKROMCP_SECRET_BACKUP`, and call `create_backup` with `passwordSecret: BACKUP`.
+
 ### Security
 - `allowedToolPatterns` now applies to `bulk_read`, `bulk_execute` and `list_routers` by their own name. The executor skipped authorization for these fleet tools, so an identity limited to, say, `get_*` could still call them; `bulk_read`/`bulk_execute` already checked each tool they fan out, which they still do. `list_journal` checked itself and now relies on the same executor check. **Action needed:** an identity with a non-empty pattern list that uses `bulk_read` or `bulk_execute` must now list them (`list_*` already covers `list_routers`) ([#122](https://github.com/AliKarami/MikroMCP/issues/122)).
 

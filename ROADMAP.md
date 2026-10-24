@@ -430,6 +430,16 @@ Contributed by [@f0086](https://github.com/f0086).
 
 ---
 
+## ✅ v1.16 — Tighter Fleet Authz, Bounded Journal, Backup Secrets (133 tools)
+
+**Goal:** Close the gaps found while reviewing v1.15: permissions that fleet tools skipped, a journal that grew forever, and backup passwords that had to pass through the conversation.
+
+- **Fleet tools honour `allowedToolPatterns`.** `bulk_read`, `bulk_execute` and `list_routers` are now checked by their own name, like every other tool.
+- **A bounded write journal, safely.** The journal rotates into dated segments, and segments past the snapshot retention period are deleted. No file another server process may be writing is ever rewritten, so no entry is lost; readers tolerate torn lines.
+- **Encrypted backups without a pasted password.** `create_backup` takes `passwordSecret`, a `MIKROMCP_SECRET_<NAME>` bound to the router in `routers.yaml`; the value never reaches the conversation.
+
+---
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.
