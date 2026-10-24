@@ -61,6 +61,7 @@ src/
 │   │   ├── schema-fields.ts       # Shared Zod fields — routerId, dryRun, limit, offset
 │   │   ├── pagination.ts          # Client-side paging and list rendering helpers
 │   │   ├── cidr.ts                # CIDR parsing and normalisation
+│   │   ├── interface-name.ts      # Name rules for VLANs and bridges on create
 │   │   ├── command-guard.ts       # run_command allow/deny policy
 │   │   └── *-tools.ts             # Tool definitions
 │   │

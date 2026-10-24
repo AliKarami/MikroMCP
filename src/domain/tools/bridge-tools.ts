@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
+import { assertNewInterfaceName } from "./interface-name.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -202,24 +203,11 @@ const manageBridgeTool: ToolDefinition = {
       });
 
       if (parsed.action === "create") {
-        // Name rules apply only when creating; remove must accept any name
-        // RouterOS already took, however long or punctuated.
-        if (parsed.name.length > 64 || !/^[a-zA-Z0-9_.-]+$/.test(parsed.name)) {
-          throw new MikroMCPError({
-            category: ErrorCategory.VALIDATION,
-            code: "BRIDGE_NAME_INVALID",
-            message:
-              parsed.name.length > 64
-                ? `Bridge name is ${parsed.name.length} chars; create allows at most 64.`
-                : `Bridge name "${parsed.name}" uses characters create does not allow (permitted: letters, digits, dot, hyphen, underscore).`,
-            details: { name: parsed.name },
-            recoverability: {
-              retryable: false,
-              suggestedAction:
-                "Use a name of letters, digits, dot, hyphen or underscore, at most 64 chars.",
-            },
-          });
-        }
+        assertNewInterfaceName(parsed.name, {
+          kind: "Bridge",
+          action: "create",
+          code: "BRIDGE_NAME_INVALID",
+        });
         if (existing.length > 0) {
           return {
             content: `Bridge "${parsed.name}" already exists. No changes made.`,

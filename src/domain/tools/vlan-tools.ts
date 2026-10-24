@@ -2,6 +2,7 @@ import { z } from "zod";
 import { sameValue } from "../../adapter/response-parser.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { dryRun, routerId } from "./schema-fields.js";
+import { assertNewInterfaceName } from "./interface-name.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -75,26 +76,11 @@ const manageVlanTool: ToolDefinition = {
       );
 
       if (parsed.action === "add") {
-        // Name rules apply only when creating: the referencing actions must
-        // accept any name RouterOS itself already took — including names the
-        // old schema limit rejected outright (dots, brackets, >15 chars, e.g.
-        // the auto-generated "ether10-macvlan1").
-        if (parsed.name.length > 64 || !/^[a-zA-Z0-9_.-]+$/.test(parsed.name)) {
-          throw new MikroMCPError({
-            category: ErrorCategory.VALIDATION,
-            code: "VLAN_NAME_INVALID",
-            message:
-              parsed.name.length > 64
-                ? `VLAN name is ${parsed.name.length} chars; add allows at most 64.`
-                : `VLAN name "${parsed.name}" uses characters add does not allow (permitted: letters, digits, dot, hyphen, underscore).`,
-            details: { name: parsed.name },
-            recoverability: {
-              retryable: false,
-              suggestedAction:
-                "Use a name of letters, digits, dot, hyphen or underscore, at most 64 chars.",
-            },
-          });
-        }
+        assertNewInterfaceName(parsed.name, {
+          kind: "VLAN",
+          action: "add",
+          code: "VLAN_NAME_INVALID",
+        });
         if (parsed.vlanId === undefined) {
           throw new MikroMCPError({
             category: ErrorCategory.VALIDATION,
