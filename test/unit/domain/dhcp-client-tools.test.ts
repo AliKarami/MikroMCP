@@ -244,6 +244,104 @@ describe("dhcpClientTools", () => {
     });
   });
 
+  describe("manage_dhcp_client - display names (renamed interfaces)", () => {
+    it("removes a client passed by its display name", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether1", name: "ether1[uplink]", disabled: "false" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", interface: "ether1[uplink]" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("removed");
+      expect(ctx.routerClient.remove).toHaveBeenCalledWith("ip/dhcp-client", "*1");
+    });
+
+    it("disables a client passed by its display name", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether1", name: "ether1[uplink]", disabled: "false" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "disable", interface: "ether1[uplink]" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("disabled");
+    });
+
+    it("prefers an exact interface match over a display-name match", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether1", name: "ether9", disabled: "false" },
+        { ".id": "*2", interface: "ether2", name: "ether1", disabled: "false" },
+      ]);
+      await manageTool.handler(
+        { routerId: "test-router", action: "remove", interface: "ether1" },
+        ctx,
+      );
+      expect(ctx.routerClient.remove).toHaveBeenCalledWith("ip/dhcp-client", "*1");
+    });
+
+    it("add matches by interface only, not by another client's display name", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether1", name: "ether2", disabled: "false" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "add", interface: "ether2" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("created");
+      expect(ctx.routerClient.create).toHaveBeenCalledWith(
+        "ip/dhcp-client",
+        expect.objectContaining({ interface: "ether2" }),
+      );
+    });
+
+    it("remove dry-run reports the matched client's real interface", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether1", name: "ether1[uplink]", disabled: "false" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", interface: "ether1[uplink]", dryRun: true },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.diff).toEqual([{ property: "interface", before: "ether1", after: null }]);
+      expect(ctx.routerClient.remove).not.toHaveBeenCalled();
+    });
+
+    it("not_found lists the existing clients as candidates", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether2", name: "isp-uplink", status: "bound" },
+      ]);
+      const result = await manageTool.handler(
+        { routerId: "test-router", action: "remove", interface: "ether1" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("not_found");
+      expect(sc.clients).toEqual([{ interface: "ether2", name: "isp-uplink", status: "bound" }]);
+      expect(result.content).toContain("isp-uplink");
+    });
+  });
+
+  describe("list_dhcp_clients - display names", () => {
+    it("filter also matches a client's display name", async () => {
+      const ctx = makeContext([
+        { ".id": "*1", interface: "ether1", name: "ether1[uplink]", status: "bound" },
+        { ".id": "*2", interface: "ether3", status: "bound" },
+      ]);
+      const result = await listTool.handler(
+        { routerId: "test-router", interface: "ether1[uplink]" },
+        ctx,
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect((sc.clients as unknown[]).length).toBe(1);
+      expect(result.content).toContain("name=ether1[uplink]");
+    });
+  });
+
   describe("manage_dhcp_client - enable/disable", () => {
     it("disables client", async () => {
       const ctx = makeContext([{ ".id": "*1", interface: "ether1", disabled: "false" }]);

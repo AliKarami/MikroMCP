@@ -3,6 +3,7 @@ import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.
 import { dryRun, limit, offset, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
+import { sameValue } from "../../adapter/response-parser.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
 
@@ -10,10 +11,29 @@ import { paginate, listContent, compactFields } from "./pagination.js";
 
 const log = createLogger("dhcp-client-tools");
 
+/**
+ * Find a DHCP client by interface, falling back to its display name. RouterOS
+ * printouts show the display name, which can differ from the underlying
+ * interface after a rename (a client on ether1 prints as "ether1[uplink]"),
+ * so a caller passing what it read back must still find the entry. `add` passes
+ * byNameToo=false: it creates on an interface, so only the interface decides
+ * whether a client already exists there.
+ */
+function findClient(
+  clients: Record<string, unknown>[],
+  target: string,
+  byNameToo = true,
+): (Record<string, unknown> & { ".id": string }) | undefined {
+  return (clients.find((c) => sameValue(c.interface, target)) ??
+    (byNameToo ? clients.find((c) => sameValue(c.name, target)) : undefined)) as
+    | (Record<string, unknown> & { ".id": string })
+    | undefined;
+}
+
 const listDhcpClientsInputSchema = z
   .object({
     routerId,
-    interface: z.string().optional().describe("Filter by interface name (exact match)"),
+    interface: z.string().optional().describe("Filter by interface or display name (exact match)"),
     status: z
       .enum(["bound", "searching", "requesting", "init", "all"])
       .default("all")
@@ -47,7 +67,9 @@ const listDhcpClientsTool: ToolDefinition = {
       let filtered = allClients as Record<string, unknown>[];
 
       if (parsed.interface) {
-        filtered = filtered.filter((c) => c.interface === parsed.interface);
+        filtered = filtered.filter(
+          (c) => sameValue(c.interface, parsed.interface) || sameValue(c.name, parsed.interface),
+        );
       }
 
       if (parsed.status !== "all") {
@@ -58,7 +80,7 @@ const listDhcpClientsTool: ToolDefinition = {
 
       return {
         content: listContent("DHCP clients", context.routerId, clients, total, parsed.offset, (c) =>
-          compactFields(c, ["interface", "status", "address", "gateway", "disabled"]),
+          compactFields(c, ["interface", "name", "status", "address", "gateway", "disabled"]),
         ),
         structuredContent: {
           routerId: context.routerId,
@@ -79,7 +101,11 @@ const manageDhcpClientInputSchema = z
   .object({
     routerId,
     action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
-    interface: z.string().describe("Interface name — idempotency key (e.g. ether1, ether2)"),
+    interface: z
+      .string()
+      .describe(
+        "Interface name — idempotency key (e.g. ether1); for remove/enable/disable a client's display name also matches",
+      ),
     usePeerDns: z
       .boolean()
       .default(true)
@@ -119,8 +145,10 @@ const manageDhcpClientTool: ToolDefinition = {
         limit: undefined,
         offset: undefined,
       });
-      const existing = (allClients as Record<string, string>[]).find(
-        (c) => c.interface === parsed.interface,
+      const existing = findClient(
+        allClients as Record<string, unknown>[],
+        parsed.interface,
+        parsed.action !== "add",
       );
 
       if (parsed.action === "add") {
@@ -166,9 +194,24 @@ const manageDhcpClientTool: ToolDefinition = {
 
       if (parsed.action === "remove") {
         if (!existing) {
+          const candidates = (allClients as Record<string, unknown>[]).map((c) => ({
+            interface: c.interface,
+            name: c.name,
+            status: c.status,
+          }));
+          const names = candidates
+            .map((c) => c.name ?? c.interface)
+            .slice(0, 5)
+            .join(", ");
           return {
-            content: `No DHCP client found on "${parsed.interface}". Nothing to remove.`,
-            structuredContent: { action: "not_found", interface: parsed.interface },
+            content:
+              `No DHCP client found on "${parsed.interface}". Nothing to remove.` +
+              (names ? ` Existing clients: ${names}.` : ""),
+            structuredContent: {
+              action: "not_found",
+              interface: parsed.interface,
+              clients: candidates,
+            },
           };
         }
         if (parsed.dryRun) {
@@ -176,7 +219,7 @@ const manageDhcpClientTool: ToolDefinition = {
             content: `Dry run: Would remove DHCP client on "${parsed.interface}".`,
             structuredContent: {
               action: "dry_run",
-              diff: [{ property: "interface", before: parsed.interface, after: null }],
+              diff: [{ property: "interface", before: existing.interface, after: null }],
             },
           };
         }
