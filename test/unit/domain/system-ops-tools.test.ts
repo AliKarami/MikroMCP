@@ -6,6 +6,7 @@ import type { RouterConfig } from "../../../src/types.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
 import type { FtpClient } from "../../../src/adapter/ftp-client.js";
 import { MikroMCPError } from "../../../src/domain/errors/error-types.js";
+import { fromWire } from "../helpers/wire.js";
 
 function makeRouterConfig(overrides: Partial<RouterConfig> = {}): RouterConfig {
   return {
@@ -237,7 +238,7 @@ describe("system-ops tools", () => {
       const ctx = makeContext({ execute: mockExecute });
       const rebootTool = systemOpsTools[2];
       const result = await rebootTool.handler({ routerId: "test-router" }, ctx);
-      expect(mockExecute).toHaveBeenCalledWith("system/reboot", expect.anything());
+      expect(mockExecute).toHaveBeenCalledWith("system/reboot", {});
       expect((result.structuredContent as Record<string, unknown>).action).toBe("rebooting");
     });
 
@@ -247,6 +248,60 @@ describe("system-ops tools", () => {
       const rebootTool = systemOpsTools[2];
       const result = await rebootTool.handler({ routerId: "test-router", delay: 30 }, ctx);
       expect((result.structuredContent as Record<string, unknown>).delay).toBe(30);
+    });
+
+    it("schedules a delayed reboot through a self-removing scheduler entry", async () => {
+      const mockExecute = vi.fn().mockResolvedValue({});
+      const mockCreate = vi.fn().mockResolvedValue({ ".id": "*A" });
+      const ctx = makeContext({ execute: mockExecute, create: mockCreate });
+      const rebootTool = systemOpsTools[2];
+      const result = await rebootTool.handler({ routerId: "test-router", delay: 300 }, ctx);
+
+      expect(mockExecute).not.toHaveBeenCalled();
+      expect(mockCreate).toHaveBeenCalledWith(
+        "system/scheduler",
+        expect.objectContaining({
+          name: "mikromcp-reboot",
+          interval: "300s",
+          "on-event": expect.stringMatching(
+            /^\/system scheduler remove \[find name="mikromcp-reboot"\]; \/system reboot$/,
+          ),
+        }),
+      );
+      const sc = result.structuredContent as Record<string, unknown>;
+      expect(sc.action).toBe("reboot_scheduled");
+      expect(sc.scheduler).toBe("mikromcp-reboot");
+    });
+
+    it("replaces a pending delayed reboot instead of stacking a second one", async () => {
+      const mockGet = vi
+        .fn()
+        .mockResolvedValue(fromWire([{ ".id": "*7", name: "mikromcp-reboot", interval: "10m" }]));
+      const mockRemove = vi.fn().mockResolvedValue(undefined);
+      const mockCreate = vi.fn().mockResolvedValue({ ".id": "*8" });
+      const ctx = makeContext({ get: mockGet, remove: mockRemove, create: mockCreate });
+      await systemOpsTools[2].handler({ routerId: "test-router", delay: 60 }, ctx);
+
+      expect(mockGet).toHaveBeenCalledWith("system/scheduler", {
+        filter: { name: "mikromcp-reboot" },
+      });
+      expect(mockRemove).toHaveBeenCalledWith("system/scheduler", "*7");
+      expect(mockRemove.mock.invocationCallOrder[0]).toBeLessThan(
+        mockCreate.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("dry run of a delayed reboot touches nothing", async () => {
+      const mockCreate = vi.fn();
+      const mockExecute = vi.fn();
+      const ctx = makeContext({ create: mockCreate, execute: mockExecute });
+      const result = await systemOpsTools[2].handler(
+        { routerId: "test-router", delay: 60, dryRun: true },
+        ctx,
+      );
+      expect((result.structuredContent as Record<string, unknown>).action).toBe("dry_run");
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockExecute).not.toHaveBeenCalled();
     });
   });
 

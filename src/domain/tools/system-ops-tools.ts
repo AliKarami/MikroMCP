@@ -4,6 +4,7 @@ import { dryRun, routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 import { resolveCommandPolicy, checkCommand } from "./command-guard.js";
+import type { RouterOSRecord } from "../../types.js";
 
 const log = createLogger("system-ops-tools");
 
@@ -145,6 +146,8 @@ const setSystemClockTool: ToolDefinition = {
 // reboot
 // ---------------------------------------------------------------------------
 
+const REBOOT_SCHEDULER_NAME = "mikromcp-reboot";
+
 const rebootInputSchema = z
   .object({
     routerId,
@@ -163,7 +166,7 @@ const rebootTool: ToolDefinition = {
   name: "reboot",
   title: "Reboot",
   description:
-    "Trigger a controlled router reboot with an optional delay. Supports dry-run. Use this tool instead of run_command for reboots — run_command's deny list blocks /system reboot*.",
+    'Trigger a controlled router reboot with an optional delay. delay=0 reboots immediately; delay>0 adds a one-shot "mikromcp-reboot" scheduler entry on the router (calling again replaces it; remove it to cancel). Supports dry-run. Use this tool instead of run_command for reboots — run_command\'s deny list blocks /system reboot*.',
   inputSchema: rebootInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -187,17 +190,41 @@ const rebootTool: ToolDefinition = {
         };
       }
 
-      await context.routerClient.execute("system/reboot", { delay: String(parsed.delay) });
-      log.info({ routerId: context.routerId, delay: parsed.delay }, "Reboot triggered");
+      if (parsed.delay === 0) {
+        // /system/reboot takes no arguments; RouterOS 7.25 rejects any extra field with HTTP 400.
+        await context.routerClient.execute("system/reboot", {});
+        log.info({ routerId: context.routerId }, "Reboot triggered");
+        return {
+          content: `Reboot of ${context.routerId} triggered.`,
+          structuredContent: { action: "rebooting", delay: 0, routerId: context.routerId },
+        };
+      }
 
-      const msg =
-        parsed.delay > 0
-          ? `Reboot of ${context.routerId} scheduled in ${parsed.delay} seconds.`
-          : `Reboot of ${context.routerId} triggered.`;
+      const pending = await context.routerClient.get<RouterOSRecord>("system/scheduler", {
+        filter: { name: REBOOT_SCHEDULER_NAME },
+      });
+      for (const entry of pending) {
+        await context.routerClient.remove("system/scheduler", String(entry[".id"]));
+      }
+      // The entry removes itself before rebooting: an interval scheduler left in place would
+      // fire again after boot and reboot the router in a loop.
+      await context.routerClient.create("system/scheduler", {
+        name: REBOOT_SCHEDULER_NAME,
+        interval: `${parsed.delay}s`,
+        policy: "read,write,policy,reboot,test",
+        "on-event": `/system scheduler remove [find name="${REBOOT_SCHEDULER_NAME}"]; /system reboot`,
+        comment: "One-shot reboot scheduled by MikroMCP",
+      });
+      log.info({ routerId: context.routerId, delay: parsed.delay }, "Reboot scheduled");
 
       return {
-        content: msg,
-        structuredContent: { action: "rebooting", delay: parsed.delay, routerId: context.routerId },
+        content: `Reboot of ${context.routerId} scheduled in ${parsed.delay} seconds. Cancel it by removing the "${REBOOT_SCHEDULER_NAME}" scheduler entry.`,
+        structuredContent: {
+          action: "reboot_scheduled",
+          delay: parsed.delay,
+          scheduler: REBOOT_SCHEDULER_NAME,
+          routerId: context.routerId,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "reboot");

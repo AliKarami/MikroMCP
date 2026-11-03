@@ -58,7 +58,7 @@ Trigger a controlled router reboot with an optional delay. Use this instead of `
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `delay` | integer | `0` | Seconds before rebooting (0–3600) |
+| `delay` | integer | `0` | Seconds before rebooting (0–3600). `0` reboots now; above `0` adds a one-shot `mikromcp-reboot` scheduler entry — calling again replaces it, removing it cancels the reboot |
 | `dryRun` | boolean | `false` | Preview without executing |
 
 **Example prompt:** "Schedule a reboot of edge-01 in 5 minutes."

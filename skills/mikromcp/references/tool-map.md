@@ -55,7 +55,7 @@ Multi-tool patterns:
 | Get CPU, memory, uptime, version | `get_system_status` | `system/identity`, `system/resource` | read |
 | Get current system clock | `get_system_clock` | `system/clock` | read |
 | Set system clock | `set_system_clock` | `system/clock` | destructive |
-| Reboot the router | `reboot` | `system/reboot` | destructive |
+| Reboot the router | `reboot` | `system/reboot`, `system/scheduler` (delayed) | destructive |
 | Run an arbitrary RouterOS console command via SSH | `run_command` | SSH | destructive |
 
 ## Interfaces & Bridges
