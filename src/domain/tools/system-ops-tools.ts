@@ -190,6 +190,14 @@ const rebootTool: ToolDefinition = {
         };
       }
 
+      // A pending delayed reboot left behind an immediate one would survive it and fire after boot.
+      const pending = await context.routerClient.get<RouterOSRecord>("system/scheduler", {
+        filter: { name: REBOOT_SCHEDULER_NAME },
+      });
+      for (const entry of pending) {
+        await context.routerClient.remove("system/scheduler", String(entry[".id"]));
+      }
+
       if (parsed.delay === 0) {
         // /system/reboot takes no arguments; RouterOS 7.25 rejects any extra field with HTTP 400.
         await context.routerClient.execute("system/reboot", {});
@@ -200,12 +208,6 @@ const rebootTool: ToolDefinition = {
         };
       }
 
-      const pending = await context.routerClient.get<RouterOSRecord>("system/scheduler", {
-        filter: { name: REBOOT_SCHEDULER_NAME },
-      });
-      for (const entry of pending) {
-        await context.routerClient.remove("system/scheduler", String(entry[".id"]));
-      }
       // The entry removes itself before rebooting: an interval scheduler left in place would
       // fire again after boot and reboot the router in a loop.
       await context.routerClient.create("system/scheduler", {

@@ -291,6 +291,29 @@ describe("system-ops tools", () => {
       );
     });
 
+    it("clears a pending delayed reboot before rebooting immediately", async () => {
+      const mockGet = vi
+        .fn()
+        .mockResolvedValue(fromWire([{ ".id": "*7", name: "mikromcp-reboot", interval: "10m" }]));
+      const mockRemove = vi.fn().mockResolvedValue(undefined);
+      const mockExecute = vi.fn().mockResolvedValue({});
+      const mockCreate = vi.fn();
+      const ctx = makeContext({
+        get: mockGet,
+        remove: mockRemove,
+        execute: mockExecute,
+        create: mockCreate,
+      });
+      await systemOpsTools[2].handler({ routerId: "test-router", delay: 0 }, ctx);
+
+      expect(mockRemove).toHaveBeenCalledWith("system/scheduler", "*7");
+      expect(mockRemove.mock.invocationCallOrder[0]).toBeLessThan(
+        mockExecute.mock.invocationCallOrder[0],
+      );
+      expect(mockExecute).toHaveBeenCalledWith("system/reboot", {});
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
     it("dry run of a delayed reboot touches nothing", async () => {
       const mockCreate = vi.fn();
       const mockExecute = vi.fn();
