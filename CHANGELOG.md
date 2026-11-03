@@ -10,6 +10,8 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-11-04
+
 ### Fixed
 - `reboot` failed on every call with `HTTP 400: unknown parameter delay`, because it sent a `delay` field that `/system/reboot` does not take (RouterOS 7.25 rejects it). An immediate reboot now sends an empty body. A `delay` above 0 now adds a one-shot `mikromcp-reboot` scheduler entry that removes itself and reboots the router when it fires; calling `reboot` again, with or without a delay, replaces a pending entry, and removing it cancels the reboot. The result's `action` for a delayed reboot is now `reboot_scheduled` ([#131](https://github.com/AliKarami/MikroMCP/issues/131)).
 
