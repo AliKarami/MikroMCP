@@ -288,6 +288,103 @@ describe("apply_plan", () => {
   });
 });
 
+describe("plan bound to the state plan_changes observed", () => {
+  const STEPS = [{ tool: "manage_route", params: { action: "remove", dstAddress: "10.0.0.0/8" } }];
+
+  // A context whose device client reads the live route table, which the test can edit.
+  function liveContext(routes: { records: Record<string, unknown>[] }): ToolContext {
+    const client = {
+      get: vi.fn(async () => routes.records),
+    } as unknown as RouterOSRestClient;
+    return { ...makeContext(), routerClient: client, deviceClient: client } as ToolContext;
+  }
+
+  async function plan(tools: ToolDefinition[], ctx: ToolContext): Promise<string> {
+    const planTool = tools.find((t) => t.name === "plan_changes")!;
+    const result = await planTool.handler({ routerId: "edge-01", steps: STEPS }, ctx);
+    const planFingerprint = result.structuredContent.planFingerprint as string;
+    expect(planFingerprint).toMatch(/^[0-9a-f]{64}\.[0-9a-f]{64}$/);
+    expect(result.content).toContain(planFingerprint);
+    const [step] = result.structuredContent.steps as Record<string, unknown>[];
+    expect(step.stateFingerprint).toMatch(/^[0-9a-f]{64}$/);
+    return planFingerprint;
+  }
+
+  it("applies when the state is what plan_changes saw", async () => {
+    const manageRoute = makeManageRoute("removed");
+    const tools = createChangeManagementTools([manageRoute]);
+    const routes = { records: [ROUTE_RECORD] as Record<string, unknown>[] };
+    const ctx = liveContext(routes);
+    const planFingerprint = await plan(tools, ctx);
+    vi.mocked(manageRoute.handler).mockClear();
+
+    const applyTool = tools.find((t) => t.name === "apply_plan")!;
+    const result = await applyTool.handler(
+      { routerId: "edge-01", steps: STEPS, planFingerprint },
+      ctx,
+    );
+    expect(result.structuredContent.status).toBe("success");
+    expect(manageRoute.handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses with PLAN_STATE_CHANGED, running no step, when the state moved after the plan", async () => {
+    const manageRoute = makeManageRoute("removed");
+    const tools = createChangeManagementTools([manageRoute]);
+    const routes = { records: [ROUTE_RECORD] as Record<string, unknown>[] };
+    const ctx = liveContext(routes);
+    const planFingerprint = await plan(tools, ctx);
+    vi.mocked(manageRoute.handler).mockClear();
+
+    routes.records = [{ ...ROUTE_RECORD, gateway: "192.168.1.254" }];
+
+    const applyTool = tools.find((t) => t.name === "apply_plan")!;
+    await expect(
+      applyTool.handler({ routerId: "edge-01", steps: STEPS, planFingerprint }, ctx),
+    ).rejects.toMatchObject({ code: "PLAN_STATE_CHANGED", category: "CONFLICT" });
+    expect(manageRoute.handler).not.toHaveBeenCalled();
+  });
+
+  it("refuses with PLAN_MISMATCH when the steps differ from the plan's", async () => {
+    const manageRoute = makeManageRoute("removed");
+    const tools = createChangeManagementTools([manageRoute]);
+    const ctx = liveContext({ records: [ROUTE_RECORD] });
+    const planFingerprint = await plan(tools, ctx);
+    vi.mocked(manageRoute.handler).mockClear();
+
+    const applyTool = tools.find((t) => t.name === "apply_plan")!;
+    await expect(
+      applyTool.handler(
+        {
+          routerId: "edge-01",
+          steps: [{ tool: "manage_route", params: { action: "remove", dstAddress: "0.0.0.0/0" } }],
+          planFingerprint,
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "PLAN_MISMATCH" });
+    expect(manageRoute.handler).not.toHaveBeenCalled();
+  });
+
+  it("rejects a planFingerprint that is not in plan_changes' format", () => {
+    const applyTool = createChangeManagementTools([makeManageRoute("x")]).find(
+      (t) => t.name === "apply_plan",
+    )!;
+    expect(() =>
+      applyTool.inputSchema.parse({ routerId: "edge-01", steps: STEPS, planFingerprint: "abc" }),
+    ).toThrow();
+  });
+
+  it("binds a confirmation token to every step's paths (statePaths)", () => {
+    const applyTool = createChangeManagementTools([makeManageRoute("x")]).find(
+      (t) => t.name === "apply_plan",
+    )!;
+    expect(applyTool.statePaths!({ routerId: "edge-01", steps: STEPS })).toEqual(["ip/route"]);
+    expect(
+      applyTool.statePaths!({ routerId: "edge-01", steps: [{ tool: "nope", params: {} }] }),
+    ).toEqual([]);
+  });
+});
+
 describe("plan steps in the logs", () => {
   function makeRedactingTool(): ToolDefinition {
     return {

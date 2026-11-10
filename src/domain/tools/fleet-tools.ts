@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { isEffectiveDryRun, loggableParams, snapshotPathsFor } from "./tool-definition.js";
+import {
+  isEffectiveDryRun,
+  loggableParams,
+  snapshotPathsFor,
+  statePathsFor,
+} from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { compactFields } from "./pagination.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
@@ -17,6 +22,7 @@ import {
 import { withRetry } from "../../adapter/retry-engine.js";
 import { checkFleetConfirmation } from "../../middleware/fleet-confirmation.js";
 import { takeSnapshot } from "../snapshot/snapshot-engine.js";
+import { combineFingerprints, fingerprintState } from "../snapshot/state-fingerprint.js";
 import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 
 const log = createLogger("fleet-tools");
@@ -305,6 +311,50 @@ function fleetAudit(
   );
 }
 
+/**
+ * One fingerprint for the affected configuration across a fan-out's routers,
+ * so a fleet token approves the state its preview saw on every router. A router
+ * the caller may not touch, or that does not speak the tool's platform, is never
+ * read (fanOut refuses it anyway); one that cannot be read counts as
+ * "unreadable", so it coming back changes the fingerprint too.
+ */
+async function fleetStateFingerprint(
+  targetTool: ToolDefinition,
+  toolName: string,
+  params: Record<string, unknown>,
+  routers: RouterConfig[],
+  context: ToolContext,
+): Promise<string> {
+  const parts = await Promise.all(
+    [...routers]
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .map(async (router): Promise<[string, string]> => {
+        try {
+          checkAuthz(context.identity, toolName, router.id);
+          assertPlatformMatch(targetTool, router);
+        } catch {
+          return [router.id, "skipped"];
+        }
+        try {
+          const routerContext = buildRouterToolContext({
+            routerConfig: router,
+            correlationId: context.correlationId,
+            identity: context.identity,
+            pool: context.connectionPool!,
+            config: context.appConfig,
+            registry: context.routerRegistry,
+          });
+          const paths = statePathsFor(targetTool, { ...params, routerId: router.id });
+          return [router.id, await fingerprintState(routerContext.deviceClient, paths)];
+        } catch (err) {
+          log.warn({ err, routerId: router.id }, "Could not read state for the fleet fingerprint");
+          return [router.id, "unreadable"];
+        }
+      }),
+  );
+  return combineFingerprints(parts);
+}
+
 interface FanOutRequest {
   fleetTool: FleetToolName;
   input: FanOutInput;
@@ -573,13 +623,21 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       // blast radius of any write, and an annotation slip must not open the fleet.
       if (isWrite) {
         const routerIdList = routers.map((r) => r.id);
+        const toolParams = parsed.params as Record<string, unknown>;
         checkFleetConfirmation(
           {
             toolName: parsed.toolName,
             routerIds: routerIdList,
-            params: parsed.params as Record<string, unknown>,
+            params: toolParams,
             identityId: context.identity.id,
             submittedToken: parsed.confirmationToken,
+            stateFingerprint: await fleetStateFingerprint(
+              targetTool,
+              parsed.toolName,
+              toolParams,
+              routers,
+              context,
+            ),
           },
           context.appConfig.confirmationSecret,
         );

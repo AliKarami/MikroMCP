@@ -60,4 +60,39 @@ describe("checkFleetConfirmation", () => {
       checkFleetConfirmation({ ...base, routerIds: ["r1"], submittedToken: token }, secret),
     ).toThrow();
   });
+
+  it("refuses with CONFIRMATION_STATE_CHANGED when the fleet's state moved after issue", () => {
+    let token = "";
+    try {
+      checkFleetConfirmation(
+        { ...base, stateFingerprint: "s1", submittedToken: undefined },
+        secret,
+      );
+    } catch (err) {
+      expect((err as MikroMCPError).details!.stateFingerprint).toBe("s1");
+      token = (err as MikroMCPError).details!.confirmationToken as string;
+    }
+    try {
+      checkFleetConfirmation({ ...base, stateFingerprint: "s2", submittedToken: token }, secret);
+      throw new Error("should have thrown");
+    } catch (err) {
+      expect((err as MikroMCPError).code).toBe("CONFIRMATION_STATE_CHANGED");
+      expect((err as MikroMCPError).category).toBe(ErrorCategory.CONFLICT);
+    }
+    expect(() =>
+      checkFleetConfirmation({ ...base, stateFingerprint: "s1", submittedToken: token }, secret),
+    ).not.toThrow();
+  });
+
+  it("issues distinct tokens for identical requests, so one caller cannot spend another's", () => {
+    const tokens = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      try {
+        checkFleetConfirmation({ ...base, submittedToken: undefined }, secret);
+      } catch (err) {
+        tokens.add((err as MikroMCPError).details!.confirmationToken as string);
+      }
+    }
+    expect(tokens.size).toBe(5);
+  });
 });

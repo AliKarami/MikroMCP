@@ -796,6 +796,33 @@ describe("fleet-tools", () => {
       });
     }
 
+    it("refuses with CONFIRMATION_STATE_CHANGED when a router's state moved after the token", async () => {
+      const routes = {
+        records: [{ ".id": "*1", "dst-address": "10.0.0.0/8", gateway: "1.1.1.1" }],
+      };
+      const client = { get: vi.fn(async () => routes.records) };
+      const ctx = makeFleetContext({
+        ...writeFleetContext(),
+        connectionPool: {
+          getClient: vi.fn().mockReturnValue(client),
+        } as unknown as ToolContext["connectionPool"],
+      });
+      const args = {
+        toolName: "manage_route",
+        routerIds: ["r1", "r2"],
+        params: {},
+        concurrency: 5,
+      };
+      const token = await fleetToken(args, ctx);
+
+      routes.records = [{ ...routes.records[0], gateway: "9.9.9.9" }];
+
+      await expect(
+        bulkTool.handler({ ...args, confirmationToken: token }, ctx),
+      ).rejects.toMatchObject({ code: "CONFIRMATION_STATE_CHANGED" });
+      expect(mockWriteTool.handler).not.toHaveBeenCalled();
+    });
+
     it("snapshots and journals each router for a write tool", async () => {
       const ctx = writeFleetContext();
       const args = {

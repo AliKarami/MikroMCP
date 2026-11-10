@@ -42,6 +42,12 @@ export interface ToolDefinition {
    */
   snapshotPaths?: string[] | ((params: Record<string, unknown>) => string[]);
   /**
+   * Paths whose state a confirmation token binds (see state-fingerprint.ts).
+   * Defaults to the snapshot paths; set it when the tool snapshots elsewhere,
+   * as apply_plan does per step.
+   */
+  statePaths?: (params: Record<string, unknown>) => string[];
+  /**
    * Parameters as they may be written to the audit log and the write journal.
    * The generic redaction drops well-known secret keys; a tool whose parameter
    * can carry a secret inside a free-form value (a config document) scrubs it
@@ -95,6 +101,11 @@ export function snapshotPathsFor(tool: ToolDefinition, params: Record<string, un
   return typeof tool.snapshotPaths === "function"
     ? tool.snapshotPaths(params)
     : (tool.snapshotPaths ?? []);
+}
+
+/** Paths whose state a confirmation token for this call binds. */
+export function statePathsFor(tool: ToolDefinition, params: Record<string, unknown>): string[] {
+  return tool.statePaths ? tool.statePaths(params) : snapshotPathsFor(tool, params);
 }
 
 export interface ToolContext {

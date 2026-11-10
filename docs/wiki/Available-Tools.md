@@ -1655,6 +1655,8 @@ These tools work together as a workflow: `plan_changes` → `apply_plan` → `ro
 
 Preview a sequence of write operations without applying them. Each step is run with `dryRun=true` against live router state, so the preview reflects actual current config. Use `apply_plan` to execute the same steps for real.
 
+The result carries a `planFingerprint`, and each step a `stateFingerprint`. They are hashes of the configuration under the paths each step touches, read before the dry runs: dynamic records are dropped, counters and status fields (`bytes`, `packets`, a lease's `expires-after`, a peer's `last-handshake`, and so on) are left out, and record order is kept. Pass `planFingerprint` to `apply_plan` so the plan is refused if any of that configuration changes in between. When the state cannot be read, the result has no `planFingerprint` and says so.
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
@@ -1670,15 +1672,18 @@ Preview a sequence of write operations without applying them. Each step is run w
 
 Execute a sequence of write operations in order. Takes a snapshot of affected RouterOS paths before applying, enabling rollback via `rollback_change`. Stops and reports on the first step that fails.
 
+With `planFingerprint`, before the first step runs, `apply_plan` checks that `routerId` and `steps` are the ones `plan_changes` previewed (`PLAN_MISMATCH` if not) and that the configuration each step touches is still what `plan_changes` read (`PLAN_STATE_CHANGED`, a `CONFLICT`, if not). Either way nothing is applied: run `plan_changes` again and review. This check runs for every role, admins included. A `confirmationToken` for `apply_plan` is also bound to the configuration of every step's paths when it was issued (see [Security](Security#change-safety)).
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `steps` | object[] | — | Ordered list of operations to apply (1–10 steps) |
 | `steps[].tool` | string | — | Name of the MikroMCP tool to invoke |
 | `steps[].params` | object | — | Tool parameters (omit `routerId` — injected automatically) |
+| `planFingerprint` | string | — | The `planFingerprint` from `plan_changes`. Refuses the plan if the steps differ from the previewed ones or the configuration they touch changed since. Recommended |
 | `confirmationToken` | string | — | HMAC confirmation token (required in HTTP mode) |
 
-**Example prompt:** "Apply the plan we just previewed on core-01."
+**Example prompt:** "Apply the plan we just previewed on core-01, with its planFingerprint, so it stops if anything changed since."
 
 ---
 
@@ -1762,7 +1767,7 @@ Any inner tool that is not read-only needs a fleet token. Tokens are signed with
 1. Call `bulk_execute` with the desired `toolName`, `routerIds`/`tags`, and `params` — **without** `confirmationToken`. The server returns an `APPROVAL_REQUIRED` error containing a `confirmationToken` in its `details`.
 2. Re-submit the **identical** call with `confirmationToken` set to the value from step 1. The tool fans out to all resolved routers.
 
-Tokens expire after 5 minutes and are single-use. If the router set or params change between calls, the token is rejected.
+Tokens expire after 5 minutes and are single-use. If the router set or params change between calls, the token is rejected. A token is also bound to the configuration the inner tool touches on every targeted router when it was issued: if that changes on any of them before the second call, the call is refused with `CONFIRMATION_STATE_CHANGED` and nothing runs. Get a fresh token and review again.
 
 Each per-router call runs through the same safety layers as a direct call: authorization, maintenance-window enforcement (destructive tools are blocked per-router outside a configured window and reported as that router's error), the per-router circuit breaker, and automatic retry for read-only inner tools. A failure or blocked window on one router does not stop the others — results are aggregated with per-router status.
 

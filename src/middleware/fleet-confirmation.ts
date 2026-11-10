@@ -1,5 +1,13 @@
 import { createHmac, createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
+import { NO_STATE_FINGERPRINT } from "../domain/snapshot/state-fingerprint.js";
+import {
+  formatToken,
+  newNonce,
+  parseToken,
+  stateChangedError,
+  type TokenParts,
+} from "./confirmation.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 
@@ -17,6 +25,11 @@ export interface FleetConfirmationArgs {
   params: Record<string, unknown>;
   identityId: string;
   submittedToken: string | undefined;
+  /**
+   * Fingerprint of the affected configuration across the targeted routers, read
+   * now (see fleetStateFingerprint in fleet-tools.ts). Omitted, nothing is bound.
+   */
+  stateFingerprint?: string;
 }
 
 function fingerprint(args: FleetConfirmationArgs): string {
@@ -30,9 +43,11 @@ function fingerprint(args: FleetConfirmationArgs): string {
   return createHash("sha256").update(payload).digest("hex");
 }
 
-function sign(fp: string, expiresAtMs: number, secret: string): string {
-  const mac = createHmac("sha256", secret).update(`${fp}|${expiresAtMs}`).digest("hex");
-  return `${expiresAtMs}.${mac}`;
+function sign(fp: string, parts: TokenParts, secret: string): string {
+  const mac = createHmac("sha256", secret)
+    .update(`${fp}|${parts.stateFingerprint}|${parts.nonce}|${parts.expiresAtMs}`)
+    .digest("hex");
+  return formatToken(parts, mac);
 }
 
 function tokensEqual(a: string, b: string): boolean {
@@ -66,12 +81,13 @@ export function checkFleetConfirmation(
   const now = Date.now();
   sweepUsed(now);
   const fp = fingerprint(args);
+  const currentState = args.stateFingerprint ?? NO_STATE_FINGERPRINT;
 
   if (args.submittedToken) {
     const token = args.submittedToken;
-    const dot = token.indexOf(".");
-    const expiresAtMs = dot > 0 ? Number(token.slice(0, dot)) : NaN;
-    const expected = Number.isFinite(expiresAtMs) ? sign(fp, expiresAtMs, secret) : "";
+    const parts = parseToken(token);
+    const { expiresAtMs, stateFingerprint } = parts;
+    const expected = Number.isFinite(expiresAtMs) ? sign(fp, parts, secret) : "";
 
     if (
       !Number.isFinite(expiresAtMs) ||
@@ -90,12 +106,19 @@ export function checkFleetConfirmation(
         },
       });
     }
+    if (stateFingerprint !== currentState) {
+      throw stateChangedError(`at least one of the ${args.routerIds.length} targeted router(s)`);
+    }
     usedTokens.set(token, expiresAtMs);
     return;
   }
 
   const expiresAtMs = now + CONFIRMATION_TTL_MS;
-  const token = sign(fp, expiresAtMs, secret);
+  const token = sign(
+    fp,
+    { expiresAtMs, nonce: newNonce(), stateFingerprint: currentState },
+    secret,
+  );
 
   throw new MikroMCPError({
     category: ErrorCategory.APPROVAL_REQUIRED,
@@ -105,6 +128,7 @@ export function checkFleetConfirmation(
       confirmationToken: token,
       expiresAt: new Date(expiresAtMs).toISOString(),
       routerCount: args.routerIds.length,
+      stateFingerprint: currentState,
     },
     recoverability: {
       retryable: true,
