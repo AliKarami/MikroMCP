@@ -132,6 +132,45 @@ describe("fingerprintState", () => {
     expect(b).toBe(a);
   });
 
+  it("ignores script and scheduler execution bookkeeping", async () => {
+    const script: WireRecord = {
+      ".id": "*1",
+      name: "backup",
+      source: ":log info hi",
+      "run-count": "3",
+      "last-started": "2026-11-10 10:00:00",
+    };
+    const job: WireRecord = {
+      ".id": "*2",
+      name: "nightly",
+      "on-event": "backup",
+      interval: "1d",
+      "run-count": "3",
+      "next-run": "2026-11-11 03:00:00",
+    };
+    const paths = ["system/script", "system/scheduler"];
+    const a = await fingerprintState(
+      clientWith({ "system/script": [script], "system/scheduler": [job] }),
+      paths,
+    );
+    const b = await fingerprintState(
+      clientWith({
+        "system/script": [{ ...script, "run-count": "4", "last-started": "2026-11-10 10:05:00" }],
+        "system/scheduler": [{ ...job, "run-count": "4", "next-run": "2026-11-12 03:00:00" }],
+      }),
+      paths,
+    );
+    expect(b).toBe(a);
+    const edited = await fingerprintState(
+      clientWith({
+        "system/script": [{ ...script, source: ":log info bye" }],
+        "system/scheduler": [job],
+      }),
+      paths,
+    );
+    expect(edited).not.toBe(a);
+  });
+
   it("keeps a field that is volatile only on another path", async () => {
     const addr: WireRecord = { ".id": "*1", address: "10.0.0.1/24", interface: "ether1" };
     const a = await fingerprintState(clientWith({ "ip/address": [addr] }), ["ip/address"]);

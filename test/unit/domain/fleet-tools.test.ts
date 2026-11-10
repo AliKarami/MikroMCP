@@ -823,6 +823,63 @@ describe("fleet-tools", () => {
       expect(mockWriteTool.handler).not.toHaveBeenCalled();
     });
 
+    it("skips, rather than writes, a router whose state could not be read either time", async () => {
+      const healthy = { get: vi.fn().mockResolvedValue([]) };
+      const down = { get: vi.fn().mockRejectedValue(new Error("unreachable")) };
+      const ctx = makeFleetContext({
+        ...writeFleetContext(),
+        connectionPool: {
+          getClient: vi.fn((router: RouterConfig) => (router.id === "r2" ? down : healthy)),
+        } as unknown as ToolContext["connectionPool"],
+      });
+      const args = {
+        toolName: "manage_route",
+        routerIds: ["r1", "r2"],
+        params: {},
+        concurrency: 5,
+      };
+
+      let token = "";
+      try {
+        await bulkTool.handler(args, ctx);
+      } catch (err) {
+        const details = (err as MikroMCPError).details!;
+        expect(details.unreadableRouterIds).toEqual(["r2"]);
+        token = details.confirmationToken as string;
+      }
+      const result = await bulkTool.handler({ ...args, confirmationToken: token }, ctx);
+
+      const calledFor = vi.mocked(mockWriteTool.handler).mock.calls.map((c) => c[1].routerId);
+      expect(calledFor).toEqual(["r1"]);
+      expect(JSON.stringify(result.structuredContent)).toContain("STATE_UNREADABLE");
+    });
+
+    it("reads fingerprint state no more than `concurrency` routers at a time", async () => {
+      let inFlight = 0;
+      let peak = 0;
+      const client = {
+        get: vi.fn(async () => {
+          inFlight++;
+          peak = Math.max(peak, inFlight);
+          await new Promise((r) => setTimeout(r, 2));
+          inFlight--;
+          return [];
+        }),
+      };
+      const ctx = makeFleetContext({
+        ...writeFleetContext(),
+        connectionPool: {
+          getClient: vi.fn().mockReturnValue(client),
+        } as unknown as ToolContext["connectionPool"],
+      });
+      await fleetToken(
+        { toolName: "manage_route", routerIds: ["r1", "r2", "r3"], params: {}, concurrency: 1 },
+        ctx,
+      );
+      expect(client.get).toHaveBeenCalledTimes(3);
+      expect(peak).toBe(1);
+    });
+
     it("snapshots and journals each router for a write tool", async () => {
       const ctx = writeFleetContext();
       const args = {

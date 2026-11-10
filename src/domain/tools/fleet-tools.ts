@@ -310,8 +310,10 @@ function fleetAudit(
  * One fingerprint for the affected configuration across a fan-out's routers,
  * so a fleet token approves the state its preview saw on every router. A router
  * the caller may not touch, or that does not speak the tool's platform, is never
- * read (fanOut refuses it anyway); one that cannot be read counts as
- * "unreadable", so it coming back changes the fingerprint too.
+ * read (fanOut refuses it anyway). One that cannot be read counts as
+ * "unreadable", so it coming back changes the fingerprint, and is reported so
+ * the caller can leave it out of the write: its state was never previewed.
+ * Reads run at most `concurrency` at a time, like the fan-out itself.
  */
 async function fleetStateFingerprint(
   targetTool: ToolDefinition,
@@ -319,39 +321,53 @@ async function fleetStateFingerprint(
   params: Record<string, unknown>,
   routers: RouterConfig[],
   context: ToolContext,
-): Promise<string> {
-  const parts = await Promise.all(
-    [...routers]
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-      .map(async (router): Promise<[string, string]> => {
-        try {
-          checkAuthz(context.identity, toolName, router.id);
-          assertPlatformMatch(targetTool, router);
-        } catch {
-          return [router.id, "skipped"];
-        }
-        try {
-          const routerContext = buildRouterToolContext({
-            routerConfig: router,
-            correlationId: context.correlationId,
-            identity: context.identity,
-            pool: context.connectionPool!,
-            config: context.appConfig,
-            registry: context.routerRegistry,
-          });
-          const callParams = { ...params, routerId: router.id };
-          return [
-            router.id,
-            await fingerprintCall(routerContext.deviceClient, targetTool, callParams),
-          ];
-        } catch (err) {
-          log.warn({ err, routerId: router.id }, "Could not read state for the fleet fingerprint");
-          return [router.id, "unreadable"];
-        }
-      }),
-  );
-  return combineFingerprints(parts);
+  concurrency: number,
+): Promise<{ fingerprint: string; unreadable: string[] }> {
+  const sorted = [...routers].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const parts: [string, string][] = [];
+  for (let i = 0; i < sorted.length; i += concurrency) {
+    const batch = sorted.slice(i, i + concurrency);
+    parts.push(
+      ...(await Promise.all(
+        batch.map(async (router): Promise<[string, string]> => {
+          try {
+            checkAuthz(context.identity, toolName, router.id);
+            assertPlatformMatch(targetTool, router);
+          } catch {
+            return [router.id, "skipped"];
+          }
+          try {
+            const routerContext = buildRouterToolContext({
+              routerConfig: router,
+              correlationId: context.correlationId,
+              identity: context.identity,
+              pool: context.connectionPool!,
+              config: context.appConfig,
+              registry: context.routerRegistry,
+            });
+            const callParams = { ...params, routerId: router.id };
+            return [
+              router.id,
+              await fingerprintCall(routerContext.deviceClient, targetTool, callParams),
+            ];
+          } catch (err) {
+            log.warn(
+              { err, routerId: router.id },
+              "Could not read state for the fleet fingerprint",
+            );
+            return [router.id, UNREADABLE];
+          }
+        }),
+      )),
+    );
+  }
+  return {
+    fingerprint: combineFingerprints(parts),
+    unreadable: parts.filter(([, fp]) => fp === UNREADABLE).map(([id]) => id),
+  };
 }
+
+const UNREADABLE = "unreadable";
 
 interface FanOutRequest {
   fleetTool: FleetToolName;
@@ -613,7 +629,9 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       });
 
       const targetTool = resolveInnerTool("bulk_execute", parsed.toolName, toolMap);
-      const { routers, preErrors } = resolveRouters("bulk_execute", parsed, context);
+      const resolved = resolveRouters("bulk_execute", parsed, context);
+      const { preErrors } = resolved;
+      let { routers } = resolved;
 
       const isWrite = !targetTool.annotations.readOnlyHint;
 
@@ -622,6 +640,14 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
       if (isWrite) {
         const routerIdList = routers.map((r) => r.id);
         const toolParams = parsed.params as Record<string, unknown>;
+        const state = await fleetStateFingerprint(
+          targetTool,
+          parsed.toolName,
+          toolParams,
+          routers,
+          context,
+          parsed.concurrency,
+        );
         checkFleetConfirmation(
           {
             toolName: parsed.toolName,
@@ -629,16 +655,26 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
             params: toolParams,
             identityId: context.identity.id,
             submittedToken: parsed.confirmationToken,
-            stateFingerprint: await fleetStateFingerprint(
-              targetTool,
-              parsed.toolName,
-              toolParams,
-              routers,
-              context,
-            ),
+            stateFingerprint: state.fingerprint,
+            unreadableRouterIds: state.unreadable,
           },
           context.appConfig.confirmationSecret,
         );
+        // Unreadable at issue and again now, so the token matched without ever
+        // seeing these routers' state: writing to them would apply an
+        // unpreviewed change should they answer by the time fanOut reaches them.
+        if (state.unreadable.length > 0) {
+          const skipped = new Set(state.unreadable);
+          for (const id of state.unreadable) {
+            preErrors.push({
+              routerId: id,
+              status: "error",
+              error: `STATE_UNREADABLE: router "${id}"'s state could not be read when confirming, so it was not written. Re-run bulk_execute for it once it answers.`,
+              durationMs: 0,
+            });
+          }
+          routers = routers.filter((r) => !skipped.has(r.id));
+        }
       }
 
       return fanOut({

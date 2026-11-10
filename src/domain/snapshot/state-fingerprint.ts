@@ -93,6 +93,9 @@ const VOLATILE_FIELDS_BY_PATH: Record<string, readonly string[]> = {
     "http-resp-time",
     "tcp-connect-time",
   ],
+  // Execution bookkeeping: running a script or a job is not a configuration edit.
+  "system/script": ["run-count", "last-started"],
+  "system/scheduler": ["run-count", "next-run"],
   certificate: ["expires-after"],
   container: ["status"],
   // Log files and the like grow all the time; a name appearing or going is the drift that matters.

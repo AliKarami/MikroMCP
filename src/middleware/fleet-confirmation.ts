@@ -30,6 +30,8 @@ export interface FleetConfirmationArgs {
    * now (see fleetStateFingerprint in fleet-tools.ts). Omitted, nothing is bound.
    */
   stateFingerprint?: string;
+  /** Routers whose state could not be read: named in APPROVAL_REQUIRED, and not written. */
+  unreadableRouterIds?: string[];
 }
 
 function fingerprint(args: FleetConfirmationArgs): string {
@@ -129,6 +131,13 @@ export function checkFleetConfirmation(
       expiresAt: new Date(expiresAtMs).toISOString(),
       routerCount: args.routerIds.length,
       stateFingerprint: currentState,
+      ...(args.unreadableRouterIds && args.unreadableRouterIds.length > 0
+        ? {
+            unreadableRouterIds: args.unreadableRouterIds,
+            unreadableNote:
+              "These routers' state could not be read, so the token cannot vouch for it; they will be skipped, not written.",
+          }
+        : {}),
     },
     recoverability: {
       retryable: true,
