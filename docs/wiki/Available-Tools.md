@@ -1655,7 +1655,7 @@ These tools work together as a workflow: `plan_changes` → `apply_plan` → `ro
 
 Preview a sequence of write operations without applying them. Each step is run with `dryRun=true` against live router state, so the preview reflects actual current config. Use `apply_plan` to execute the same steps for real.
 
-The result carries a `planFingerprint`, and each step a `stateFingerprint`. They are hashes of the configuration under the paths each step touches, read before the dry runs: dynamic records are dropped, counters and status fields (`bytes`, `packets`, a lease's `expires-after`, a peer's `last-handshake`, and so on) are left out, and record order is kept. Pass `planFingerprint` to `apply_plan` so the plan is refused if any of that configuration changes in between. When the state cannot be read, the result has no `planFingerprint` and says so.
+The result carries a `planFingerprint`, and each step a `stateFingerprint`. They are hashes of the configuration under the paths each step touches, read before the dry runs: dynamic records are dropped (except those a step acts on, such as the dynamic lease `manage_dhcp_lease` makes static), counters and status fields (`bytes`, `packets`, a lease's `expires-after`, a peer's `last-handshake`, and so on) are left out, and record order is kept. Pass `planFingerprint` to `apply_plan` so the plan is refused if any of that configuration changes in between. When the state cannot be read, the result has no `planFingerprint` and says so.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|

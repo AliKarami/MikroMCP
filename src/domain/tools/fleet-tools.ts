@@ -1,11 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import {
-  isEffectiveDryRun,
-  loggableParams,
-  snapshotPathsFor,
-  statePathsFor,
-} from "./tool-definition.js";
+import { isEffectiveDryRun, loggableParams, snapshotPathsFor } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { compactFields } from "./pagination.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
@@ -22,7 +17,7 @@ import {
 import { withRetry } from "../../adapter/retry-engine.js";
 import { checkFleetConfirmation } from "../../middleware/fleet-confirmation.js";
 import { takeSnapshot } from "../snapshot/snapshot-engine.js";
-import { combineFingerprints, fingerprintState } from "../snapshot/state-fingerprint.js";
+import { combineFingerprints, fingerprintCall } from "../snapshot/state-fingerprint.js";
 import { recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 
 const log = createLogger("fleet-tools");
@@ -344,8 +339,11 @@ async function fleetStateFingerprint(
             config: context.appConfig,
             registry: context.routerRegistry,
           });
-          const paths = statePathsFor(targetTool, { ...params, routerId: router.id });
-          return [router.id, await fingerprintState(routerContext.deviceClient, paths)];
+          const callParams = { ...params, routerId: router.id };
+          return [
+            router.id,
+            await fingerprintCall(routerContext.deviceClient, targetTool, callParams),
+          ];
         } catch (err) {
           log.warn({ err, routerId: router.id }, "Could not read state for the fleet fingerprint");
           return [router.id, "unreadable"];

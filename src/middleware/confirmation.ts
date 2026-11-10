@@ -146,6 +146,22 @@ export async function checkConfirmation(
       throw stateChangedError(`router "${routerId}"`);
     }
 
+    // A concurrent call with the same token may have passed the first check
+    // and consumed it during the read above; check again right before
+    // consuming, with no await in between, so only one of them proceeds.
+    if (usedTokens.has(submittedToken)) {
+      throw new MikroMCPError({
+        category: ErrorCategory.PERMISSION_DENIED,
+        code: "CONFIRMATION_EXPIRED",
+        message:
+          "Confirmation token was already used. Re-submit without confirmationToken to get a fresh token.",
+        recoverability: {
+          retryable: true,
+          suggestedAction:
+            "Re-submit the tool call without confirmationToken to receive a new token.",
+        },
+      });
+    }
     usedTokens.set(submittedToken, expiresAtMs);
     return;
   }

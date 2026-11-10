@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { isEffectiveDryRun, loggableParams, snapshotPathsFor } from "./tool-definition.js";
+import type { DynamicTargets } from "./tool-definition.js";
+import {
+  isEffectiveDryRun,
+  loggableParams,
+  snapshotPathsFor,
+  statePathsFor,
+} from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
@@ -9,7 +15,7 @@ import { createLogger } from "../../observability/logger.js";
 import { takeSnapshot, loadSnapshot } from "../snapshot/snapshot-engine.js";
 import type { StoredSnapshot } from "../snapshot/snapshot-engine.js";
 import { computeRestorePlan, applyRestorePlan } from "../snapshot/diff-engine.js";
-import { combineFingerprints, fingerprintState } from "../snapshot/state-fingerprint.js";
+import { combineFingerprints, fingerprintCall } from "../snapshot/state-fingerprint.js";
 import { readJournalEntries, recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 import type { RouterOSRecord } from "../../types.js";
 import type { SwosClient } from "../../adapter/swos-client.js";
@@ -351,8 +357,12 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     const out: string[] = [];
     for (const step of steps) {
       const tool = requireTool(step.tool);
-      const paths = snapshotPathsFor(tool, { ...step.params, routerId: routerIdValue });
-      out.push(await fingerprintState(context.deviceClient, paths));
+      out.push(
+        await fingerprintCall(context.deviceClient, tool, {
+          ...step.params,
+          routerId: routerIdValue,
+        }),
+      );
     }
     return out;
   }
@@ -363,6 +373,26 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     const requestHash = hashOf({ routerId: routerIdValue, steps });
     const stateHash = combineFingerprints(states.map((fp, i) => [String(i), fp] as const));
     return `${requestHash}.${stateHash}`;
+  }
+
+  // An unvalidated apply_plan call's steps, each with its tool and the
+  // parameters it will run with; unknown tools are skipped (the handler
+  // rejects them before anything runs).
+  function resolvedSteps(
+    params: Record<string, unknown>,
+  ): { tool: ToolDefinition; stepParams: Record<string, unknown> }[] {
+    if (!Array.isArray(params.steps)) return [];
+    return params.steps.flatMap((step: unknown) => {
+      const { tool: name, params: stepParams } = (step ?? {}) as Record<string, unknown>;
+      const tool = typeof name === "string" ? toolMap.get(name) : undefined;
+      if (!tool || !stepParams || typeof stepParams !== "object") return [];
+      return [
+        {
+          tool,
+          stepParams: { ...(stepParams as Record<string, unknown>), routerId: params.routerId },
+        },
+      ];
+    });
   }
 
   function requireTool(name: string): ToolDefinition {
@@ -523,17 +553,15 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     snapshotPaths: [],
     // The executor snapshots nothing for apply_plan itself (each step does), but
     // its confirmation token still binds the state every step touches.
-    statePaths: (params) => {
-      if (!Array.isArray(params.steps)) return [];
-      return params.steps.flatMap((step: unknown) => {
-        const { tool: name, params: stepParams } = (step ?? {}) as Record<string, unknown>;
-        const tool = typeof name === "string" ? toolMap.get(name) : undefined;
-        if (!tool || !stepParams || typeof stepParams !== "object") return [];
-        return snapshotPathsFor(tool, {
-          ...(stepParams as Record<string, unknown>),
-          routerId: params.routerId,
-        });
-      });
+    statePaths: (params) =>
+      resolvedSteps(params).flatMap(({ tool, stepParams }) => statePathsFor(tool, stepParams)),
+    stateDynamicTargets: (params) => {
+      const targets = resolvedSteps(params)
+        .map(({ tool, stepParams }) => tool.stateDynamicTargets?.(stepParams))
+        .filter((t): t is DynamicTargets => t !== undefined);
+      return targets.length > 0
+        ? (path, record) => targets.some((t) => t(path, record))
+        : undefined;
     },
     annotations: {
       readOnlyHint: false,

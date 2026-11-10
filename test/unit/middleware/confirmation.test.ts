@@ -264,6 +264,26 @@ describe("confirmation middleware", () => {
       expect(read).not.toHaveBeenCalled();
     });
 
+    it("lets only one of two concurrent calls with the same token through", async () => {
+      const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
+      const identity = makeIdentity("operator");
+      const params = { routerId: "edge-01", action: "remove" };
+      const { token } = await issue(params, identity, async () => "s");
+      const confirmed = { ...params, confirmationToken: token };
+      // A slow state read: both calls are past the first used-token check
+      // before either finishes it.
+      const slowRead = () => new Promise<string>((resolve) => setTimeout(() => resolve("s"), 5));
+
+      const results = await Promise.allSettled([
+        checkConfirmation("manage_firewall_rule", "edge-01", confirmed, identity, SECRET, slowRead),
+        checkConfirmation("manage_firewall_rule", "edge-01", confirmed, identity, SECRET, slowRead),
+      ]);
+
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+      expect(isMikroMCPError(rejected.reason) && rejected.reason.code).toBe("CONFIRMATION_EXPIRED");
+    });
+
     it("admins bypass the token, so no state is read", async () => {
       const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
       const read = vi.fn().mockResolvedValue("x");

@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import type { DeviceClient } from "../../adapter/connection-pool.js";
 import { SwosClient } from "../../adapter/swos-client.js";
 import type { RouterOSRecord, RouterOSValue } from "../../types.js";
-import { normalizeForDiff } from "./diff-engine.js";
+import { isTrue } from "../../adapter/response-parser.js";
+import type { DynamicTargets, ToolDefinition } from "../tools/tool-definition.js";
+import { statePathsFor } from "../tools/tool-definition.js";
+import { RUNTIME_FIELDS } from "./diff-engine.js";
 
 /** Fingerprint of a call that reads no state: nothing to bind, so it always matches. */
 export const NO_STATE_FINGERPRINT = "none";
@@ -96,22 +99,44 @@ const VOLATILE_FIELDS_BY_PATH: Record<string, readonly string[]> = {
   file: ["size", "last-modified", "contents"],
 };
 
-function stableRecord(record: RouterOSRecord, volatile: ReadonlySet<string>): string {
+function stableRecord(
+  record: RouterOSRecord,
+  volatile: ReadonlySet<string>,
+  dynamic: boolean,
+): string {
   const entries: [string, RouterOSValue][] = Object.entries(record)
-    .filter(([k]) => !volatile.has(k))
+    .filter(([k]) => !RUNTIME_FIELDS.has(k) && !volatile.has(k))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  // `dynamic` is a runtime field, but a kept dynamic record turning static (or
+  // back) is exactly the drift its tool cares about.
+  if (dynamic) entries.push(["~dynamic", true]);
   return JSON.stringify(entries);
 }
 
-/** The part of one path's records a fingerprint covers, in the order the router lists them. */
-export function fingerprintableRecords(path: string, records: RouterOSRecord[]): string[] {
+/**
+ * The part of one path's records a fingerprint covers, in the order the router
+ * lists them. Dynamic records are router-generated and churn on their own, so
+ * they are dropped, except the ones the call itself acts on (`keepDynamic`):
+ * making a dynamic DHCP lease static approves that lease as previewed.
+ */
+export function fingerprintableRecords(
+  path: string,
+  records: RouterOSRecord[],
+  keepDynamic?: DynamicTargets,
+): string[] {
   const volatile = new Set(VOLATILE_FIELDS_BY_PATH[path] ?? []);
-  return normalizeForDiff(records).map((r) => stableRecord(r, volatile));
+  const out: string[] = [];
+  for (const record of records) {
+    const dynamic = isTrue(record.dynamic);
+    if (dynamic && !keepDynamic?.(path, record)) continue;
+    out.push(stableRecord(record, volatile, dynamic));
+  }
+  return out;
 }
 
 /**
  * Hash the configuration under `paths` as the router reports it now: dynamic
- * records dropped, runtime counters and status fields stripped, record order
+ * records dropped (except those `keepDynamic` selects), runtime counters and status fields stripped, record order
  * kept (it matters on firewall chains, and `.id` stays in so a rule swapped for
  * an identical-looking one also counts). A confirmation token or a plan carries
  * this hash, so approving a preview approves the state that preview was made
@@ -121,16 +146,29 @@ export function fingerprintableRecords(path: string, records: RouterOSRecord[]):
  * readings (uptime, PoE power, link state), so they return NO_STATE_FINGERPRINT.
  * A read that fails throws: a state that cannot be read cannot be vouched for.
  */
-export async function fingerprintState(client: DeviceClient, paths: string[]): Promise<string> {
+export async function fingerprintState(
+  client: DeviceClient,
+  paths: string[],
+  keepDynamic?: DynamicTargets,
+): Promise<string> {
   const bound = [...new Set(paths)].filter((p) => !UNBOUND_PATHS.has(p));
   if (bound.length === 0 || client instanceof SwosClient) return NO_STATE_FINGERPRINT;
 
   const hash = createHash("sha256");
   for (const path of bound) {
     const records = await client.get<RouterOSRecord>(path, {});
-    hash.update(JSON.stringify([path, fingerprintableRecords(path, records)]));
+    hash.update(JSON.stringify([path, fingerprintableRecords(path, records, keepDynamic)]));
   }
   return hash.digest("hex");
+}
+
+/** The state fingerprint for one call of `tool`: its state paths and the dynamic records it targets. */
+export function fingerprintCall(
+  client: DeviceClient,
+  tool: ToolDefinition,
+  params: Record<string, unknown>,
+): Promise<string> {
+  return fingerprintState(client, statePathsFor(tool, params), tool.stateDynamicTargets?.(params));
 }
 
 /** Combine several fingerprints (per router, per plan step) into one, order-sensitively. */

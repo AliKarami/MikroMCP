@@ -162,6 +162,64 @@ describe("fingerprintState", () => {
   });
 });
 
+describe("dynamic records a call targets", () => {
+  const LEASE_PATH = "ip/dhcp-server/lease";
+  const lease: WireRecord = {
+    ".id": "*5",
+    address: "192.168.88.50",
+    "mac-address": "AA:BB:CC:00:00:01",
+    server: "lan",
+    dynamic: "true",
+    status: "bound",
+    "expires-after": "8m",
+  };
+  const byMac = (path: string, record: Record<string, unknown>) =>
+    path === LEASE_PATH && record["mac-address"] === "AA:BB:CC:00:00:01";
+
+  it("binds a targeted dynamic lease, so a new address after the preview counts as drift", async () => {
+    const a = await fingerprintState(clientWith({ [LEASE_PATH]: [lease] }), [LEASE_PATH], byMac);
+    const b = await fingerprintState(
+      clientWith({ [LEASE_PATH]: [{ ...lease, address: "192.168.88.99" }] }),
+      [LEASE_PATH],
+      byMac,
+    );
+    expect(b).not.toBe(a);
+  });
+
+  it("binds the lease's identity: a replaced lease for the same MAC counts as drift", async () => {
+    const a = await fingerprintState(clientWith({ [LEASE_PATH]: [lease] }), [LEASE_PATH], byMac);
+    const b = await fingerprintState(
+      clientWith({ [LEASE_PATH]: [{ ...lease, ".id": "*6" }] }),
+      [LEASE_PATH],
+      byMac,
+    );
+    expect(b).not.toBe(a);
+  });
+
+  it("counts the lease turning static as drift", async () => {
+    const a = await fingerprintState(clientWith({ [LEASE_PATH]: [lease] }), [LEASE_PATH], byMac);
+    const b = await fingerprintState(
+      clientWith({ [LEASE_PATH]: [{ ...lease, dynamic: "false" }] }),
+      [LEASE_PATH],
+      byMac,
+    );
+    expect(b).not.toBe(a);
+  });
+
+  it("still ignores the targeted lease's status fields and other dynamic leases", async () => {
+    const other: WireRecord = { ...lease, ".id": "*9", "mac-address": "AA:BB:CC:00:00:02" };
+    const a = await fingerprintState(clientWith({ [LEASE_PATH]: [lease] }), [LEASE_PATH], byMac);
+    const b = await fingerprintState(
+      clientWith({
+        [LEASE_PATH]: [{ ...lease, status: "waiting", "expires-after": "1s" }, other],
+      }),
+      [LEASE_PATH],
+      byMac,
+    );
+    expect(b).toBe(a);
+  });
+});
+
 describe("combineFingerprints", () => {
   it("is order-sensitive and key-sensitive", () => {
     const ab = combineFingerprints([

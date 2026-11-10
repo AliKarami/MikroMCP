@@ -5,7 +5,7 @@ import { checkAuthz, checkToolAllowed } from "../middleware/authz.js";
 import { checkConfirmation } from "../middleware/confirmation.js";
 import { auditLog } from "../observability/audit-log.js";
 import { takeSnapshot } from "../domain/snapshot/snapshot-engine.js";
-import { fingerprintState } from "../domain/snapshot/state-fingerprint.js";
+import { fingerprintCall } from "../domain/snapshot/state-fingerprint.js";
 import { recordAttempt, recordOutcome } from "../domain/snapshot/write-journal.js";
 import { withRetry } from "../adapter/retry-engine.js";
 import { isWithinMaintenanceWindow } from "../config/maintenance-window.js";
@@ -20,7 +20,6 @@ import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { ToolContext, ToolDefinition } from "../domain/tools/tool-definition.js";
 import {
   snapshotPathsFor,
-  statePathsFor,
   loggableParams,
   unavailableCapability,
   isEffectiveDryRun,
@@ -248,7 +247,7 @@ export async function executeToolCall(
           args,
           identity,
           config.confirmationSecret,
-          () => fingerprintState(toolContext.deviceClient, statePathsFor(tool, handlerArgs)),
+          () => fingerprintCall(toolContext.deviceClient, tool, handlerArgs),
         );
       }
 

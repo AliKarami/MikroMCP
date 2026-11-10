@@ -4,7 +4,7 @@ import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import type { RouterOSRestClient } from "../../adapter/rest-client.js";
 import type { SwosClient } from "../../adapter/swos-client.js";
 import type { DeviceClient } from "../../adapter/connection-pool.js";
-import type { DeviceType, RouterConfig } from "../../types.js";
+import type { DeviceType, RouterConfig, RouterOSRecord } from "../../types.js";
 import type { Identity } from "../../types.js";
 import type { SshClient } from "../../adapter/ssh-client.js";
 import type { FtpClient } from "../../adapter/ftp-client.js";
@@ -48,6 +48,12 @@ export interface ToolDefinition {
    */
   statePaths?: (params: Record<string, unknown>) => string[];
   /**
+   * The dynamic records this call acts on. A state fingerprint drops dynamic
+   * records (they churn on their own), so a tool that writes one (making a
+   * dynamic DHCP lease static) names it here to keep it bound.
+   */
+  stateDynamicTargets?: (params: Record<string, unknown>) => DynamicTargets | undefined;
+  /**
    * Parameters as they may be written to the audit log and the write journal.
    * The generic redaction drops well-known secret keys; a tool whose parameter
    * can carry a secret inside a free-form value (a config document) scrubs it
@@ -65,6 +71,9 @@ export interface ToolDefinition {
   platform?: ToolPlatform;
   handler: (params: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>;
 }
+
+/** Selects, by path, the dynamic records a call acts on. */
+export type DynamicTargets = (path: string, record: RouterOSRecord) => boolean;
 
 /** Platform a tool targets: a concrete device type, or "any" for platform-aware tools. */
 export type ToolPlatform = DeviceType | "any";

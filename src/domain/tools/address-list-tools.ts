@@ -88,6 +88,15 @@ const manageAddressListTool: ToolDefinition = {
     openWorldHint: false,
   },
   snapshotPaths: ["ip/firewall/address-list"],
+  // An entry with a timeout is dynamic in RouterOS; bind the targeted one anyway.
+  stateDynamicTargets: (params) => {
+    if (typeof params.list !== "string" || typeof params.address !== "string") return undefined;
+    const { list, address } = params;
+    return (path, record) =>
+      path === "ip/firewall/address-list" &&
+      String(record.list) === list &&
+      String(record.address) === address;
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageAddressListInputSchema.parse(params);
     log.info(
