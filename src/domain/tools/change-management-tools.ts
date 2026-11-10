@@ -474,6 +474,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
             journalId: stepJournalId,
             phase: "success",
             durationMs: Date.now() - stepStartMs,
+            autoRevert: result.structuredContent.autoRevert,
           });
           results.push({
             stepIndex: i,
@@ -481,6 +482,9 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
             status: "success",
             journalId: stepJournalId,
             result: result.content,
+            ...(result.structuredContent.autoRevert === undefined
+              ? {}
+              : { autoRevert: result.structuredContent.autoRevert }),
           });
         } catch (err) {
           const error = err instanceof MikroMCPError ? err : enrichError(err, { tool: step.tool });
@@ -490,6 +494,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
             phase: "failure",
             outcome: error.code,
             durationMs: Date.now() - stepStartMs,
+            autoRevert: error.details?.autoRevert,
           });
           log.error({ err: error, tool: step.tool, step: i }, "apply_plan step failed");
           return {
@@ -498,7 +503,13 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
               status: "failed",
               failedStep: i,
               completedSteps: results,
-              error: { code: error.code, message: error.message },
+              error: {
+                code: error.code,
+                message: error.message,
+                ...(error.details?.autoRevert === undefined
+                  ? {}
+                  : { autoRevert: error.details.autoRevert }),
+              },
             },
             isError: true,
           };

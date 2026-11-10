@@ -313,6 +313,7 @@ export async function executeToolCall(
           journalId,
           phase: "success",
           durationMs: Date.now() - startMs,
+          autoRevert: result.structuredContent.autoRevert,
         });
         // Surface the journal ID only when rollback_change could use it: a real
         // write with at least one snapshot. Dry runs, plan_changes, apply_plan's
@@ -374,6 +375,7 @@ export async function executeToolCall(
           phase: "failure",
           outcome: error.code,
           durationMs: Date.now() - startMs,
+          autoRevert: error.details?.autoRevert,
         });
       }
 

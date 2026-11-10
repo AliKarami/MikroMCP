@@ -3,6 +3,7 @@ import { createChangeManagementTools } from "../../../../src/domain/tools/change
 import type { ToolDefinition, ToolContext } from "../../../../src/domain/tools/tool-definition.js";
 import { loggableParams } from "../../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../../src/adapter/rest-client.js";
+import { MikroMCPError, ErrorCategory } from "../../../../src/domain/errors/error-types.js";
 
 vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
@@ -320,6 +321,63 @@ describe("plan steps in the logs", () => {
     expect(inner.handler).toHaveBeenCalledWith(
       expect.objectContaining({ config: "community: s3cr3t" }),
       expect.anything(),
+    );
+  });
+});
+
+describe("apply_plan with an auto-revert-guarded step", () => {
+  const autoRevert = { status: "disarmed", jobName: "mikromcp-autorevert-x", seconds: 60 };
+  const steps = [{ tool: "manage_route", params: {} }];
+
+  function journalLines(): Record<string, unknown>[] {
+    return vi
+      .mocked(nodeFsp.appendFile)
+      .mock.calls.map((c) => JSON.parse(String(c[1])) as Record<string, unknown>);
+  }
+
+  it("reports the step's auto-revert job in the result and the journal outcome", async () => {
+    const inner = makeManageRoute("ok");
+    vi.mocked(inner.handler).mockResolvedValue({
+      content: "Added.",
+      structuredContent: { action: "created", autoRevert },
+    });
+    const applyTool = createChangeManagementTools([inner]).find((t) => t.name === "apply_plan")!;
+    vi.mocked(nodeFsp.appendFile).mockClear();
+
+    const result = await applyTool.handler({ routerId: "edge-01", steps }, makeContext());
+
+    expect(result.structuredContent).toMatchObject({ steps: [{ autoRevert }] });
+    await vi.waitFor(() =>
+      expect(journalLines().find((l) => l.phase === "success")).toMatchObject({ autoRevert }),
+    );
+  });
+
+  it("reports a job left armed when a step locks the router out", async () => {
+    const inner = makeManageRoute("ok");
+    const armed = { ...autoRevert, status: "armed", healthCheck: "failed" };
+    vi.mocked(inner.handler).mockRejectedValue(
+      new MikroMCPError({
+        category: ErrorCategory.ROUTER_UNREACHABLE,
+        code: "AUTO_REVERT_PENDING",
+        message: "locked out",
+        details: { autoRevert: armed },
+        recoverability: { retryable: false, suggestedAction: "wait" },
+      }),
+    );
+    const applyTool = createChangeManagementTools([inner]).find((t) => t.name === "apply_plan")!;
+    vi.mocked(nodeFsp.appendFile).mockClear();
+
+    const result = await applyTool.handler({ routerId: "edge-01", steps }, makeContext());
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: { code: "AUTO_REVERT_PENDING", autoRevert: armed },
+    });
+    await vi.waitFor(() =>
+      expect(journalLines().find((l) => l.phase === "failure")).toMatchObject({
+        outcome: "AUTO_REVERT_PENDING",
+        autoRevert: armed,
+      }),
     );
   });
 });
