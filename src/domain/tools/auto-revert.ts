@@ -49,8 +49,16 @@ export type FirewallRevert =
   | { kind: "remove-new"; chain: string; knownIds: string[] }
   /** After an add: remove exactly the rule it created. */
   | { kind: "remove-id"; id: string }
-  /** After a remove: re-add the rule as it was, at the same position. */
-  | { kind: "restore"; record: Record<string, unknown>; placeBefore?: string }
+  /**
+   * After a remove: re-add the rule as it was, at the same position. `sameComment`
+   * counts the rules that carried its comment before the remove, itself included.
+   */
+  | {
+      kind: "restore";
+      record: Record<string, unknown>;
+      placeBefore?: string;
+      sameComment: number;
+    }
   /** After enable/disable: put the disabled flag back. */
   | { kind: "set-disabled"; id: string; disabled: boolean };
 
@@ -144,9 +152,11 @@ function revertBody(path: string, revert: FirewallRevert): string {
           ? add
           : `:do {${add} place-before=${rosId(revert.placeBefore)}} on-error={${add}}`;
       const comment = revert.record.comment;
-      // Guard on the comment so a job that fires twice does not add the rule twice.
+      // Restore only while the comment is one rule short, so a job that fires twice
+      // adds nothing the second time, and other rules sharing the comment don't
+      // count as the removed one still being there.
       return typeof comment === "string" && comment !== ""
-        ? `:if ([:len [${m} find where comment=${rosString(comment)}]] = 0) do={\n${placed}\n}`
+        ? `:if ([:len [${m} find where comment=${rosString(comment)}]] < ${revert.sameComment}) do={\n${placed}\n}`
         : placed;
     }
   }
@@ -180,6 +190,65 @@ function withReport(err: MikroMCPError, report: AutoRevertReport, note: string):
       suggestedAction: `${note} ${err.recoverability.suggestedAction}`,
     },
   });
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/**
+ * The router's wall clock plus `seconds`, as scheduler `start-date`/`start-time`
+ * in the date format the router reported. A new entry's first run defaults to
+ * the moment it is added, so `interval` alone would fire the revert at once.
+ * Both clock forms are handled: `2026-11-11` (RouterOS 7.10+) and `nov/11/2026`.
+ */
+export function startAfter(
+  clock: { date?: unknown; time?: unknown },
+  seconds: number,
+): { "start-date": string; "start-time": string } {
+  const date = String(clock.date ?? "");
+  const time = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(String(clock.time ?? ""));
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const legacy = /^([a-z]{3})\/(\d{2})\/(\d{4})$/i.exec(date);
+  const month = legacy ? MONTHS.indexOf(legacy[1].toLowerCase()) : -1;
+  if (!time || (!iso && month < 0)) {
+    throw new MikroMCPError({
+      category: ErrorCategory.INTERNAL,
+      code: "AUTO_REVERT_CLOCK_UNREADABLE",
+      message: `Cannot read the router clock ("${date} ${String(clock.time ?? "")}") to schedule the auto-revert job.`,
+      recoverability: {
+        retryable: false,
+        suggestedAction: "Pass autoRevertSeconds=0 to apply without the auto-revert job.",
+      },
+    });
+  }
+  // The clock is local wall time; doing the arithmetic in UTC keeps it as such.
+  const at = new Date(
+    Date.UTC(
+      Number(iso ? iso[1] : legacy![3]),
+      iso ? Number(iso[2]) - 1 : month,
+      Number(iso ? iso[3] : legacy![2]),
+      Number(time[1]),
+      Number(time[2]),
+      Number(time[3]) + seconds,
+    ),
+  );
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    "start-date": iso
+      ? `${at.getUTCFullYear()}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`
+      : `${MONTHS[at.getUTCMonth()]}/${pad(at.getUTCDate())}/${at.getUTCFullYear()}`,
+    "start-time": `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())}:${pad(at.getUTCSeconds())}`,
+  };
+}
+
+async function firstRun(
+  context: ToolContext,
+  seconds: number,
+): Promise<{ "start-date": string; "start-time": string }> {
+  const results: unknown = await context.routerClient.get<RouterOSRecord>("system/clock");
+  const clock = (Array.isArray(results) ? results[0] : results) as
+    | Record<string, unknown>
+    | undefined;
+  return startAfter(clock ?? {}, seconds);
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -233,6 +302,7 @@ export async function guardedWrite<T>(
   try {
     const job = await context.routerClient.create(SCHEDULER_PATH, {
       name: jobName,
+      ...(await firstRun(context, seconds)),
       interval: `${seconds}s`,
       policy: "read,write",
       comment: `MikroMCP auto-revert: ${description}`.slice(0, 255),

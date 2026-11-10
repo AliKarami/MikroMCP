@@ -257,17 +257,24 @@ function plannedAutoRevert(seconds: number): Record<string, unknown> {
   return { wouldArm: seconds > 0, seconds };
 }
 
-/** The id of the first static rule after `id`, where a re-added rule must go. */
-async function nextStaticRuleId(
+/**
+ * What re-adding a removed rule needs: the first static rule after it, where it
+ * must go back, and how many rules carry its comment, itself included.
+ */
+async function restoreTarget(
   context: ToolContext,
   path: string,
-  id: string,
-): Promise<string | undefined> {
-  // Dynamic rules cannot anchor place-before.
+  rule: Record<string, unknown>,
+): Promise<{ placeBefore?: string; sameComment: number }> {
   const rules = await context.routerClient.get<RouterOSRecord>(path, {});
-  const at = rules.findIndex((r) => r[".id"] === id);
+  const at = rules.findIndex((r) => r[".id"] === rule[".id"]);
+  // Dynamic rules cannot anchor place-before.
   const next = at < 0 ? undefined : rules.slice(at + 1).find((r) => !isTrue(r.dynamic));
-  return next === undefined ? undefined : String(next[".id"]);
+  const sameComment = rules.filter((r) => r.comment === rule.comment).length;
+  return {
+    placeBefore: next === undefined ? undefined : String(next[".id"]),
+    sameComment: Math.max(sameComment, 1),
+  };
 }
 
 /** Run a write behind the auto-revert job unless it is turned off. */
@@ -520,14 +527,16 @@ const manageFirewallRuleTool: ToolDefinition = {
           };
         }
 
-        const placeBefore =
-          parsed.autoRevertSeconds > 0 ? await nextStaticRuleId(context, path, id) : undefined;
+        const target =
+          parsed.autoRevertSeconds > 0
+            ? await restoreTarget(context, path, existing)
+            : { sameComment: 1 };
 
         const { extra, note } = await applyWrite(
           context,
           parsed.autoRevertSeconds,
           path,
-          { kind: "restore", record: existing, placeBefore },
+          { kind: "restore", record: existing, ...target },
           `remove ${parsed.table} rule "${comment}"`,
           () => context.routerClient.remove(path, id),
         );

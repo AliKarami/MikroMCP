@@ -19,7 +19,13 @@ const SCHEDULER = "system/scheduler";
  */
 function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
   const mockGet = vi.fn((path: string) =>
-    Promise.resolve(path === SCHEDULER ? [{ ".id": "*S1" }] : fromWire(records)),
+    Promise.resolve(
+      path === SCHEDULER
+        ? [{ ".id": "*S1" }]
+        : path === "system/clock"
+          ? { date: "2026-11-11", time: "10:00:00" }
+          : fromWire(records),
+    ),
   );
   const mockCreate = vi.fn((path: string) =>
     Promise.resolve(

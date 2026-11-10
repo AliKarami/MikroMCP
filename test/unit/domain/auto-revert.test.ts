@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   addArguments,
   guardedWrite,
+  startAfter,
   revertScript,
   rosString,
 } from "../../../src/domain/tools/auto-revert.js";
@@ -13,6 +14,7 @@ import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import { fromWire, type WireRecord } from "../helpers/wire.js";
 
 const SCHEDULER = "system/scheduler";
+const CLOCK = { date: "2026-11-11", time: "23:59:30", "time-zone-name": "Europe/Berlin" };
 const manageFirewallRule = firewallTools[1];
 
 interface Client {
@@ -33,6 +35,7 @@ function makeClient(
     probe?: () => Promise<void>;
     jobGone?: boolean;
     armError?: unknown;
+    clock?: Record<string, string>;
   } = {},
 ) {
   const events: string[] = [];
@@ -40,6 +43,7 @@ function makeClient(
     get: vi.fn((path: string, query?: { filter?: Record<string, string> }) => {
       events.push(`get ${path}`);
       if (path === SCHEDULER) return Promise.resolve(opts.jobGone ? [] : [{ ".id": "*S1" }]);
+      if (path === "system/clock") return Promise.resolve(opts.clock ?? CLOCK);
       const comment = query?.filter?.comment;
       const rules = fromWire(opts.rules ?? []);
       return Promise.resolve(
@@ -143,13 +147,13 @@ describe("revert scripts", () => {
     const script = revertScript(
       "job",
       "ip/firewall/filter",
-      { kind: "restore", record, placeBefore: "*9" },
+      { kind: "restore", record, placeBefore: "*9", sameComment: 1 },
       "x",
     );
     const add =
       '/ip firewall filter add chain="input" action="accept" dst-port="443" protocol="tcp" comment="allow-mgmt" disabled=no';
     expect(script).toContain(
-      ':if ([:len [/ip firewall filter find where comment="allow-mgmt"]] = 0)',
+      ':if ([:len [/ip firewall filter find where comment="allow-mgmt"]] < 1)',
     );
     expect(script).toContain(`:do {${add} place-before=*9} on-error={${add}}`);
     expect(addArguments(record)).not.toMatch(/bytes|packets|dynamic|invalid|\.id/);
@@ -167,6 +171,28 @@ describe("revert scripts", () => {
   });
 });
 
+describe("startAfter", () => {
+  it("adds the delay to an ISO clock, across midnight and month end", () => {
+    expect(startAfter({ date: "2026-12-31", time: "23:59:50" }, 60)).toEqual({
+      "start-date": "2027-01-01",
+      "start-time": "00:00:50",
+    });
+  });
+
+  it("keeps the legacy date format the router reports", () => {
+    expect(startAfter({ date: "feb/28/2028", time: "23:30:00" }, 3600)).toEqual({
+      "start-date": "feb/29/2028",
+      "start-time": "00:30:00",
+    });
+  });
+
+  it("refuses a clock it cannot read", () => {
+    expect(() => startAfter({ date: "11/11/2026", time: "10:00:00" }, 60)).toThrow(
+      /AUTO_REVERT_CLOCK_UNREADABLE|Cannot read the router clock/,
+    );
+  });
+});
+
 describe("guardedWrite", () => {
   it("arms the job, applies the change, checks health, then removes the job", async () => {
     const { client, events, context } = makeClient();
@@ -179,6 +205,7 @@ describe("guardedWrite", () => {
 
     expect(result).toBe("done");
     expect(events).toEqual([
+      "get system/clock",
       `create ${SCHEDULER}`,
       "write",
       "probe",
@@ -186,7 +213,13 @@ describe("guardedWrite", () => {
       `remove ${SCHEDULER}`,
     ]);
     const [, job] = client.create.mock.calls[0];
-    expect(job).toMatchObject({ interval: "60s", policy: "read,write" });
+    // The first run is pinned 60s ahead: a new entry otherwise runs when added.
+    expect(job).toMatchObject({
+      "start-date": "2026-11-12",
+      "start-time": "00:00:30",
+      interval: "60s",
+      policy: "read,write",
+    });
     expect(job.name).toMatch(/^mikromcp-autorevert-/);
     expect(job["on-event"]).toContain("/ip firewall filter set [find where .id=*5] disabled=no");
     expect(client.remove).toHaveBeenCalledWith(SCHEDULER, "*S1");
@@ -209,6 +242,17 @@ describe("guardedWrite", () => {
     expect(err.details?.autoRevert).toMatchObject({ status: "armed", healthCheck: "failed" });
     expect(client.probe).toHaveBeenCalledTimes(2);
     expect(client.remove).not.toHaveBeenCalled();
+  });
+
+  it("does not apply the change when the router clock cannot be read", async () => {
+    const { client, context } = makeClient({ clock: { date: "", time: "" } });
+    const write = vi.fn();
+
+    const err = await caught(guardedWrite(context, guard, write));
+
+    expect(err.code).toBe("AUTO_REVERT_ARM_FAILED");
+    expect(client.create).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
   });
 
   it("does not apply the change when the job cannot be armed", async () => {
@@ -347,6 +391,21 @@ describe("manage_firewall_rule auto-revert", () => {
       action: "removed",
       autoRevert: { status: "disarmed" },
     });
+  });
+
+  it("remove: restores the rule even when another rule shares its comment", async () => {
+    const { client, context } = makeClient({
+      rules: [
+        { ".id": "*4", chain: "input", action: "accept", comment: "mgmt" },
+        { ".id": "*5", chain: "input", action: "accept", comment: "mgmt" },
+      ],
+    });
+
+    await manageFirewallRule.handler({ ...base, action: "remove", comment: "mgmt" }, context);
+
+    const [, job] = client.create.mock.calls.find((c) => c[0] === SCHEDULER)!;
+    expect(job["on-event"]).toContain('[:len [/ip firewall filter find where comment="mgmt"]] < 2');
+    expect(job["on-event"]).toContain("place-before=*5");
   });
 
   it("disable: the job re-enables the rule", async () => {
