@@ -194,32 +194,25 @@ function withReport(err: MikroMCPError, report: AutoRevertReport, note: string):
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
+export type ScheduleStart = { "start-date": string; "start-time": string };
+
 /**
  * The router's wall clock plus `seconds`, as scheduler `start-date`/`start-time`
- * in the date format the router reported. A new entry's first run defaults to
- * the moment it is added, so `interval` alone would fire the revert at once.
- * Both clock forms are handled: `2026-11-11` (RouterOS 7.10+) and `nov/11/2026`.
+ * in the date format the router reported, or null when the clock can't be parsed.
+ * A new scheduler entry's start defaults to the moment it is added, so the first
+ * run is pinned rather than left to how the RouterOS version places it. Both clock
+ * forms are handled: `2026-11-11` (RouterOS 7.10+) and `nov/11/2026`.
  */
-export function startAfter(
+export function clockPlus(
   clock: { date?: unknown; time?: unknown },
   seconds: number,
-): { "start-date": string; "start-time": string } {
+): ScheduleStart | null {
   const date = String(clock.date ?? "");
   const time = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(String(clock.time ?? ""));
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   const legacy = /^([a-z]{3})\/(\d{2})\/(\d{4})$/i.exec(date);
   const month = legacy ? MONTHS.indexOf(legacy[1].toLowerCase()) : -1;
-  if (!time || (!iso && month < 0)) {
-    throw new MikroMCPError({
-      category: ErrorCategory.INTERNAL,
-      code: "AUTO_REVERT_CLOCK_UNREADABLE",
-      message: `Cannot read the router clock ("${date} ${String(clock.time ?? "")}") to schedule the auto-revert job.`,
-      recoverability: {
-        retryable: false,
-        suggestedAction: "Pass autoRevertSeconds=0 to apply without the auto-revert job.",
-      },
-    });
-  }
+  if (!time || (!iso && month < 0)) return null;
   // The clock is local wall time; doing the arithmetic in UTC keeps it as such.
   const at = new Date(
     Date.UTC(
@@ -240,15 +233,45 @@ export function startAfter(
   };
 }
 
-async function firstRun(
+/** Read `system/clock` and return it as `clock` plus `seconds`; `clock` echoes what was read. */
+export async function readClockPlus(
   context: ToolContext,
   seconds: number,
-): Promise<{ "start-date": string; "start-time": string }> {
+): Promise<{ start: ScheduleStart | null; clock: string }> {
   const results: unknown = await context.routerClient.get<RouterOSRecord>("system/clock");
-  const clock = (Array.isArray(results) ? results[0] : results) as
-    | Record<string, unknown>
-    | undefined;
-  return startAfter(clock ?? {}, seconds);
+  const clock = ((Array.isArray(results) ? results[0] : results) ?? {}) as Record<string, unknown>;
+  return {
+    start: clockPlus(clock, seconds),
+    clock: `${String(clock.date ?? "")} ${String(clock.time ?? "")}`,
+  };
+}
+
+/** `clockPlus` that throws the auto-revert error for an unreadable clock. */
+export function startAfter(
+  clock: { date?: unknown; time?: unknown },
+  seconds: number,
+): ScheduleStart {
+  const start = clockPlus(clock, seconds);
+  if (!start) throw clockUnreadable(`${String(clock.date ?? "")} ${String(clock.time ?? "")}`);
+  return start;
+}
+
+function clockUnreadable(clock: string): MikroMCPError {
+  return new MikroMCPError({
+    category: ErrorCategory.INTERNAL,
+    code: "AUTO_REVERT_CLOCK_UNREADABLE",
+    message: `Cannot read the router clock ("${clock}") to schedule the auto-revert job.`,
+    recoverability: {
+      retryable: false,
+      suggestedAction: "Pass autoRevertSeconds=0 to apply without the auto-revert job.",
+    },
+  });
+}
+
+async function firstRun(context: ToolContext, seconds: number): Promise<ScheduleStart> {
+  const { start, clock } = await readClockPlus(context, seconds);
+  if (!start) throw clockUnreadable(clock);
+  return start;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

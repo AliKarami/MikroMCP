@@ -224,6 +224,11 @@ describe("system-ops tools", () => {
   });
 
   describe("reboot handler", () => {
+    const CLOCK = fromWire([{ date: "2026-11-11", time: "23:58:30", "time-zone-name": "UTC" }]);
+    function rebootGet(scheduler: Record<string, unknown>[] = [], clock: unknown = CLOCK) {
+      return vi.fn((path: string) => Promise.resolve(path === "system/clock" ? clock : scheduler));
+    }
+
     it("returns dry_run result without calling execute", async () => {
       const mockExecute = vi.fn();
       const ctx = makeContext({ execute: mockExecute });
@@ -244,7 +249,7 @@ describe("system-ops tools", () => {
 
     it("includes delay in structured content", async () => {
       const mockExecute = vi.fn().mockResolvedValue({});
-      const ctx = makeContext({ execute: mockExecute });
+      const ctx = makeContext({ execute: mockExecute, get: rebootGet() });
       const rebootTool = systemOpsTools[2];
       const result = await rebootTool.handler({ routerId: "test-router", delay: 30 }, ctx);
       expect((result.structuredContent as Record<string, unknown>).delay).toBe(30);
@@ -253,7 +258,7 @@ describe("system-ops tools", () => {
     it("schedules a delayed reboot through a self-removing scheduler entry", async () => {
       const mockExecute = vi.fn().mockResolvedValue({});
       const mockCreate = vi.fn().mockResolvedValue({ ".id": "*A" });
-      const ctx = makeContext({ execute: mockExecute, create: mockCreate });
+      const ctx = makeContext({ execute: mockExecute, create: mockCreate, get: rebootGet() });
       const rebootTool = systemOpsTools[2];
       const result = await rebootTool.handler({ routerId: "test-router", delay: 300 }, ctx);
 
@@ -262,6 +267,8 @@ describe("system-ops tools", () => {
         "system/scheduler",
         expect.objectContaining({
           name: "mikromcp-reboot",
+          "start-date": "2026-11-12",
+          "start-time": "00:03:30",
           interval: "300s",
           "on-event": expect.stringMatching(
             /^\/system scheduler remove \[find name="mikromcp-reboot"\]; \/system reboot$/,
@@ -271,12 +278,47 @@ describe("system-ops tools", () => {
       const sc = result.structuredContent as Record<string, unknown>;
       expect(sc.action).toBe("reboot_scheduled");
       expect(sc.scheduler).toBe("mikromcp-reboot");
+      expect(sc.startDate).toBe("2026-11-12");
+      expect(sc.startTime).toBe("00:03:30");
+    });
+
+    it("pins the first run in the legacy clock format the router reports", async () => {
+      const mockCreate = vi.fn().mockResolvedValue({ ".id": "*A" });
+      const get = rebootGet([], fromWire([{ date: "nov/11/2026", time: "10:00:00" }]));
+      const ctx = makeContext({ create: mockCreate, get });
+      await systemOpsTools[2].handler({ routerId: "test-router", delay: 3600 }, ctx);
+      expect(mockCreate).toHaveBeenCalledWith(
+        "system/scheduler",
+        expect.objectContaining({ "start-date": "nov/11/2026", "start-time": "11:00:00" }),
+      );
+    });
+
+    it("refuses a delayed reboot when the router clock is unreadable, leaving a pending one", async () => {
+      const mockCreate = vi.fn();
+      const mockRemove = vi.fn();
+      const get = rebootGet(
+        fromWire([{ ".id": "*7", name: "mikromcp-reboot", interval: "10m" }]),
+        fromWire([{ date: "11/11/2026", time: "10:00:00" }]),
+      );
+      const ctx = makeContext({ create: mockCreate, remove: mockRemove, get });
+      await expect(
+        systemOpsTools[2].handler({ routerId: "test-router", delay: 60 }, ctx),
+      ).rejects.toMatchObject({ code: "REBOOT_CLOCK_UNREADABLE" });
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockRemove).not.toHaveBeenCalled();
+    });
+
+    it("does not read the clock for an immediate reboot", async () => {
+      const get = rebootGet();
+      const ctx = makeContext({ get });
+      await systemOpsTools[2].handler({ routerId: "test-router", delay: 0 }, ctx);
+      expect(get).not.toHaveBeenCalledWith("system/clock");
     });
 
     it("replaces a pending delayed reboot instead of stacking a second one", async () => {
-      const mockGet = vi
-        .fn()
-        .mockResolvedValue(fromWire([{ ".id": "*7", name: "mikromcp-reboot", interval: "10m" }]));
+      const mockGet = rebootGet(
+        fromWire([{ ".id": "*7", name: "mikromcp-reboot", interval: "10m" }]),
+      );
       const mockRemove = vi.fn().mockResolvedValue(undefined);
       const mockCreate = vi.fn().mockResolvedValue({ ".id": "*8" });
       const ctx = makeContext({ get: mockGet, remove: mockRemove, create: mockCreate });

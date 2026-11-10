@@ -5,6 +5,8 @@ import { toolError } from "./tool-definition.js";
 import { createLogger } from "../../observability/logger.js";
 import { resolveCommandPolicy, checkCommand } from "./command-guard.js";
 import type { RouterOSRecord } from "../../types.js";
+import { readClockPlus, type ScheduleStart } from "./auto-revert.js";
+import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 
 const log = createLogger("system-ops-tools");
 
@@ -148,6 +150,21 @@ const setSystemClockTool: ToolDefinition = {
 
 const REBOOT_SCHEDULER_NAME = "mikromcp-reboot";
 
+async function rebootStart(context: ToolContext, delay: number): Promise<ScheduleStart> {
+  const { start, clock } = await readClockPlus(context, delay);
+  if (start) return start;
+  throw new MikroMCPError({
+    category: ErrorCategory.INTERNAL,
+    code: "REBOOT_CLOCK_UNREADABLE",
+    message: `Cannot read the router clock ("${clock}") to schedule a delayed reboot; nothing was changed.`,
+    recoverability: {
+      retryable: false,
+      suggestedAction: "Check the router clock with get_system_clock, or reboot with delay=0.",
+      alternativeTools: ["get_system_clock"],
+    },
+  });
+}
+
 const rebootInputSchema = z
   .object({
     routerId,
@@ -190,6 +207,11 @@ const rebootTool: ToolDefinition = {
         };
       }
 
+      // RouterOS documents a new entry's start-date/start-time as defaulting to the moment
+      // it is added (7.23 then runs it one interval later), so pin the first run explicitly.
+      // Read the clock before touching a pending reboot, so a failure leaves it as it was.
+      const start = parsed.delay > 0 ? await rebootStart(context, parsed.delay) : undefined;
+
       // A pending delayed reboot left behind an immediate one would survive it and fire after boot.
       const pending = await context.routerClient.get<RouterOSRecord>("system/scheduler", {
         filter: { name: REBOOT_SCHEDULER_NAME },
@@ -212,6 +234,7 @@ const rebootTool: ToolDefinition = {
       // fire again after boot and reboot the router in a loop.
       await context.routerClient.create("system/scheduler", {
         name: REBOOT_SCHEDULER_NAME,
+        ...start,
         interval: `${parsed.delay}s`,
         policy: "read,write,policy,reboot,test",
         "on-event": `/system scheduler remove [find name="${REBOOT_SCHEDULER_NAME}"]; /system reboot`,
@@ -225,6 +248,8 @@ const rebootTool: ToolDefinition = {
           action: "reboot_scheduled",
           delay: parsed.delay,
           scheduler: REBOOT_SCHEDULER_NAME,
+          startDate: start?.["start-date"],
+          startTime: start?.["start-time"],
           routerId: context.routerId,
         },
       };

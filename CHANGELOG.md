@@ -16,6 +16,9 @@ Each release section covers changes **since the previous release only**.
 ### Changed
 - `manage_firewall_rule` now needs write access to `/system scheduler` for real writes: if the auto-revert job cannot be added, the call fails with `AUTO_REVERT_ARM_FAILED` and changes nothing. Pass `autoRevertSeconds: 0` to write without the job, as before.
 
+### Fixed
+- `reboot` with a `delay` above 0 now pins the `mikromcp-reboot` scheduler entry's first run instead of leaving it to the router: the entry had only an `interval`, and RouterOS documents a new entry's `start-date`/`start-time` as defaulting to the moment it is added (RouterOS 7.23 then runs it one interval later, but that placement is not documented). `start-date`/`start-time` are now set from the router clock plus `delay` (ISO and `mmm/dd/yyyy` date formats) and returned as `startDate`/`startTime`. If the clock cannot be read, the call fails with `REBOOT_CLOCK_UNREADABLE` and leaves any pending delayed reboot in place.
+
 ## [1.16.1] - 2026-11-04
 
 ### Fixed
