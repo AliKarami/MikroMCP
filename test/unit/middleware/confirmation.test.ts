@@ -155,4 +155,147 @@ describe("confirmation middleware", () => {
       (err: unknown) => isMikroMCPError(err) && err.category === "APPROVAL_REQUIRED",
     );
   });
+
+  describe("state binding", () => {
+    async function issue(
+      params: Record<string, unknown>,
+      identity: Identity,
+      state: () => Promise<string>,
+    ): Promise<{ token: string; details: Record<string, unknown> }> {
+      const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
+      try {
+        await checkConfirmation("manage_firewall_rule", "edge-01", params, identity, SECRET, state);
+      } catch (err) {
+        const details = (err as { details: Record<string, unknown> }).details;
+        return { token: details.confirmationToken as string, details };
+      }
+      throw new Error("expected APPROVAL_REQUIRED");
+    }
+
+    it("reports the fingerprint the token was issued against", async () => {
+      const { details } = await issue(
+        { routerId: "edge-01", action: "remove" },
+        makeIdentity("operator"),
+        async () => "a".repeat(64),
+      );
+      expect(details.stateFingerprint).toBe("a".repeat(64));
+      expect(details.confirmationToken).toContain(`.${"a".repeat(64)}.`);
+    });
+
+    it("refuses the token with CONFIRMATION_STATE_CHANGED when the state moved after the preview", async () => {
+      const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
+      const identity = makeIdentity("operator");
+      const params = { routerId: "edge-01", action: "remove", comment: "block-lab" };
+      let state = "before";
+      const read = async () => state;
+      const { token } = await issue(params, identity, read);
+
+      state = "after";
+      await expect(
+        checkConfirmation(
+          "manage_firewall_rule",
+          "edge-01",
+          { ...params, confirmationToken: token },
+          identity,
+          SECRET,
+          read,
+        ),
+      ).rejects.toSatisfy(
+        (err: unknown) =>
+          isMikroMCPError(err) &&
+          err.code === "CONFIRMATION_STATE_CHANGED" &&
+          err.category === "CONFLICT",
+      );
+    });
+
+    it("does not consume a token refused for drift, so it holds again if the state returns", async () => {
+      const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
+      const identity = makeIdentity("operator");
+      const params = { routerId: "edge-01", action: "remove" };
+      let state = "before";
+      const read = async () => state;
+      const { token } = await issue(params, identity, read);
+      const confirmed = { ...params, confirmationToken: token };
+
+      state = "after";
+      await expect(
+        checkConfirmation("manage_firewall_rule", "edge-01", confirmed, identity, SECRET, read),
+      ).rejects.toBeDefined();
+      state = "before";
+      await expect(
+        checkConfirmation("manage_firewall_rule", "edge-01", confirmed, identity, SECRET, read),
+      ).resolves.toBeUndefined();
+    });
+
+    it("refuses a token whose embedded fingerprint was edited (MAC covers it)", async () => {
+      const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
+      const identity = makeIdentity("operator");
+      const params = { routerId: "edge-01", action: "remove" };
+      const { token } = await issue(params, identity, async () => "before");
+      const [exp, nonce, , mac] = token.split(".");
+      const forged = `${exp}.${nonce}.after.${mac}`;
+      await expect(
+        checkConfirmation(
+          "manage_firewall_rule",
+          "edge-01",
+          { ...params, confirmationToken: forged },
+          identity,
+          SECRET,
+          async () => "after",
+        ),
+      ).rejects.toSatisfy(
+        (err: unknown) => isMikroMCPError(err) && err.code === "CONFIRMATION_MISMATCH",
+      );
+    });
+
+    it("does not read router state for a token that fails the MAC check", async () => {
+      const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
+      const read = vi.fn().mockResolvedValue("x");
+      await expect(
+        checkConfirmation(
+          "manage_firewall_rule",
+          "edge-01",
+          { routerId: "edge-01", confirmationToken: `${Date.now() + 60_000}.n.x.deadbeef` },
+          makeIdentity("operator"),
+          SECRET,
+          read,
+        ),
+      ).rejects.toBeDefined();
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it("lets only one of two concurrent calls with the same token through", async () => {
+      const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
+      const identity = makeIdentity("operator");
+      const params = { routerId: "edge-01", action: "remove" };
+      const { token } = await issue(params, identity, async () => "s");
+      const confirmed = { ...params, confirmationToken: token };
+      // A slow state read: both calls are past the first used-token check
+      // before either finishes it.
+      const slowRead = () => new Promise<string>((resolve) => setTimeout(() => resolve("s"), 5));
+
+      const results = await Promise.allSettled([
+        checkConfirmation("manage_firewall_rule", "edge-01", confirmed, identity, SECRET, slowRead),
+        checkConfirmation("manage_firewall_rule", "edge-01", confirmed, identity, SECRET, slowRead),
+      ]);
+
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+      expect(isMikroMCPError(rejected.reason) && rejected.reason.code).toBe("CONFIRMATION_EXPIRED");
+    });
+
+    it("admins bypass the token, so no state is read", async () => {
+      const { checkConfirmation } = await import("../../../src/middleware/confirmation.js");
+      const read = vi.fn().mockResolvedValue("x");
+      await checkConfirmation(
+        "manage_firewall_rule",
+        "edge-01",
+        { routerId: "edge-01" },
+        makeIdentity("admin"),
+        SECRET,
+        read,
+      );
+      expect(read).not.toHaveBeenCalled();
+    });
+  });
 });

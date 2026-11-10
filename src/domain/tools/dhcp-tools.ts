@@ -157,6 +157,13 @@ const manageDhcpLeaseTool: ToolDefinition = {
     openWorldHint: false,
   },
   snapshotPaths: ["ip/dhcp-server/lease"],
+  // make-static acts on a dynamic lease; bind that lease (by MAC) to the token.
+  stateDynamicTargets: (params) => {
+    if (typeof params.macAddress !== "string") return undefined;
+    const mac = params.macAddress.toUpperCase();
+    return (path, record) =>
+      path === "ip/dhcp-server/lease" && String(record["mac-address"] ?? "").toUpperCase() === mac;
+  },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageDhcpLeaseInputSchema.parse(params);
     const upperMac = parsed.macAddress.toUpperCase();

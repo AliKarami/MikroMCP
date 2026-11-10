@@ -5,6 +5,7 @@ import { checkAuthz, checkToolAllowed } from "../middleware/authz.js";
 import { checkConfirmation } from "../middleware/confirmation.js";
 import { auditLog } from "../observability/audit-log.js";
 import { takeSnapshot } from "../domain/snapshot/snapshot-engine.js";
+import { fingerprintCall } from "../domain/snapshot/state-fingerprint.js";
 import { recordAttempt, recordOutcome } from "../domain/snapshot/write-journal.js";
 import { withRetry } from "../adapter/retry-engine.js";
 import { isWithinMaintenanceWindow } from "../config/maintenance-window.js";
@@ -225,8 +226,29 @@ export async function executeToolCall(
 
       assertMaintenanceWindow(tool.annotations.destructiveHint, routerConfig, routerId);
 
+      const toolContext = buildRouterToolContext({
+        routerConfig,
+        correlationId,
+        identity,
+        pool,
+        config,
+        registry,
+      });
+
+      const cb = getOrCreateBreaker(circuitBreakers, routerId, config);
+      toolContext.circuitBreaker = cb;
+
+      const { confirmationToken: _ct, ...handlerArgs } = args;
+
       if (tool.annotations.destructiveHint && config.confirmationSecret) {
-        await checkConfirmation(tool.name, routerId, args, identity, config.confirmationSecret);
+        await checkConfirmation(
+          tool.name,
+          routerId,
+          args,
+          identity,
+          config.confirmationSecret,
+          () => fingerprintCall(toolContext.deviceClient, tool, handlerArgs),
+        );
       }
 
       const shouldAudit = tool.annotations.destructiveHint || !tool.annotations.readOnlyHint;
@@ -246,20 +268,6 @@ export async function executeToolCall(
           config.auditLogPath,
         );
       }
-
-      const toolContext = buildRouterToolContext({
-        routerConfig,
-        correlationId,
-        identity,
-        pool,
-        config,
-        registry,
-      });
-
-      const cb = getOrCreateBreaker(circuitBreakers, routerId, config);
-      toolContext.circuitBreaker = cb;
-
-      const { confirmationToken: _ct, ...handlerArgs } = args;
 
       const snapshotIds: string[] = [];
       const snapshots = { taken: [] as string[], failed: [] as string[] };

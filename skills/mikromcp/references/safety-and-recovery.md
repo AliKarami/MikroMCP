@@ -9,7 +9,8 @@
    `APPROVAL_REQUIRED` error carrying a `confirmationToken`. Tell the user what
    the call will change and on which router(s), then re-issue the same call with
    that `confirmationToken` once they agree — the token is not their approval. Tokens are HMAC-signed and scoped to the
-   tool+router+args; `readonly` and `operator` identities need them whenever `MIKROMCP_CONFIRMATION_SECRET` is set, `admin`/`superadmin` skip per-router confirmation, and `bulk_execute` fan-outs of any write tool always need a fleet token.
+   tool+router+args and to the router's configuration when issued (a change in between gets
+   `CONFIRMATION_STATE_CHANGED`); `readonly` and `operator` identities need them whenever `MIKROMCP_CONFIRMATION_SECRET` is set, `admin`/`superadmin` skip per-router confirmation, and `bulk_execute` fan-outs of any write tool always need a fleet token.
 4. **Apply** and read the `action`: `created`, `updated`, or `removed`.
 
 ## Idempotency outcomes (all are SUCCESS unless noted)
@@ -43,6 +44,7 @@ Write tools take a config snapshot and write a journal entry before applying.
 | `VALIDATION` / `MISSING_ROUTER_ID` | Bad params, or no router resolved | Fix params; provide `routerId` or set `MIKROMCP_DEFAULT_ROUTER` |
 | `NOT_FOUND` | Target resource/router absent | Verify with the matching `list_*`; check the id/name |
 | `CONFLICT` | Exists with different config | Remove-then-recreate, or adjust the request (see above) |
+| `CONFLICT` / `CONFIRMATION_STATE_CHANGED`, `PLAN_STATE_CHANGED` | The router changed after the preview the token or `planFingerprint` was issued for | Nothing was written. Re-run the preview, show the user the new diff, then get a fresh token or `planFingerprint` |
 | `PERMISSION_DENIED` | Identity lacks rights, or outside maintenance window | Use an allowed identity; wait for the window; check `details` |
 | `APPROVAL_REQUIRED` | Destructive op or fleet write needs confirmation | Show the user the change, then re-issue with the returned `confirmationToken` |
 | `ROUTER_UNREACHABLE` | Network/TLS failure to the router | Check host/port/TLS in `routers.yaml`; verify the router is up |

@@ -1,6 +1,13 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { isEffectiveDryRun, loggableParams, snapshotPathsFor } from "./tool-definition.js";
+import type { DynamicTargets } from "./tool-definition.js";
+import {
+  isEffectiveDryRun,
+  loggableParams,
+  snapshotPathsFor,
+  statePathsFor,
+} from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { enrichError } from "../errors/error-enricher.js";
@@ -8,6 +15,7 @@ import { createLogger } from "../../observability/logger.js";
 import { takeSnapshot, loadSnapshot } from "../snapshot/snapshot-engine.js";
 import type { StoredSnapshot } from "../snapshot/snapshot-engine.js";
 import { computeRestorePlan, applyRestorePlan } from "../snapshot/diff-engine.js";
+import { combineFingerprints, fingerprintCall } from "../snapshot/state-fingerprint.js";
 import { readJournalEntries, recordAttempt, recordOutcome } from "../snapshot/write-journal.js";
 import type { RouterOSRecord } from "../../types.js";
 import type { SwosClient } from "../../adapter/swos-client.js";
@@ -42,9 +50,22 @@ const applyPlanInputSchema = z
       .min(1)
       .max(10)
       .describe("Ordered list of write operations to apply in sequence"),
+    planFingerprint: z
+      .string()
+      .regex(/^[0-9a-f]{64}\.[0-9a-f]{64}$/, "Expected the planFingerprint plan_changes returned")
+      .optional()
+      .describe(
+        "The planFingerprint from plan_changes. When given, apply_plan first checks that the steps are the planned ones and that the configuration each step touches is still what plan_changes saw, and refuses with PLAN_STATE_CHANGED if not. Recommended: without it, the plan runs against whatever the state is now.",
+      ),
     confirmationToken: z.string().optional(),
   })
   .strict();
+
+type PlanStep = z.infer<typeof stepSchema>;
+
+function hashOf(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
 
 /**
  * Whether a journal attempt was a dry run. The executor records the effective
@@ -323,6 +344,57 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     };
   }
 
+  /**
+   * Per-step fingerprints of the configuration each step touches, every one
+   * read against the state as it is now (plan_changes runs every dry run
+   * against the same unchanged router, so apply_plan compares before step 1).
+   */
+  async function stepFingerprints(
+    steps: PlanStep[],
+    routerIdValue: string,
+    context: ToolContext,
+  ): Promise<string[]> {
+    const out: string[] = [];
+    for (const step of steps) {
+      const tool = requireTool(step.tool);
+      out.push(
+        await fingerprintCall(context.deviceClient, tool, {
+          ...step.params,
+          routerId: routerIdValue,
+        }),
+      );
+    }
+    return out;
+  }
+
+  // Two halves, so a refusal can say which one moved: the request (router and
+  // steps) and the state those steps were previewed against.
+  function planFingerprintOf(steps: PlanStep[], routerIdValue: string, states: string[]): string {
+    const requestHash = hashOf({ routerId: routerIdValue, steps });
+    const stateHash = combineFingerprints(states.map((fp, i) => [String(i), fp] as const));
+    return `${requestHash}.${stateHash}`;
+  }
+
+  // An unvalidated apply_plan call's steps, each with its tool and the
+  // parameters it will run with; unknown tools are skipped (the handler
+  // rejects them before anything runs).
+  function resolvedSteps(
+    params: Record<string, unknown>,
+  ): { tool: ToolDefinition; stepParams: Record<string, unknown> }[] {
+    if (!Array.isArray(params.steps)) return [];
+    return params.steps.flatMap((step: unknown) => {
+      const { tool: name, params: stepParams } = (step ?? {}) as Record<string, unknown>;
+      const tool = typeof name === "string" ? toolMap.get(name) : undefined;
+      if (!tool || !stepParams || typeof stepParams !== "object") return [];
+      return [
+        {
+          tool,
+          stepParams: { ...(stepParams as Record<string, unknown>), routerId: params.routerId },
+        },
+      ];
+    });
+  }
+
   function requireTool(name: string): ToolDefinition {
     const tool = toolMap.get(name);
     if (!tool) {
@@ -339,11 +411,55 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     return tool;
   }
 
+  async function assertPlanStillHolds(
+    steps: PlanStep[],
+    routerIdValue: string,
+    planFingerprint: string,
+    context: ToolContext,
+  ): Promise<void> {
+    const [plannedRequest, plannedState] = planFingerprint.split(".");
+    const current = planFingerprintOf(steps, routerIdValue, []).split(".")[0];
+    if (current !== plannedRequest) {
+      throw new MikroMCPError({
+        category: ErrorCategory.VALIDATION,
+        code: "PLAN_MISMATCH",
+        message:
+          "planFingerprint belongs to a different plan: the router or the steps differ from what plan_changes previewed.",
+        recoverability: {
+          retryable: false,
+          suggestedAction:
+            "Pass apply_plan exactly the routerId and steps given to plan_changes, or run plan_changes again for these steps.",
+          alternativeTools: ["plan_changes"],
+        },
+      });
+    }
+    let states: string[];
+    try {
+      states = await stepFingerprints(steps, routerIdValue, context);
+    } catch (err) {
+      throw enrichError(err, { routerId: routerIdValue, tool: "apply_plan" });
+    }
+    const currentState = planFingerprintOf(steps, routerIdValue, states).split(".")[1];
+    if (currentState !== plannedState) {
+      throw new MikroMCPError({
+        category: ErrorCategory.CONFLICT,
+        code: "PLAN_STATE_CHANGED",
+        message: `The configuration this plan touches on router "${routerIdValue}" changed after plan_changes previewed it. Nothing was applied.`,
+        recoverability: {
+          retryable: true,
+          suggestedAction:
+            "Run plan_changes again to preview the steps against the current state, review the result, then apply_plan with the new planFingerprint.",
+          alternativeTools: ["plan_changes"],
+        },
+      });
+    }
+  }
+
   const planChangesTool: ToolDefinition = {
     name: "plan_changes",
     title: "Plan Changes",
     description:
-      "Preview a sequence of write operations: each step runs with dryRun=true against live state, returning affected paths and the predicted action per step. Use apply_plan to execute the same steps for real.",
+      "Preview a sequence of write operations: each step runs with dryRun=true against live state, returning affected paths and the predicted action per step. Also returns a planFingerprint binding the steps to the configuration they were previewed against; pass it to apply_plan to execute the same steps for real, refused if the router changed in between.",
     inputSchema: planChangesInputSchema,
     redactParams: loggableSteps,
     annotations: {
@@ -355,6 +471,16 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       const parsed = planChangesInputSchema.parse(params);
       log.info({ routerId: context.routerId, stepCount: parsed.steps.length }, "Planning changes");
+
+      // Read before the dry runs: a change landing between a dry run and the
+      // fingerprint would otherwise be approved without ever being previewed.
+      let states: string[] | undefined;
+      try {
+        states = await stepFingerprints(parsed.steps, context.routerId, context);
+      } catch (err) {
+        if (err instanceof MikroMCPError && err.code === "TOOL_NOT_FOUND") throw err;
+        log.warn({ err, routerId: context.routerId }, "Could not fingerprint the plan's state");
+      }
 
       const stepResults = [];
 
@@ -390,16 +516,29 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
           currentState,
           dryRunResult: dryRunResult.content,
           structuredDryRun: dryRunResult.structuredContent,
+          ...(states ? { stateFingerprint: states[i] } : {}),
         });
       }
+
+      const planFingerprint = states
+        ? planFingerprintOf(parsed.steps, context.routerId, states)
+        : undefined;
+      const fingerprintNote = planFingerprint
+        ? `\nPass planFingerprint ${planFingerprint} to apply_plan so it refuses if the router changes before then.`
+        : "\nNo planFingerprint: the state the steps touch could not be read, so apply_plan cannot be bound to it.";
 
       return {
         content:
           `Plan for ${parsed.steps.length} step(s) on ${parsed.routerId}:\n` +
           stepResults
             .map((s) => `  Step ${s.stepIndex + 1} (${s.tool}): ${s.dryRunResult}`)
-            .join("\n"),
-        structuredContent: { routerId: parsed.routerId, steps: stepResults },
+            .join("\n") +
+          fingerprintNote,
+        structuredContent: {
+          routerId: parsed.routerId,
+          steps: stepResults,
+          ...(planFingerprint ? { planFingerprint } : {}),
+        },
       };
     },
   };
@@ -408,10 +547,22 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     name: "apply_plan",
     title: "Apply Plan",
     description:
-      "Execute write operations in order, stopping on first failure. Each step is snapshotted and journaled individually. Non-admin identities need a confirmationToken (same two-step flow as other destructive tools). Undo individual steps via rollback_change with the returned journal IDs.",
+      "Execute write operations in order, stopping on first failure. Each step is snapshotted and journaled individually. Pass the planFingerprint from plan_changes so the plan is refused (PLAN_STATE_CHANGED) when the configuration it touches changed after the preview — this check applies to every role. Non-admin identities also need a confirmationToken (same two-step flow as other destructive tools), itself bound to the state when issued. Undo individual steps via rollback_change with the returned journal IDs.",
     inputSchema: applyPlanInputSchema,
     redactParams: loggableSteps,
     snapshotPaths: [],
+    // The executor snapshots nothing for apply_plan itself (each step does), but
+    // its confirmation token still binds the state every step touches.
+    statePaths: (params) =>
+      resolvedSteps(params).flatMap(({ tool, stepParams }) => statePathsFor(tool, stepParams)),
+    stateDynamicTargets: (params) => {
+      const targets = resolvedSteps(params)
+        .map(({ tool, stepParams }) => tool.stateDynamicTargets?.(stepParams))
+        .filter((t): t is DynamicTargets => t !== undefined);
+      return targets.length > 0
+        ? (path, record) => targets.some((t) => t(path, record))
+        : undefined;
+    },
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
@@ -421,6 +572,10 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
     async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
       const parsed = applyPlanInputSchema.parse(params);
       log.info({ routerId: context.routerId, stepCount: parsed.steps.length }, "Applying plan");
+
+      if (parsed.planFingerprint) {
+        await assertPlanStillHolds(parsed.steps, context.routerId, parsed.planFingerprint, context);
+      }
 
       const journalPath = context.appConfig.journalPath;
       const snapshotDir = context.appConfig.snapshotDir;

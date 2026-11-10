@@ -83,7 +83,9 @@ Full enumeration of every tool by family: `references/tool-map.md`.
    commit step, so this is the only check that the change landed as meant.
 
 Several dependent writes (a routing table, then a route in it, then a rule that
-uses it): `plan_changes` (up to 10 steps, all dry-run) → review → `apply_plan`.
+uses it): `plan_changes` (up to 10 steps, all dry-run) → review → `apply_plan`
+with the `planFingerprint` `plan_changes` returned, so the plan is refused if the router
+changed after the review.
 It stops at the first failed step and journals each step separately.
 
 ### Diagnose connectivity

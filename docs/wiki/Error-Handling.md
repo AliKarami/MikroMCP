@@ -8,7 +8,7 @@ Every error MikroMCP returns includes a machine-readable `category`, `code`, and
 |---|---|
 | `VALIDATION` | Invalid input parameters (Zod schema rejection, or no router could be resolved — `MISSING_ROUTER_ID`) |
 | `NOT_FOUND` | Resource does not exist on the router |
-| `CONFLICT` | Resource exists but with different configuration |
+| `CONFLICT` | Resource exists but with different configuration; also `CONFIRMATION_STATE_CHANGED` / `PLAN_STATE_CHANGED` when the router's configuration changed between a preview (confirmation token, `plan_changes`) and the apply |
 | `PERMISSION_DENIED` | Identity lacks the required role or the call is outside a maintenance window |
 | `APPROVAL_REQUIRED` | Destructive operation or `bulk_execute` write fan-out requires a two-step confirmation token |
 | `ROUTER_UNREACHABLE` | Network or TLS connectivity failure to the router |

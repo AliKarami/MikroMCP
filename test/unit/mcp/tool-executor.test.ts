@@ -4,6 +4,10 @@ import type { ToolDefinition } from "../../../src/domain/tools/tool-definition.j
 import { MikroMCPError, ErrorCategory } from "../../../src/domain/errors/error-types.js";
 import { createSshClient } from "../../../src/adapter/adapter-factory.js";
 import { diagnosticTools } from "../../../src/domain/tools/diagnostic-tools.js";
+import { firewallTools } from "../../../src/domain/tools/firewall-tools.js";
+import { dhcpTools } from "../../../src/domain/tools/dhcp-tools.js";
+import { addressListTools } from "../../../src/domain/tools/address-list-tools.js";
+import { fromWire, type WireRecord } from "../helpers/wire.js";
 import { takeSnapshot } from "../../../src/domain/snapshot/snapshot-engine.js";
 import { recordAttempt } from "../../../src/domain/snapshot/write-journal.js";
 import { withIdentity } from "../../../src/middleware/auth.js";
@@ -568,5 +572,168 @@ describe("executeToolCall and the audit log", () => {
     const entries = vi.mocked(auditLog).mock.calls.map(([event]) => event);
     expect(JSON.stringify(entries)).not.toContain("s3cr3t");
     expect(entries[0].params).toEqual({ routerId: "r1", params: "<withheld: redaction failed>" });
+  });
+
+  describe("confirmation tokens bind the previewed router state", () => {
+    beforeEach(() => {
+      process.env.ROUTER_R1_USER = "u";
+      process.env.ROUTER_R1_PASS = "p";
+    });
+    afterEach(() => {
+      delete process.env.ROUTER_R1_USER;
+      delete process.env.ROUTER_R1_PASS;
+    });
+
+    const manageFirewallRule = firewallTools.find((t) => t.name === "manage_firewall_rule")!;
+    const operator = {
+      id: "op",
+      role: "operator",
+      allowedRouters: [],
+      allowedToolPatterns: [],
+    } as Identity;
+    const RULE: WireRecord = {
+      ".id": "*7",
+      chain: "forward",
+      action: "drop",
+      "src-address": "10.0.0.0/8",
+      comment: "block-lab",
+      disabled: "false",
+      bytes: "100",
+      packets: "1",
+    };
+
+    function routerWith(filter: { rules: WireRecord[] }) {
+      const client = {
+        get: vi.fn(async (path: string) =>
+          path === "ip/firewall/filter" ? fromWire(filter.rules) : [],
+        ),
+        remove: vi.fn().mockResolvedValue(undefined),
+      };
+      const deps = makeDeps({
+        pool: {
+          getClient: vi.fn().mockReturnValue(client),
+          removeClient: vi.fn(),
+        } as unknown as ToolExecutorDeps["pool"],
+      });
+      (deps.config as { confirmationSecret?: string }).confirmationSecret = "test-secret";
+      return { client, deps };
+    }
+
+    const removeCall = {
+      routerId: "r1",
+      action: "remove",
+      chain: "forward",
+      ruleAction: "drop",
+      comment: "block-lab",
+      // These tests are about the token; the dead-man switch has its own tests.
+      autoRevertSeconds: 0,
+    };
+
+    async function tokenFor(deps: ToolExecutorDeps): Promise<string> {
+      const result = await withIdentity(operator, () =>
+        executeToolCall(manageFirewallRule, { ...removeCall }, deps),
+      );
+      expect(result.content[0].text).toContain("APPROVAL_REQUIRED");
+      const details = result.content[0].text.split("\n").find((l) => l.startsWith("Details: "))!;
+      return (JSON.parse(details.slice("Details: ".length)) as { confirmationToken: string })
+        .confirmationToken;
+    }
+
+    it("refuses the apply when the rule changed between issuing and using the token", async () => {
+      const filter = { rules: [RULE] };
+      const { client, deps } = routerWith(filter);
+      const token = await tokenFor(deps);
+
+      // Someone widens the rule after the preview: same comment, different match.
+      filter.rules = [{ ...RULE, "src-address": "0.0.0.0/0" }];
+
+      const result = await withIdentity(operator, () =>
+        executeToolCall(manageFirewallRule, { ...removeCall, confirmationToken: token }, deps),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("CONFIRMATION_STATE_CHANGED");
+      expect(client.remove).not.toHaveBeenCalled();
+    });
+
+    it("refuses the apply when another rule was inserted ahead of it", async () => {
+      const filter = { rules: [RULE] };
+      const { client, deps } = routerWith(filter);
+      const token = await tokenFor(deps);
+
+      filter.rules = [{ ".id": "*9", chain: "forward", action: "accept", disabled: "false" }, RULE];
+
+      const result = await withIdentity(operator, () =>
+        executeToolCall(manageFirewallRule, { ...removeCall, confirmationToken: token }, deps),
+      );
+
+      expect(result.content[0].text).toContain("CONFIRMATION_STATE_CHANGED");
+      expect(client.remove).not.toHaveBeenCalled();
+    });
+
+    it("refuses make-static when the targeted dynamic lease changed after the preview", async () => {
+      const manageLease = dhcpTools.find((t) => t.name === "manage_dhcp_lease")!;
+      const lease: WireRecord = {
+        ".id": "*5",
+        address: "192.168.88.50",
+        "mac-address": "AA:BB:CC:00:00:01",
+        dynamic: "true",
+        status: "bound",
+      };
+      const leases = { rules: [lease] };
+      const client = {
+        get: vi.fn(async (path: string) =>
+          path === "ip/dhcp-server/lease" ? fromWire(leases.rules) : [],
+        ),
+        execute: vi.fn().mockResolvedValue(undefined),
+        update: vi.fn().mockResolvedValue(undefined),
+      };
+      const deps = makeDeps({
+        pool: {
+          getClient: vi.fn().mockReturnValue(client),
+          removeClient: vi.fn(),
+        } as unknown as ToolExecutorDeps["pool"],
+      });
+      (deps.config as { confirmationSecret?: string }).confirmationSecret = "test-secret";
+      const call = { routerId: "r1", action: "make-static", macAddress: "aa:bb:cc:00:00:01" };
+
+      const first = await withIdentity(operator, () =>
+        executeToolCall(manageLease, { ...call }, deps),
+      );
+      const details = first.content[0].text.split("\n").find((l) => l.startsWith("Details: "))!;
+      const token = (JSON.parse(details.slice("Details: ".length)) as { confirmationToken: string })
+        .confirmationToken;
+
+      leases.rules = [{ ...lease, address: "192.168.88.99" }];
+
+      const result = await withIdentity(operator, () =>
+        executeToolCall(manageLease, { ...call, confirmationToken: token }, deps),
+      );
+      expect(result.content[0].text).toContain("CONFIRMATION_STATE_CHANGED");
+      expect(client.execute).not.toHaveBeenCalled();
+      expect(client.update).not.toHaveBeenCalled();
+    });
+
+    it("binds a timed (dynamic) address-list entry the call targets", () => {
+      const manageEntry = addressListTools.find((t) => t.name === "manage_address_list_entry")!;
+      const keep = manageEntry.stateDynamicTargets!({ list: "blocked", address: "1.2.3.4" })!;
+      expect(keep("ip/firewall/address-list", { list: "blocked", address: "1.2.3.4" })).toBe(true);
+      expect(keep("ip/firewall/address-list", { list: "blocked", address: "5.6.7.8" })).toBe(false);
+    });
+
+    it("applies when only traffic counters moved", async () => {
+      const filter = { rules: [RULE] };
+      const { client, deps } = routerWith(filter);
+      const token = await tokenFor(deps);
+
+      filter.rules = [{ ...RULE, bytes: "999999", packets: "5000" }];
+
+      const result = await withIdentity(operator, () =>
+        executeToolCall(manageFirewallRule, { ...removeCall, confirmationToken: token }, deps),
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(client.remove).toHaveBeenCalledWith("ip/firewall/filter", "*7");
+    });
   });
 });
