@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { firewallTools } from "../../../src/domain/tools/firewall-tools.js";
+import { probeTiming } from "../../../src/domain/tools/auto-revert.js";
+
+probeTiming.settleMs = 0;
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { fromWire, type WireRecord } from "../helpers/wire.js";

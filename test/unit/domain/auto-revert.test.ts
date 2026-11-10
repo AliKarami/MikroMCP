@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   addArguments,
   guardedWrite,
+  probeTiming,
   startAfter,
   revertScript,
   rosString,
@@ -90,6 +91,9 @@ async function caught(promise: Promise<unknown>): Promise<MikroMCPError> {
   }
   throw new Error("expected a MikroMCPError");
 }
+
+probeTiming.settleMs = 0;
+probeTiming.retryMs = 0;
 
 afterEach(() => {
   vi.useRealTimers();
