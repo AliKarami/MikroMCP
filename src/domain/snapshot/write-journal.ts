@@ -26,6 +26,8 @@ interface OutcomeArgs {
   phase: "success" | "failure";
   durationMs: number;
   outcome?: string;
+  /** The auto-revert job that guarded the write, when one did (see `auto-revert.ts`). */
+  autoRevert?: unknown;
 }
 
 async function appendLine(filePath: string, obj: Record<string, unknown>): Promise<void> {
@@ -175,5 +177,6 @@ export function recordOutcome(args: OutcomeArgs): void {
     phase: args.phase,
     outcome: args.outcome,
     durationMs: args.durationMs,
+    ...(args.autoRevert === undefined ? {} : { autoRevert: args.autoRevert }),
   });
 }

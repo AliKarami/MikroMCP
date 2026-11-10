@@ -11,11 +11,23 @@ const listFirewallRulesInputSchema = listFirewallRulesTool.inputSchema;
 
 const manageFirewallRuleInputSchema = manageFirewallRuleTool.inputSchema;
 
+const SCHEDULER = "system/scheduler";
+
+/**
+ * A client whose firewall paths return `records`, and whose scheduler accepts the
+ * auto-revert job and still lists it at disarm time (the router answered).
+ */
 function makeContext(records: WireRecord[], createReturn?: Record<string, unknown>): ToolContext {
-  const mockGet = vi.fn().mockResolvedValue(fromWire(records));
-  const mockCreate = vi
-    .fn()
-    .mockResolvedValue(createReturn ?? { ".id": "*1", chain: "forward", action: "drop" });
+  const mockGet = vi.fn((path: string) =>
+    Promise.resolve(path === SCHEDULER ? [{ ".id": "*S1" }] : fromWire(records)),
+  );
+  const mockCreate = vi.fn((path: string) =>
+    Promise.resolve(
+      path === SCHEDULER
+        ? { ".id": "*S1" }
+        : (createReturn ?? { ".id": "*1", chain: "forward", action: "drop" }),
+    ),
+  );
   const mockRemove = vi.fn().mockResolvedValue(undefined);
   const mockUpdate = vi.fn().mockResolvedValue(undefined);
   return {
@@ -26,8 +38,16 @@ function makeContext(records: WireRecord[], createReturn?: Record<string, unknow
       create: mockCreate,
       remove: mockRemove,
       update: mockUpdate,
+      probe: vi.fn().mockResolvedValue(undefined),
     } as unknown as RouterOSRestClient,
-  };
+  } as unknown as ToolContext;
+}
+
+/** The create call that wrote the firewall rule, skipping the auto-revert job. */
+function firewallCreateCall(mock: ReturnType<typeof vi.fn>): unknown[] {
+  const call = mock.mock.calls.find((c) => c[0] !== SCHEDULER);
+  if (!call) throw new Error("no firewall create call");
+  return call;
 }
 
 describe("firewall tools", () => {
@@ -204,7 +224,7 @@ describe("firewall tools", () => {
         typeof vi.fn
       >;
       expect(mockCreate).toHaveBeenCalled();
-      const callArgs = mockCreate.mock.calls[0];
+      const callArgs = firewallCreateCall(mockCreate);
       expect(callArgs[1]).toHaveProperty("action", "drop");
       expect(callArgs[1]).toHaveProperty("chain", "forward");
     });
@@ -600,7 +620,7 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
       },
       ctx,
     );
-    expect(createMock(ctx).mock.calls[0][1]).toMatchObject({
+    expect(firewallCreateCall(createMock(ctx))[1]).toMatchObject({
       "in-interface-list": "WAN",
       "connection-state": "new",
       "connection-nat-state": "!dstnat",
@@ -610,7 +630,7 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
   it("creates a dst-nat port forward with to-addresses and to-ports", async () => {
     const ctx = makeContext([]);
     await manageFirewallRuleTool.handler(portForwardParams, ctx);
-    const [path, body] = createMock(ctx).mock.calls[0];
+    const [path, body] = firewallCreateCall(createMock(ctx));
     expect(path).toBe("ip/firewall/nat");
     expect(body).toMatchObject({
       action: "dst-nat",
@@ -828,7 +848,9 @@ describe("manage_firewall_rule - interface lists, connection state and NAT targe
 
     const ctx = makeContext([]);
     await manageFirewallRuleTool.handler(params, ctx);
-    expect(createMock(ctx).mock.calls[0][1]).toMatchObject({ "connection-state": "!invalid" });
+    expect(firewallCreateCall(createMock(ctx))[1]).toMatchObject({
+      "connection-state": "!invalid",
+    });
 
     await expect(
       manageFirewallRuleTool.handler(

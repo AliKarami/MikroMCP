@@ -42,7 +42,11 @@ RouterOS documentation — when you need to know what a RouterOS field means, se
 5. **Rollback exists.** Write tools snapshot+journal first, and a write that can
    be undone returns its `journalId` (dry runs don't). To undo, use
    `rollback_change` with it; `list_journal` recovers a lost ID (pick an entry
-   with `rollbackable: true`). Know this before bulk changes.
+   with `rollbackable: true`). Know this before bulk changes. Rollback needs a
+   router you can still reach, so `manage_firewall_rule` also arms a scheduler
+   job that undoes the change by itself (`autoRevertSeconds`, default 60) unless
+   the router still answers afterwards. Leave it on. On `AUTO_REVERT_PENDING`,
+   wait for the router to revert and do not retry the same rule.
 6. **Prefer dedicated tools over `run_command`.** Use `run_command` only when no
    dedicated tool covers the need. Its writes journal but never snapshot, so
    they cannot be rolled back — record the manual undo yourself.

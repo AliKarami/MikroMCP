@@ -13,6 +13,8 @@ import { paginate, listContent, compactFields } from "./pagination.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+import { autoRevertSeconds, autoRevertSummary, guardedWrite } from "./auto-revert.js";
+import type { FirewallRevert } from "./auto-revert.js";
 
 const log = createLogger("firewall-tools");
 
@@ -246,14 +248,53 @@ const manageFirewallRuleInputSchema = z
       .boolean()
       .default(false)
       .describe("If true, validate and return planned changes without applying"),
+    autoRevertSeconds,
   })
   .strict();
+
+/** What a dry run reports about the auto-revert job a real call would arm. */
+function plannedAutoRevert(seconds: number): Record<string, unknown> {
+  return { wouldArm: seconds > 0, seconds };
+}
+
+/** The id of the first static rule after `id`, where a re-added rule must go. */
+async function nextStaticRuleId(
+  context: ToolContext,
+  path: string,
+  id: string,
+): Promise<string | undefined> {
+  // Dynamic rules cannot anchor place-before.
+  const rules = await context.routerClient.get<RouterOSRecord>(path, {});
+  const at = rules.findIndex((r) => r[".id"] === id);
+  const next = at < 0 ? undefined : rules.slice(at + 1).find((r) => !isTrue(r.dynamic));
+  return next === undefined ? undefined : String(next[".id"]);
+}
+
+/** Run a write behind the auto-revert job unless it is turned off. */
+async function applyWrite<T>(
+  context: ToolContext,
+  seconds: number,
+  path: string,
+  revert: FirewallRevert,
+  description: string,
+  write: (retarget: (revert: FirewallRevert) => Promise<void>) => Promise<T>,
+): Promise<{ result: T; extra: Record<string, unknown>; note: string }> {
+  if (seconds === 0) {
+    return { result: await write(async () => {}), extra: {}, note: "" };
+  }
+  const { result, autoRevert } = await guardedWrite(
+    context,
+    { seconds, path, revert, description },
+    write,
+  );
+  return { result, extra: { autoRevert }, note: `\n${autoRevertSummary(autoRevert)}` };
+}
 
 const manageFirewallRuleTool: ToolDefinition = {
   name: "manage_firewall_rule",
   title: "Manage Firewall Rule",
   description:
-    "Add, remove, disable, or enable a firewall rule on a MikroTik router. Matches addresses, ports, protocol, interfaces, interface lists, and connection/NAT state; nat rules take toAddresses/toPorts (e.g. a dst-nat port forward). Uses comment as idempotency key for deduplication and identification: a repeated add returns already_exists only when the match, NAT targets, and disabled state agree, otherwise CONFLICT (use enable/disable when only the disabled state differs). Supports dry-run mode.",
+    "Add, remove, disable, or enable a firewall rule on a MikroTik router. Matches addresses, ports, protocol, interfaces, interface lists, and connection/NAT state; nat rules take toAddresses/toPorts (e.g. a dst-nat port forward). Uses comment as idempotency key for deduplication and identification: a repeated add returns already_exists only when the match, NAT targets, and disabled state agree, otherwise CONFLICT (use enable/disable when only the disabled state differs). Supports dry-run mode. Every real write is guarded by a dead-man switch (autoRevertSeconds, default 60): a RouterOS scheduler job that undoes the change is armed first and removed only once the router answers a new REST connection afterwards, so a rule that locks out management reverts itself.",
   inputSchema: manageFirewallRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -389,11 +430,38 @@ const manageFirewallRuleTool: ToolDefinition = {
           }));
           return {
             content: `Dry run: Would add firewall ${parsed.table} rule in chain "${parsed.chain}" with action "${parsed.ruleAction}".`,
-            structuredContent: { action: "dry_run", diff },
+            structuredContent: {
+              action: "dry_run",
+              diff,
+              autoRevert: plannedAutoRevert(parsed.autoRevertSeconds),
+            },
           };
         }
 
-        const created = await context.routerClient.create(path, body);
+        const knownIds =
+          parsed.autoRevertSeconds === 0
+            ? []
+            : (await context.routerClient.get<RouterOSRecord>(path, {}))
+                .filter((r) => sameRuleValue("chain", r.chain, parsed.chain))
+                .map((r) => String(r[".id"]));
+
+        const {
+          result: created,
+          extra,
+          note,
+        } = await applyWrite(
+          context,
+          parsed.autoRevertSeconds,
+          path,
+          { kind: "remove-new", chain: parsed.chain, knownIds },
+          `add ${parsed.table} rule in chain ${parsed.chain}${comment === undefined ? "" : ` "${comment}"`}`,
+          async (retarget) => {
+            const rule = await context.routerClient.create(path, body);
+            const id = rule[".id"];
+            if (typeof id === "string") await retarget({ kind: "remove-id", id });
+            return rule;
+          },
+        );
 
         log.info(
           { chain: parsed.chain, ruleAction: parsed.ruleAction, id: created[".id"] },
@@ -401,8 +469,8 @@ const manageFirewallRuleTool: ToolDefinition = {
         );
 
         return {
-          content: `Added firewall ${parsed.table} rule in chain "${parsed.chain}" with action "${parsed.ruleAction}".`,
-          structuredContent: { action: "created", rule: created },
+          content: `Added firewall ${parsed.table} rule in chain "${parsed.chain}" with action "${parsed.ruleAction}".${note}`,
+          structuredContent: { action: "created", rule: created, ...extra },
         };
       }
 
@@ -443,17 +511,32 @@ const manageFirewallRuleTool: ToolDefinition = {
         if (parsed.dryRun) {
           return {
             content: `Dry run: Would remove firewall ${parsed.table} rule with comment "${comment}".`,
-            structuredContent: { action: "dry_run", id, comment },
+            structuredContent: {
+              action: "dry_run",
+              id,
+              comment,
+              autoRevert: plannedAutoRevert(parsed.autoRevertSeconds),
+            },
           };
         }
 
-        await context.routerClient.remove(path, id);
+        const placeBefore =
+          parsed.autoRevertSeconds > 0 ? await nextStaticRuleId(context, path, id) : undefined;
+
+        const { extra, note } = await applyWrite(
+          context,
+          parsed.autoRevertSeconds,
+          path,
+          { kind: "restore", record: existing, placeBefore },
+          `remove ${parsed.table} rule "${comment}"`,
+          () => context.routerClient.remove(path, id),
+        );
 
         log.info({ id, comment }, "Firewall rule removed");
 
         return {
-          content: `Removed firewall ${parsed.table} rule with comment "${comment}".`,
-          structuredContent: { action: "removed", id, comment },
+          content: `Removed firewall ${parsed.table} rule with comment "${comment}".${note}`,
+          structuredContent: { action: "removed", id, comment, ...extra },
         };
       }
 
@@ -506,17 +589,29 @@ const manageFirewallRuleTool: ToolDefinition = {
           ];
           return {
             content: `Dry run: Would ${parsed.action} firewall ${parsed.table} rule with comment "${comment}".`,
-            structuredContent: { action: "dry_run", diff },
+            structuredContent: {
+              action: "dry_run",
+              diff,
+              autoRevert: plannedAutoRevert(parsed.autoRevertSeconds),
+            },
           };
         }
 
-        await context.routerClient.update(path, id, { disabled: wantDisabled ? "true" : "false" });
+        const { extra, note } = await applyWrite(
+          context,
+          parsed.autoRevertSeconds,
+          path,
+          { kind: "set-disabled", id: String(id), disabled: isDisabled },
+          `${parsed.action} ${parsed.table} rule "${comment}"`,
+          () =>
+            context.routerClient.update(path, id, { disabled: wantDisabled ? "true" : "false" }),
+        );
 
         log.info({ id, comment, action: parsed.action }, "Firewall rule toggled");
 
         return {
-          content: `${parsed.action === "disable" ? "Disabled" : "Enabled"} firewall ${parsed.table} rule with comment "${comment}".`,
-          structuredContent: { action: parsed.action, id, comment },
+          content: `${parsed.action === "disable" ? "Disabled" : "Enabled"} firewall ${parsed.table} rule with comment "${comment}".${note}`,
+          structuredContent: { action: parsed.action, id, comment, ...extra },
         };
       }
 
