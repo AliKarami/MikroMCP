@@ -171,6 +171,25 @@ describe("fingerprintState", () => {
     expect(edited).not.toBe(a);
   });
 
+  it("ignores the probe file upload_file's dry run leaves behind, but not other new files", async () => {
+    const file: WireRecord = { ".id": "*1", name: "flash/setup.rsc", type: "script", size: "120" };
+    const a = await fingerprintState(clientWith({ file: [file] }), ["file"]);
+    const probe: WireRecord = {
+      ".id": "*2",
+      name: "flash/setup.rsc.mikromcp-probe",
+      type: "file",
+      size: "0",
+    };
+    expect(await fingerprintState(clientWith({ file: [file, probe] }), ["file"])).toBe(a);
+    const other: WireRecord = {
+      ".id": "*3",
+      name: "flash/evil.auto.rsc",
+      type: "script",
+      size: "10",
+    };
+    expect(await fingerprintState(clientWith({ file: [file, other] }), ["file"])).not.toBe(a);
+  });
+
   it("keeps a field that is volatile only on another path", async () => {
     const addr: WireRecord = { ".id": "*1", address: "10.0.0.1/24", interface: "ether1" };
     const a = await fingerprintState(clientWith({ "ip/address": [addr] }), ["ip/address"]);

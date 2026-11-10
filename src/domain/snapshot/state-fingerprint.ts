@@ -102,6 +102,15 @@ const VOLATILE_FIELDS_BY_PATH: Record<string, readonly string[]> = {
   file: ["size", "last-modified", "contents"],
 };
 
+/**
+ * Records MikroMCP itself leaves behind while previewing: `upload_file`'s dry
+ * run writes a `<name>.mikromcp-probe` over SFTP. Counting it would let
+ * `plan_changes` invalidate the very planFingerprint it returns.
+ */
+const IGNORED_RECORDS_BY_PATH: Record<string, (record: RouterOSRecord) => boolean> = {
+  file: (record) => String(record.name ?? "").endsWith(".mikromcp-probe"),
+};
+
 function stableRecord(
   record: RouterOSRecord,
   volatile: ReadonlySet<string>,
@@ -128,8 +137,10 @@ export function fingerprintableRecords(
   keepDynamic?: DynamicTargets,
 ): string[] {
   const volatile = new Set(VOLATILE_FIELDS_BY_PATH[path] ?? []);
+  const ignored = IGNORED_RECORDS_BY_PATH[path];
   const out: string[] = [];
   for (const record of records) {
+    if (ignored?.(record)) continue;
     const dynamic = isTrue(record.dynamic);
     if (dynamic && !keepDynamic?.(path, record)) continue;
     out.push(stableRecord(record, volatile, dynamic));
