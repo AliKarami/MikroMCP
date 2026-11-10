@@ -625,6 +625,8 @@ describe("executeToolCall and the audit log", () => {
       chain: "forward",
       ruleAction: "drop",
       comment: "block-lab",
+      // These tests are about the token; the dead-man switch has its own tests.
+      autoRevertSeconds: 0,
     };
 
     async function tokenFor(deps: ToolExecutorDeps): Promise<string> {

@@ -58,7 +58,7 @@ Trigger a controlled router reboot with an optional delay. Use this instead of `
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `delay` | integer | `0` | Seconds before rebooting (0–3600). `0` reboots now; above `0` adds a one-shot `mikromcp-reboot` scheduler entry — calling again replaces it, removing it cancels the reboot |
+| `delay` | integer | `0` | Seconds before rebooting (0–3600). `0` reboots now; above `0` adds a one-shot `mikromcp-reboot` scheduler entry whose first run is set from the router clock to now + `delay` — calling again replaces it, removing it cancels the reboot |
 | `dryRun` | boolean | `false` | Preview without executing |
 
 **Example prompt:** "Schedule a reboot of edge-01 in 5 minutes."
@@ -1058,6 +1058,8 @@ List firewall rules in evaluation order.
 
 Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match, NAT-target config, or `disabled` state (when only `disabled` differs, the error points to `action=enable`/`disable`); a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
 
+**Auto-revert (dead-man switch).** RouterOS Safe Mode belongs to a terminal or Winbox session and cannot be used over REST, so every real write (not a dry run, `already_exists` or `no_change`) is guarded by a scheduler job instead. Before the change, MikroMCP adds a `mikromcp-autorevert-<id>` entry to `/system scheduler` that undoes it after `autoRevertSeconds` (default `60`): an `add` removes the new rule, a `remove` re-adds the rule as it was before the rule that followed it (also when other rules share its comment), and `enable`/`disable` sets the flag back. The job's first run is pinned to the router's clock plus `autoRevertSeconds` (`start-date`/`start-time`), since a scheduler entry otherwise first runs the moment it is added; a clock MikroMCP cannot read counts as an arm failure. After the change it waits 3 seconds for it to take effect, then opens a **new** REST connection to the router (a connection that is already open survives a rule that drops new ones). If the router answers, the job is removed and the result carries `autoRevert: { status: "disarmed" }`. If it does not, the job is left in place, the router reverts itself, and the call fails with `AUTO_REVERT_PENDING`. Other outcomes: `AUTO_REVERT_ARM_FAILED` (the job could not be added, so nothing was changed; the REST user needs write access to `/system scheduler`), `AUTO_REVERT_EXPIRED` (the change and the check took longer than `autoRevertSeconds`, so the job has already run), and `AUTO_REVERT_DISARM_FAILED` (the router answers but the job could not be removed, so it will still undo the change; remove it with `manage_scheduled_job`). A write that times out leaves the job armed. The job's state is in the result's `autoRevert` field, in the error's `details.autoRevert`, and in the write journal's outcome entry. Pass `autoRevertSeconds: 0` to write without it. The same applies to `manage_firewall_rule` steps in `apply_plan`: each step is guarded and checked on its own.
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
@@ -1081,9 +1083,12 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `toPorts` | string | — | NAT target port or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same`, `redirect`, `masquerade` |
 | `disabled` | boolean | `false` | Create the rule in disabled state; on `add`, part of the idempotency check |
 | `placeBefore` | string | — | Place the new rule before this rule ID |
-| `dryRun` | boolean | `false` | Preview without applying |
+| `dryRun` | boolean | `false` | Preview without applying; the result's `autoRevert` says whether a real call would arm the job |
+| `autoRevertSeconds` | integer | `60` | Seconds after which the scheduler job undoes the change unless the router still answers; `30`–`3600`, or `0` for no job |
 
 **Example prompt:** "Add a drop rule for 1.2.3.4 on the input chain of core-01, comment it 'block-attacker'."
+
+**Example prompt:** "On core-01, add an input-chain rule dropping TCP 8729 from the WAN interface list, with a 120-second auto-revert."
 
 **Example prompt:** "Forward TCP 8443 arriving on the WAN interface list to 192.168.88.10:443 on core-01, comment it 'fwd-nas-https'."
 
@@ -1670,7 +1675,7 @@ The result carries a `planFingerprint`, and each step a `stateFingerprint`. They
 
 ### `apply_plan` — Write · Destructive
 
-Execute a sequence of write operations in order. Takes a snapshot of affected RouterOS paths before applying, enabling rollback via `rollback_change`. Stops and reports on the first step that fails.
+Execute a sequence of write operations in order. Takes a snapshot of affected RouterOS paths before applying, enabling rollback via `rollback_change`. Stops and reports on the first step that fails. A `manage_firewall_rule` step runs behind its own auto-revert job (see `manage_firewall_rule`); the step's result and its journal entry carry `autoRevert`, and a step that cuts off access stops the plan with `AUTO_REVERT_PENDING`.
 
 With `planFingerprint`, before the first step runs, `apply_plan` checks that `routerId` and `steps` are the ones `plan_changes` previewed (`PLAN_MISMATCH` if not) and that the configuration each step touches is still what `plan_changes` read (`PLAN_STATE_CHANGED`, a `CONFLICT`, if not). Either way nothing is applied: run `plan_changes` again and review. This check runs for every role, admins included. A `confirmationToken` for `apply_plan` is also bound to the configuration of every step's paths when it was issued (see [Security](Security#change-safety)).
 

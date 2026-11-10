@@ -16,6 +16,13 @@ Each release section covers changes **since the previous release only**.
 
 ### Added
 - `plan_changes` returns a `planFingerprint` (and a `stateFingerprint` per step), and `apply_plan` takes it as an optional `planFingerprint` parameter. With it, `apply_plan` checks before the first step that the steps are the previewed ones (`PLAN_MISMATCH`) and that the configuration they touch is unchanged since the preview (`PLAN_STATE_CHANGED`), for every role — the drift check admins get, since they skip confirmation tokens.
+- Auto-revert for `manage_firewall_rule`, a dead-man switch that stands in for RouterOS Safe Mode, which the REST API cannot use. Before a real write, MikroMCP adds a `mikromcp-autorevert-<id>` scheduler job that undoes the change after `autoRevertSeconds` (default 60; `0` turns it off): it removes an added rule, re-adds a removed one at its old position, or flips `disabled` back. The job's first run is set from the router's clock, because a scheduler entry with only an `interval` first runs as soon as it is added. After the write, MikroMCP waits 3 seconds for the change to take effect (with connection tracking on `auto`, a CHR only starts tracking a moment after the first rule that needs it), then opens a new REST connection to the router. If the router answers, the job is removed; if it does not, the job stays, the router reverts itself, and the call fails with `AUTO_REVERT_PENDING`. The job's state is reported in the result's `autoRevert`, in error details, and in the write journal's outcome entry, including for `manage_firewall_rule` steps in `apply_plan`. Dry runs, `already_exists` and `no_change` arm nothing.
+
+### Changed
+- `manage_firewall_rule` now needs write access to `/system scheduler` for real writes: if the auto-revert job cannot be added, the call fails with `AUTO_REVERT_ARM_FAILED` and changes nothing. Pass `autoRevertSeconds: 0` to write without the job, as before.
+
+### Fixed
+- `reboot` with a `delay` above 0 now pins the `mikromcp-reboot` scheduler entry's first run instead of leaving it to the router: the entry had only an `interval`, and RouterOS documents a new entry's `start-date`/`start-time` as defaulting to the moment it is added (RouterOS 7.23 then runs it one interval later, but that placement is not documented). `start-date`/`start-time` are now set from the router clock plus `delay` (ISO and `mmm/dd/yyyy` date formats) and returned as `startDate`/`startTime`. If the clock cannot be read, the call fails with `REBOOT_CLOCK_UNREADABLE` and leaves any pending delayed reboot in place.
 
 ## [1.16.1] - 2026-11-04
 

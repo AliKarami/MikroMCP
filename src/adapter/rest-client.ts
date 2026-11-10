@@ -46,6 +46,7 @@ export class RouterOSRestClient {
   private readonly baseUrl: string;
   private readonly authHeader: string;
   private readonly agent: Agent;
+  private readonly tls: RouterConfig["tls"];
 
   constructor(config: RouterConfig, credentials: { username: string; password: string }) {
     const scheme = config.tls.enabled ? "https" : "http";
@@ -54,6 +55,7 @@ export class RouterOSRestClient {
     this.authHeader =
       "Basic " + Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64");
 
+    this.tls = config.tls;
     this.agent = new Agent(buildAgentOptions(config.tls));
   }
 
@@ -153,6 +155,20 @@ export class RouterOSRestClient {
     );
   }
 
+  /**
+   * Check that the router still accepts a new REST connection. The pooled agent
+   * keeps connections alive, and a firewall rule that drops new connections
+   * leaves an established one working, so this deliberately opens its own.
+   */
+  async probe(timeoutMs: number): Promise<void> {
+    const agent = new Agent(buildAgentOptions(this.tls));
+    try {
+      await this.doRequest("GET", `${this.baseUrl}/system/identity`, undefined, timeoutMs, agent);
+    } finally {
+      void agent.close();
+    }
+  }
+
   // ---------- lifecycle ----------
 
   /** Close the underlying HTTP agent and free resources. */
@@ -175,6 +191,7 @@ export class RouterOSRestClient {
     url: string,
     body?: unknown,
     timeoutMs = REQUEST_TIMEOUT_MS,
+    dispatcher: Agent = this.agent,
   ): Promise<unknown> {
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -192,7 +209,7 @@ export class RouterOSRestClient {
       method: method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
       headers,
       body: requestBody,
-      dispatcher: this.agent,
+      dispatcher,
       bodyTimeout: timeoutMs,
       headersTimeout: timeoutMs,
     });
