@@ -48,9 +48,18 @@ Define identities for distinct consumers (a read-only dashboard vs. an automatio
 - **Confirmation tokens.** When `MIKROMCP_CONFIRMATION_SECRET` is set, `readonly` and `operator` identities must call a destructive tool twice: the first call returns `APPROVAL_REQUIRED` with a single-use token valid for five minutes, the second call carries it as `confirmationToken`. `admin` and `superadmin` (including the built-in stdio identity) skip this per-router gate. Every `bulk_execute` fan-out of a write tool, destructive or not, is gated for every role with a fleet-wide token obtained the same two-step way.
 - **What a confirmation token is — and is not.** The token is returned to the caller that asked for it. It binds the second call to the exact tool, router(s), parameters, and identity of the first, and stops one-shot mistakes and runaway loops; it is **not** a human approval. An LLM client can complete the round-trip on its own. MikroMCP's server instructions and usage skill tell the assistant to show the user what will change before re-submitting, but for an enforced human in the loop rely on your MCP client's per-tool approval prompts (clients typically key them off the `destructiveHint` annotation) and scope identities with `allowedToolPatterns`.
 - **Which tools are destructive.** Every write tool that can remove, overwrite, or reconfigure router state, or run RouterOS script, is annotated `destructiveHint: true` — in practice every write tool except `plan_changes`, which only previews. A unit test enforces this for new tools. Treat these as equivalent to arbitrary script execution with the RouterOS user's policies: `run_command`, `run_script`, `manage_script`, `manage_scheduled_job` (its `onEvent` is script), and `upload_file` (RouterOS runs a file named `*.auto.rsc` as soon as it arrives over FTP, which `upload_file` falls back to when SFTP is unavailable). The `run_command` deny-list applies only to `run_command`.
+- **Where these tools run.** `run_command` and the other script-capable tools act on the **router**, with the RouterOS user's policies. `run_command` sends its text to the router over an SSH `exec` channel; nothing runs in a shell on the machine hosting MikroMCP. Their reach is therefore bounded by the RouterOS user, not by the `run_command` deny-list, which is a guard against obvious mistakes and not an authorization control.
 - **Fleet reads vs. fleet writes.** `bulk_read` fans out only read-only tools and refuses everything else on the server, so a client that approves tools by name (for example Claude Code permission rules) can allow `bulk_read` and keep `bulk_execute` behind a prompt.
 - **Maintenance windows.** Routers can declare windows during which destructive operations are permitted; calls outside them are rejected with `PERMISSION_DENIED`.
 - **Snapshots & rollback.** Write tools snapshot affected config and append a journal entry before applying, so a change can be reversed with `rollback_change`.
+
+## Scoping arbitrary-command tools
+
+If a client should never run arbitrary RouterOS commands or script, take the tools away from it rather than relying on the `run_command` deny-list:
+
+- **Leave them out of `allowedToolPatterns`.** List what the identity may call (for example `list_*`, `get_*`, `ping`, `manage_firewall_rule`) instead of a broad `manage_*` or an empty list, which allows everything. For stdio, set `MIKROMCP_STDIO_IDENTITY` to a scoped identity; without it the stdio client is the built-in superadmin and can call every tool.
+- **Narrow `run_command` when you keep it.** A `cmdAllow` list (per router in `routers.yaml`, or `MIKROMCP_CMD_ALLOW`) makes every `;`-separated segment match an allowed pattern, for example `/ip route print*` and `/interface print*`.
+- **Limit the RouterOS user.** A user group without `ssh` cannot use `run_command` at all; one without `write` cannot change configuration through any tool.
 
 ## Auditing
 
@@ -69,4 +78,4 @@ Define identities for distinct consumers (a read-only dashboard vs. an automatio
 
 ## Reporting a vulnerability
 
-For vulnerabilities or unsafe behavior, please open a private GitHub security advisory or contact the maintainer **before** publishing details, so a fix can be prepared responsibly.
+For vulnerabilities or unsafe behavior, please open a [private GitHub security advisory](https://github.com/AliKarami/MikroMCP/security/advisories/new) rather than a public issue, so a fix can be prepared responsibly. [`SECURITY.md`](https://github.com/AliKarami/MikroMCP/blob/main/SECURITY.md) describes what is in scope.
