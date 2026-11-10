@@ -24,7 +24,14 @@ export const DEFAULT_AUTO_REVERT_SECONDS = 60;
 const MIN_AUTO_REVERT_SECONDS = 30;
 const MAX_AUTO_REVERT_SECONDS = 3600;
 const PROBE_ATTEMPTS = 2;
-const PROBE_RETRY_DELAY_MS = 2_000;
+
+/**
+ * Waits around the post-change probe. A firewall change can take a moment to bite:
+ * with connection tracking on `auto`, RouterOS only starts tracking once a rule
+ * needs it, and a probe sent before that slips past a `connection-state=new` drop
+ * (seen on a CHR). Mutable so unit tests can run without the waits.
+ */
+export const probeTiming = { settleMs: 3_000, retryMs: 2_000 };
 
 export const autoRevertSeconds = z
   .number()
@@ -277,6 +284,7 @@ async function firstRun(context: ToolContext, seconds: number): Promise<Schedule
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function probe(context: ToolContext, seconds: number): Promise<boolean> {
+  await sleep(probeTiming.settleMs);
   const timeoutMs = Math.min(10_000, Math.floor((seconds * 1000) / 4));
   for (let attempt = 1; attempt <= PROBE_ATTEMPTS; attempt++) {
     try {
@@ -284,7 +292,7 @@ async function probe(context: ToolContext, seconds: number): Promise<boolean> {
       return true;
     } catch (err) {
       log.warn({ err, routerId: context.routerId, attempt }, "Post-change REST probe failed");
-      if (attempt < PROBE_ATTEMPTS) await sleep(PROBE_RETRY_DELAY_MS);
+      if (attempt < PROBE_ATTEMPTS) await sleep(probeTiming.retryMs);
     }
   }
   return false;
