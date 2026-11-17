@@ -315,6 +315,21 @@ export async function executeToolCall(
 
       const result = await executeHandler();
 
+      // A dry run must be impossible to mistake for a write: its changes block
+      // reads like success (and write_swos_blob's dryRun defaults to true,
+      // unlike every RouterOS write tool — #140), so the verdict goes into
+      // structuredContent and becomes the first line of the text. A handler
+      // that reports `applied` itself (plan_changes previews writes without
+      // making them) is left alone.
+      if (!tool.annotations.readOnlyHint) {
+        if (result.structuredContent.applied === undefined) {
+          result.structuredContent = { ...result.structuredContent, applied: !dryRun };
+        }
+        if (dryRun) {
+          result.content = `NOT APPLIED — dry run only. Pass dryRun: false to write this change.\n${result.content}`;
+        }
+      }
+
       if (journalId) {
         recordOutcome({
           journalPath: config.journalPath!,

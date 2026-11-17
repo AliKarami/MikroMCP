@@ -183,6 +183,78 @@ describe("executeToolCall", () => {
     });
   });
 
+  describe("applied verdict on write results (#140)", () => {
+    function makeWriteTool() {
+      return makeReadTool(async () => ({ content: "ok", structuredContent: { x: 1 } }), {
+        name: "test_write",
+        snapshotPaths: [],
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      });
+    }
+
+    it("a dry run reports applied: false and leads with NOT APPLIED", async () => {
+      const result = await executeToolCall(
+        makeWriteTool([]),
+        { routerId: "r1", dryRun: true },
+        makeDeps(),
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect((result.structuredContent as Record<string, unknown>).applied).toBe(false);
+      expect(result.content[0].text).toMatch(/^NOT APPLIED — dry run only/);
+      expect(result.content[0].text).toContain("dryRun: false");
+    });
+
+    it("a schema-defaulted dryRun (SwOS write tools default to true) is verdicted the same way", async () => {
+      const tool = makeWriteTool([]);
+      tool.inputSchema = z.object({
+        routerId: z.string(),
+        dryRun: z.boolean().default(true),
+      }) as unknown as ToolDefinition["inputSchema"];
+
+      const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
+
+      expect((result.structuredContent as Record<string, unknown>).applied).toBe(false);
+      expect(result.content[0].text).toMatch(/^NOT APPLIED — dry run only/);
+    });
+
+    it("a real write reports applied: true with no NOT APPLIED banner", async () => {
+      const result = await executeToolCall(
+        makeWriteTool([]),
+        { routerId: "r1", dryRun: false },
+        makeDeps(),
+      );
+
+      expect((result.structuredContent as Record<string, unknown>).applied).toBe(true);
+      expect(result.content[0].text).not.toContain("NOT APPLIED");
+    });
+
+    it("a read tool carries no applied verdict", async () => {
+      const result = await executeToolCall(
+        makeReadTool(async () => ({ content: "ok", structuredContent: { x: 1 } })),
+        { routerId: "r1" },
+        makeDeps(),
+      );
+
+      expect((result.structuredContent as Record<string, unknown>).applied).toBeUndefined();
+    });
+
+    it("a handler that reports applied itself (plan_changes previews writes) is not overridden", async () => {
+      const tool = makeWriteTool([]);
+      tool.handler = async () => ({ content: "planned", structuredContent: { applied: false } });
+
+      const result = await executeToolCall(tool, { routerId: "r1" }, makeDeps());
+
+      expect((result.structuredContent as Record<string, unknown>).applied).toBe(false);
+      expect(result.content[0].text).not.toContain("NOT APPLIED");
+    });
+  });
+
   it("a read tool carries no journalId even with a journal configured", async () => {
     const tool = makeReadTool(async () => ({ content: "ok", structuredContent: { x: 1 } }));
     const deps = makeDeps();
