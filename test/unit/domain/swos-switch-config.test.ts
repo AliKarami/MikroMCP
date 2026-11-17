@@ -503,6 +503,32 @@ describe("review regressions", () => {
     ]);
   });
 
+  describe("on SwOS Lite, where vlan.b is read but not written (#146)", () => {
+    const lite = (vlanRows: string): CurrentBlobs => ({
+      "sys.b": wire(LITE, "sys.b"),
+      "link.b": wire(LITE, "link.b"),
+      "fwd.b": wire(LITE, "fwd.b"),
+      "vlan.b": parseWireBlob(vlanRows),
+      "snmp.b": wire(LITE, "snmp.b"),
+    });
+    const moveManagementTo = (vlan: number) =>
+      parseSwitchConfig({ version: 1, system: { allow_from_vlan: vlan } });
+    // VLANs 10, 20 and 30, every port a member of each.
+    const table = readFileSync(join(LITE, "vlan.b.sample2"), "utf8");
+
+    it("sees a VLAN in the table when judging where management is allowed from", () => {
+      const plan = planSwitchConfig(moveManagementTo(20), lite(table));
+      expect(plan.warnings.filter((w) => w.includes("VLAN table"))).toEqual([]);
+    });
+
+    it("warns when the VLAN management is moved to is not in the table", () => {
+      const plan = planSwitchConfig(moveManagementTo(40), lite(table));
+      expect(plan.warnings).toContain(
+        "Management is allowed from VLAN 40 only, which would no longer be in the VLAN table.",
+      );
+    });
+  });
+
   it("warns when the VLAN management is allowed from is pruned or loses the management port", () => {
     const seeded = factory();
     const sys = { ...(seeded["sys.b"] as Record<string, unknown>) };
