@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   createRateLimiter,
+  rateLimitHeaders,
+  rateLimitedBody,
   readBody,
   BodyTooLargeError,
   connectHttp,
@@ -44,6 +46,63 @@ describe("createRateLimiter", () => {
     for (let i = 0; i < 1000; i++) {
       expect(check("10.0.0.1")).toBe(true);
     }
+  });
+
+  describe("status", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("reports the full budget for a client it has not seen", () => {
+      expect(createRateLimiter(5).status("192.0.2.1")).toEqual({
+        limit: 5,
+        remaining: 5,
+        resetMs: 60_000,
+      });
+    });
+
+    it("counts down as requests arrive and never goes below zero", () => {
+      const check = createRateLimiter(2);
+      check("192.0.2.1");
+      expect(check.status("192.0.2.1").remaining).toBe(1);
+      check("192.0.2.1");
+      check("192.0.2.1");
+      expect(check.status("192.0.2.1").remaining).toBe(0);
+    });
+
+    it("reports the time left in the window, not the full minute", () => {
+      vi.useFakeTimers();
+      const check = createRateLimiter(1);
+      check("192.0.2.1");
+      vi.advanceTimersByTime(45_000);
+      expect(check.status("192.0.2.1").resetMs).toBe(15_000);
+      vi.advanceTimersByTime(15_000);
+      expect(check("192.0.2.1")).toBe(true);
+    });
+  });
+});
+
+describe("rate limit response", () => {
+  it("rateLimitHeaders gives the limit, the budget left and seconds to reset", () => {
+    expect(rateLimitHeaders({ limit: 60, remaining: 7, resetMs: 12_300 })).toEqual({
+      "RateLimit-Limit": "60",
+      "RateLimit-Remaining": "7",
+      "RateLimit-Reset": "13",
+    });
+  });
+
+  it("rateLimitedBody names the limit, the real wait and the way out", () => {
+    const body = rateLimitedBody({ limit: 60, remaining: 0, resetMs: 12_300 });
+    expect(body.limit).toBe(60);
+    expect(body.retryAfterSeconds).toBe(13);
+    expect(body.error).toContain("60 requests in 60 seconds");
+    expect(body.error).toContain("Retry after 13 seconds");
+    expect(body.hint).toContain("MIKROMCP_HTTP_RATE_LIMIT_RPM");
+    expect(body.hint).toContain("bulk_read");
+  });
+
+  it("never asks for a wait of zero seconds", () => {
+    expect(rateLimitedBody({ limit: 5, remaining: 0, resetMs: 10 }).retryAfterSeconds).toBe(1);
   });
 });
 
@@ -183,6 +242,53 @@ describe("connectHttp — /metrics authentication", () => {
     await withServer(registry, async (port) => {
       const res = await getWithHeaders(port, "/metrics", { Authorization: "Bearer tok" });
       expect(res.status).toBe(200);
+    });
+  });
+});
+
+describe("connectHttp — rate limiting", () => {
+  async function withLimit(rpm: number, fn: (port: number) => Promise<void>): Promise<void> {
+    const server = await connectHttp(
+      vi.fn(() => ({}) as unknown as McpServer),
+      { port: 0, bindHost: "127.0.0.1", maxBodyBytes: 1024 * 1024, rateLimitRpm: rpm },
+      {
+        getIdentities: vi.fn().mockReturnValue([]),
+        findIdentityByToken: vi.fn(),
+      } as unknown as IdentityRegistry,
+    );
+    const { port } = server.address() as import("node:net").AddressInfo;
+    try {
+      await fn(port);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
+
+  it("tells every request its budget, and the 429 how long to wait", async () => {
+    await withLimit(2, async (port) => {
+      const first = await getWithHeaders(port, "/elsewhere", {});
+      expect(first.headers["ratelimit-limit"]).toBe("2");
+      expect(first.headers["ratelimit-remaining"]).toBe("1");
+
+      await getWithHeaders(port, "/elsewhere", {});
+      const blocked = await getWithHeaders(port, "/elsewhere", {});
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers["ratelimit-remaining"]).toBe("0");
+      const wait = Number(blocked.headers["retry-after"]);
+      expect(wait).toBeGreaterThanOrEqual(1);
+      expect(wait).toBeLessThanOrEqual(60);
+      const body = JSON.parse(blocked.body) as Record<string, unknown>;
+      expect(body.limit).toBe(2);
+      expect(body.retryAfterSeconds).toBe(wait);
+      expect(String(body.hint)).toContain("MIKROMCP_HTTP_RATE_LIMIT_RPM");
+    });
+  });
+
+  it("sends no rate limit headers when the limit is off", async () => {
+    await withLimit(0, async (port) => {
+      const res = await getWithHeaders(port, "/elsewhere", {});
+      expect(res.headers["ratelimit-limit"]).toBeUndefined();
+      expect(res.status).not.toBe(429);
     });
   });
 });

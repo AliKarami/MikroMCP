@@ -1786,6 +1786,8 @@ Each per-router call runs through the same safety layers as a direct call: autho
 
 Fan out a read-only single-router tool to multiple routers by ID or tag — the same targeting, concurrency, and per-router safety layers as `bulk_execute`, restricted to reads. The server accepts an inner tool only if it is annotated `readOnlyHint: true` and is not one of the traffic-generating diagnostics `ping`, `traceroute`, `torch`, or `bandwidth_test`; anything else fails before any router is contacted with `BULK_READ_TOOL_NOT_READ_ONLY`, pointing at `bulk_execute`. Fleet tools are refused with `BULK_SELF_REFERENCE`. There is no confirmation token, snapshot, or journal entry, and, like a direct read, no audit record.
 
+It runs one tool with one set of parameters on many routers in a single request; it does not batch different queries against one router. When the HTTP rate limit is the concern (see [Running](Running#http-transport)), many routers in one `bulk_read` cost one request, while many queries to one router are better combined into one filtered query.
+
 Because the restriction is enforced by the server, a client that approves tools by name (for example a Claude Code permission rule for `mcp__mikromcp__bulk_read`) can allow fleet-wide reads without prompting, while `bulk_execute` stays behind a prompt.
 
 | Parameter | Type | Default | Description |

@@ -160,7 +160,7 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_PORT` | `3000` | HTTP listen port (HTTP transport only) |
 | `MIKROMCP_BIND_HOST` | `127.0.0.1` | HTTP bind address (HTTP transport only) |
 | `MIKROMCP_HTTP_MAX_BODY_BYTES` | `1048576` (1 MB) | Maximum request body size for HTTP transport |
-| `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | Request rate limit in requests per minute (HTTP transport) |
+| `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | Requests allowed per 60 seconds for each client IP on `/mcp`, `/sse` and `/messages` (HTTP transport); every HTTP request counts, not only tool calls. `0` turns the limit off. Past it the server answers `429` with `Retry-After`; see [Running](Running#http-transport) |
 | `MIKROMCP_IDENTITIES_PATH` | `~/.mikromcp/identities.yaml` | Path to identity/token registry (HTTP transport) |
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport; omit for built-in superadmin |
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the per-router confirmation gate is off, and `bulk_execute` write fan-outs are still gated with tokens signed by a random per-process secret (valid only until restart, and only on the instance that issued them) |
