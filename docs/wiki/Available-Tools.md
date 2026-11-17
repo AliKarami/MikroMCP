@@ -2157,7 +2157,7 @@ A switch without PoE or SFP cages does not serve `poe.b` or `sfp.b`; those are l
 
 ### `get_swos_endpoint` — Read
 
-Fetch and decode a single SwOS `.b` endpoint (`link.b`, `sys.b`, `poe.b`, `lacp.b`, `rstp.b`, `snmp.b`, `fwd.b`, `vlan.b`, `!stats.b` on SwOS Lite or `stats.b` on full SwOS, `sfp.b`, `host.b`, `acl.b`, ...) as structured data. Unknown keys are preserved under `_raw`. Per-port bitmasks inside record lists (VLAN members, IGMP member ports, ACL source ports) decode to one flag per port; for those endpoints the tool also reads `link.b` to learn the port count. Long decodes are truncated in the text response only — `structuredContent` always carries the full result.
+Fetch and decode a single SwOS `.b` endpoint (`link.b`, `sys.b`, `poe.b`, `lacp.b`, `rstp.b`, `snmp.b`, `fwd.b`, `vlan.b`, `!stats.b` on SwOS Lite or `stats.b` on full SwOS, `sfp.b`, `host.b`, `acl.b`, ...) as structured data. Unknown keys are preserved under `_raw`. Per-port bitmasks inside record lists (VLAN members, IGMP member ports, ACL source ports) decode to one flag per port; for those endpoints the tool also reads `link.b` to learn the port count. Long decodes are truncated in the text response only — `structuredContent` always carries the full result. On SwOS Lite, `vlan.b` rows decode to `vid` (the VLAN ID), `members` (one flag per port) and `igmp` (IGMP snooping on or off). The Lite layout was checked against the web UI on one CSS610 (SwOS Lite 2.21), not against a capture with VLANs. The table can be read there but not written (`write_swos_blob` takes no record lists, and `apply_swos_config` refuses `vlans` on SwOS Lite).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|

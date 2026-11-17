@@ -148,6 +148,73 @@ describe("swosTools", () => {
     });
   });
 
+  describe("get_swos_endpoint vlan.b on SwOS Lite (#146)", () => {
+    // A SwOS Lite switch with VLANs: i01 = VLAN id, i02 = member-port bitmask,
+    // i03 = IGMP snooping. The plain vlan.b fixture is the empty table.
+    const rows = blob("vlan.b.sample2");
+    const read = async (raw: string) =>
+      (
+        (
+          await getTool.handler(
+            { routerId: "switch-01", endpoint: "vlan.b" },
+            makeContext(makeSwosClient({ "vlan.b": raw })),
+          )
+        ).structuredContent as { data: Record<string, unknown>[] }
+      ).data;
+
+    it("decodes each row to a VLAN id and one membership flag per port", async () => {
+      const data = await read(rows);
+      expect(data.map((r) => r.vid)).toEqual([10, 20, 30]);
+      for (const row of data) expect(row.members).toEqual(Array(10).fill(true));
+    });
+
+    it("decodes a partial member mask port by port", async () => {
+      const data = await read("[{i01:0x0014,i02:0x0301,i03:0x00}]");
+      expect(data[0].members).toEqual([
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+      ]);
+    });
+
+    it("decodes i03 as the IGMP snooping flag, set only on the row that has it on", async () => {
+      const data = await read(rows);
+      expect(data.map((r) => r.igmp)).toEqual([false, false, true]);
+      for (const row of data) expect(row._raw).toEqual({});
+    });
+
+    it("keeps a key it does not know under _raw", async () => {
+      const data = await read("[{i01:0x0001,i02:0x03ff,i03:0x00,i04:0x07}]");
+      expect(data[0]._raw).toEqual({ i04: 7 });
+    });
+
+    it("still decodes an empty table", async () => {
+      const result = await getTool.handler(
+        { routerId: "switch-01", endpoint: "vlan.b" },
+        makeContext(makeSwosClient()),
+      );
+      expect((result.structuredContent as { data: unknown[] }).data).toEqual([]);
+    });
+
+    it("leaves the table unwritable: write_swos_blob refuses vlan.b", async () => {
+      const swos = makeSwosClient({ "vlan.b": rows });
+      await expect(
+        writeTool.handler(
+          { routerId: "switch-01", endpoint: "vlan.b", fields: { vid: 5 }, dryRun: false },
+          makeContext(swos),
+        ),
+      ).rejects.toThrow();
+      expect(swos.client.writeBlob).not.toHaveBeenCalled();
+    });
+  });
+
   describe("list_swos_endpoints", () => {
     it("lists every endpoint with its decoded field names", async () => {
       const result = await listTool.handler({ routerId: "switch-01" }, makeContext());

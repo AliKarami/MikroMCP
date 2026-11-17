@@ -648,20 +648,23 @@ const FWD: Endpoint = {
   ],
 };
 
-// vlan.b / host.b / !dhost.b / !igmp.b / acl.b: records. SwOS Lite iNN keys for
-// vlan.b are unverified (device had no VLANs); only legacy swos mnemonics map.
+// vlan.b / host.b / !dhost.b / !igmp.b / acl.b: records. On SwOS Lite a vlan.b
+// row is {i01: VLAN id, i02: member-port bitmask, i03: IGMP snooping flag},
+// matched against the web UI on one CSS610 (2.21): the one VLAN created with
+// IGMP snooping on was the only row with i03 set. The committed Lite capture
+// holds no VLANs, so this layout rests on that comparison, not on a capture.
 const VLAN: Endpoint = {
   path: "vlan.b",
   isArray: true,
-  note: "SwOS Lite vlan.b keys unverified (device had none)",
+  note: "SwOS Lite rows: i01 = VLAN id, i02 = member ports, i03 = IGMP snooping (keys seen on SwOS Lite 2.21)",
   fields: [
-    f("vid", { swos: "vid" }, Kind.INT),
+    f("vid", { swos: "vid", swos_lite: "i01" }, Kind.INT),
     f("name", { swos: "nm" }, Kind.STR),
     f("port_isolation", { swos: "piso" }, Kind.CHECKBOX),
     f("learning", { swos: "lrn" }, Kind.CHECKBOX),
     f("mirror", { swos: "mrr" }, Kind.CHECKBOX),
-    f("igmp", { swos: "igmp" }, Kind.CHECKBOX),
-    f("members", { swos: "mbr" }, Kind.BOOL),
+    f("igmp", { swos: "igmp", swos_lite: "i03" }, Kind.CHECKBOX),
+    f("members", { swos: "mbr", swos_lite: "i02" }, Kind.BOOL),
   ],
 };
 

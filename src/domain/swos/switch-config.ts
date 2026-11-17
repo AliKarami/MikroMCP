@@ -1074,7 +1074,7 @@ export function planSwitchConfig(
     if (dialect !== "swos") {
       throw configError(
         "SWOS_VLAN_TABLE_UNSUPPORTED",
-        "Writing the VLAN table is only supported on full SwOS; SwOS Lite's vlan.b keys are unverified.",
+        "Writing the VLAN table is only supported on full SwOS; SwOS Lite's vlan.b can be read, but how it takes a write is not verified.",
         "Remove `vlans` from the config for this switch, or set the table in the web UI.",
       );
     }
