@@ -2130,7 +2130,7 @@ Add, update, or remove a PPP profile. Idempotent by name. `update` returns `no_c
 
 ### `list_swos_endpoints` — Read
 
-List the `.b` endpoints supported by this server with their decoded field names. Schema introspection only — no device call.
+List the `.b` endpoints supported by this server with their decoded field names, and a `notes` entry for every field that needs one — for example on `sys.b`, `ip` is the live management address while `static_ip` and `addr_acq` are stored settings that do not move it by themselves, and `allow_from_*` restrict where the switch answers. Schema introspection only — no device call.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -2176,6 +2176,8 @@ Mutate a SwOS `.b` endpoint. The full blob is read, the given fields are merged 
 
 Values are given by decoded field name (from `list_swos_endpoints`) or by a raw wire key already present in the blob; anything else — including a schema field this device's firmware does not send — is rejected rather than injected. Option fields take the enum name (e.g. `auto` for PoE out mode), encoded for the SwOS dialect the switch speaks. IP fields take a dotted quad (`192.168.88.1`) and MAC fields six hex pairs (`64:d1:54:00:00:01`); anything else is refused. A per-port field given a single value applies it to **every** port — the firmware has no per-port addressing here, so partial-port changes require passing an array covering every port. Per-port bitmasks (`enabled`, `flow_rx`, …) are one number, not a list of flags.
 
+A real write to `sys.b` that changes how the switch is reached — the live address `ip`, `static_ip`, `addr_acq`, or any `allow_from_*` setting — is refused with `SWOS_MANAGEMENT_CHANGE_REFUSED` unless `includeManagement` is `true`, because it can cut the session that makes the write (the same gate `apply_swos_config` uses). A dry run previews it without the flag. Both the preview and the write return `warnings`: `static_ip` and `addr_acq` are stored configuration that did not move the live address on SwOS Lite 2.21 (writing `ip` did), so the warning names the live address and any stored one that differs; an `allow_from_*` change warns that a session not matching it, this one included, loses access.
+
 Device-generated tables (`!stats.b`, `stats.b`, `!dhost.b`, `!igmp.b`, `!aclstats.b`) are read-only and cannot be targeted, and neither can record lists (`vlan.b`, `host.b`, `acl.b`) — a field merge cannot express "edit row 3", and writing one would replace the table rather than edit it.
 
 Every result — dry run and real write — carries a `compatibility` verdict comparing the switch's model and firmware against the set the schema was validated on, plus any wire keys the schema does not map. It warns; it does not block. See [Configuration → Firmware compatibility](Configuration).
@@ -2186,6 +2188,7 @@ Every result — dry run and real write — carries a `compatibility` verdict co
 | `endpoint` | enum | — | `.b` endpoint to write (writable ones only) |
 | `fields` | object | — | Values by decoded field name (or raw wire key) |
 | `dryRun` | boolean | `true` | Preview the resulting blob without writing |
+| `includeManagement` | boolean | `false` | Allow a real `sys.b` write that changes how the switch is reached (`ip`, `static_ip`, `addr_acq`, `allow_from_*`) |
 
 **Example prompt:** "Preview setting PoE out mode to auto on all ports of the access switch, then apply it."
 

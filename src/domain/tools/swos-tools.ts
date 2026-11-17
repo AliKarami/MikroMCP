@@ -15,6 +15,7 @@ import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import {
   SWOS_ENDPOINTS,
   SWOS_SCHEMA,
+  decodeEndpoint,
   dumpBlob,
   encodeLike,
   fieldFor,
@@ -99,12 +100,18 @@ const listSwosEndpointsTool: ToolDefinition = {
     const endpoints = SWOS_ENDPOINTS.map((ep) => ({
       endpoint: ep,
       fields: SWOS_SCHEMA[ep].fields.map((f) => f.name),
+      notes: Object.fromEntries(
+        SWOS_SCHEMA[ep].fields.flatMap((f) => (f.note ? [[f.name, f.note]] : [])),
+      ) as Record<string, string>,
     }));
     const content = endpoints
-      .map(
-        (e) =>
-          `${e.endpoint}\n  fields: ${e.fields.length > 0 ? e.fields.join(", ") : "(decoded generically per port)"}`,
-      )
+      .map((e) => {
+        const notes = Object.entries(e.notes).map(([name, note]) => `\n    ${name}: ${note}`);
+        return (
+          `${e.endpoint}\n  fields: ${e.fields.length > 0 ? e.fields.join(", ") : "(decoded generically per port)"}` +
+          (notes.length > 0 ? `\n  notes:${notes.join("")}` : "")
+        );
+      })
       .join("\n");
     return {
       content: `SwOS endpoints:\n${content}`,
@@ -453,8 +460,62 @@ const writeBlobSchema = z
       .boolean()
       .default(true)
       .describe("Preview the resulting blob without writing to the switch."),
+    includeManagement: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Allow a real write to sys.b that changes how the switch is reached: the live address (ip), static_ip, addr_acq or an allow_from_* setting. Refused unless true, because it can cut the session that makes the write; a dry run previews it without.",
+      ),
   })
   .strict();
+
+/** sys.b fields that decide how, and from where, the switch is reached. */
+const SYS_MANAGEMENT_FIELDS = new Set([
+  "ip",
+  "static_ip",
+  "addr_acq",
+  "allow_from_ip",
+  "allow_from_mask",
+  "allow_from_vlan",
+  "allow_from_ports",
+]);
+
+const SYS_ALLOW_FROM_FIELDS = [
+  "allow_from_vlan",
+  "allow_from_ip",
+  "allow_from_mask",
+  "allow_from_ports",
+];
+
+/**
+ * What a sys.b management change does not do, or may do to this session. The
+ * stored address settings leave the live address alone (observed on SwOS Lite
+ * 2.21), and an allow-from restriction stops answering everything it excludes,
+ * the writing session included.
+ */
+function managementWarnings(names: Set<string>, after: Record<string, unknown>): string[] {
+  const warnings: string[] = [];
+  const stored = ["static_ip", "addr_acq"].filter((n) => names.has(n));
+  if (stored.length > 0 && !names.has("ip")) {
+    const differs =
+      after.addr_acq === "static" && after.static_ip !== undefined && after.static_ip !== after.ip;
+    warnings.push(
+      `${stored.join(" and ")} ${stored.length > 1 ? "are" : "is"} stored configuration: the live address stays ${String(after.ip)}` +
+        (differs ? `, while the stored static address is ${String(after.static_ip)}` : "") +
+        ". On SwOS Lite 2.21 the live address did not follow; check it with get_swos_status after the write.",
+    );
+  }
+  const restricted = SYS_ALLOW_FROM_FIELDS.filter((n) => names.has(n));
+  if (restricted.length > 0) {
+    const vlan = typeof after.allow_from_vlan === "number" ? after.allow_from_vlan : 0;
+    warnings.push(
+      `${restricted.join(", ")} restrict${restricted.length > 1 ? "" : "s"} where management is answered` +
+        (vlan > 0 ? ` (VLAN ${vlan} only)` : "") +
+        ": a session that does not match, this one included, loses access to the switch. Make sure this session reaches it that way first.",
+    );
+  }
+  return warnings;
+}
 
 /**
  * Resolve a field definition by decoded name or raw wire key. A raw key the
@@ -602,7 +663,7 @@ const writeSwosBlobTool: ToolDefinition = {
   name: "write_swos_blob",
   title: "Write SwOS Blob",
   description:
-    "Mutate a SwOS '.b' endpoint on a MikroTik switch. The full endpoint blob is read, the given fields are merged in, and the entire blob is written back (the firmware only accepts whole-blob writes); untouched fields are re-sent byte-for-byte, and a field this firmware does not expose is refused rather than injected. dryRun defaults to true — preview first. Every result reports whether the schema has been verified against the switch's firmware. The pre-write blob is snapshotted, so the change can be undone with rollback_change. Returns no_change when the values already match.",
+    "Mutate a SwOS '.b' endpoint on a MikroTik switch. The full endpoint blob is read, the given fields are merged in, and the entire blob is written back (the firmware only accepts whole-blob writes); untouched fields are re-sent byte-for-byte, and a field this firmware does not expose is refused rather than injected. dryRun defaults to true — preview first. Every result reports whether the schema has been verified against the switch's firmware. The pre-write blob is snapshotted, so the change can be undone with rollback_change. Returns no_change when the values already match. A real write to sys.b that changes how the switch is reached (ip, static_ip, addr_acq, allow_from_*) is refused unless includeManagement is true, since it can cut this session; static_ip and addr_acq are stored settings that do not move the live address (ip) by themselves, and the result warns about both.",
   inputSchema: writeBlobSchema,
   annotations: {
     readOnlyHint: false,
@@ -625,6 +686,7 @@ const writeSwosBlobTool: ToolDefinition = {
       const changes: Record<string, { from: unknown; to: unknown }> = {};
       const before: Record<string, unknown> = {};
       const targetKeys: Record<string, string> = {};
+      const fieldNames: Record<string, string | undefined> = {};
       for (const [key, value] of Object.entries(parsed.fields)) {
         const field = resolveField(parsed.endpoint, key, wire);
         const targetKey = Object.hasOwn(wire, key)
@@ -645,6 +707,7 @@ const writeSwosBlobTool: ToolDefinition = {
         const existing = wire[targetKey];
         before[key] = existing;
         targetKeys[key] = targetKey;
+        fieldNames[key] = field?.name;
         // Coerce against the dialect the device speaks: full SwOS and Lite use
         // different option lists for the same field (VLAN mode, speed).
         const wireField = field ? fieldFor(field, targetKey) : undefined;
@@ -679,6 +742,33 @@ const writeSwosBlobTool: ToolDefinition = {
         };
       }
 
+      const managementNames = new Set(
+        parsed.endpoint === "sys.b"
+          ? modified.flatMap(([key]) => {
+              const name = fieldNames[key];
+              return name && SYS_MANAGEMENT_FIELDS.has(name) ? [name] : [];
+            })
+          : [],
+      );
+      if (managementNames.size > 0 && !parsed.dryRun && !parsed.includeManagement) {
+        throw validationError(
+          "SWOS_MANAGEMENT_CHANGE_REFUSED",
+          `This write changes how ${context.routerId} is reached (${[...managementNames].join(", ")}) and can cut the session that makes it.`,
+          "Preview it with dryRun: true, make sure this session still reaches the switch afterwards, then retry with includeManagement: true.",
+        );
+      }
+      let warnings: string[] = [];
+      if (managementNames.size > 0) {
+        let after: Record<string, unknown> = {};
+        try {
+          after = decodeEndpoint("sys.b", dumpBlob(wire)) as Record<string, unknown>;
+        } catch (err) {
+          log.warn({ err }, "Could not decode the sys.b result for the management warnings");
+        }
+        warnings = managementWarnings(managementNames, after);
+      }
+      const warningText = warnings.map((w) => `⚠️  ${w}`).join("\n");
+
       const diff = modified
         .map(([key, c]) => `  ${key}: ${JSON.stringify(c.from)} -> ${JSON.stringify(c.to)}`)
         .join("\n");
@@ -699,6 +789,9 @@ const writeSwosBlobTool: ToolDefinition = {
         return {
           content:
             `DRY RUN — no write performed. ${modified.length} field(s) would change on ${parsed.endpoint}:\n${diff}\n\n` +
+            (warnings.length > 0
+              ? `${warningText}\nA real write of these fields needs includeManagement: true.\n\n`
+              : "") +
             `${banner}\n\nResulting blob:\n${preview}`,
           structuredContent: {
             routerId: context.routerId,
@@ -706,6 +799,7 @@ const writeSwosBlobTool: ToolDefinition = {
             action: "dry_run",
             dryRun: true,
             changes,
+            warnings,
             compatibility,
             blob: preview,
           },
@@ -716,6 +810,7 @@ const writeSwosBlobTool: ToolDefinition = {
       return {
         content:
           `Wrote ${parsed.endpoint} on ${context.routerId}:\n${diff}\n` +
+          (warnings.length > 0 ? `${warningText}\n` : "") +
           `${banner}\n` +
           `Response: ${response || "(empty)"}\n` +
           "The pre-write blob was snapshotted — undo with rollback_change using this call's journal ID.",
@@ -725,6 +820,7 @@ const writeSwosBlobTool: ToolDefinition = {
           action: "written",
           dryRun: false,
           changes,
+          warnings,
           compatibility,
           response,
         },
