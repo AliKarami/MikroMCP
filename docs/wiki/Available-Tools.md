@@ -2,7 +2,7 @@
 
 All 133 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
-Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
+Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them. Every write-tool response states what happened in an `applied` boolean: `true` when the call ran its write path, `false` on a dry run — and a dry run's text always starts with `NOT APPLIED — dry run only. Pass dryRun: false to write this change.`, so a preview cannot be mistaken for a write. Note that `write_swos_blob` and the SwOS maintenance tools default to `dryRun: true` (preview first); the RouterOS write tools default to `false`.
 
 ---
 
