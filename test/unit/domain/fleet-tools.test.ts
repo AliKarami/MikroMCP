@@ -1,5 +1,10 @@
+import {
+  clearRouterObservations,
+  recordRouterVersion,
+} from "../../../src/domain/router-observations.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
+import { systemTools } from "../../../src/domain/tools/system-tools.js";
 import { createFleetTools } from "../../../src/domain/tools/fleet-tools.js";
 import type { ToolContext, ToolDefinition } from "../../../src/domain/tools/tool-definition.js";
 import type { SshClient } from "../../../src/adapter/ssh-client.js";
@@ -263,6 +268,84 @@ describe("fleet-tools", () => {
         ...over,
       };
     }
+
+    describe("rosVersionSeen (#152)", () => {
+      beforeEach(() => clearRouterObservations());
+      const rowOf = async (routers: RouterConfig[]) =>
+        (
+          (await listRoutersTool.handler({}, listCtx(routers))).structuredContent as {
+            routers: Record<string, unknown>[];
+          }
+        ).routers[0];
+
+      it("shows no observed version for a router nothing has reached", async () => {
+        const row = await rowOf([taggedRouter("r1", [], { rosVersion: "7.20" })]);
+        expect(row.rosVersion).toBe("7.20");
+        expect(row).not.toHaveProperty("rosVersionSeen");
+      });
+
+      it("shows what check_router_health saw, next to the configured version", async () => {
+        const router = taggedRouter("r1", [], { rosVersion: "7.20" });
+        await healthTool.handler(
+          { routerId: "r1" },
+          makeContext({
+            routerId: "r1",
+            routerConfig: router,
+            routerClient: {
+              get: vi.fn().mockResolvedValue([{ version: "7.25 (stable)" }]),
+            } as unknown as RouterOSRestClient,
+          }),
+        );
+        const row = await rowOf([router]);
+        expect(row.rosVersion).toBe("7.20");
+        expect(row.rosVersionSeen).toBe("7.25 (stable)");
+        expect(Date.parse(String(row.rosVersionSeenAt))).not.toBeNaN();
+      });
+
+      it("shows what get_system_status saw", async () => {
+        const router = taggedRouter("r1", [], { rosVersion: "7.20" });
+        await systemTools[0].handler(
+          { routerId: "r1", sections: ["resource"] },
+          makeContext({
+            routerId: "r1",
+            routerConfig: router,
+            routerClient: {
+              get: vi.fn().mockResolvedValue([{ version: "7.24.2 (stable)" }]),
+            } as unknown as RouterOSRestClient,
+          }),
+        );
+        expect((await rowOf([router])).rosVersionSeen).toBe("7.24.2 (stable)");
+      });
+
+      it("ignores an observation made on a different host", async () => {
+        recordRouterVersion("r1", "192.0.2.50", "7.25");
+        const row = await rowOf([taggedRouter("r1", [], { host: "192.0.2.51" })]);
+        expect(row).not.toHaveProperty("rosVersionSeen");
+      });
+
+      it("never shows one for a SwOS switch", async () => {
+        recordRouterVersion("sw", "192.0.2.60", "2.21");
+        const row = await rowOf([
+          taggedRouter("sw", [], { host: "192.0.2.60", deviceType: "swos", rosVersion: "swos" }),
+        ]);
+        expect(row).not.toHaveProperty("rosVersionSeen");
+      });
+
+      it("does not record a failed health check", async () => {
+        const router = taggedRouter("r1", []);
+        await healthTool.handler(
+          { routerId: "r1" },
+          makeContext({
+            routerId: "r1",
+            routerConfig: router,
+            routerClient: {
+              get: vi.fn().mockRejectedValue(new Error("down")),
+            } as unknown as RouterOSRestClient,
+          }),
+        );
+        expect(await rowOf([router])).not.toHaveProperty("rosVersionSeen");
+      });
+    });
 
     it("rejects unknown input fields (strict schema)", async () => {
       const ctx = listCtx([taggedRouter("r1", [])]);
