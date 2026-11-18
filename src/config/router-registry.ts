@@ -133,15 +133,65 @@ const ConfigFileSchema = z
   })
   .strict();
 
+/** What a reload would do to the registry, by router id. Field names only, never values. */
+export interface RouterChanges {
+  added: string[];
+  removed: string[];
+  changed: { id: string; fields: string[] }[];
+  unchanged: string[];
+}
+
 export class RouterRegistry {
   private routers: Map<string, RouterConfig>;
 
-  constructor(configPath: string) {
-    this.routers = new Map();
+  private fileExisted: boolean;
+
+  constructor(private readonly configPath: string) {
+    this.fileExisted = existsSync(configPath);
+    this.routers = RouterRegistry.load(configPath, true);
+  }
+
+  /**
+   * Read and validate the config file again and report what differs from what is
+   * loaded. Nothing changes until `commit()`; a file that is missing or invalid
+   * throws here, so the loaded routers stay in force.
+   */
+  prepareReload(): { changes: RouterChanges; commit: () => void } {
+    const next = RouterRegistry.load(this.configPath, !this.fileExisted);
+    const changes: RouterChanges = { added: [], removed: [], changed: [], unchanged: [] };
+    for (const [id, config] of next) {
+      const current = this.routers.get(id);
+      if (!current) {
+        changes.added.push(id);
+        continue;
+      }
+      const fields = [...new Set([...Object.keys(current), ...Object.keys(config)])].filter(
+        (key) =>
+          JSON.stringify((current as unknown as Record<string, unknown>)[key]) !==
+          JSON.stringify((config as unknown as Record<string, unknown>)[key]),
+      );
+      if (fields.length > 0) changes.changed.push({ id, fields });
+      else changes.unchanged.push(id);
+    }
+    for (const id of this.routers.keys()) if (!next.has(id)) changes.removed.push(id);
+    return {
+      changes,
+      commit: () => {
+        this.routers = next;
+        this.fileExisted = existsSync(this.configPath);
+      },
+    };
+  }
+
+  private static load(configPath: string, missingIsEmpty: boolean): Map<string, RouterConfig> {
+    const routers = new Map<string, RouterConfig>();
 
     if (!existsSync(configPath)) {
+      if (!missingIsEmpty) {
+        throw new Error(`Router config file not found at ${configPath}`);
+      }
       log.warn({ configPath }, "Router config file not found; starting with empty registry");
-      return;
+      return routers;
     }
 
     const raw = readFileSync(configPath, "utf-8");
@@ -199,9 +249,10 @@ export class RouterRegistry {
           "SSH private key is readable by group or others — restrict it to the owner (chmod 0600).",
         );
       }
-      this.routers.set(id, routerConfig);
+      routers.set(id, routerConfig);
     }
-    log.info({ count: this.routers.size }, "Loaded routers from config");
+    log.info({ count: routers.size }, "Loaded routers from config");
+    return routers;
   }
 
   getRouter(id: string): RouterConfig {

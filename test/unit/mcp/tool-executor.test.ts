@@ -388,6 +388,22 @@ describe("executeToolCall", () => {
     expect(result.content[0].text).toContain("fleet-ok");
   });
 
+  it("skipRouterContext — the handler gets the identity registry (reload_config needs it)", async () => {
+    let seen: unknown;
+    const tool = makeReadTool(
+      async (_params, context) => {
+        seen = context.identityRegistry;
+        return { content: "ok", structuredContent: {} };
+      },
+      { skipRouterContext: true },
+    );
+    const deps = makeDeps();
+
+    await executeToolCall(tool, {}, deps);
+
+    expect(seen).toBe(deps.identityRegistry);
+  });
+
   describe("skipRouterContext — allowedToolPatterns", () => {
     function scoped(patterns: string[]) {
       return {

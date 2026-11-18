@@ -205,6 +205,7 @@ export async function executeToolCall(
           sftpClient: fleetUnavailable<ToolContext["sftpClient"]>("sftpClient"),
           identity,
           routerRegistry: registry,
+          identityRegistry,
           connectionPool: pool,
           circuitBreakers,
           appConfig: config,

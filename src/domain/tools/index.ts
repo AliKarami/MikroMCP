@@ -5,6 +5,7 @@ import { ipTools } from "./ip-tools.js";
 import { dhcpTools } from "./dhcp-tools.js";
 import { routeTools } from "./route-tools.js";
 import { firewallTools } from "./firewall-tools.js";
+import { configReloadTools } from "./config-reload-tools.js";
 import { diagnosticTools } from "./diagnostic-tools.js";
 import { systemOpsTools } from "./system-ops-tools.js";
 import { bridgeTools } from "./bridge-tools.js";
@@ -93,6 +94,7 @@ const baseTools: ToolDefinition[] = [
   ...swosTools,
   ...swosConfigTools,
   ...swosMaintenanceTools,
+  ...configReloadTools,
 ];
 
 export const allTools: ToolDefinition[] = [

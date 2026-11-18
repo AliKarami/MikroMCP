@@ -3,6 +3,7 @@ import { createServerFactory } from "../mcp/server.js";
 import { connectStdio } from "../mcp/transports/stdio.js";
 import { connectHttp } from "../mcp/transports/http.js";
 import { IdentityRegistry } from "../config/identity-registry.js";
+import { reloadConfig } from "../config/reload.js";
 import { getStdioIdentity, withIdentity } from "../middleware/auth.js";
 import { createLogger } from "../observability/logger.js";
 import { pruneSnapshots, rotateAndPruneJournal } from "../domain/snapshot/retention.js";
@@ -30,7 +31,10 @@ export async function runServe(): Promise<void> {
     }
   }
 
-  const { makeServer, pool } = createServerFactory(config, identityRegistry);
+  const { makeServer, pool, circuitBreakers, registry } = createServerFactory(
+    config,
+    identityRegistry,
+  );
 
   if (config.transport === "stdio") {
     const stdioIdentity = getStdioIdentity(config.stdioIdentity, identityRegistry);
@@ -58,6 +62,26 @@ export async function runServe(): Promise<void> {
     pool.closeAll();
     process.exit(0);
   };
+
+  // Windows has no SIGHUP; there reload_config is the way.
+  if (process.platform !== "win32") {
+    process.on("SIGHUP", () => {
+      try {
+        reloadConfig({
+          routerRegistry: registry,
+          identityRegistry,
+          pool,
+          circuitBreakers,
+          config,
+        });
+      } catch (err) {
+        log.error(
+          { err },
+          "SIGHUP: configuration not reloaded; the running configuration is unchanged",
+        );
+      }
+    });
+  }
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);

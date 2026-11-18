@@ -1,6 +1,6 @@
 # Available Tools
 
-All 133 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 134 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them. Every write-tool response states what happened in an `applied` boolean: `true` when the call ran its write path, `false` on a dry run — and a dry run's text always starts with `NOT APPLIED — dry run only. Pass dryRun: false to write this change.`, so a preview cannot be mistaken for a write. Note that `write_swos_blob` and the SwOS maintenance tools default to `dryRun: true` (preview first); the RouterOS write tools default to `false`.
 
@@ -1735,6 +1735,22 @@ List the routers configured in the registry (`routers.yaml`) so you can discover
 | `tags` | string[] | — | Only return routers having any of these tags (e.g. `["edge", "prod"]`) |
 
 **Example prompt:** "What routers are configured, and which tags can I use with bulk_execute?"
+
+---
+
+### `reload_config` — Write · Destructive · Idempotent
+
+Re-read `routers.yaml` and `identities.yaml` without restarting the server, and report which routers and identities were added, removed or changed — by id and, for routers, by field name, never by value. It does the same as sending the server `SIGHUP`, so a host changed in `routers.yaml` takes effect without a restart and without dropping the MCP connection.
+
+Both files are read and checked first. If either is missing or invalid, nothing changes, the running configuration stays in force and the error names the problem (`RELOAD_REFUSED`). In HTTP mode a file with `readonly` or `operator` identities is refused unless `MIKROMCP_CONFIRMATION_SECRET` is set, the same rule as at startup. After a reload the pooled connection and circuit breaker of every changed or removed router are dropped, so the next call connects with the new settings, and cached identity tokens are cleared, so a revoked token stops working at once. A call already running when the reload happens finishes with the settings it started with.
+
+Needs an `admin` or `superadmin` identity (`RELOAD_NOT_ALLOWED` otherwise); stdio without a configured identity is `superadmin`. Settings that come from `MIKROMCP_*` environment variables, including the HTTP port and rate limit, are not reloaded: restart the server for those. On Windows there is no `SIGHUP`; use this tool.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `dryRun` | boolean | `false` | Check both files and report what would change, without changing the running server |
+
+**Example prompt:** "I changed the host of one switch in routers.yaml. Check the files with a dry run, then reload the configuration."
 
 ---
 
