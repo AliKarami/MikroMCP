@@ -69,6 +69,12 @@ Trigger a controlled router reboot with an optional delay. Use this instead of `
 
 Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
 
+### `run_command` — Write · Destructive
+
+Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
+
+`dryRun` checks the allow/deny policy and nothing else. The result says so (`validated: "policy"`, `syntaxChecked: false`, and the text starts with a reminder): the syntax, the names the command refers to and what a `[find ...]` would match are not checked, so a dry run that passes does not show the command will work. A malformed command, for example a port name containing brackets that is not quoted, passes a dry run and may do nothing when run.
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
@@ -1730,7 +1736,7 @@ List recent entries from the server's write journal — every journaled write wi
 
 ### `list_routers` — Read
 
-List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`. The `rosVersion` is what `routers.yaml` states — it can lag a router upgrade, so ask `get_system_status` when the live version matters (e.g. before version-dependent commands).
+List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`. The `rosVersion` is what `routers.yaml` states — it can lag a router upgrade, and it is still what MikroMCP uses to choose version-dependent REST paths. Once `get_system_status` or `check_router_health` has reached a RouterOS router, its row also carries `rosVersionSeen` and `rosVersionSeenAt` (an ISO timestamp): the version the router reported to this server, so a stale `routers.yaml` shows up next to the live value. The observation lives in memory only, so it is absent after a restart, and it is not shown after the router's `host` changes. SwOS switches never carry it. Ask `get_system_status` when the live version matters (e.g. before version-dependent commands).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
