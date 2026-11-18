@@ -208,6 +208,7 @@ Multi-tool patterns:
 | Run the same read-only tool against multiple routers | `bulk_read` | (orchestration) | read |
 | Check health of a router | `check_router_health` | `system/resource` | read |
 | Discover configured routers, tags, and the default | `list_routers` | (local config) | read |
+| Pick up edited `routers.yaml` / `identities.yaml` without a restart (also `SIGHUP`) | `reload_config` | (local config) | destructive |
 | Create a config backup/snapshot (encrypt with `passwordSecret`, not a literal `password`) | `create_backup` | `system/backup/save` | destructive |
 | Export running config | `export_config` | `system/export` | destructive |
 
