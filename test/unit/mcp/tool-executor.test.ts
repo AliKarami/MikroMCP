@@ -175,6 +175,85 @@ describe("executeToolCall", () => {
       );
     });
 
+    describe("rollback verdict (#156)", () => {
+      const rollbackOf = (r: { structuredContent?: unknown }) =>
+        (r.structuredContent as Record<string, unknown>).rollback as Record<string, unknown>;
+
+      it("a snapshotted write says it can be rolled back, with the journal ID", async () => {
+        vi.mocked(takeSnapshot).mockResolvedValueOnce({ id: "s1" } as Awaited<
+          ReturnType<typeof takeSnapshot>
+        >);
+        const result = await executeToolCall(
+          makeWriteTool(["ip/address"]),
+          { routerId: "r1" },
+          journalDeps(),
+        );
+        expect(rollbackOf(result)).toEqual({
+          available: true,
+          journalId: "j1",
+          snapshotted: ["ip/address"],
+        });
+        expect(result.content[0].text).not.toContain("Not undoable");
+      });
+
+      it("a write that takes no snapshot says so, and why (e.g. run_command)", async () => {
+        const result = await executeToolCall(makeWriteTool([]), { routerId: "r1" }, journalDeps());
+        expect(rollbackOf(result)).toMatchObject({ available: false, reason: "NO_SNAPSHOT" });
+        expect(result.content[0].text).toContain("Not undoable with rollback_change");
+        expect(result.content[0].text).toContain("test_write takes no snapshot");
+      });
+
+      it("a snapshot that failed is told apart from one that was never taken", async () => {
+        vi.mocked(takeSnapshot).mockRejectedValueOnce(new Error("disk full"));
+        const result = await executeToolCall(
+          makeWriteTool(["ip/address"]),
+          { routerId: "r1" },
+          journalDeps(),
+        );
+        expect(rollbackOf(result)).toMatchObject({
+          available: false,
+          reason: "SNAPSHOT_FAILED",
+        });
+        expect(result.content[0].text).toContain("ip/address");
+      });
+
+      it("says so without a journal configured too", async () => {
+        const result = await executeToolCall(makeWriteTool([]), { routerId: "r1" }, makeDeps());
+        expect(rollbackOf(result)).toMatchObject({ available: false, reason: "NO_SNAPSHOT" });
+      });
+
+      it("a dry run carries no rollback verdict", async () => {
+        const result = await executeToolCall(
+          makeWriteTool([]),
+          { routerId: "r1", dryRun: true },
+          journalDeps(),
+        );
+        expect(rollbackOf(result)).toBeUndefined();
+      });
+
+      it("a read tool carries none", async () => {
+        const result = await executeToolCall(
+          makeReadTool(async () => ({ content: "ok", structuredContent: {} })),
+          { routerId: "r1" },
+          makeDeps(),
+        );
+        expect(rollbackOf(result)).toBeUndefined();
+      });
+
+      it("leaves out the tools that report their own rollback, and a result that applied nothing", async () => {
+        for (const name of ["apply_plan", "rollback_change", "plan_changes"]) {
+          const tool = { ...makeWriteTool([]), name };
+          const result = await executeToolCall(tool, { routerId: "r1" }, journalDeps());
+          expect(rollbackOf(result), name).toBeUndefined();
+        }
+        const notApplied = makeWriteTool([]);
+        notApplied.handler = async () => ({ content: "x", structuredContent: { applied: false } });
+        expect(
+          rollbackOf(await executeToolCall(notApplied, { routerId: "r1" }, journalDeps())),
+        ).toBeUndefined();
+      });
+    });
+
     it("a write without snapshots (e.g. run_command) carries no journalId", async () => {
       const result = await executeToolCall(makeWriteTool([]), { routerId: "r1" }, journalDeps());
 
