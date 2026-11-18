@@ -26,10 +26,42 @@ export class BodyTooLargeError extends Error {
   }
 }
 
+export interface RateLimitStatus {
+  limit: number;
+  remaining: number;
+  /** Time until this client's window resets. */
+  resetMs: number;
+}
+
 export interface RateLimiter {
   (ip: string): boolean;
+  /** The client's budget as it stands now, after the last check. */
+  status(ip: string): RateLimitStatus;
   sweep(): void;
   size(): number;
+}
+
+/** RateLimit-* headers (IETF draft names), sent on every rate-limited request. */
+export function rateLimitHeaders(status: RateLimitStatus): Record<string, string> {
+  return {
+    "RateLimit-Limit": String(status.limit),
+    "RateLimit-Remaining": String(status.remaining),
+    "RateLimit-Reset": String(Math.ceil(status.resetMs / 1000)),
+  };
+}
+
+/** The 429 body: what the limit is, when it resets, and how to stay under it. */
+export function rateLimitedBody(status: RateLimitStatus): Record<string, unknown> {
+  const retryAfterSeconds = Math.max(1, Math.ceil(status.resetMs / 1000));
+  return {
+    error: `Too many requests: more than ${status.limit} requests in 60 seconds from this client address. Retry after ${retryAfterSeconds} seconds.`,
+    limit: status.limit,
+    retryAfterSeconds,
+    hint:
+      "Every HTTP request counts, including the MCP handshake. Raise MIKROMCP_HTTP_RATE_LIMIT_RPM on the server (0 turns the limit off), " +
+      "or send fewer requests: one query with a filter and proplist instead of many small ones, " +
+      "or bulk_read to run one read-only tool on many routers in a single request.",
+  };
 }
 
 export function createRateLimiter(rpm: number): RateLimiter {
@@ -52,6 +84,12 @@ export function createRateLimiter(rpm: number): RateLimiter {
   };
 
   const limiter = check as RateLimiter;
+  limiter.status = (ip) => {
+    const entry = windows.get(ip);
+    const age = entry ? Date.now() - entry.windowStart : WINDOW_MS;
+    if (!entry || age >= WINDOW_MS) return { limit: rpm, remaining: rpm, resetMs: WINDOW_MS };
+    return { limit: rpm, remaining: Math.max(0, rpm - entry.count), resetMs: WINDOW_MS - age };
+  };
   limiter.sweep = () => {
     const now = Date.now();
     for (const [ip, entry] of windows) {
@@ -174,11 +212,21 @@ export async function connectHttp(
       return;
     }
 
-    if (!checkRateLimit(ip)) {
-      log.warn({ ip }, "Rate limit exceeded");
-      res.writeHead(429, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Too many requests. Retry after 60 seconds." }));
-      return;
+    const allowed = checkRateLimit(ip);
+    if (rateLimitRpm > 0) {
+      const status = checkRateLimit.status(ip);
+      for (const [name, value] of Object.entries(rateLimitHeaders(status))) {
+        res.setHeader(name, value);
+      }
+      if (!allowed) {
+        log.warn({ ip }, "Rate limit exceeded");
+        res.writeHead(429, {
+          "Content-Type": "application/json",
+          "Retry-After": String(Math.max(1, Math.ceil(status.resetMs / 1000))),
+        });
+        res.end(JSON.stringify(rateLimitedBody(status)));
+        return;
+      }
     }
 
     try {
