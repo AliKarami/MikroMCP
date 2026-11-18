@@ -69,6 +69,12 @@ Trigger a controlled router reboot with an optional delay. Use this instead of `
 
 Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
 
+### `run_command` — Write · Destructive
+
+Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
+
+`dryRun` checks the allow/deny policy and nothing else. The result says so (`validated: "policy"`, `syntaxChecked: false`, and the text starts with a reminder): the syntax, the names the command refers to and what a `[find ...]` would match are not checked, so a dry run that passes does not show the command will work. A malformed command, for example a port name containing brackets that is not quoted, passes a dry run and may do nothing when run.
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
