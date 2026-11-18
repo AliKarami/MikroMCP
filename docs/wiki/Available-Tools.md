@@ -2,7 +2,7 @@
 
 All 133 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
-Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them.
+Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them. Every write-tool response states what happened in an `applied` boolean: `true` when the call ran its write path, `false` on a dry run — and a dry run's text always starts with `NOT APPLIED — dry run only. Pass dryRun: false to write this change.`, so a preview cannot be mistaken for a write. Note that `write_swos_blob` and the SwOS maintenance tools default to `dryRun: true` (preview first); the RouterOS write tools default to `false`.
 
 ---
 
@@ -68,6 +68,12 @@ Trigger a controlled router reboot with an optional delay. Use this instead of `
 ### `run_command` — Write · Destructive
 
 Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
+
+### `run_command` — Write · Destructive
+
+Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
+
+`dryRun` checks the allow/deny policy and nothing else. The result says so (`validated: "policy"`, `syntaxChecked: false`, and the text starts with a reminder): the syntax, the names the command refers to and what a `[find ...]` would match are not checked, so a dry run that passes does not show the command will work. A malformed command, for example a port name containing brackets that is not quoted, passes a dry run and may do nothing when run.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1696,6 +1702,8 @@ With `planFingerprint`, before the first step runs, `apply_plan` checks that `ro
 
 Restore the state captured before a previous write. On RouterOS that is the section state before an `apply_plan` run; on a SwOS switch the `.b` endpoints snapshotted before `apply_swos_config` or `write_swos_blob`, re-posted in a lockout-safe order (on full SwOS a VLAN table holding both the current and the old VLANs, then the per-port settings, then the old table). When one of those writes is not answered, the rest are still sent and the result is `SWOS_ROLLBACK_INCOMPLETE`, naming what was restored and what was not. Uses the snapshot stored in the write journal. The `journalId` comes from the write's result or from `list_journal`; a dry-run entry returns `dry_run_entry` and restores nothing, since its snapshot would undo any change made after the preview.
 
+**Which writes can be undone.** Every real write response says whether `rollback_change` can undo it, in a `rollback` field. `{ available: true, journalId, snapshotted }` means the configuration under those paths was snapshotted before the write (and the text carries the `Journal ID`). `{ available: false, reason, detail }` means there is nothing to restore: `NO_SNAPSHOT` for a tool that takes no snapshot, or `SNAPSHOT_FAILED` when the snapshot was attempted and failed (the write still ran). Dry runs, `plan_changes`, `apply_plan` (each step has its own `journalId`) and `rollback_change` carry no `rollback` field. These write tools take no snapshot, so their changes need an undo you note yourself: `run_command`, `run_script`, `reboot`, `manage_wifi_interface`, `manage_ip_service`, `manage_interface_list`, `manage_interface_list_member`, `manage_container_env`, `manage_container_mount`, `manage_upgrade`, `create_backup`, `export_config`, `delete_file`, `fetch_url` and the SwOS `save_swos_backup`, `restore_swos_backup`, `upgrade_swos_firmware` and `set_swos_password`. `write_swos_blob` and `apply_swos_config` snapshot the SwOS endpoints they write. Every other RouterOS write tool snapshots the section it changes. `run_command` is journaled for audit like every write (see `list_journal`) but is never snapshotted, whatever the command.
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
@@ -1728,7 +1736,7 @@ List recent entries from the server's write journal — every journaled write wi
 
 ### `list_routers` — Read
 
-List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`. The `rosVersion` is what `routers.yaml` states — it can lag a router upgrade, so ask `get_system_status` when the live version matters (e.g. before version-dependent commands).
+List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`. The `rosVersion` is what `routers.yaml` states — it can lag a router upgrade, and it is still what MikroMCP uses to choose version-dependent REST paths. Once `get_system_status` or `check_router_health` has reached a RouterOS router, its row also carries `rosVersionSeen` and `rosVersionSeenAt` (an ISO timestamp): the version the router reported to this server, so a stale `routers.yaml` shows up next to the live value. The observation lives in memory only, so it is absent after a restart, and it is not shown after the router's `host` changes. SwOS switches never carry it. Ask `get_system_status` when the live version matters (e.g. before version-dependent commands).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -2132,7 +2140,7 @@ Add, update, or remove a PPP profile. Idempotent by name. `update` returns `no_c
 
 ### `list_swos_endpoints` — Read
 
-List the `.b` endpoints supported by this server with their decoded field names. Schema introspection only — no device call.
+List the `.b` endpoints supported by this server with their decoded field names, and a `notes` entry for every field that needs one — for example on `sys.b`, `ip` is the live management address while `static_ip` and `addr_acq` are stored settings that do not move it by themselves, and `allow_from_*` restrict where the switch answers. Schema introspection only — no device call.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -2159,7 +2167,7 @@ A switch without PoE or SFP cages does not serve `poe.b` or `sfp.b`; those are l
 
 ### `get_swos_endpoint` — Read
 
-Fetch and decode a single SwOS `.b` endpoint (`link.b`, `sys.b`, `poe.b`, `lacp.b`, `rstp.b`, `snmp.b`, `fwd.b`, `vlan.b`, `!stats.b` on SwOS Lite or `stats.b` on full SwOS, `sfp.b`, `host.b`, `acl.b`, ...) as structured data. Unknown keys are preserved under `_raw`. Per-port bitmasks inside record lists (VLAN members, IGMP member ports, ACL source ports) decode to one flag per port; for those endpoints the tool also reads `link.b` to learn the port count. Long decodes are truncated in the text response only — `structuredContent` always carries the full result.
+Fetch and decode a single SwOS `.b` endpoint (`link.b`, `sys.b`, `poe.b`, `lacp.b`, `rstp.b`, `snmp.b`, `fwd.b`, `vlan.b`, `!stats.b` on SwOS Lite or `stats.b` on full SwOS, `sfp.b`, `host.b`, `acl.b`, ...) as structured data. Unknown keys are preserved under `_raw`. Per-port bitmasks inside record lists (VLAN members, IGMP member ports, ACL source ports) decode to one flag per port; for those endpoints the tool also reads `link.b` to learn the port count. Long decodes are truncated in the text response only — `structuredContent` always carries the full result. On SwOS Lite, `vlan.b` rows decode to `vid` (the VLAN ID), `members` (one flag per port) and `igmp` (IGMP snooping on or off). The Lite layout was checked against the web UI on one CSS610 (SwOS Lite 2.21), not against a capture with VLANs. The table can be read there but not written (`write_swos_blob` takes no record lists, and `apply_swos_config` refuses `vlans` on SwOS Lite).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -2178,6 +2186,8 @@ Mutate a SwOS `.b` endpoint. The full blob is read, the given fields are merged 
 
 Values are given by decoded field name (from `list_swos_endpoints`) or by a raw wire key already present in the blob; anything else — including a schema field this device's firmware does not send — is rejected rather than injected. Option fields take the enum name (e.g. `auto` for PoE out mode), encoded for the SwOS dialect the switch speaks. IP fields take a dotted quad (`192.168.88.1`) and MAC fields six hex pairs (`64:d1:54:00:00:01`); anything else is refused. A per-port field given a single value applies it to **every** port — the firmware has no per-port addressing here, so partial-port changes require passing an array covering every port. Per-port bitmasks (`enabled`, `flow_rx`, …) are one number, not a list of flags.
 
+A real write to `sys.b` that changes how the switch is reached — the live address `ip`, `static_ip`, `addr_acq`, or any `allow_from_*` setting — is refused with `SWOS_MANAGEMENT_CHANGE_REFUSED` unless `includeManagement` is `true`, because it can cut the session that makes the write (the same gate `apply_swos_config` uses). A dry run previews it without the flag. Both the preview and the write return `warnings`: `static_ip` and `addr_acq` are stored configuration that did not move the live address on SwOS Lite 2.21 (writing `ip` did), so the warning names the live address and any stored one that differs; an `allow_from_*` change warns that a session not matching it, this one included, loses access.
+
 Device-generated tables (`!stats.b`, `stats.b`, `!dhost.b`, `!igmp.b`, `!aclstats.b`) are read-only and cannot be targeted, and neither can record lists (`vlan.b`, `host.b`, `acl.b`) — a field merge cannot express "edit row 3", and writing one would replace the table rather than edit it.
 
 Every result — dry run and real write — carries a `compatibility` verdict comparing the switch's model and firmware against the set the schema was validated on, plus any wire keys the schema does not map. It warns; it does not block. See [Configuration → Firmware compatibility](Configuration).
@@ -2188,6 +2198,7 @@ Every result — dry run and real write — carries a `compatibility` verdict co
 | `endpoint` | enum | — | `.b` endpoint to write (writable ones only) |
 | `fields` | object | — | Values by decoded field name (or raw wire key) |
 | `dryRun` | boolean | `true` | Preview the resulting blob without writing |
+| `includeManagement` | boolean | `false` | Allow a real `sys.b` write that changes how the switch is reached (`ip`, `static_ip`, `addr_acq`, `allow_from_*`) |
 
 **Example prompt:** "Preview setting PoE out mode to auto on all ports of the access switch, then apply it."
 

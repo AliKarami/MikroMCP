@@ -148,6 +148,73 @@ describe("swosTools", () => {
     });
   });
 
+  describe("get_swos_endpoint vlan.b on SwOS Lite (#146)", () => {
+    // A SwOS Lite switch with VLANs: i01 = VLAN id, i02 = member-port bitmask,
+    // i03 = IGMP snooping. The plain vlan.b fixture is the empty table.
+    const rows = blob("vlan.b.sample2");
+    const read = async (raw: string) =>
+      (
+        (
+          await getTool.handler(
+            { routerId: "switch-01", endpoint: "vlan.b" },
+            makeContext(makeSwosClient({ "vlan.b": raw })),
+          )
+        ).structuredContent as { data: Record<string, unknown>[] }
+      ).data;
+
+    it("decodes each row to a VLAN id and one membership flag per port", async () => {
+      const data = await read(rows);
+      expect(data.map((r) => r.vid)).toEqual([10, 20, 30]);
+      for (const row of data) expect(row.members).toEqual(Array(10).fill(true));
+    });
+
+    it("decodes a partial member mask port by port", async () => {
+      const data = await read("[{i01:0x0014,i02:0x0301,i03:0x00}]");
+      expect(data[0].members).toEqual([
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+      ]);
+    });
+
+    it("decodes i03 as the IGMP snooping flag, set only on the row that has it on", async () => {
+      const data = await read(rows);
+      expect(data.map((r) => r.igmp)).toEqual([false, false, true]);
+      for (const row of data) expect(row._raw).toEqual({});
+    });
+
+    it("keeps a key it does not know under _raw", async () => {
+      const data = await read("[{i01:0x0001,i02:0x03ff,i03:0x00,i04:0x07}]");
+      expect(data[0]._raw).toEqual({ i04: 7 });
+    });
+
+    it("still decodes an empty table", async () => {
+      const result = await getTool.handler(
+        { routerId: "switch-01", endpoint: "vlan.b" },
+        makeContext(makeSwosClient()),
+      );
+      expect((result.structuredContent as { data: unknown[] }).data).toEqual([]);
+    });
+
+    it("leaves the table unwritable: write_swos_blob refuses vlan.b", async () => {
+      const swos = makeSwosClient({ "vlan.b": rows });
+      await expect(
+        writeTool.handler(
+          { routerId: "switch-01", endpoint: "vlan.b", fields: { vid: 5 }, dryRun: false },
+          makeContext(swos),
+        ),
+      ).rejects.toThrow();
+      expect(swos.client.writeBlob).not.toHaveBeenCalled();
+    });
+  });
+
   describe("list_swos_endpoints", () => {
     it("lists every endpoint with its decoded field names", async () => {
       const result = await listTool.handler({ routerId: "switch-01" }, makeContext());
@@ -636,12 +703,109 @@ describe("swosTools", () => {
     });
   });
 
+  describe("write_swos_blob management changes on sys.b (#142)", () => {
+    const sysParams = (fields: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+      routerId: "switch-01",
+      endpoint: "sys.b",
+      fields,
+      ...extra,
+    });
+    const warningsOf = (r: { structuredContent: unknown }) =>
+      (r.structuredContent as { warnings: string[] }).warnings;
+
+    it("refuses a real write of allow_from_vlan without includeManagement", async () => {
+      const swos = makeSwosClient();
+      await expect(
+        writeTool.handler(sysParams({ allow_from_vlan: 20 }, { dryRun: false }), makeContext(swos)),
+      ).rejects.toMatchObject({ code: "SWOS_MANAGEMENT_CHANGE_REFUSED" });
+      expect(swos.client.writeBlob).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["static_ip", { static_ip: "192.0.2.10" }],
+      ["addr_acq", { addr_acq: "static" }],
+      ["ip", { ip: "192.0.2.10" }],
+      ["allow_from_ip", { allow_from_ip: "192.0.2.0" }],
+    ])("refuses a real %s write without includeManagement", async (_name, fields) => {
+      const swos = makeSwosClient();
+      await expect(
+        writeTool.handler(sysParams(fields, { dryRun: false }), makeContext(swos)),
+      ).rejects.toMatchObject({ code: "SWOS_MANAGEMENT_CHANGE_REFUSED" });
+      expect(swos.client.writeBlob).not.toHaveBeenCalled();
+    });
+
+    it("previews a management change without includeManagement, with warnings", async () => {
+      const swos = makeSwosClient();
+      const result = await writeTool.handler(sysParams({ allow_from_vlan: 20 }), makeContext(swos));
+      expect((result.structuredContent as { action: string }).action).toBe("dry_run");
+      expect(warningsOf(result).join(" ")).toContain("VLAN 20 only");
+      expect(result.content).toContain("needs includeManagement: true");
+      expect(swos.client.writeBlob).not.toHaveBeenCalled();
+    });
+
+    it("writes with includeManagement and still reports the warning", async () => {
+      const swos = makeSwosClient();
+      const result = await writeTool.handler(
+        sysParams({ allow_from_vlan: 20 }, { dryRun: false, includeManagement: true }),
+        makeContext(swos),
+      );
+      expect((result.structuredContent as { action: string }).action).toBe("written");
+      expect(warningsOf(result).join(" ")).toContain("VLAN 20 only");
+      expect(swos.client.writeBlob).toHaveBeenCalledTimes(1);
+    });
+
+    it("warns that static_ip and addr_acq leave the live address alone", async () => {
+      const swos = makeSwosClient();
+      const result = await writeTool.handler(
+        sysParams({ addr_acq: "static", static_ip: "192.0.2.10" }),
+        makeContext(swos),
+      );
+      const text = warningsOf(result).join(" ");
+      expect(text).toContain("static_ip and addr_acq are stored configuration");
+      const live = (decodeEndpoint("sys.b", blob("sys.b")) as { ip: string }).ip;
+      expect(text).toContain(`live address stays ${live}`);
+      expect(text).toContain("stored static address is 192.0.2.10");
+    });
+
+    it("does not warn about stored settings when the live ip is written too", async () => {
+      const swos = makeSwosClient();
+      const result = await writeTool.handler(
+        sysParams({ ip: "192.0.2.10", static_ip: "192.0.2.10" }),
+        makeContext(swos),
+      );
+      expect(warningsOf(result).join(" ")).not.toContain("stored configuration");
+    });
+
+    it("leaves unrelated sys.b writes and other endpoints unguarded", async () => {
+      const swos = makeSwosClient();
+      const result = await writeTool.handler(
+        sysParams({ bridge_priority: 0x4000 }, { dryRun: false }),
+        makeContext(swos),
+      );
+      expect((result.structuredContent as { action: string }).action).toBe("written");
+      expect(warningsOf(result)).toEqual([]);
+    });
+
+    it("lists the field notes in list_swos_endpoints", async () => {
+      const result = await listTool.handler({ routerId: "switch-01" }, makeContext());
+      const sys = (
+        result.structuredContent as {
+          endpoints: { endpoint: string; notes: Record<string, string> }[];
+        }
+      ).endpoints.find((e) => e.endpoint === "sys.b");
+      expect(sys?.notes.static_ip).toContain("does not change the live address");
+      expect(sys?.notes.allow_from_vlan).toContain("unreachable");
+      expect(result.content).toContain("allow_from_vlan: 0 = any VLAN");
+    });
+  });
+
   describe("write_swos_blob on full SwOS", () => {
     const params = (endpoint: string, fields: Record<string, unknown>) => ({
       routerId: "switch-01",
       endpoint,
       fields,
       dryRun: false,
+      includeManagement: true,
     });
 
     it("encodes 'strict' with the full-SwOS option index", async () => {

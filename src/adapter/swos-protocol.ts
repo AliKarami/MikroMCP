@@ -348,7 +348,9 @@ const SYS: Endpoint = {
       note: "seconds",
       profiles: { swos: { scale: 100 } },
     }),
-    f("ip", { swos: "cip", swos_lite: "i02" }, Kind.IP),
+    f("ip", { swos: "cip", swos_lite: "i02" }, Kind.IP, {
+      note: "live management address; on SwOS Lite 2.21 writing it moved the address at once, while static_ip did not",
+    }),
     f("mac", { swos: "mac", swos_lite: "i03" }, Kind.MAC),
     f("serial", { swos: "sid", swos_lite: "i04" }, Kind.STR),
     f("identity", { swos: "id", swos_lite: "i05" }, Kind.STR),
@@ -357,20 +359,33 @@ const SYS: Endpoint = {
     f("discovery_protocol", { swos: "pdsc", swos_lite: "i08" }, Kind.BOOL, {
       note: "per-port bitmask of MikroTik discovery enabled",
     }),
-    f("static_ip", { swos: "ip", swos_lite: "i09" }, Kind.IP),
-    f("addr_acq", { swos: "iptp", swos_lite: "i0a" }, Kind.OPTION, { options: ADDR_ACQ }),
+    f("static_ip", { swos: "ip", swos_lite: "i09" }, Kind.IP, {
+      note: "stored static address; does not change the live address (ip) by itself",
+    }),
+    f("addr_acq", { swos: "iptp", swos_lite: "i0a" }, Kind.OPTION, {
+      options: ADDR_ACQ,
+      note: "stored acquisition mode; does not change the live address (ip) by itself",
+    }),
     f("build_number", { swos: "bld", swos_lite: "i0b" }, Kind.INT, {
       note: "full SwOS: build time as a Unix timestamp",
     }),
-    f("allow_from_ports", { swos: "allp", swos_lite: "i12" }, Kind.BOOL),
+    f("allow_from_ports", { swos: "allp", swos_lite: "i12" }, Kind.BOOL, {
+      note: "per-port bitmask of ports management is allowed from; restricts access",
+    }),
     f("dhcp_trusted_ports", { swos: "dtrp", swos_lite: "i13" }, Kind.BOOL),
     f("dhcp_info_option", { swos: "ainf", swos_lite: "i14" }, Kind.CHECKBOX),
     f("psu1_voltage", { swos: "p1v", swos_lite: "i15" }, Kind.INT, { scale: 100, note: "volts" }),
     f("psu1_current", { swos: "p1c", swos_lite: "i16" }, Kind.INT, { note: "mA" }),
     f("igmp_snooping", { swos: "igmp", swos_lite: "i17" }, Kind.CHECKBOX),
-    f("allow_from_ip", { swos: "alla", swos_lite: "i19" }, Kind.IP),
-    f("allow_from_mask", { swos: "allm", swos_lite: "i1a" }, Kind.INT),
-    f("allow_from_vlan", { swos: "avln", swos_lite: "i1b" }, Kind.INT),
+    f("allow_from_ip", { swos: "alla", swos_lite: "i19" }, Kind.IP, {
+      note: "management is allowed only from this address range (0.0.0.0 = any); restricts access",
+    }),
+    f("allow_from_mask", { swos: "allm", swos_lite: "i1a" }, Kind.INT, {
+      note: "prefix length of allow_from_ip",
+    }),
+    f("allow_from_vlan", { swos: "avln", swos_lite: "i1b" }, Kind.INT, {
+      note: "0 = any VLAN; non-zero answers management only on this VLAN and can make the switch unreachable",
+    }),
     f("psu2_voltage", { swos: "p2v", swos_lite: "i1e" }, Kind.INT, { scale: 100 }),
     f("psu2_current", { swos: "p2c", swos_lite: "i1f" }, Kind.INT),
     f("bridge_priority", { swos: "prio", swos_lite: "i0e" }, Kind.INT),
@@ -648,20 +663,23 @@ const FWD: Endpoint = {
   ],
 };
 
-// vlan.b / host.b / !dhost.b / !igmp.b / acl.b: records. SwOS Lite iNN keys for
-// vlan.b are unverified (device had no VLANs); only legacy swos mnemonics map.
+// vlan.b / host.b / !dhost.b / !igmp.b / acl.b: records. On SwOS Lite a vlan.b
+// row is {i01: VLAN id, i02: member-port bitmask, i03: IGMP snooping flag},
+// matched against the web UI on one CSS610 (2.21): the one VLAN created with
+// IGMP snooping on was the only row with i03 set. The committed Lite capture
+// holds no VLANs, so this layout rests on that comparison, not on a capture.
 const VLAN: Endpoint = {
   path: "vlan.b",
   isArray: true,
-  note: "SwOS Lite vlan.b keys unverified (device had none)",
+  note: "SwOS Lite rows: i01 = VLAN id, i02 = member ports, i03 = IGMP snooping (keys seen on SwOS Lite 2.21)",
   fields: [
-    f("vid", { swos: "vid" }, Kind.INT),
+    f("vid", { swos: "vid", swos_lite: "i01" }, Kind.INT),
     f("name", { swos: "nm" }, Kind.STR),
     f("port_isolation", { swos: "piso" }, Kind.CHECKBOX),
     f("learning", { swos: "lrn" }, Kind.CHECKBOX),
     f("mirror", { swos: "mrr" }, Kind.CHECKBOX),
-    f("igmp", { swos: "igmp" }, Kind.CHECKBOX),
-    f("members", { swos: "mbr" }, Kind.BOOL),
+    f("igmp", { swos: "igmp", swos_lite: "i03" }, Kind.CHECKBOX),
+    f("members", { swos: "mbr", swos_lite: "i02" }, Kind.BOOL),
   ],
 };
 

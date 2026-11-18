@@ -23,7 +23,14 @@ synthetic ones; everything else is untouched:
 | Switch serial (`sys.b i04`) | `SWTEST00001` |
 | Port names (`link.b i0a`) | generic role names |
 | SFP module serials (`sfp.b i04`) | `SFPTESTSN0000N`, padded to the original field width |
+| VLAN IDs (`vlan.b.sample2`, `i01`) | `0x000a`, `0x0014`, `0x001e` (10, 20, 30) |
 
 Endpoints the test device had no data for (`acl.b`, `host.b`, `vlan.b`,
 `!igmp.b`) are captured as empty `{}`/`[]` on purpose — they pin down the
 "nothing configured" shape the decoder has to handle.
+
+`vlan.b.sample2` is the same endpoint on a switch that did have VLANs, so the
+VLAN row layout is covered. Two rows are as the device sent them with only the
+VLAN IDs replaced; the third row (the one with `i03` set) was written in the same
+wire format from that switch's decoded output, after adding a VLAN with IGMP
+snooping on. The IDs are synthetic: `0x000a`, `0x0014` and `0x001e` (10, 20, 30).

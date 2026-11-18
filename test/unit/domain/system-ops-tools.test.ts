@@ -405,6 +405,48 @@ describe("system-ops tools", () => {
   describe("run_command handler", () => {
     const runCommandTool = systemOpsTools[3];
 
+    describe("dry run (#154)", () => {
+      const dryRun = (command: string) =>
+        runCommandTool.handler({ routerId: "test-router", command, dryRun: true }, makeContext());
+
+      it("says it checked the policy and nothing else", async () => {
+        const result = await dryRun("/interface/print");
+        expect(result.structuredContent).toMatchObject({
+          action: "dry_run",
+          validated: "policy",
+          syntaxChecked: false,
+        });
+        expect(result.content).toContain("Only the policy was checked");
+        expect(result.content).toContain("does not show the command will work");
+      });
+
+      it("does not run the command", async () => {
+        const ctx = makeContext();
+        await runCommandTool.handler(
+          { routerId: "test-router", command: "/interface/print", dryRun: true },
+          ctx,
+        );
+        expect(ctx.sshClient.execute).not.toHaveBeenCalled();
+      });
+
+      it("passes a malformed command, which is why the label matters", async () => {
+        const result = await dryRun("/interface/set ether8[uplink] disabled=yes");
+        expect((result.structuredContent as { action: string }).action).toBe("dry_run");
+      });
+
+      it("still refuses a denied command", async () => {
+        await expect(dryRun("/system shutdown")).rejects.toBeInstanceOf(MikroMCPError);
+      });
+
+      it("a real run carries no dry-run verdict", async () => {
+        const result = await runCommandTool.handler(
+          { routerId: "test-router", command: "/interface/print" },
+          makeContext(),
+        );
+        expect(result.structuredContent).not.toHaveProperty("validated");
+      });
+    });
+
     it("throws MikroMCPError for denied command (/system shutdown)", async () => {
       const ctx = makeContext();
       await expect(

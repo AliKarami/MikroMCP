@@ -536,6 +536,7 @@ export function createChangeManagementTools(baseTools: ToolDefinition[]): ToolDe
           fingerprintNote,
         structuredContent: {
           routerId: parsed.routerId,
+          applied: false,
           steps: stepResults,
           ...(planFingerprint ? { planFingerprint } : {}),
         },

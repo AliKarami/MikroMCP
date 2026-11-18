@@ -38,6 +38,13 @@ const AMBIGUOUS_WRITE_CATEGORIES = new Set<ErrorCategory>([
   ErrorCategory.ROUTER_UNREACHABLE,
 ]);
 
+/**
+ * Write tools whose results already say how to undo them: apply_plan gives each
+ * step its own journal ID, rollback_change is the undo, and plan_changes writes
+ * nothing.
+ */
+const REPORTS_OWN_ROLLBACK = new Set(["apply_plan", "rollback_change", "plan_changes"]);
+
 const VERIFY_STATE_PREFIX =
   "The write may already have been applied — verify router state before retrying. ";
 
@@ -315,6 +322,21 @@ export async function executeToolCall(
 
       const result = await executeHandler();
 
+      // A dry run must be impossible to mistake for a write: its changes block
+      // reads like success (and write_swos_blob's dryRun defaults to true,
+      // unlike every RouterOS write tool — #140), so the verdict goes into
+      // structuredContent and becomes the first line of the text. A handler
+      // that reports `applied` itself (plan_changes previews writes without
+      // making them) is left alone.
+      if (!tool.annotations.readOnlyHint) {
+        if (result.structuredContent.applied === undefined) {
+          result.structuredContent = { ...result.structuredContent, applied: !dryRun };
+        }
+        if (dryRun) {
+          result.content = `NOT APPLIED — dry run only. Pass dryRun: false to write this change.\n${result.content}`;
+        }
+      }
+
       if (journalId) {
         recordOutcome({
           journalPath: config.journalPath!,
@@ -330,6 +352,35 @@ export async function executeToolCall(
         if (!dryRun && snapshotIds.length > 0) {
           result.structuredContent = { ...result.structuredContent, journalId };
           result.content += `\nJournal ID: ${journalId} (pass to rollback_change to undo).`;
+        }
+      }
+
+      // Silence about a journal ID read as "something went wrong", when for
+      // most writes it means there is nothing for rollback_change to restore.
+      // Say which, so nobody has to guess before relying on an undo (#156).
+      if (
+        !tool.annotations.readOnlyHint &&
+        !dryRun &&
+        result.structuredContent.applied !== false &&
+        !REPORTS_OWN_ROLLBACK.has(tool.name)
+      ) {
+        const rollback =
+          snapshotIds.length > 0 && journalId
+            ? { available: true, journalId, snapshotted: snapshots.taken }
+            : snapshots.failed.length > 0
+              ? {
+                  available: false,
+                  reason: "SNAPSHOT_FAILED",
+                  detail: `The snapshot of ${snapshots.failed.join(", ")} failed, so there is nothing to restore.`,
+                }
+              : {
+                  available: false,
+                  reason: "NO_SNAPSHOT",
+                  detail: `${tool.name} takes no snapshot of the configuration, so rollback_change cannot undo it. Note the undo yourself before relying on it.`,
+                };
+        result.structuredContent = { ...result.structuredContent, rollback };
+        if (!rollback.available) {
+          result.content += `\nNot undoable with rollback_change: ${rollback.detail}`;
         }
       }
 

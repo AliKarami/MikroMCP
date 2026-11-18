@@ -5,6 +5,7 @@ import { routerId } from "./schema-fields.js";
 import { compactFields } from "./pagination.js";
 import type { RouterOSRecord, RouterConfig } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
+import { observedRouterVersion, recordRouterVersion } from "../router-observations.js";
 import { createLogger } from "../../observability/logger.js";
 import { auditLog } from "../../observability/audit-log.js";
 import { checkAuthz } from "../../middleware/authz.js";
@@ -95,7 +96,7 @@ const listRoutersTool: ToolDefinition = {
   name: "list_routers",
   title: "List Routers",
   description:
-    "List the routers configured in the registry (routers.yaml): id, host, port, TLS status, tags, ROS version, and which is the default. Read-only reflection of local config — no RouterOS API call, no credentials in the response. rosVersion is what routers.yaml states and may lag a router upgrade — ask get_system_status for the live version. Use it to discover valid routerId values and tags for targeting other tools (including bulk_read and bulk_execute).",
+    "List the routers configured in the registry (routers.yaml): id, host, port, TLS status, tags, ROS version, and which is the default. Read-only reflection of local config — no RouterOS API call, no credentials in the response. rosVersion is what routers.yaml states and may lag a router upgrade. Once get_system_status or check_router_health has reached a router, rosVersionSeen and rosVersionSeenAt show what it reported to this server (kept in memory, so empty after a restart or a host change); ask get_system_status for the live version. Use it to discover valid routerId values and tags for targeting other tools (including bulk_read and bulk_execute).",
   inputSchema: listRoutersInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -123,16 +124,20 @@ const listRoutersTool: ToolDefinition = {
     // only one. Mirrors the executor's routerId resolution.
     const soleDefaultId =
       defaultRouter === undefined && routers.length === 1 ? routers[0].id : undefined;
-    const rows = routers.map((r) => ({
-      id: r.id,
-      host: r.host,
-      port: r.port,
-      deviceType: r.deviceType ?? "routeros",
-      tlsEnabled: r.tls.enabled,
-      tags: r.tags,
-      rosVersion: r.rosVersion,
-      isDefault: defaultRouter !== undefined ? r.id === defaultRouter : r.id === soleDefaultId,
-    }));
+    const rows = routers.map((r) => {
+      const seen = r.deviceType === "swos" ? undefined : observedRouterVersion(r.id, r.host);
+      return {
+        id: r.id,
+        host: r.host,
+        port: r.port,
+        deviceType: r.deviceType ?? "routeros",
+        tlsEnabled: r.tls.enabled,
+        tags: r.tags,
+        rosVersion: r.rosVersion,
+        ...(seen ? { rosVersionSeen: seen.version, rosVersionSeenAt: seen.seenAt } : {}),
+        isDefault: defaultRouter !== undefined ? r.id === defaultRouter : r.id === soleDefaultId,
+      };
+    });
 
     const total = rows.length;
     const header = `Routers: ${total === 0 ? "none" : `1-${total} of ${total}`}.`;
@@ -146,6 +151,7 @@ const listRoutersTool: ToolDefinition = {
           "tlsEnabled",
           "tags",
           "rosVersion",
+          "rosVersionSeen",
           "isDefault",
         ])}`,
     );
@@ -160,7 +166,7 @@ const listRoutersTool: ToolDefinition = {
         returned: total,
         ...(hasRouterOS
           ? {
-              note: "rosVersion comes from routers.yaml and may be stale; use get_system_status for the live version.",
+              note: "rosVersion comes from routers.yaml and may be stale. rosVersionSeen, where present, is what the router itself reported to this server at rosVersionSeenAt (from get_system_status or check_router_health); use get_system_status for the live version.",
             }
           : {}),
       },
@@ -568,6 +574,9 @@ export function createFleetTools(baseTools: ToolDefinition[]): ToolDefinition[] 
           ? swosResourceRecord(await context.swosClient.get("sys.b"))
           : (await context.routerClient.get<RouterOSRecord>("system/resource"))[0];
         const latencyMs = Date.now() - startMs;
+        if (!context.swosClient) {
+          recordRouterVersion(context.routerId, context.routerConfig.host, resource?.["version"]);
+        }
 
         const result = {
           routerId: context.routerId,

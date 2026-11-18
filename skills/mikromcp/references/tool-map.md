@@ -277,7 +277,11 @@ is undoable via `rollback_change`. A per-port field given one value applies it t
 every port; per-port bitmasks take one number, not a list of flags. `!`-prefixed
 endpoints (device-generated) and record lists (`vlan.b`, `host.b`, `acl.b`) are
 not writable. Results carry a `compatibility` verdict: an unverified firmware is
-a warning, not a block — read the dry-run diff before applying.
+a warning, not a block — read the dry-run diff before applying. A real `sys.b`
+write that changes how the switch is reached (`ip`, `static_ip`, `addr_acq`,
+`allow_from_*`) is refused without `includeManagement: true`; `static_ip` and
+`addr_acq` are stored settings that do not move the live `ip` by themselves,
+and `list_swos_endpoints` shows each field's notes.
 
 For a whole switch, prefer `apply_swos_config` over many `write_swos_blob`
 calls: start from `get_swos_config`, edit the document, dry-run it, and apply.
