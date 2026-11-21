@@ -19,6 +19,7 @@
 [![MCP Server](https://img.shields.io/badge/MCP-server-6f42c1)](https://modelcontextprotocol.io)
 [![Tools](https://img.shields.io/badge/MCP%20tools-133-0f766e)](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)
 [![MikroMCP MCP server](https://glama.ai/mcp/servers/AliKarami/MikroMCP/badges/score.svg)](https://glama.ai/mcp/servers/AliKarami/MikroMCP)
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.AliKarami%2Fmikromcp.svg)](https://mcptoplist.com/server/io.github.AliKarami%2Fmikromcp)
 
 MikroMCP exists because raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas, idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC, audit logs, snapshots, and rollback-aware change workflows.
 
