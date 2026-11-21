@@ -69,9 +69,11 @@ means it is already there. Jump rules need `jumpTarget`; reject rules may set `r
 |---|---|---|---|
 | List all interfaces | `list_interfaces` | `interface` | read |
 | List bridge interfaces and settings | `list_bridges` | `interface/bridge` | read |
-| Add/remove/modify a bridge | `manage_bridge` | `interface/bridge` | destructive |
-| Add/remove a port to a bridge | `manage_bridge_port` | `interface/bridge/port` | destructive |
+| Create/update/remove a bridge; turn VLAN filtering on or off | `manage_bridge` | `interface/bridge` | destructive |
+| Add/update/remove a bridge port; set PVID, frame types, ingress filtering | `manage_bridge_port` | `interface/bridge/port` | destructive |
 | List bridge ports (membership, PVID, STP role) | `list_bridge_ports` | `interface/bridge/port` | read |
+| List the bridge VLAN table (tagged/untagged ports per VLAN) | `list_bridge_vlans` | `interface/bridge/vlan` | read |
+| Add/update/remove a bridge VLAN entry | `manage_bridge_vlan` | `interface/bridge/vlan` | destructive |
 | List interface lists | `list_interface_lists` | `interface/list` | read |
 | Add/remove an interface list | `manage_interface_list` | `interface/list` | destructive |
 | Add/remove a member from an interface list | `manage_interface_list_member` | `interface/list/member` | destructive |
@@ -262,6 +264,23 @@ means it is already there. Jump rules need `jumpTarget`; reject rules may set `r
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | Add/remove/enable/disable a VLAN interface | `manage_vlan` | `interface/vlan` | destructive |
+| List which bridge ports carry a VLAN, tagged or untagged | `list_bridge_vlans` | `interface/bridge/vlan` | read |
+| Put ports in a VLAN on a bridge (trunk = tagged, access = untagged) | `manage_bridge_vlan` | `interface/bridge/vlan` | destructive |
+| Set an access port's PVID / frame types | `manage_bridge_port` (`update`) | `interface/bridge/port` | destructive |
+| Turn bridge VLAN filtering on | `manage_bridge` (`update`, `vlanFiltering`) | `interface/bridge` | destructive |
+
+Bridge VLAN filtering workflow — order matters, because enabling filtering is the
+classic way to lock yourself out of a RouterOS router:
+1. Create the bridge VLAN entries with `manage_bridge_vlan` (trunk ports tagged,
+   access ports untagged). For every VLAN interface on the bridge (management VLAN
+   included), list the bridge itself as `tagged`.
+2. Set each access port's `pvid` (and `frameTypes`) with `manage_bridge_port` action
+   `update`. A management address directly on the bridge is reached untagged only
+   from ports whose PVID matches the bridge's.
+3. Check the result with `list_bridge_vlans` and `list_bridge_ports`.
+4. Enable `vlanFiltering` with `manage_bridge` action `update` **last**: dry-run it,
+   read every entry in `warnings`, and keep another way in (a port outside the
+   bridge, or MAC/serial console) before applying.
 
 ## SwOS
 SwOS / SwOS Lite switches (`deviceType: "swos"`) have no RouterOS REST — they

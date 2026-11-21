@@ -1,6 +1,6 @@
 # Available Tools
 
-All 137 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 139 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them. Every write-tool response states what happened in an `applied` boolean: `true` when the call ran its write path, `false` on a dry run — and a dry run's text always starts with `NOT APPLIED — dry run only. Pass dryRun: false to write this change.`, so a preview cannot be mistaken for a write. Note that `write_swos_blob` and the SwOS maintenance tools default to `dryRun: true` (preview first); the RouterOS write tools default to `false`.
 
@@ -400,34 +400,40 @@ List bridge interfaces and their port members.
 
 ### `manage_bridge` — Write · Destructive · Idempotent
 
-Create or remove a bridge interface. Returns `already_exists` if the bridge already exists.
+Create, update, or remove a bridge interface, and turn bridge VLAN filtering on or off. `create` returns `already_exists` if the bridge already exists (`CONFLICT` if `vlanFiltering` is given and differs); `update` returns `no_change` when nothing differs and `NOT_FOUND` for a missing bridge.
+
+Enabling `vlanFiltering` is the classic management lock-out: traffic to the router's own address on the bridge stops unless the bridge itself is a tagged member of the management VLAN (for a VLAN interface on the bridge) or the management VLAN is untagged with a PVID that matches the bridge's. Configure the VLAN table (`manage_bridge_vlan`) and port PVIDs (`manage_bridge_port`) first and enable filtering last. The dry run and the real result of an `update` that enables it carry `warnings`: a general lock-out warning, plus specific gaps found in the current setup (no static bridge VLAN entries; a VLAN interface on the bridge whose VLAN does not list the bridge as tagged; ports whose PVID does not reach an address on the bridge).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `create` \| `remove` | — | Operation to perform |
-| `name` | string | — | Bridge interface name. `create`: letters/digits/`.`/`-`/`_`, max 64 chars; `remove`: any existing name verbatim |
-| `comment` | string | — | Optional comment |
-| `disabled` | boolean | `false` | Create the bridge in disabled state |
+| `action` | `create` \| `update` \| `remove` | — | Operation to perform |
+| `name` | string | — | Bridge interface name. `create`: letters/digits/`.`/`-`/`_`, max 64 chars; `update`/`remove`: any existing name verbatim |
+| `vlanFiltering` | boolean | — | Turn bridge VLAN filtering on or off (`create`/`update`) |
+| `comment` | string | — | Optional comment (`create`/`update`) |
+| `disabled` | boolean | — | Disable the bridge. `create`: defaults to `false`; `update`: unchanged when omitted |
 | `dryRun` | boolean | `false` | Preview without applying |
 
-**Example prompt:** "Create a bridge interface named bridge1 on core-01."
+**Example prompt:** "Dry-run enabling VLAN filtering on bridge1 on core-01 and tell me whether I would lose access to the router."
 
 ---
 
 ### `manage_bridge_port` — Write · Destructive · Idempotent
 
-Add or remove an interface as a bridge port. Returns `already_exists` if the interface is already a member.
+Add, update, or remove an interface as a bridge port, and set its VLAN-filtering port settings. `add` returns `already_exists` if the interface is already a member with the requested settings (`CONFLICT` if a given `pvid`/`frameTypes`/`ingressFiltering` differs; use `update`). `update` returns `no_change` when nothing differs and `NOT_FOUND` when the interface is not a port of that bridge; dynamic ports are refused. Results warn when the bridge has vlan-filtering off (the settings take effect once it is on) or on (changing the PVID or frame types of the port you manage the router through can cut the session).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `add` \| `remove` | — | Operation to perform |
+| `action` | `add` \| `update` \| `remove` | — | Operation to perform |
 | `bridge` | string | — | Bridge interface name |
-| `interface` | string | — | Interface to add or remove |
+| `interface` | string | — | Interface to add, update or remove |
+| `pvid` | integer | — | Port VLAN ID for untagged ingress traffic, 1–4094 (`add`/`update`) |
+| `frameTypes` | `admit-all` \| `admit-only-untagged-and-priority-tagged` \| `admit-only-vlan-tagged` | — | Which frames the port admits on ingress (`add`/`update`) |
+| `ingressFiltering` | boolean | — | Drop ingress frames for VLANs the port is not a member of (`add`/`update`) |
 | `dryRun` | boolean | `false` | Preview without applying |
 
-**Example prompt:** "Add ether2 and ether3 to bridge1 on core-01."
+**Example prompt:** "Add ether2 and ether3 to bridge1 on core-01, then make ether2 an access port with PVID 20 that only admits untagged frames."
 
 ---
 
@@ -444,6 +450,42 @@ List bridge port entries: interface membership, PVID, frame types, STP role and 
 | `offset` | integer | `0` | Pagination offset |
 
 **Example prompt:** "Is ether5 a port of bridge1 on core-01, and what is its PVID?"
+
+---
+
+### `list_bridge_vlans` — Read
+
+List the bridge VLAN table (`/interface/bridge/vlan`): per entry the bridge, `vlan-ids`, configured `tagged`/`untagged` ports, the `current-tagged`/`current-untagged` ports RouterOS actually applies, and whether the entry is dynamic (derived from port PVIDs).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `bridge` | string | — | Only entries of this bridge |
+| `vlanId` | integer | — | Only entries whose `vlan-ids` include this VLAN (1–4094; matched inside ranges and lists) |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which ports carry VLAN 20 on bridge1 of core-01, tagged and untagged?"
+
+---
+
+### `manage_bridge_vlan` — Write · Destructive · Idempotent
+
+Add, update, or remove a bridge VLAN table entry: which ports carry which VLANs tagged or untagged. Idempotent by `bridge` + `vlanIds`, compared as a set of VLAN ids (`10,20` equals `20,10`; `100-102` equals `100,101,102`), with port lists compared order-insensitively. `add` returns `already_exists` for an equal entry, and `CONFLICT` when the entry exists with different ports (`BRIDGE_VLAN_CONFLICT`) or overlaps another static entry's VLANs (`BRIDGE_VLAN_OVERLAP`). `update` returns `no_change` when nothing differs; `update` and `remove` return `NOT_FOUND` when no static entry has exactly those VLANs. Dynamic entries are refused (`BRIDGE_VLAN_DYNAMIC`). A port listed as both tagged and untagged is rejected (`BRIDGE_VLAN_PORT_OVERLAP`), as RouterOS rejects it. Results carry `warnings` when the bridge has vlan-filtering off (the entry has no effect until it is on) and when a change drops the bridge itself from a VLAN while filtering is on. Workflow: create the VLAN entries, set access-port PVIDs with `manage_bridge_port`, then enable vlan-filtering with `manage_bridge` last.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `update` \| `remove` | — | Operation to perform |
+| `bridge` | string | — | Bridge interface name |
+| `vlanIds` | integer \| string | — | A VLAN id (1–4094), a range (`100-110`) or a comma list (`10,20,100-110`). With `bridge`, the idempotency key; sent to RouterOS normalised (sorted, runs collapsed to ranges) |
+| `tagged` | string[] | — | Interfaces that carry these VLANs tagged (trunks). Include the bridge itself when the router has a VLAN interface on it. On `update`, replaces the list; `[]` clears it |
+| `untagged` | string[] | — | Interfaces that carry these VLANs untagged (access ports; set their PVID to match with `manage_bridge_port`). On `update`, replaces the list; `[]` clears it |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | — | Disable the entry (unchanged on `update` when omitted) |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Put ether2 as an untagged access port in VLAN 20 on bridge1 and trunk VLANs 10 and 20 on ether5, on core-01. Dry-run it first."
 
 ---
 
