@@ -11,6 +11,8 @@ import { loadAppConfig } from "../config/app-config.js";
 import { IdentityRegistry } from "../config/identity-registry.js";
 import { MikroMCPError } from "../domain/errors/error-types.js";
 import type { RouterConfig } from "../types.js";
+import type { AppConfig } from "../config/app-config.js";
+import { isLoopbackBind, parseIpAllowlist } from "../middleware/request-guard.js";
 
 declare const __MIKROMCP_VERSION__: string;
 const localVersion = __MIKROMCP_VERSION__;
@@ -179,6 +181,28 @@ function checkEnvVars(routers: RouterConfig[], transport: string): void {
 
   if (transport === "http" && !process.env.MIKROMCP_CONFIRMATION_SECRET) {
     warn("MIKROMCP_CONFIRMATION_SECRET not set — required in HTTP mode");
+  }
+}
+
+// ─── HTTP allow lists ─────────────────────────────────────────────────────
+
+function checkHttpAllowlists(appConfig: AppConfig): void {
+  if (appConfig.transport !== "http") return;
+  const { allowedHosts, allowedIps } = appConfig.http;
+  try {
+    parseIpAllowlist(allowedIps);
+    if (allowedIps.length > 0) ok(`Client IP allow list: ${allowedIps.join(", ")}`);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+  if (allowedHosts.includes("*")) {
+    warn("MIKROMCP_HTTP_ALLOWED_HOSTS=* — the Host/Origin (DNS-rebinding) check is off");
+  } else if (allowedHosts.length > 0) {
+    ok(`Host allow list: ${allowedHosts.join(", ")}`);
+  } else if (!isLoopbackBind(appConfig.bindHost)) {
+    warn(
+      `Bound to ${appConfig.bindHost} without MIKROMCP_HTTP_ALLOWED_HOSTS — the Host/Origin (DNS-rebinding) check is off`,
+    );
   }
 }
 
@@ -520,6 +544,7 @@ export async function runDoctor(): Promise<void> {
   // 5. Identities
   console.log();
   checkIdentities(appConfig.identitiesPath, appConfig.transport);
+  checkHttpAllowlists(appConfig);
 
   // 6. Claude Desktop registration
   checkClaudeDesktop();

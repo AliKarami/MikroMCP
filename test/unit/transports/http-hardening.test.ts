@@ -327,3 +327,63 @@ describe("connectHttp — /healthz endpoint", () => {
     }
   });
 });
+
+describe("connectHttp — Host, Origin and client IP allow lists", () => {
+  async function withGuard(
+    lists: { allowedHosts?: string[]; allowedOrigins?: string[]; allowedIps?: string[] },
+    fn: (port: number) => Promise<void>,
+  ): Promise<void> {
+    const server = await connectHttp(
+      vi.fn(() => ({}) as unknown as McpServer),
+      { port: 0, bindHost: "127.0.0.1", maxBodyBytes: 1024 * 1024, rateLimitRpm: 0, ...lists },
+      {
+        getIdentities: vi.fn().mockReturnValue([]),
+        findIdentityByToken: vi.fn(),
+      } as unknown as IdentityRegistry,
+    );
+    const { port } = server.address() as import("node:net").AddressInfo;
+    try {
+      await fn(port);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
+
+  it("refuses a foreign browser Origin with 403 before authentication", async () => {
+    await withGuard({}, async (port) => {
+      const res = await getWithHeaders(port, "/mcp", { Origin: "https://evil.example" });
+      expect(res.status).toBe(403);
+      const body = JSON.parse(res.body) as Record<string, unknown>;
+      expect(body.code).toBe("ORIGIN_NOT_ALLOWED");
+      expect(String(body.hint)).toContain("MIKROMCP_HTTP_ALLOWED_ORIGINS");
+    });
+  });
+
+  it("lets a request without Origin through to authentication", async () => {
+    await withGuard({}, async (port) => {
+      const res = await getWithHeaders(port, "/mcp", {});
+      expect(res.status).toBe(401);
+    });
+  });
+
+  it("refuses a Host the server does not answer to (DNS rebinding)", async () => {
+    await withGuard({}, async (port) => {
+      const res = await getWithHeaders(port, "/mcp", { Host: `rebind.example:${port}` });
+      expect(res.status).toBe(403);
+      expect((JSON.parse(res.body) as Record<string, unknown>).code).toBe("HOST_NOT_ALLOWED");
+    });
+  });
+
+  it("guards /metrics too, but never /healthz", async () => {
+    await withGuard({ allowedIps: ["192.0.2.0/24"] }, async (port) => {
+      expect((await getWithHeaders(port, "/metrics", {})).status).toBe(403);
+      expect((await getRequest(port, "/healthz")).status).toBe(200);
+    });
+  });
+
+  it("refuses to start with a malformed MIKROMCP_HTTP_ALLOWED_IPS entry", async () => {
+    await expect(withGuard({ allowedIps: ["10.0.0.0/40"] }, async () => {})).rejects.toThrow(
+      /MIKROMCP_HTTP_ALLOWED_IPS/,
+    );
+  });
+});

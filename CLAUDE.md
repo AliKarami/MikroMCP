@@ -224,6 +224,9 @@ Two transports:
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId` (falls back to the sole router if only one is configured) |
 | `MIKROMCP_LOG_LEVEL` | `info` | `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP transport only |
+| `MIKROMCP_HTTP_ALLOWED_HOSTS` | loopback names | Host header allow list (DNS-rebinding check); `*` turns it off. Unset on a non-loopback bind = off, with a warning |
+| `MIKROMCP_HTTP_ALLOWED_ORIGINS` | follows hosts | Browser `Origin` allow list; requests without `Origin` are not checked |
+| `MIKROMCP_HTTP_ALLOWED_IPS` | — | Client IP/CIDR allow list for the HTTP transport |
 | `MIKROMCP_IDENTITIES_PATH` | `~/.mikromcp/identities.yaml` | Path to identity/token registry |
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport (omit for built-in superadmin) |
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret for confirmation tokens (**required** in HTTP mode when identities with role `readonly` or `operator` are configured) |

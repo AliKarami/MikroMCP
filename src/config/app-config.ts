@@ -17,6 +17,9 @@ export interface AppConfig {
   http: {
     maxBodyBytes: number;
     rateLimitRpm: number;
+    allowedHosts: string[];
+    allowedOrigins: string[];
+    allowedIps: string[];
   };
   ssh: {
     commandTimeoutMs: number;
@@ -76,6 +79,14 @@ function intEnv(name: string, fallback: number): number {
   return value;
 }
 
+/** A comma-separated env var as a list, blanks dropped. */
+function listEnv(name: string): string[] {
+  return (process.env[name] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export function loadAppConfig(): AppConfig {
   const env = process.env;
   const dataDir = env.MIKROMCP_DATA_DIR ?? join(mikromcpDir(), "data");
@@ -90,14 +101,8 @@ export function loadAppConfig(): AppConfig {
     dataDir,
     snapshotDir: `${dataDir}/snapshots`,
     journalPath: `${dataDir}/write-journal.ndjson`,
-    cmdAllow: (env.MIKROMCP_CMD_ALLOW ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    cmdDeny: (env.MIKROMCP_CMD_DENY ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
+    cmdAllow: listEnv("MIKROMCP_CMD_ALLOW"),
+    cmdDeny: listEnv("MIKROMCP_CMD_DENY"),
     identitiesPath: env.MIKROMCP_IDENTITIES_PATH ?? join(mikromcpDir(), "identities.yaml"),
     stdioIdentity: env.MIKROMCP_STDIO_IDENTITY || undefined,
     confirmationSecret: env.MIKROMCP_CONFIRMATION_SECRET || undefined,
@@ -105,6 +110,9 @@ export function loadAppConfig(): AppConfig {
     http: {
       maxBodyBytes: intEnv("MIKROMCP_HTTP_MAX_BODY_BYTES", 1024 * 1024),
       rateLimitRpm: intEnv("MIKROMCP_HTTP_RATE_LIMIT_RPM", 60),
+      allowedHosts: listEnv("MIKROMCP_HTTP_ALLOWED_HOSTS"),
+      allowedOrigins: listEnv("MIKROMCP_HTTP_ALLOWED_ORIGINS"),
+      allowedIps: listEnv("MIKROMCP_HTTP_ALLOWED_IPS"),
     },
     ssh: {
       commandTimeoutMs: intEnv("MIKROMCP_SSH_COMMAND_TIMEOUT_MS", 30000),

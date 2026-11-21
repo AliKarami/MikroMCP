@@ -160,6 +160,9 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_PORT` | `3000` | HTTP listen port (HTTP transport only) |
 | `MIKROMCP_BIND_HOST` | `127.0.0.1` | HTTP bind address (HTTP transport only) |
 | `MIKROMCP_HTTP_MAX_BODY_BYTES` | `1048576` (1 MB) | Maximum request body size for HTTP transport |
+| `MIKROMCP_HTTP_ALLOWED_HOSTS` | — (loopback names when bound to loopback) | Comma-separated `Host` header values the HTTP server answers to, e.g. `mcp.example.com,10.0.0.5:3000` (no port = any port). Unset and bound to a loopback address: only `localhost`, `127.0.0.1` and `[::1]`. Unset and bound elsewhere: no Host check, with a startup warning. `*` turns the check off. A mismatch gets `403 HOST_NOT_ALLOWED`. See [Running](Running#host-origin-and-client-ip-allow-lists) |
+| `MIKROMCP_HTTP_ALLOWED_ORIGINS` | — (follows the host list) | Comma-separated browser origins allowed to call the server, e.g. `https://app.example.com`. Unset: an `Origin` is allowed when its host passes the Host check. Requests without an `Origin` header (non-browser clients) are not checked. `*` allows any origin. A mismatch gets `403 ORIGIN_NOT_ALLOWED` |
+| `MIKROMCP_HTTP_ALLOWED_IPS` | — (any client) | Comma-separated client IPs and CIDRs, IPv4 or IPv6, e.g. `10.0.0.0/8,192.0.2.7`. Other clients get `403 CLIENT_IP_NOT_ALLOWED`. Behind a reverse proxy the server sees the proxy's address. A malformed entry stops the server at startup |
 | `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | Requests allowed per 60 seconds for each client IP on `/mcp`, `/sse` and `/messages` (HTTP transport); every HTTP request counts, not only tool calls. `0` turns the limit off. Past it the server answers `429` with `Retry-After`; see [Running](Running#http-transport) |
 | `MIKROMCP_IDENTITIES_PATH` | `~/.mikromcp/identities.yaml` | Path to identity/token registry (HTTP transport) |
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport; omit for built-in superadmin |
