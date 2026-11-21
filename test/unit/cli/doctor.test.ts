@@ -48,9 +48,10 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
-vi.mock("node:net", () => ({
-  createConnection: vi.fn(),
-}));
+vi.mock("node:net", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:net")>();
+  return { ...actual, createConnection: vi.fn() };
+});
 
 vi.mock("node:os", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:os")>();
@@ -126,7 +127,13 @@ function makeAppConfig(
     stdioIdentity: undefined,
     confirmationSecret: overrides.confirmationSecret,
     auditLogPath: undefined,
-    http: { maxBodyBytes: 1048576, rateLimitRpm: 60 },
+    http: {
+      maxBodyBytes: 1048576,
+      rateLimitRpm: 60,
+      allowedHosts: [],
+      allowedOrigins: [],
+      allowedIps: [],
+    },
     ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
     retry: { maxRetries: 3, baseDelayMs: 200, maxDelayMs: 5000 },
     circuitBreaker: { failureThreshold: 5, cooldownMs: 30000 },
@@ -916,6 +923,42 @@ describe("runDoctor", () => {
       // cleanup
       delete process.env.ROUTER_CORE01_USER;
       delete process.env.ROUTER_CORE01_PASS;
+    });
+
+    async function doctorOutputWith(http: Record<string, unknown>, bindHost: string) {
+      const base = makeAppConfig({ transport: "http", confirmationSecret: "s" });
+      mockLoadAppConfig.mockReturnValue({
+        ...base,
+        bindHost,
+        http: { ...base.http, ...http },
+      } as ReturnType<typeof loadAppConfig>);
+      mockExistsSync.mockReturnValue(false);
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockReadFileSync.mockReturnValue(JSON.stringify({ mcpServers: {} }));
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+      return consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    }
+
+    it("warns when bound to a non-loopback address without a host allow list", async () => {
+      const out = await doctorOutputWith({}, "0.0.0.0");
+      expect(out).toMatch(/without MIKROMCP_HTTP_ALLOWED_HOSTS/);
+    });
+
+    it("reports the allow lists when they are set", async () => {
+      const out = await doctorOutputWith(
+        { allowedHosts: ["mcp.example.com"], allowedIps: ["10.0.0.0/8"] },
+        "0.0.0.0",
+      );
+      expect(out).toMatch(/Host allow list: mcp\.example\.com/);
+      expect(out).toMatch(/Client IP allow list: 10\.0\.0\.0\/8/);
+    });
+
+    it("fails on a malformed client IP entry", async () => {
+      const out = await doctorOutputWith({ allowedIps: ["10.0.0.0/99"] }, "127.0.0.1");
+      expect(out).toMatch(/MIKROMCP_HTTP_ALLOWED_IPS/);
     });
   });
 });

@@ -64,6 +64,24 @@ ROUTER_CORE01_PASS=secret \
 
 Every rate-limited response carries the budget in `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until the window resets). Past the limit the server answers `429` with a `Retry-After` header (the seconds left in the window, not always a full minute) and a JSON body naming the limit and the way out. To stay under the limit without raising it, put many reads into one request: a single query with a filter and `proplist` instead of many small ones, or `bulk_read` to run one read-only tool on many routers in one request. `bulk_read` does not batch different queries on one router.
 
+### Host, Origin and client IP allow lists
+
+Every request except `/healthz` is checked before authentication:
+
+- **Host.** A DNS-rebinding page in a browser can make requests to `localhost` under its own domain name. When the server is bound to a loopback address (the default `127.0.0.1`), only the `Host` names `localhost`, `127.0.0.1` and `[::1]` are answered. When it is bound elsewhere (`0.0.0.0` in Docker, a LAN address), set `MIKROMCP_HTTP_ALLOWED_HOSTS` to the name clients use, such as `mcp.example.com`; without it the Host check is off and the server logs a warning at startup.
+- **Origin.** A request that carries an `Origin` header (a browser) must come from an allowed origin: one listed in `MIKROMCP_HTTP_ALLOWED_ORIGINS`, or, when that is unset, one whose host passes the Host check. Requests without `Origin` (CLI clients, Claude Desktop, `mcp-remote`) are not affected.
+- **Client IP.** `MIKROMCP_HTTP_ALLOWED_IPS` limits which client addresses may connect (IPs and CIDRs). IPv4-mapped IPv6 addresses are matched as IPv4. Behind a reverse proxy, list the proxy's address and filter clients at the proxy.
+
+A refused request gets `403` with a JSON body: `code` is `HOST_NOT_ALLOWED`, `ORIGIN_NOT_ALLOWED` or `CLIENT_IP_NOT_ALLOWED`, and `hint` names the variable to set. `mikromcp doctor` reports the lists and warns when the Host check is off.
+
+```bash
+MIKROMCP_TRANSPORT=http \
+MIKROMCP_BIND_HOST=0.0.0.0 \
+MIKROMCP_HTTP_ALLOWED_HOSTS=mcp.example.com \
+MIKROMCP_HTTP_ALLOWED_IPS=10.0.0.0/8 \
+  mikromcp serve
+```
+
 For Docker and systemd deployment, see [Connecting to AI Assistants](Connecting-to-AI-Assistants#using-docker).
 
 ---

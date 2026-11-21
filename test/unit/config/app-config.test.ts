@@ -14,6 +14,9 @@ afterEach(() => {
   delete process.env.MIKROMCP_CONFIRMATION_SECRET;
   delete process.env.MIKROMCP_AUDIT_LOG_PATH;
   delete process.env.MIKROMCP_DATA_DIR;
+  delete process.env.MIKROMCP_HTTP_ALLOWED_HOSTS;
+  delete process.env.MIKROMCP_HTTP_ALLOWED_ORIGINS;
+  delete process.env.MIKROMCP_HTTP_ALLOWED_IPS;
 });
 
 describe("loadAppConfig", () => {
@@ -53,6 +56,25 @@ describe("loadAppConfig", () => {
     it("reads MIKROMCP_HTTP_RATE_LIMIT_RPM=0 to disable rate limiting", () => {
       process.env.MIKROMCP_HTTP_RATE_LIMIT_RPM = "0";
       expect(loadAppConfig().http.rateLimitRpm).toBe(0);
+    });
+
+    it("leaves the HTTP allow lists empty by default", () => {
+      expect(loadAppConfig().http).toMatchObject({
+        allowedHosts: [],
+        allowedOrigins: [],
+        allowedIps: [],
+      });
+    });
+
+    it("reads the HTTP allow lists as comma-separated lists, blanks dropped", () => {
+      process.env.MIKROMCP_HTTP_ALLOWED_HOSTS = "mcp.example.com, 10.0.0.5:3000,";
+      process.env.MIKROMCP_HTTP_ALLOWED_ORIGINS = "https://app.example.com";
+      process.env.MIKROMCP_HTTP_ALLOWED_IPS = "10.0.0.0/8 , 192.0.2.7";
+      expect(loadAppConfig().http).toMatchObject({
+        allowedHosts: ["mcp.example.com", "10.0.0.5:3000"],
+        allowedOrigins: ["https://app.example.com"],
+        allowedIps: ["10.0.0.0/8", "192.0.2.7"],
+      });
     });
 
     it("reads MIKROMCP_SSH_COMMAND_TIMEOUT_MS", () => {
