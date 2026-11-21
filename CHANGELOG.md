@@ -10,6 +10,12 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-11-21
+
+Change safety: firewall writes revert themselves if they cut the router off, confirmation tokens and plans are tied to the state that was previewed, and every write says whether it was applied and whether it can be undone. SwOS Lite VLAN decoding and a guard on management-address writes come from [@f0086](https://github.com/f0086)'s CSS610 lockout report.
+
+**Upgrading from 1.16.** `manage_firewall_rule` real writes now add a `/system scheduler` job, so the router user needs write access to the scheduler; without it the call fails with `AUTO_REVERT_ARM_FAILED` and changes nothing. Pass `autoRevertSeconds: 0` to write without the job, as before. `write_swos_blob` now refuses a real `sys.b` write that changes how the switch is reached unless `includeManagement: true` is passed. Confirmation tokens issued by an older version are refused as expired; request a new one.
+
 ### Security
 - A confirmation token now approves the state that was previewed, not just the request. The signed payload carries a fingerprint of the configuration under the tool's snapshot paths (dynamic records dropped unless the call acts on them, as `manage_dhcp_lease` make-static does; counters and status fields left out; record order kept), read when the token is issued and again when it is used. If someone edits, inserts or removes a record in that section in between, the call is refused with `CONFIRMATION_STATE_CHANGED` (category `CONFLICT`) and nothing is written; before, the old token still validated, so approving one preview could authorize a different diff. `bulk_execute` fleet tokens bind every targeted router's state the same way (a router whose state cannot be read is skipped with `STATE_UNREADABLE`, never written unpreviewed), and an `apply_plan` token binds every step's paths. SwOS switches and `set_system_clock` are not covered (their state changes on its own). Tokens issued before upgrading are refused as expired; request a new one.
 - Confirmation tokens now carry a random nonce, so two identical requests in the same millisecond get distinct single-use tokens instead of one shared token the second caller finds already used.

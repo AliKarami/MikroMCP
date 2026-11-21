@@ -438,6 +438,15 @@ Contributed by [@f0086](https://github.com/f0086).
 - **A bounded write journal, safely.** The journal rotates into dated segments, and segments past the snapshot retention period are deleted. No file another server process may be writing is ever rewritten, so no entry is lost; readers tolerate torn lines.
 - **Encrypted backups without a pasted password.** `create_backup` takes `passwordSecret`, a `MIKROMCP_SECRET_<NAME>` bound to the router in `routers.yaml`; the value never reaches the conversation.
 
+## ✅ v1.17 — Self-Reverting Firewall Writes, State-Bound Approvals (133 tools)
+
+**Goal:** Make a write's outcome impossible to misread and an approval impossible to reuse on a different state, and make a firewall change that locks the server out undo itself.
+
+- **Auto-revert for firewall writes.** `manage_firewall_rule` arms a scheduler job before a real write and removes it only if the router still answers afterwards, a dead-man switch in place of Safe Mode, which REST cannot use.
+- **Approvals bound to state.** A confirmation token, and a `plan_changes` fingerprint passed to `apply_plan`, are refused if the configuration they touch changed since the preview.
+- **Every write says what happened.** Write responses carry `applied` (dry runs lead with "NOT APPLIED") and `rollback` (whether `rollback_change` can undo it).
+- **SwOS and fixes.** SwOS Lite `vlan.b` is decoded, `write_swos_blob` guards management-address changes, `list_routers` shows the version a router reported, and `manage_dhcp_lease` make-static works.
+
 ---
 
 ## Guiding principles
