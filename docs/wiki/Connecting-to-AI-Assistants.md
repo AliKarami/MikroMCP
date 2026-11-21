@@ -8,6 +8,10 @@ For Claude Desktop specifically, see [Connecting-to-Claude-Desktop.md](Connectin
 
 ---
 
+## Local models and small context windows
+
+The full tool list is about 38k tokens. For a local model (LM Studio, Ollama, llama.cpp) with a small context window, start the server with `MIKROMCP_READ_ONLY=true` (about 14k tokens) or `MIKROMCP_TOOLSETS` naming only the areas you need, e.g. `firewall,ip` (a few thousand). Put the variables in the client's `env` block. See [Configuration → Tool catalogue](Configuration#tool-catalogue).
+
 ## Claude Code (CLI)
 
 Claude Code reads MCP server registrations from its config. The easiest way to register MikroMCP is with the `claude mcp add` command.

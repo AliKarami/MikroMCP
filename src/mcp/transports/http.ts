@@ -7,6 +7,7 @@ import { createLogger } from "../../observability/logger.js";
 import type { IdentityRegistry } from "../../config/identity-registry.js";
 import { authenticateHttp, withIdentity } from "../../middleware/auth.js";
 import { MikroMCPError } from "../../domain/errors/error-types.js";
+import type { Identity } from "../../types.js";
 import { renderPrometheus } from "../../observability/metrics.js";
 import { createRequestGuard, isLoopbackBind } from "../../middleware/request-guard.js";
 
@@ -157,7 +158,7 @@ export interface HttpTransportConfig {
 }
 
 export async function connectHttp(
-  makeServer: () => McpServer,
+  makeServer: (identity?: Identity) => McpServer,
   config: HttpTransportConfig,
   identityRegistry: IdentityRegistry,
 ): Promise<Server> {
@@ -282,7 +283,7 @@ export async function connectHttp(
             makeServer,
             streamableSessions,
             sseTransports,
-            boundIdentity.id,
+            boundIdentity,
           );
         });
         return;
@@ -340,11 +341,12 @@ async function handleMcpRequest(
   url: URL,
   port: number,
   maxBodyBytes: number,
-  makeServer: () => McpServer,
+  makeServer: (identity?: Identity) => McpServer,
   streamableSessions: Map<string, StreamableSession>,
   sseTransports: Map<string, SSEServerTransport>,
-  identityId: string,
+  identity: Identity,
 ): Promise<void> {
+  const identityId = identity.id;
   if (pathname === "/mcp") {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     let session = sessionId ? streamableSessions.get(sessionId) : undefined;
@@ -382,7 +384,7 @@ async function handleMcpRequest(
           log.info({ sessionId: transport!.sessionId }, "Streamable HTTP session closed");
         }
       };
-      await makeServer().connect(transport);
+      await makeServer(identity).connect(transport);
     }
 
     const body = req.method === "POST" ? await readBody(req, maxBodyBytes) : undefined;
@@ -392,7 +394,7 @@ async function handleMcpRequest(
 
   if (pathname === "/sse" && req.method === "GET") {
     const sseTransport = new SSEServerTransport("/messages", res);
-    const sseServer = makeServer();
+    const sseServer = makeServer(identity);
     await sseServer.connect(sseTransport);
     sseTransports.set(sseTransport.sessionId, sseTransport);
     sseTransport.onclose = () => {

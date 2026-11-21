@@ -12,11 +12,15 @@ Each release section covers changes **since the previous release only**.
 
 **Upgrading from 1.17.** An HTTP server bound to a loopback address (the default `127.0.0.1`) now answers only the `Host` names `localhost`, `127.0.0.1` and `[::1]`, and refuses browser requests from other origins. A client that reaches a loopback-bound server under another name (an SSH tunnel with a custom host alias, for example) needs that name in `MIKROMCP_HTTP_ALLOWED_HOSTS`. Servers bound elsewhere behave as before unless the new lists are set.
 
-### Security
-- The HTTP transport checks the `Host` and `Origin` headers before authentication, so a DNS-rebinding page in the user's browser can no longer reach a server bound to `localhost`. Bound to loopback, only `localhost` names are answered; for other binds, `MIKROMCP_HTTP_ALLOWED_HOSTS` and `MIKROMCP_HTTP_ALLOWED_ORIGINS` set the lists, and without a host list the server logs that the check is off. New `MIKROMCP_HTTP_ALLOWED_IPS` restricts client addresses (IPs and CIDRs). Refusals are `403` with `HOST_NOT_ALLOWED`, `ORIGIN_NOT_ALLOWED` or `CLIENT_IP_NOT_ALLOWED` and a hint naming the variable; `/healthz` is not checked. `mikromcp doctor` reports the lists.
+### Added
+- `MIKROMCP_READ_ONLY=true` registers only read-only tools, so no client of that server can call a write tool, and `tools/list` drops from about 150 KB to about 55 KB of JSON. `MIKROMCP_TOOLSETS` (e.g. `firewall,dhcp`) registers only the named toolsets plus `list_routers` and `check_router_health`. A single toolset is around 13 KB, small enough for local models with short context windows. An unknown toolset name stops the server at startup with the valid names. The server instructions say when the catalogue is reduced. Toolset names are on the Configuration page.
+- In HTTP mode, `tools/list` leaves out the tools a caller's identity may not call under its `allowedToolPatterns`. Calls to hidden tools are still refused by the executor, as before.
 
 ### Fixed
 - `docker-compose.example.yml` now sets `MIKROMCP_BIND_HOST: 0.0.0.0`. Without it the server inside the container listened on `127.0.0.1`, which the published port cannot reach, so the example compose file never answered.
+
+### Security
+- The HTTP transport checks the `Host` and `Origin` headers before authentication, so a DNS-rebinding page in the user's browser can no longer reach a server bound to `localhost`. Bound to loopback, only `localhost` names are answered; for other binds, `MIKROMCP_HTTP_ALLOWED_HOSTS` and `MIKROMCP_HTTP_ALLOWED_ORIGINS` set the lists, and without a host list the server logs that the check is off. New `MIKROMCP_HTTP_ALLOWED_IPS` restricts client addresses (IPs and CIDRs). Refusals are `403` with `HOST_NOT_ALLOWED`, `ORIGIN_NOT_ALLOWED` or `CLIENT_IP_NOT_ALLOWED` and a hint naming the variable; `/healthz` is not checked. `mikromcp doctor` reports the lists.
 
 ## [1.17.0] - 2026-11-21
 
