@@ -1,4 +1,4 @@
-# MikroMCP
+# MikroMCP — MikroTik MCP Server
 
 <p align="center">
   <picture>
@@ -8,7 +8,7 @@
   </picture>
 </p>
 
-> **AI-native network automation for MikroTik RouterOS and SwOS.** MikroMCP exposes RouterOS routers and SwOS switches as a typed, auditable [Model Context Protocol](https://modelcontextprotocol.io) server so Claude, Cursor, Codex, and other MCP clients can inspect, diagnose, and safely operate MikroTik gear in natural language.
+> **The MikroTik MCP server: AI-native network automation for MikroTik RouterOS and SwOS.** MikroMCP exposes RouterOS routers and SwOS switches as a typed, auditable [Model Context Protocol](https://modelcontextprotocol.io) server so Claude, Cursor, Codex, and other MCP clients can inspect, diagnose, and safely operate MikroTik gear in natural language.
 
 [![CI](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml)
 [![Release](https://github.com/AliKarami/MikroMCP/actions/workflows/release.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/release.yml)
