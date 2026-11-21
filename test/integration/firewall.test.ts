@@ -238,3 +238,109 @@ describe("manage_firewall_rule negated connection-state against live CHR", () =>
     ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
   });
 });
+
+const MOVE_A = "mikromcp-itest-fw-move-a";
+const MOVE_B = "mikromcp-itest-fw-move-b";
+const moveA = liveResource(harness.context, "ip/firewall/filter", { comment: MOVE_A });
+const moveB = liveResource(harness.context, "ip/firewall/filter", { comment: MOVE_B });
+
+/** The ids of the static filter rules in table order. */
+async function staticOrder(): Promise<string[]> {
+  const rules = await harness.context.routerClient.get<RouterOSRecord>("ip/firewall/filter", {});
+  return rules.filter((r) => !isTrue(r.dynamic)).map((r) => String(r[".id"]));
+}
+
+describe("manage_firewall_rule move against live CHR", () => {
+  beforeAll(async () => {
+    await moveA.removeLeftover();
+    await moveB.removeLeftover();
+  });
+  afterAll(async () => {
+    await moveA.removeLeftover();
+    await moveB.removeLeftover();
+  });
+
+  it("moves a rule before another, then to the end, and is idempotent", async () => {
+    for (const [comment, src] of [
+      [MOVE_A, "198.51.100.1"],
+      [MOVE_B, "198.51.100.2"],
+    ]) {
+      await runTool(harness.context, "manage_firewall_rule", {
+        action: "add",
+        chain: "forward",
+        ruleAction: "accept",
+        srcAddress: src,
+        comment,
+        autoRevertSeconds: 0,
+      });
+    }
+    const a = String((await moveA.find())![".id"]);
+    const b = String((await moveB.find())![".id"]);
+
+    const moved = await runTool(harness.context, "manage_firewall_rule", {
+      action: "move",
+      ruleId: b,
+      destination: a,
+    });
+    expect(moved.structuredContent).toMatchObject({
+      action: "moved",
+      autoRevert: { status: "disarmed", revert: "move-back" },
+    });
+    let order = await staticOrder();
+    expect(order.indexOf(b)).toBe(order.indexOf(a) - 1);
+
+    const again = await runTool(harness.context, "manage_firewall_rule", {
+      action: "move",
+      ruleId: b,
+      destination: a,
+    });
+    expect(again.structuredContent.action).toBe("no_change");
+
+    await runTool(harness.context, "manage_firewall_rule", {
+      action: "move",
+      ruleId: b,
+      destination: "end",
+      autoRevertSeconds: 0,
+    });
+    order = await staticOrder();
+    expect(order[order.length - 1]).toBe(b);
+  });
+});
+
+const V6_COMMENT = "mikromcp-itest-fw6-icmpv6";
+const v6 = liveResource(harness.context, "ipv6/firewall/filter", { comment: V6_COMMENT });
+
+describe("manage_firewall_rule IPv6 filter against live CHR", () => {
+  beforeAll(() => v6.removeLeftover());
+  afterAll(() => v6.removeLeftover());
+
+  it("adds an icmpv6 rule to /ipv6 firewall filter and finds it again", async () => {
+    const rule = {
+      family: "ipv6",
+      chain: "forward",
+      ruleAction: "accept",
+      protocol: "icmpv6",
+      srcAddress: "2001:db8::/32",
+      comment: V6_COMMENT,
+    };
+    const created = await runTool(harness.context, "manage_firewall_rule", {
+      action: "add",
+      ...rule,
+    });
+    expect(created.structuredContent.action).toBe("created");
+    expect((await v6.find())!.protocol).toBe("icmpv6");
+
+    const repeat = await runTool(harness.context, "manage_firewall_rule", {
+      action: "add",
+      ...rule,
+    });
+    expect(repeat.structuredContent.action).toBe("already_exists");
+
+    const removed = await runTool(harness.context, "manage_firewall_rule", {
+      action: "remove",
+      ...rule,
+    });
+    expect(removed.structuredContent.action).toBe("removed");
+    expect(await v6.find()).toBeUndefined();
+  });
+});

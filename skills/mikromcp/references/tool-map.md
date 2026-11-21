@@ -41,13 +41,19 @@ Multi-tool patterns:
 ## Firewall & NAT
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
-| List filter/nat/mangle rules | `list_firewall_rules` | `ip/firewall/filter` | read |
-| Add/remove/toggle a filter or NAT rule | `manage_firewall_rule` | `ip/firewall/filter`, `ip/firewall/nat` | destructive |
-| List mangle rules | `list_mangle_rules` | `ip/firewall/mangle` | read |
-| Add/remove a mangle rule | `manage_mangle_rule` | `ip/firewall/mangle` | destructive |
-| List address-list entries | `list_address_list_entries` | `ip/firewall/address-list` | read |
-| Add/remove an address-list entry | `manage_address_list_entry` | `ip/firewall/address-list` | destructive |
+| List filter/nat/raw rules (IPv4 or IPv6) | `list_firewall_rules` | `ip/firewall/{filter,nat,raw}`, `ipv6/firewall/{filter,nat,raw}` | read |
+| Add/remove/toggle/move a filter, NAT or raw rule | `manage_firewall_rule` | `ip/firewall/{filter,nat,raw}`, `ipv6/firewall/{filter,nat,raw}` | destructive |
+| List mangle rules | `list_mangle_rules` | `ip/firewall/mangle`, `ipv6/firewall/mangle` | read |
+| Add/remove/toggle/move a mangle rule | `manage_mangle_rule` | `ip/firewall/mangle`, `ipv6/firewall/mangle` | destructive |
+| List address-list entries | `list_address_list_entries` | `ip/firewall/address-list`, `ipv6/firewall/address-list` | read |
+| Add/remove an address-list entry | `manage_address_list_entry` | `ip/firewall/address-list`, `ipv6/firewall/address-list` | destructive |
 | List active connections | `list_connections` | `ip/firewall/connection` | read |
+
+Pass `family: "ipv6"` for the `/ipv6 firewall` menus (ICMP there is `protocol: "icmpv6"`), and
+`table: "raw"` for pre-conntrack rules (`notrack`). To reorder a rule, list the table, then call
+`manage_firewall_rule` (or `manage_mangle_rule`) with `action: "move"`, the rule's `.id` as
+`ruleId` and the `.id` of the rule it should precede (or `end`) as `destination`; `no_change`
+means it is already there. Jump rules need `jumpTarget`; reject rules may set `rejectWith`.
 
 ## System
 | Intent | Tool | REST path | Class |

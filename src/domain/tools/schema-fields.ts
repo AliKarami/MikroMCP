@@ -34,3 +34,21 @@ export const limit = z
  * `?comment=` matches no rule.
  */
 export const ruleComment = z.string().min(1);
+
+/** Address family of a firewall menu: `/ip firewall` or `/ipv6 firewall`. */
+export const firewallFamily = z
+  .enum(["ip", "ipv6"])
+  .default("ip")
+  .describe("Address family: ip (IPv4, /ip firewall) or ipv6 (/ipv6 firewall)");
+
+export type FirewallFamily = z.infer<typeof firewallFamily>;
+
+/** REST path of a firewall menu, e.g. `ipv6/firewall/raw`. */
+export function firewallPath(family: FirewallFamily, menu: string): string {
+  return `${family}/firewall/${menu}`;
+}
+
+/** The family a raw (unparsed) call names, for snapshot and state paths. */
+export function rawFamily(params: Record<string, unknown>): FirewallFamily {
+  return params.family === "ipv6" ? "ipv6" : "ip";
+}

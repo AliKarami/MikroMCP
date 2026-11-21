@@ -1045,12 +1045,13 @@ List OSPF neighbors with state, interface, DR/BDR, and uptime. RouterOS 7+ only.
 
 ### `list_firewall_rules` — Read
 
-List firewall rules in evaluation order.
+List firewall rules in evaluation order, from the IPv4 (`/ip firewall`) or IPv6 (`/ipv6 firewall`) filter, nat or raw table. Each rule's `.id` is what `manage_firewall_rule` `action: "move"` takes.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `table` | `filter` \| `nat` | `filter` | Firewall table (mangle rules: `list_mangle_rules`) |
+| `family` | `ip` \| `ipv6` | `ip` | Address family: `ip` reads `ip/firewall/<table>`, `ipv6` reads `ipv6/firewall/<table>` |
+| `table` | `filter` \| `nat` \| `raw` | `filter` | Firewall table (mangle rules: `list_mangle_rules`) |
 | `chain` | string | — | Filter by chain name |
 | `disabled` | `true` \| `false` \| `all` | `all` | Filter by disabled state |
 | `limit` | integer | `100` | Results per page (1–500) |
@@ -1058,27 +1059,34 @@ List firewall rules in evaluation order.
 
 **Example prompt:** "Show me all forward chain rules on core-01."
 
+**Example prompt:** "List the IPv6 raw prerouting rules on core-01."
+
 ---
 
 ### `manage_firewall_rule` — Write · Destructive · Idempotent
 
-Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match, NAT-target config, or `disabled` state (when only `disabled` differs, the error points to `action=enable`/`disable`); a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
+Add, remove, disable, enable, or move a firewall rule in the filter, nat or raw table, IPv4 (`family: "ip"`, the default, `/ip firewall`) or IPv6 (`family: "ipv6"`, `/ipv6 firewall`). Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match, NAT-target config, jump target, reject reply, or `disabled` state (when only `disabled` differs, the error points to `action=enable`/`disable`); a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`. The `raw` table (chains `prerouting` and `output`) is evaluated before connection tracking and takes actions such as `notrack` and `drop`.
 
-**Auto-revert (dead-man switch).** RouterOS Safe Mode belongs to a terminal or Winbox session and cannot be used over REST, so every real write (not a dry run, `already_exists` or `no_change`) is guarded by a scheduler job instead. Before the change, MikroMCP adds a `mikromcp-autorevert-<id>` entry to `/system scheduler` that undoes it after `autoRevertSeconds` (default `60`): an `add` removes the new rule, a `remove` re-adds the rule as it was before the rule that followed it (also when other rules share its comment), and `enable`/`disable` sets the flag back. The job's first run is pinned to the router's clock plus `autoRevertSeconds` (`start-date`/`start-time`), since a scheduler entry otherwise first runs the moment it is added; a clock MikroMCP cannot read counts as an arm failure. After the change it waits 3 seconds for it to take effect, then opens a **new** REST connection to the router (a connection that is already open survives a rule that drops new ones). If the router answers, the job is removed and the result carries `autoRevert: { status: "disarmed" }`. If it does not, the job is left in place, the router reverts itself, and the call fails with `AUTO_REVERT_PENDING`. Other outcomes: `AUTO_REVERT_ARM_FAILED` (the job could not be added, so nothing was changed; the REST user needs write access to `/system scheduler`), `AUTO_REVERT_EXPIRED` (the change and the check took longer than `autoRevertSeconds`, so the job has already run), and `AUTO_REVERT_DISARM_FAILED` (the router answers but the job could not be removed, so it will still undo the change; remove it with `manage_scheduled_job`). A write that times out leaves the job armed. The job's state is in the result's `autoRevert` field, in the error's `details.autoRevert`, and in the write journal's outcome entry. Pass `autoRevertSeconds: 0` to write without it. The same applies to `manage_firewall_rule` steps in `apply_plan`: each step is guarded and checked on its own.
+`chain` and `ruleAction` are required for `add`, `remove`, `enable` and `disable` (`PARAM_REQUIRED` otherwise). `ruleAction: "jump"` needs `jumpTarget` (`JUMP_TARGET_REQUIRED`), and `jumpTarget` with another action is refused (`JUMP_TARGET_NOT_APPLICABLE`). `rejectWith` applies only to `ruleAction: "reject"` and only with a reply of the rule's family (`REJECT_WITH_FAMILY_MISMATCH`): IPv4 `icmp-network-unreachable` (the default), `icmp-host-unreachable`, `icmp-port-unreachable`, `icmp-protocol-unreachable`, `icmp-network-prohibited`, `icmp-host-prohibited`, `icmp-admin-prohibited`, `tcp-reset`; IPv6 `icmp-no-route` (the default), `icmp-admin-prohibited`, `icmp-not-neighbour`, `icmp-address-unreachable`, `icmp-port-unreachable`, `tcp-reset`. On a repeated add of a reject rule, an omitted `rejectWith` and the family default count as the same. ICMP is `protocol: "icmp"` for IPv4 and `"icmpv6"` for IPv6; the other one is refused with `PROTOCOL_FAMILY_MISMATCH`. These checks run before any router call, so a dry run reports them.
+
+**Moving a rule.** `action: "move"` takes `ruleId` (the rule's `.id` from `list_firewall_rules`, e.g. `*1A`) and `destination`: the `.id` of the rule to place it before, or `end` for the bottom of the table. It runs RouterOS `move` (`POST <table>/move` with `numbers` and `destination`; for `end` without `destination`, which the RouterOS console `move` treats as the end of the list). It takes no `chain`, `ruleAction`, `comment` or match fields (`PARAM_NOT_APPLICABLE`). If the first static rule after `ruleId` is already `destination` (for `end`: no static rule follows it), it returns `no_change` and writes nothing. Dynamic rules cannot be moved or used as `destination` (`DYNAMIC_RULE_NOT_MOVABLE`, category `VALIDATION`); an unknown `ruleId` or `destination` is `FIREWALL_RULE_NOT_FOUND`. The result's `position` gives the rule's 0-based index in the table as listed (dynamic rules included) before and after the move; a dry run reports the same. `rollback_change` does not restore rule order (it re-creates rules at the end), so a move is undone by the auto-revert job or by moving the rule back.
+
+**Auto-revert (dead-man switch).** RouterOS Safe Mode belongs to a terminal or Winbox session and cannot be used over REST, so every real write (not a dry run, `already_exists` or `no_change`) is guarded by a scheduler job instead. Before the change, MikroMCP adds a `mikromcp-autorevert-<id>` entry to `/system scheduler` that undoes it after `autoRevertSeconds` (default `60`): an `add` removes the new rule, a `remove` re-adds the rule as it was before the rule that followed it (also when other rules share its comment), `enable`/`disable` sets the flag back, and a `move` moves the rule back before the static rule that followed it (or to the end if it was last). The job runs in the menu of the table and family the call used (`/ip firewall filter`, `/ipv6 firewall raw`, ...). The job's first run is pinned to the router's clock plus `autoRevertSeconds` (`start-date`/`start-time`), since a scheduler entry otherwise first runs the moment it is added; a clock MikroMCP cannot read counts as an arm failure. After the change it waits 3 seconds for it to take effect, then opens a **new** REST connection to the router (a connection that is already open survives a rule that drops new ones). If the router answers, the job is removed and the result carries `autoRevert: { status: "disarmed" }`. If it does not, the job is left in place, the router reverts itself, and the call fails with `AUTO_REVERT_PENDING`. Other outcomes: `AUTO_REVERT_ARM_FAILED` (the job could not be added, so nothing was changed; the REST user needs write access to `/system scheduler`), `AUTO_REVERT_EXPIRED` (the change and the check took longer than `autoRevertSeconds`, so the job has already run), and `AUTO_REVERT_DISARM_FAILED` (the router answers but the job could not be removed, so it will still undo the change; remove it with `manage_scheduled_job`). A write that times out leaves the job armed. The job's state is in the result's `autoRevert` field, in the error's `details.autoRevert`, and in the write journal's outcome entry. Pass `autoRevertSeconds: 0` to write without it. The same applies to `manage_firewall_rule` steps in `apply_plan`: each step is guarded and checked on its own.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `add` \| `remove` \| `disable` \| `enable` | — | Operation to perform |
-| `table` | `filter` \| `nat` | `filter` | Firewall table |
-| `chain` | string | — | Chain name (e.g. `input`, `forward`, `output`, `srcnat`) |
+| `action` | `add` \| `remove` \| `disable` \| `enable` \| `move` | — | Operation to perform |
+| `family` | `ip` \| `ipv6` | `ip` | Address family: `ip/firewall/<table>` or `ipv6/firewall/<table>` |
+| `table` | `filter` \| `nat` \| `raw` | `filter` | Firewall table |
+| `chain` | string | — | Chain name, required except for `move` (e.g. `input`, `forward`, `output`, `srcnat`; raw: `prerouting`, `output`) |
 | `comment` | string | — | Comment used as idempotency key; at least one printable character, omit for none |
-| `ruleAction` | string | — | RouterOS action (e.g. `accept`, `drop`, `masquerade`) |
+| `ruleAction` | string | — | RouterOS action, required except for `move` (e.g. `accept`, `drop`, `reject`, `jump`, `masquerade`; raw also `notrack`) |
 | `srcAddress` | string | — | Source IP or CIDR |
 | `dstAddress` | string | — | Destination IP or CIDR |
 | `srcPort` | string | — | Source port or range (e.g. `80`, `8000-9000`) |
 | `dstPort` | string | — | Destination port or range |
-| `protocol` | `tcp` \| `udp` \| `icmp` \| `gre` \| `ospf` \| `all` | — | Protocol to match |
+| `protocol` | `tcp` \| `udp` \| `icmp` \| `icmpv6` \| `gre` \| `ospf` \| `all` | — | Protocol to match; `icmp` for family `ip`, `icmpv6` for family `ipv6` |
 | `inInterface` | string | — | Incoming interface |
 | `outInterface` | string | — | Outgoing interface |
 | `inInterfaceList` | string | — | Incoming interface list (e.g. `WAN`, `!LAN`) |
@@ -1087,8 +1095,12 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `connectionNatState` | string | — | Connection NAT state: `srcnat`, `dstnat` or both, optionally negated (`!dstnat`) |
 | `toAddresses` | string | — | NAT target address or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same` |
 | `toPorts` | string | — | NAT target port or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same`, `redirect`, `masquerade` |
+| `jumpTarget` | string | — | Chain to jump to (`jump-target`); required with `ruleAction: "jump"`, refused otherwise |
+| `rejectWith` | string | family default | Reply sent by a reject rule (`reject-with`); `ruleAction: "reject"` only, values per family as listed above |
 | `disabled` | boolean | `false` | Create the rule in disabled state; on `add`, part of the idempotency check |
 | `placeBefore` | string | — | Place the new rule before this rule ID |
+| `ruleId` | string | — | `move` only: the `.id` of the rule to move (e.g. `*1A`) |
+| `destination` | string | — | `move` only: the `.id` of the rule to place it before, or `end` |
 | `dryRun` | boolean | `false` | Preview without applying; the result's `autoRevert` says whether a real call would arm the job |
 | `autoRevertSeconds` | integer | `60` | Seconds after which the scheduler job undoes the change unless the router still answers; `30`–`3600`, or `0` for no job |
 
@@ -1098,17 +1110,24 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 
 **Example prompt:** "Forward TCP 8443 arriving on the WAN interface list to 192.168.88.10:443 on core-01, comment it 'fwd-nas-https'."
 
+**Example prompt:** "On core-01, move the rule that drops SSH above the accept-established rule in the input chain." (list the rules, then `action: "move"` with the drop rule's `.id` as `ruleId` and the accept rule's `.id` as `destination`)
+
+**Example prompt:** "Add an IPv6 input rule on core-01 that accepts ICMPv6 echo requests, then one that drops all other ICMPv6." (`family: "ipv6"`, `protocol: "icmpv6"`)
+
+**Example prompt:** "Add a raw prerouting rule on core-01 that sets notrack for traffic from 10.0.0.0/8." (`table: "raw"`, `ruleAction: "notrack"`)
+
 ---
 
 ## Mangle Rules
 
 ### `list_mangle_rules` — Read
 
-List firewall mangle rules in evaluation order. Supports filtering by chain, action, and disabled state.
+List firewall mangle rules in evaluation order, IPv4 (`ip/firewall/mangle`) or IPv6 (`ipv6/firewall/mangle`). Supports filtering by chain, action, and disabled state.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
+| `family` | `ip` \| `ipv6` | `ip` | Address family |
 | `chain` | string | — | Filter by chain (e.g. `prerouting`, `forward`, `postrouting`) |
 | `action` | string | — | Filter by mangle action (e.g. `mark-routing`, `mark-connection`) |
 | `disabled` | boolean | — | Filter by disabled state |
@@ -1119,13 +1138,14 @@ List firewall mangle rules in evaluation order. Supports filtering by chain, act
 
 ### `manage_mangle_rule` — Write · Destructive · Idempotent
 
-Add, remove, enable, or disable a mangle rule. Each `new*` value belongs to one action: `newRoutingMark` → `mark-routing`, `newConnectionMark` → `mark-connection`, `newPacketMark` → `mark-packet`, `newDscpValue` → `change-dscp`, `newMss` → `change-mss`. `ruleAction` sets the rule's action; when it is omitted, the one `new*` value given implies its action, and with no value the action is `accept`, the RouterOS default. A `new*` value under another action, values of two different actions, and one of these actions without its value are rejected. `mark-routing` is rejected in the built-in chains `input`, `forward`, and `postrouting`, as RouterOS does (custom chains are allowed). `change-mss` needs `protocol: tcp` and `tcpFlags` with `syn`, and `tcpFlags` needs `protocol: tcp`, as RouterOS requires. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different chain, match fields (addresses, address lists, protocol, ports, interfaces, TCP flags), marks, `newDscpValue`, `newMss`, `passthrough`, or the given or implied action. With neither `ruleAction` nor a `new*` value, the existing rule's action is not compared. `newDscpValue`, `newMss`, and `passthrough` are compared only when the router reports them for the rule's action; an omitted `passthrough` counts as the RouterOS default `yes`.
+Add, remove, enable, disable, or move a mangle rule, IPv4 (`family: "ip"`, the default) or IPv6 (`family: "ipv6"`, `ipv6/firewall/mangle`). `action: "move"` takes `ruleId` and `destination` instead of `comment` and works as in `manage_firewall_rule` (`no_change` when the rule is already in place, dynamic rules refused, `MANGLE_RULE_NOT_FOUND` for an unknown id, dry run reports `position`); mangle writes have no auto-revert job. Each `new*` value belongs to one action: `newRoutingMark` → `mark-routing`, `newConnectionMark` → `mark-connection`, `newPacketMark` → `mark-packet`, `newDscpValue` → `change-dscp`, `newMss` → `change-mss`. `ruleAction` sets the rule's action; when it is omitted, the one `new*` value given implies its action, and with no value the action is `accept`, the RouterOS default. A `new*` value under another action, values of two different actions, and one of these actions without its value are rejected. `mark-routing` is rejected in the built-in chains `input`, `forward`, and `postrouting`, as RouterOS does (custom chains are allowed). `change-mss` needs `protocol: tcp` and `tcpFlags` with `syn`, and `tcpFlags` needs `protocol: tcp`, as RouterOS requires. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different chain, match fields (addresses, address lists, protocol, ports, interfaces, TCP flags), marks, `newDscpValue`, `newMss`, `passthrough`, or the given or implied action. With neither `ruleAction` nor a `new*` value, the existing rule's action is not compared. `newDscpValue`, `newMss`, and `passthrough` are compared only when the router reports them for the rule's action; an omitted `passthrough` counts as the RouterOS default `yes`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
-| `comment` | string | — | **Idempotency key** — required for all actions, non-empty |
+| `action` | `add` \| `remove` \| `enable` \| `disable` \| `move` | — | Operation to perform |
+| `family` | `ip` \| `ipv6` | `ip` | Address family |
+| `comment` | string | — | **Idempotency key** — required for every action except `move` (`PARAM_REQUIRED`), non-empty |
 | `chain` | string | — | Mangle chain (required on `add`): `prerouting`, `input`, `forward`, `output`, `postrouting` |
 | `ruleAction` | `accept` \| `passthrough` \| `mark-routing` \| `mark-connection` \| `mark-packet` \| `change-dscp` \| `change-mss` | implied by the `new*` value, else `accept` | Rule action, `add` only (rejected otherwise) |
 | `srcAddress` | string | — | Source IP/CIDR to match |
@@ -1144,6 +1164,8 @@ Add, remove, enable, or disable a mangle rule. Each `new*` value belongs to one 
 | `newDscpValue` | integer | — | DSCP value to set, 0–63 (`ruleAction: change-dscp`) |
 | `newMss` | integer \| `clamp-to-pmtu` | — | MSS to set, 0–65535 or `clamp-to-pmtu` (`ruleAction: change-mss`, `protocol: tcp`, `tcpFlags: syn`) |
 | `passthrough` | boolean | — | Whether to continue matching subsequent rules |
+| `ruleId` | string | — | `move` only: the `.id` of the rule to move |
+| `destination` | string | — | `move` only: the `.id` of the rule to place it before, or `end` |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a mangle rule on core-01 that marks traffic from 10.10.0.0/24 with routing-mark 'vpn' in the prerouting chain." (`newRoutingMark: vpn`, which implies `ruleAction: mark-routing`)
@@ -1154,11 +1176,12 @@ Add, remove, enable, or disable a mangle rule. Each `new*` value belongs to one 
 
 ### `list_address_list_entries` — Read
 
-List firewall address list entries. Supports filtering by list name and address.
+List firewall address list entries, IPv4 (`ip/firewall/address-list`) or IPv6 (`ipv6/firewall/address-list`). Supports filtering by list name and address.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
+| `family` | `ip` \| `ipv6` | `ip` | Address family |
 | `list` | string | — | Filter by address list name |
 | `address` | string | — | Filter by address (IP or CIDR) |
 
@@ -1168,14 +1191,15 @@ List firewall address list entries. Supports filtering by list name and address.
 
 ### `manage_address_list_entry` — Write · Destructive · Idempotent
 
-Add or remove a firewall address list entry. Idempotent by list name + address.
+Add or remove a firewall address list entry, IPv4 or IPv6 (`family: "ipv6"` writes `ipv6/firewall/address-list`). Idempotent by list name + address.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` | — | Operation to perform |
+| `family` | `ip` \| `ipv6` | `ip` | Address family |
 | `list` | string | — | Address list name |
-| `address` | string | — | IP address or CIDR to add/remove |
+| `address` | string | — | IP address or CIDR to add/remove (IPv6 address or prefix for `family: "ipv6"`) |
 | `comment` | string | — | Optional comment |
 | `timeout` | string | — | Expiry timeout (e.g. `1d`, `2h30m`) — omit for permanent |
 | `dryRun` | boolean | `false` | Preview without applying |

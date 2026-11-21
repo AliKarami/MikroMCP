@@ -4,6 +4,7 @@ import { probeTiming } from "../../../src/domain/tools/auto-revert.js";
 
 probeTiming.settleMs = 0;
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
+import { snapshotPathsFor } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { fromWire, type WireRecord } from "../helpers/wire.js";
 
@@ -1042,4 +1043,464 @@ describe("manage_firewall_rule - empty comment", () => {
       expect(ctx.routerClient.create).not.toHaveBeenCalled();
     },
   );
+});
+
+/** makeContext plus `execute`, which the move command goes through. */
+function makeMoveContext(records: WireRecord[]): ToolContext {
+  const ctx = makeContext(records);
+  (ctx.routerClient as unknown as Record<string, unknown>).execute = vi.fn().mockResolvedValue([]);
+  return ctx;
+}
+
+function mocks(ctx: ToolContext): Record<string, ReturnType<typeof vi.fn>> {
+  return ctx.routerClient as unknown as Record<string, ReturnType<typeof vi.fn>>;
+}
+
+describe("firewall tools - raw table and IPv6 family", () => {
+  it("list_firewall_rules defaults family to ip and accepts raw and ipv6", () => {
+    expect(listFirewallRulesInputSchema.parse({})).toMatchObject({
+      family: "ip",
+      table: "filter",
+    });
+    expect(listFirewallRulesInputSchema.parse({ family: "ipv6", table: "raw" })).toMatchObject({
+      family: "ipv6",
+      table: "raw",
+    });
+    expect(() => listFirewallRulesInputSchema.parse({ family: "ip4" })).toThrow();
+  });
+
+  it.each([
+    ["ip", "raw", "ip/firewall/raw"],
+    ["ipv6", "filter", "ipv6/firewall/filter"],
+    ["ipv6", "nat", "ipv6/firewall/nat"],
+    ["ipv6", "raw", "ipv6/firewall/raw"],
+  ])("list_firewall_rules reads family %s table %s from %s", async (family, table, path) => {
+    const ctx = makeContext([{ ".id": "*1", chain: "prerouting", action: "notrack" }]);
+    const result = await listFirewallRulesTool.handler({ family, table }, ctx);
+    expect(ctx.routerClient.get).toHaveBeenCalledWith(path, expect.anything());
+    expect(result.structuredContent).toMatchObject({ family, table, total: 1 });
+  });
+
+  it("manage_firewall_rule defaults family to ip", () => {
+    expect(
+      manageFirewallRuleInputSchema.parse({ action: "add", chain: "input", ruleAction: "drop" }),
+    ).toMatchObject({ family: "ip", table: "filter" });
+  });
+
+  it("adds a notrack rule to the IPv4 raw table", async () => {
+    const ctx = makeContext([]);
+    const result = await manageFirewallRuleTool.handler(
+      {
+        action: "add",
+        table: "raw",
+        chain: "prerouting",
+        ruleAction: "notrack",
+        srcAddress: "10.0.0.0/8",
+        comment: "notrack-lan",
+      },
+      ctx,
+    );
+    expect(result.structuredContent).toHaveProperty("action", "created");
+    expect(firewallCreateCall(mocks(ctx).create)).toEqual([
+      "ip/firewall/raw",
+      expect.objectContaining({ chain: "prerouting", action: "notrack" }),
+    ]);
+  });
+
+  it("adds an IPv6 input rule matching icmpv6 at ipv6/firewall/filter", async () => {
+    const ctx = makeContext([]);
+    const result = await manageFirewallRuleTool.handler(
+      {
+        action: "add",
+        family: "ipv6",
+        chain: "input",
+        ruleAction: "accept",
+        protocol: "icmpv6",
+        comment: "allow-icmpv6",
+      },
+      ctx,
+    );
+    expect(firewallCreateCall(mocks(ctx).create)).toEqual([
+      "ipv6/firewall/filter",
+      expect.objectContaining({ protocol: "icmpv6", chain: "input" }),
+    ]);
+    expect(result.content).toContain("ipv6 filter");
+  });
+
+  it("rejects protocol icmp for ipv6 and icmpv6 for ip, before any router call", async () => {
+    const ctx = makeContext([]);
+    const base = { action: "add", chain: "input", ruleAction: "accept", dryRun: true };
+    await expect(
+      manageFirewallRuleTool.handler({ ...base, family: "ipv6", protocol: "icmp" }, ctx),
+    ).rejects.toMatchObject({ code: "PROTOCOL_FAMILY_MISMATCH", message: /icmpv6/ });
+    await expect(
+      manageFirewallRuleTool.handler({ ...base, protocol: "icmpv6" }, ctx),
+    ).rejects.toMatchObject({ code: "PROTOCOL_FAMILY_MISMATCH" });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it("finds an IPv6 rule by comment in the IPv6 table", async () => {
+    const ctx = makeContext([
+      { ".id": "*9", chain: "input", action: "drop", comment: "v6-drop", disabled: "false" },
+    ]);
+    await manageFirewallRuleTool.handler(
+      {
+        action: "disable",
+        family: "ipv6",
+        table: "raw",
+        chain: "prerouting",
+        ruleAction: "drop",
+        comment: "v6-drop",
+        autoRevertSeconds: 0,
+      },
+      ctx,
+    );
+    expect(ctx.routerClient.update).toHaveBeenCalledWith("ipv6/firewall/raw", "*9", {
+      disabled: "true",
+    });
+  });
+
+  it("snapshots only the table and family the call touches", () => {
+    expect(snapshotPathsFor(manageFirewallRuleTool, {})).toEqual(["ip/firewall/filter"]);
+    expect(snapshotPathsFor(manageFirewallRuleTool, { table: "nat" })).toEqual(["ip/firewall/nat"]);
+    expect(snapshotPathsFor(manageFirewallRuleTool, { family: "ipv6", table: "raw" })).toEqual([
+      "ipv6/firewall/raw",
+    ]);
+  });
+
+  it("keeps chain and ruleAction required for add, remove, enable and disable", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageFirewallRuleTool.handler({ action: "add", ruleAction: "drop" }, ctx),
+    ).rejects.toMatchObject({ code: "PARAM_REQUIRED", details: { param: "chain" } });
+    await expect(
+      manageFirewallRuleTool.handler({ action: "remove", chain: "input", comment: "x" }, ctx),
+    ).rejects.toMatchObject({ code: "PARAM_REQUIRED", details: { param: "ruleAction" } });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+});
+
+describe("manage_firewall_rule - jumpTarget and rejectWith", () => {
+  const add = { action: "add", chain: "forward", autoRevertSeconds: 0 };
+
+  it("sends jump-target with a jump rule", async () => {
+    const ctx = makeContext([]);
+    await manageFirewallRuleTool.handler(
+      { ...add, ruleAction: "jump", jumpTarget: "wan-in", comment: "to-wan-in" },
+      ctx,
+    );
+    expect(firewallCreateCall(mocks(ctx).create)[1]).toMatchObject({
+      action: "jump",
+      "jump-target": "wan-in",
+    });
+  });
+
+  it("requires jumpTarget for jump and rejects it otherwise", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...add, ruleAction: "jump" }, ctx),
+    ).rejects.toMatchObject({ code: "JUMP_TARGET_REQUIRED" });
+    await expect(
+      manageFirewallRuleTool.handler({ ...add, ruleAction: "drop", jumpTarget: "x" }, ctx),
+    ).rejects.toMatchObject({ code: "JUMP_TARGET_NOT_APPLICABLE" });
+    expect(ctx.routerClient.create).not.toHaveBeenCalled();
+  });
+
+  it("sends reject-with with a reject rule", async () => {
+    const ctx = makeContext([]);
+    await manageFirewallRuleTool.handler(
+      { ...add, ruleAction: "reject", rejectWith: "tcp-reset", protocol: "tcp" },
+      ctx,
+    );
+    expect(firewallCreateCall(mocks(ctx).create)[1]).toMatchObject({
+      action: "reject",
+      "reject-with": "tcp-reset",
+    });
+  });
+
+  it("rejects rejectWith on another action", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageFirewallRuleTool.handler({ ...add, ruleAction: "drop", rejectWith: "tcp-reset" }, ctx),
+    ).rejects.toMatchObject({ code: "REJECT_WITH_NOT_APPLICABLE" });
+  });
+
+  it("validates rejectWith per family", async () => {
+    const ctx = makeContext([]);
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...add, ruleAction: "reject", rejectWith: "icmp-no-route" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "REJECT_WITH_FAMILY_MISMATCH" });
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...add, family: "ipv6", ruleAction: "reject", rejectWith: "icmp-host-prohibited" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "REJECT_WITH_FAMILY_MISMATCH" });
+    await manageFirewallRuleTool.handler(
+      { ...add, family: "ipv6", ruleAction: "reject", rejectWith: "icmp-no-route" },
+      ctx,
+    );
+    expect(firewallCreateCall(mocks(ctx).create)[0]).toBe("ipv6/firewall/filter");
+  });
+
+  it("the schema rejects a reject-with value of neither family", () => {
+    expect(() =>
+      manageFirewallRuleInputSchema.parse({ ...add, ruleAction: "reject", rejectWith: "nope" }),
+    ).toThrow();
+  });
+
+  it("compares jump-target on a repeated add", async () => {
+    const stored = {
+      ".id": "*3",
+      chain: "forward",
+      action: "jump",
+      "jump-target": "wan-in",
+      comment: "to-wan",
+      disabled: "false",
+    };
+    const same = await manageFirewallRuleTool.handler(
+      { ...add, ruleAction: "jump", jumpTarget: "wan-in", comment: "to-wan" },
+      makeContext([stored]),
+    );
+    expect(same.structuredContent).toHaveProperty("action", "already_exists");
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...add, ruleAction: "jump", jumpTarget: "lan-in", comment: "to-wan" },
+        makeContext([stored]),
+      ),
+    ).rejects.toMatchObject({
+      code: "FIREWALL_RULE_CONFLICT",
+      details: { existing: { "jump-target": "wan-in" }, requested: { "jump-target": "lan-in" } },
+    });
+  });
+
+  it("treats an omitted rejectWith and the family default as the same", async () => {
+    const reported = {
+      ".id": "*3",
+      chain: "forward",
+      action: "reject",
+      "reject-with": "icmp-network-unreachable",
+      comment: "rej",
+      disabled: "false",
+    };
+    const { "reject-with": _default, ...omitted } = reported;
+
+    for (const [stored, rejectWith] of [
+      [reported, undefined],
+      [omitted, "icmp-network-unreachable"],
+      [omitted, undefined],
+    ] as const) {
+      const result = await manageFirewallRuleTool.handler(
+        { ...add, ruleAction: "reject", comment: "rej", rejectWith },
+        makeContext([stored]),
+      );
+      expect(result.structuredContent).toHaveProperty("action", "already_exists");
+    }
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...add, ruleAction: "reject", comment: "rej", rejectWith: "tcp-reset" },
+        makeContext([reported]),
+      ),
+    ).rejects.toMatchObject({ code: "FIREWALL_RULE_CONFLICT" });
+  });
+});
+
+describe("manage_firewall_rule - move", () => {
+  // Wire order is evaluation order.
+  const table: WireRecord[] = [
+    { ".id": "*D", chain: "forward", action: "passthrough", dynamic: "true" },
+    { ".id": "*1", chain: "input", action: "accept", comment: "established" },
+    { ".id": "*2", chain: "input", action: "accept", comment: "mgmt" },
+    { ".id": "*3", chain: "input", action: "drop", comment: "drop-ssh" },
+    { ".id": "*4", chain: "input", action: "drop", comment: "drop-all" },
+  ];
+  const move = { action: "move", autoRevertSeconds: 0 };
+
+  it("needs only ruleId and destination", () => {
+    expect(
+      manageFirewallRuleInputSchema.parse({ action: "move", ruleId: "*3", destination: "*1" }),
+    ).toMatchObject({ action: "move", ruleId: "*3", destination: "*1" });
+    expect(
+      manageFirewallRuleInputSchema.parse({ action: "move", ruleId: "*3", destination: "end" }),
+    ).toMatchObject({ destination: "end" });
+  });
+
+  it("the schema rejects a ruleId or destination that is not a RouterOS id", () => {
+    expect(() =>
+      manageFirewallRuleInputSchema.parse({ action: "move", ruleId: "3", destination: "*1" }),
+    ).toThrow();
+    expect(() =>
+      manageFirewallRuleInputSchema.parse({ action: "move", ruleId: "*3", destination: "top" }),
+    ).toThrow();
+  });
+
+  it("requires ruleId and destination, before any router call", async () => {
+    const ctx = makeMoveContext(table);
+    await expect(
+      manageFirewallRuleTool.handler({ ...move, destination: "*1" }, ctx),
+    ).rejects.toMatchObject({ code: "PARAM_REQUIRED", details: { param: "ruleId" } });
+    await expect(
+      manageFirewallRuleTool.handler({ ...move, ruleId: "*3" }, ctx),
+    ).rejects.toMatchObject({ code: "PARAM_REQUIRED", details: { param: "destination" } });
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+
+  it("rejects rule fields with move, and ruleId or destination with other actions", async () => {
+    const ctx = makeMoveContext(table);
+    await expect(
+      manageFirewallRuleTool.handler(
+        { ...move, ruleId: "*3", destination: "*1", comment: "drop-ssh" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "PARAM_NOT_APPLICABLE", details: { param: "comment" } });
+    await expect(
+      manageFirewallRuleTool.handler(
+        { action: "add", chain: "input", ruleAction: "drop", ruleId: "*3" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "PARAM_NOT_APPLICABLE", details: { param: "ruleId" } });
+  });
+
+  it("moves the rule before the destination with the RouterOS move command", async () => {
+    const ctx = makeMoveContext(table);
+    const result = await manageFirewallRuleTool.handler(
+      { ...move, ruleId: "*3", destination: "*1" },
+      ctx,
+    );
+    expect(mocks(ctx).execute).toHaveBeenCalledWith("ip/firewall/filter/move", {
+      numbers: "*3",
+      destination: "*1",
+    });
+    expect(result.structuredContent).toMatchObject({
+      action: "moved",
+      id: "*3",
+      destination: "*1",
+      position: { before: 3, after: 1 },
+    });
+  });
+
+  it("moves to the end by leaving destination out", async () => {
+    const ctx = makeMoveContext(table);
+    const result = await manageFirewallRuleTool.handler(
+      { ...move, ruleId: "*2", destination: "end" },
+      ctx,
+    );
+    expect(mocks(ctx).execute).toHaveBeenCalledWith("ip/firewall/filter/move", { numbers: "*2" });
+    expect(result.structuredContent).toMatchObject({ position: { before: 2, after: 4 } });
+  });
+
+  it("moves within the IPv6 raw table", async () => {
+    const ctx = makeMoveContext(table);
+    await manageFirewallRuleTool.handler(
+      { ...move, family: "ipv6", table: "raw", ruleId: "*4", destination: "*2" },
+      ctx,
+    );
+    expect(ctx.routerClient.get).toHaveBeenCalledWith("ipv6/firewall/raw", {});
+    expect(mocks(ctx).execute).toHaveBeenCalledWith("ipv6/firewall/raw/move", {
+      numbers: "*4",
+      destination: "*2",
+    });
+  });
+
+  it("returns no_change when the rule already sits right before the destination", async () => {
+    const ctx = makeMoveContext(table);
+    const result = await manageFirewallRuleTool.handler(
+      { ...move, ruleId: "*2", destination: "*3" },
+      ctx,
+    );
+    expect(result.structuredContent).toMatchObject({
+      action: "no_change",
+      position: { before: 2, after: 2 },
+    });
+    expect(mocks(ctx).execute).not.toHaveBeenCalled();
+  });
+
+  it("returns no_change for end when the rule is already the last static rule", async () => {
+    const ctx = makeMoveContext([...table, { ".id": "*D2", chain: "input", dynamic: "true" }]);
+    const result = await manageFirewallRuleTool.handler(
+      { ...move, ruleId: "*4", destination: "end" },
+      ctx,
+    );
+    expect(result.structuredContent).toHaveProperty("action", "no_change");
+    expect(mocks(ctx).execute).not.toHaveBeenCalled();
+  });
+
+  it("does not count a dynamic rule in between as a different position", async () => {
+    const ctx = makeMoveContext([
+      { ".id": "*1", chain: "input", action: "accept" },
+      { ".id": "*D", chain: "input", action: "accept", dynamic: "true" },
+      { ".id": "*2", chain: "input", action: "drop" },
+    ]);
+    const result = await manageFirewallRuleTool.handler(
+      { ...move, ruleId: "*1", destination: "*2" },
+      ctx,
+    );
+    expect(result.structuredContent).toHaveProperty("action", "no_change");
+  });
+
+  it("throws NOT_FOUND for an unknown ruleId or destination", async () => {
+    const ctx = makeMoveContext(table);
+    await expect(
+      manageFirewallRuleTool.handler({ ...move, ruleId: "*99", destination: "*1" }, ctx),
+    ).rejects.toMatchObject({
+      category: "NOT_FOUND",
+      code: "FIREWALL_RULE_NOT_FOUND",
+      details: { ruleId: "*99" },
+    });
+    await expect(
+      manageFirewallRuleTool.handler({ ...move, ruleId: "*3", destination: "*99" }, ctx),
+    ).rejects.toMatchObject({ category: "NOT_FOUND", details: { destination: "*99" } });
+    expect(mocks(ctx).execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses to move a dynamic rule or to anchor on one", async () => {
+    const ctx = makeMoveContext(table);
+    await expect(
+      manageFirewallRuleTool.handler({ ...move, ruleId: "*D", destination: "end" }, ctx),
+    ).rejects.toMatchObject({ category: "VALIDATION", code: "DYNAMIC_RULE_NOT_MOVABLE" });
+    await expect(
+      manageFirewallRuleTool.handler({ ...move, ruleId: "*3", destination: "*D" }, ctx),
+    ).rejects.toMatchObject({ code: "DYNAMIC_RULE_NOT_MOVABLE", details: { destination: "*D" } });
+    expect(mocks(ctx).execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses a destination equal to the rule", async () => {
+    const ctx = makeMoveContext(table);
+    await expect(
+      manageFirewallRuleTool.handler({ ...move, ruleId: "*3", destination: "*3" }, ctx),
+    ).rejects.toMatchObject({ code: "MOVE_DESTINATION_IS_RULE" });
+  });
+
+  it("dry run reports the old and new position and moves nothing", async () => {
+    const ctx = makeMoveContext(table);
+    const result = await manageFirewallRuleTool.handler(
+      { action: "move", ruleId: "*3", destination: "*1", dryRun: true },
+      ctx,
+    );
+    expect(result.structuredContent).toMatchObject({
+      action: "dry_run",
+      position: { before: 3, after: 1 },
+      autoRevert: { wouldArm: true, seconds: 60 },
+    });
+    expect(result.content).toContain("from position 3 to 1");
+    expect(mocks(ctx).execute).not.toHaveBeenCalled();
+    expect(ctx.routerClient.create).not.toHaveBeenCalled();
+  });
+
+  it("guards a real move with a move-back job", async () => {
+    const ctx = makeMoveContext(table);
+    const result = await manageFirewallRuleTool.handler(
+      { action: "move", ruleId: "*3", destination: "*1" },
+      ctx,
+    );
+    const [, job] = mocks(ctx).create.mock.calls.find((c) => c[0] === SCHEDULER)!;
+    expect(job["on-event"]).toContain("/ip firewall filter move numbers=*3 destination=*4");
+    expect(result.structuredContent).toMatchObject({
+      action: "moved",
+      autoRevert: { status: "disarmed", revert: "move-back" },
+    });
+  });
 });
