@@ -34,7 +34,7 @@ export async function runServe(): Promise<void> {
 
   if (config.transport === "stdio") {
     const stdioIdentity = getStdioIdentity(config.stdioIdentity, identityRegistry);
-    await withIdentity(stdioIdentity, () => connectStdio(makeServer()));
+    await withIdentity(stdioIdentity, () => connectStdio(makeServer(stdioIdentity)));
     log.info("MikroMCP server running via stdio");
   } else if (config.transport === "http") {
     await connectHttp(
