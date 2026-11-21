@@ -10,6 +10,10 @@ Each release section covers changes **since the previous release only**.
 
 ## [Unreleased]
 
+### Added
+- `MIKROMCP_READ_ONLY=true` registers only read-only tools, so no client of that server can call a write tool, and `tools/list` drops from about 150 KB to about 55 KB of JSON. `MIKROMCP_TOOLSETS` (e.g. `firewall,dhcp`) registers only the named toolsets plus `list_routers` and `check_router_health`. A single toolset is around 13 KB, small enough for local models with short context windows. An unknown toolset name stops the server at startup with the valid names. The server instructions say when the catalogue is reduced. Toolset names are on the Configuration page.
+- In HTTP mode, `tools/list` leaves out the tools a caller's identity may not call under its `allowedToolPatterns`. Calls to hidden tools are still refused by the executor, as before.
+
 ## [1.17.0] - 2026-11-21
 
 Change safety: firewall writes revert themselves if they cut the router off, confirmation tokens and plans are tied to the state that was previewed, and every write says whether it was applied and whether it can be undone. SwOS Lite VLAN decoding and a guard on management-address writes come from [@f0086](https://github.com/f0086)'s CSS610 lockout report.

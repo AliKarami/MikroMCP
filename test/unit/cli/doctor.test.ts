@@ -48,9 +48,10 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
-vi.mock("node:net", () => ({
-  createConnection: vi.fn(),
-}));
+vi.mock("node:net", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:net")>();
+  return { ...actual, createConnection: vi.fn() };
+});
 
 vi.mock("node:os", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:os")>();
@@ -126,6 +127,8 @@ function makeAppConfig(
     stdioIdentity: undefined,
     confirmationSecret: overrides.confirmationSecret,
     auditLogPath: undefined,
+    readOnly: false,
+    toolsets: [],
     http: { maxBodyBytes: 1048576, rateLimitRpm: 60 },
     ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
     retry: { maxRetries: 3, baseDelayMs: 200, maxDelayMs: 5000 },
@@ -872,6 +875,33 @@ describe("runDoctor", () => {
       const allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
       expect(allOutput).toMatch(/⚠️.*Update available/);
       expect(allOutput).toMatch(/99\.0\.0/);
+    });
+  });
+
+  describe("tool catalogue", () => {
+    async function outputWith(over: Record<string, unknown>) {
+      mockLoadAppConfig.mockReturnValue({
+        ...makeAppConfig(),
+        ...over,
+      } as ReturnType<typeof loadAppConfig>);
+      mockExistsSync.mockReturnValue(false);
+      MockIdentityRegistry.mockImplementation(
+        () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
+      );
+      mockReadFileSync.mockReturnValue(JSON.stringify({ mcpServers: {} }));
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+      return consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    }
+
+    it("reports a reduced catalogue", async () => {
+      const out = await outputWith({ readOnly: true, toolsets: ["firewall"] });
+      expect(out).toMatch(/Tool catalogue: \d+ of \d+ tools \(read-only; toolsets firewall\)/);
+    });
+
+    it("fails on an unknown toolset", async () => {
+      const out = await outputWith({ toolsets: ["nope"] });
+      expect(out).toMatch(/unknown toolsets: nope/);
     });
   });
 

@@ -55,6 +55,8 @@ export function createHarness(
     stdioIdentity: undefined,
     confirmationSecret: undefined,
     auditLogPath: undefined,
+    readOnly: false,
+    toolsets: [],
     http: { maxBodyBytes: 1024 * 1024, rateLimitRpm: 0 },
     ssh: { commandTimeoutMs: 30_000, maxOutputBytes: 512 * 1024 },
     retry: { maxRetries: 3, baseDelayMs: 200, maxDelayMs: 5_000 },

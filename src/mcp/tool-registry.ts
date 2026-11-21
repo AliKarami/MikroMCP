@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { allTools } from "../domain/tools/index.js";
+import type { ToolDefinition } from "../domain/tools/tool-definition.js";
 import type { RouterRegistry } from "../config/router-registry.js";
 import type { ConnectionPool } from "../adapter/connection-pool.js";
 import type { CircuitBreaker } from "../adapter/circuit-breaker.js";
@@ -13,6 +13,7 @@ const log = createLogger("tool-registry");
 
 export function registerAllTools(
   server: McpServer,
+  tools: ToolDefinition[],
   registry: RouterRegistry,
   pool: ConnectionPool,
   circuitBreakers: Map<string, CircuitBreaker>,
@@ -21,7 +22,7 @@ export function registerAllTools(
 ): void {
   const deps: ToolExecutorDeps = { registry, pool, circuitBreakers, config, identityRegistry };
 
-  for (const tool of allTools) {
+  for (const tool of tools) {
     const schema = tool.inputSchema as z.ZodObject<z.ZodRawShape>;
     // Tools that declare their own confirmationToken (bulk_execute's fleet token,
     // apply_plan) keep their more specific description.
@@ -51,5 +52,5 @@ export function registerAllTools(
     log.debug({ tool: tool.name }, "Registered tool");
   }
 
-  log.info({ count: allTools.length }, "All tools registered");
+  log.debug({ count: tools.length }, "Tools registered");
 }

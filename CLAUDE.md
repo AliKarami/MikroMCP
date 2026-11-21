@@ -27,7 +27,8 @@ MCP clients speak JSON-RPC to MikroMCP over stdio or HTTP/SSE; MikroMCP routes e
 |---|---|
 | `src/main.ts` | Entry point — loads config, wires transport |
 | `src/mcp/tool-registry.ts` | Registers all tools with the MCP server; injects circuit breaker, retry, correlation ID, credentials |
-| `src/domain/tools/index.ts` | **Add new tool arrays here** to expose them |
+| `src/domain/tools/index.ts` | **Add new tool arrays here** (into a toolset) to expose them |
+| `src/mcp/tool-catalogue.ts` | `MIKROMCP_READ_ONLY` / `MIKROMCP_TOOLSETS` selection and the per-identity `tools/list` filter |
 | `src/domain/tools/tool-definition.ts` | `ToolDefinition`, `ToolContext`, `ToolResult` interfaces |
 | `src/domain/errors/error-types.ts` | `MikroMCPError`, `ErrorCategory` enum, `Recoverability` |
 | `src/domain/errors/error-enricher.ts` | Maps HTTP/network errors to `MikroMCPError` |
@@ -93,16 +94,17 @@ const myTool: ToolDefinition = {
 export const myTools: ToolDefinition[] = [myTool];
 ```
 
-Then in `src/domain/tools/index.ts`:
+Then in `src/domain/tools/index.ts`, add the array to the toolset it belongs to (`MIKROMCP_TOOLSETS` selects these by name, and a unit test fails if a tool is in no toolset or in two):
 ```typescript
 import { myTools } from "./my-tools.js";
 
-export const allTools: ToolDefinition[] = [
-  ...systemTools, ...interfaceTools, ...ipTools,
-  ...dhcpTools, ...routeTools, ...firewallTools,
-  ...myTools,   // add here
-];
+const baseToolsets = {
+  // ...
+  firewall: [...firewallTools, ...mangleTools, ...addressListTools, ...myTools],
+  // ...
+} satisfies Record<string, ToolDefinition[]>;
 ```
+A new toolset also needs a row in the toolset table on `docs/wiki/Configuration.md` (`test/unit/docs/toolsets-sync.test.ts`).
 
 ## Idempotency pattern (write tools)
 
@@ -221,6 +223,8 @@ Two transports:
 |---|---|---|
 | `MIKROMCP_TRANSPORT` | `stdio` | `stdio` or `http` |
 | `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry |
+| `MIKROMCP_READ_ONLY` | `false` | `true` registers only read-only tools (write tools cannot be called at all) |
+| `MIKROMCP_TOOLSETS` | — | Comma-separated toolsets to register (`toolsets` in `src/domain/tools/index.ts`); `list_routers` and `check_router_health` always stay |
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId` (falls back to the sole router if only one is configured) |
 | `MIKROMCP_LOG_LEVEL` | `info` | `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP transport only |

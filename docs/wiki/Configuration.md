@@ -154,6 +154,8 @@ Credentials are never logged or included in tool responses.
 |---|---|---|
 | `MIKROMCP_TRANSPORT` | `stdio` | Transport mode: `stdio` or `http` |
 | `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry YAML |
+| `MIKROMCP_READ_ONLY` | `false` | `true` registers only read-only tools: no client of this server can call a write tool, and the tool list is about a third the size. See [Tool catalogue](#tool-catalogue) |
+| `MIKROMCP_TOOLSETS` | — (all) | Comma-separated toolsets to register, e.g. `firewall,dhcp`; `list_routers` and `check_router_health` are always kept. An unknown name stops the server at startup. See [Tool catalogue](#tool-catalogue) |
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId`; falls back to the sole configured router when only one exists |
 | `MIKROMCP_DATA_DIR` | `~/.mikromcp/data` | Base directory for snapshots, the write journal and `swos/` (SwOS backups and firmware images, owner-only) |
 | `MIKROMCP_LOG_LEVEL` | `info` | Log verbosity: `trace` `debug` `info` `warn` `error` |
@@ -180,6 +182,42 @@ Credentials are never logged or included in tool responses.
 When a tool call omits `routerId`, MikroMCP resolves the target router in two steps: first it checks `MIKROMCP_DEFAULT_ROUTER`; if that is unset it falls back to the sole configured router (when exactly one is defined in `routers.yaml`). If neither condition is met (multiple routers, no default set) the call is rejected with a `VALIDATION` error (`MISSING_ROUTER_ID`) that lists the available routers. `mikromcp init` writes `MIKROMCP_DEFAULT_ROUTER` into `~/.mikromcp/.env` automatically, so single-router setups work without specifying `routerId` in every prompt.
 
 ---
+
+## Tool catalogue
+
+Every registered tool is sent to the client in `tools/list`, and many clients put the whole list into the model's context. The full catalogue is about 150 KB of JSON (roughly 38k tokens), which is too much for many local models. Two variables shrink it:
+
+| Setting | Tools | `tools/list` size |
+|---|---|---|
+| default | all | ~150 KB (~38k tokens) |
+| `MIKROMCP_READ_ONLY=true` | read-only tools only | ~55 KB (~14k tokens) |
+| `MIKROMCP_TOOLSETS=firewall` | one toolset, plus `list_routers` and `check_router_health` | ~13 KB (~3k tokens) |
+| both | read-only tools of the selected toolsets | smaller still |
+
+`MIKROMCP_READ_ONLY` is enforced, not cosmetic: write tools are not registered, so no client of that server can call one. `MIKROMCP_TOOLSETS` is about context size only. `bulk_read` and `plan_changes` still work with tools from other toolsets, and the executor's authorization checks stay as they are.
+
+The toolset names:
+
+| Toolset | Contains |
+|---|---|
+| `system` | System status and clock, reboot, `run_command`, packages, upgrade, backup and export |
+| `automation` | Scripts, scheduler jobs, files |
+| `containers` | Containers and their config, envs and mounts |
+| `interfaces` | Interfaces, bridges and bridge ports, VLANs, interface lists |
+| `wireless` | WiFi interfaces and clients |
+| `ip` | IP addresses, pools, IP services, DNS |
+| `dhcp` | DHCP leases, servers and clients |
+| `routing` | Routes, policy routing, routing tables, BGP/OSPF reads, VRRP |
+| `firewall` | Filter and NAT rules, mangle rules, address lists |
+| `vpn` | WireGuard, IPsec, PPPoE, OpenVPN, PPP profiles |
+| `access` | Users, user groups, certificates |
+| `queues` | Simple queues |
+| `monitoring` | Ping, traceroute, torch, logs and log rules, SNMP/NTP, netwatch, neighbors, ARP, bandwidth test, connections |
+| `swos` | SwOS / SwOS Lite switches |
+| `change` | `plan_changes`, `apply_plan`, `rollback_change`, `list_journal` |
+| `fleet` | `bulk_read`, `bulk_execute` |
+
+In HTTP mode, `tools/list` also leaves out the tools a caller's identity may not call under its `allowedToolPatterns`. This only hides them: a call to a hidden tool is still refused, as before.
 
 ## Identities (HTTP transport)
 
