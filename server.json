@@ -25,6 +25,27 @@
           "isSecret": false
         },
         {
+          "name": "MIKROMCP_ROUTER_HOST",
+          "description": "Address of a single router to manage without a routers.yaml file (HTTPS on port 443 by default). Used only when MIKROMCP_ROUTERS is unset and no config file exists.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MIKROMCP_ROUTER_USER",
+          "description": "RouterOS REST API username for the router set by MIKROMCP_ROUTER_HOST.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MIKROMCP_ROUTER_PASS",
+          "description": "RouterOS REST API password for the router set by MIKROMCP_ROUTER_HOST. Never logged.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
           "name": "MIKROMCP_STDIO_IDENTITY",
           "description": "Optional identity name for stdio transport RBAC. Omit to use the built-in superadmin identity.",
           "isRequired": false,

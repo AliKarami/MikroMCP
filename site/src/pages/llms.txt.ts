@@ -26,6 +26,7 @@ const body = `# ${SITE.name}
 
 ## Install
 
+- One router, no install: run \`npx -y mikromcp\` from your MCP client with \`MIKROMCP_ROUTER_HOST\`, \`MIKROMCP_ROUTER_USER\` and \`MIKROMCP_ROUTER_PASS\` in its env
 - npm: \`npm install -g mikromcp\` then \`mikromcp init\`
 - Binary: download from GitHub releases (Linux/macOS/Windows)
 - Docker: \`docker pull ghcr.io/alikarami/mikromcp:latest\`

@@ -132,6 +132,63 @@ See [Available Tools](Available-Tools) for the SwOS tool reference.
 
 ---
 
+## Routers from environment variables
+
+A single router can be configured with environment variables alone, so an MCP client's `env` block is the whole setup and no `routers.yaml` is needed:
+
+```json
+{
+  "mcpServers": {
+    "mikromcp": {
+      "command": "npx",
+      "args": ["-y", "mikromcp"],
+      "env": {
+        "MIKROMCP_ROUTER_HOST": "192.168.88.1",
+        "MIKROMCP_ROUTER_USER": "mcp",
+        "MIKROMCP_ROUTER_PASS": "your-password"
+      }
+    }
+  }
+}
+```
+
+### Precedence
+
+MikroMCP reads routers from exactly one source, the first of these that is set:
+
+1. **`MIKROMCP_ROUTERS`** — the whole registry inline, as YAML or JSON, in the same shape as `routers.yaml` (`{ "routers": { "<id>": { ... } } }`). It is validated exactly like the file, SSH-key checks included, and errors name the variable (`Invalid router config in MIKROMCP_ROUTERS: ...`). Unparseable YAML fails at startup with the line and column, never the text.
+2. **The config file** at `MIKROMCP_CONFIG_PATH` (default `~/.mikromcp/routers.yaml`), when it exists.
+3. **The `MIKROMCP_ROUTER_*` variables**, when `MIKROMCP_ROUTER_HOST` is set: one router, described by the table below.
+
+When a source wins while a lower one is also set, the lower one is ignored and the server logs a warning naming it (never its values). A `routers.yaml` left behind by `mikromcp init` therefore hides the `MIKROMCP_ROUTER_*` variables until you remove it. `mikromcp doctor` reports which source was used.
+
+```bash
+# The inline form, e.g. for a container or a CI job:
+export MIKROMCP_ROUTERS='{"routers":{"lab":{"host":"10.0.0.1","port":443,"tls":{"enabled":true,"rejectUnauthorized":true},"credentials":{"source":"env","envPrefix":"ROUTER_LAB"},"rosVersion":"7"}}}'
+export ROUTER_LAB_USER=mcp ROUTER_LAB_PASS=your-password
+```
+
+### Variables for a single router
+
+| Variable | Default | Description |
+|---|---|---|
+| `MIKROMCP_ROUTER_HOST` | — | Router address. Setting it turns this source on |
+| `MIKROMCP_ROUTER_USER` | — | REST API username (read the same way as `<PREFIX>_USER`, with prefix `MIKROMCP_ROUTER`) |
+| `MIKROMCP_ROUTER_PASS` | — | REST API password. An empty value is a real (empty) password; only an unset variable counts as missing |
+| `MIKROMCP_ROUTER_ID` | `default` | Router id used in tool calls and logs |
+| `MIKROMCP_ROUTER_PORT` | `443` (`80` with TLS off) | REST API port, an integer from 1 to 65535 |
+| `MIKROMCP_ROUTER_TLS` | `true` | `false` connects over plain HTTP (the `www` service); the password then crosses the network unencrypted, and the server logs a warning |
+| `MIKROMCP_ROUTER_TLS_FINGERPRINT` | — | SHA-256 fingerprint of the router's certificate to pin (`tls.fingerprint`); the connection is refused on mismatch |
+| `MIKROMCP_ROUTER_TLS_INSECURE` | `false` | `true` skips CA validation (`tls.rejectUnauthorized: false`) and logs a warning. Needed for a self-signed certificate; combine it with `MIKROMCP_ROUTER_TLS_FINGERPRINT`, which is still enforced |
+| `MIKROMCP_ROUTER_ROS_VERSION` | `7` | RouterOS version (`rosVersion`), which picks version-dependent REST paths |
+| `MIKROMCP_ROUTER_TAGS` | — | Comma-separated tags, e.g. `home,edge` |
+
+Booleans accept `true`/`false`, `yes`/`no` or `1`/`0`. A bad value fails at startup with a message naming the variable, e.g. `MIKROMCP_ROUTER_PORT must be an integer from 1 to 65535`. `MIKROMCP_ROUTER_TLS=false` together with `MIKROMCP_ROUTER_TLS_FINGERPRINT` or `MIKROMCP_ROUTER_TLS_INSECURE=true` is refused, since neither can apply without TLS.
+
+With one router configured, tool calls can omit `routerId` (see [Default router resolution](#default-router-resolution)). For several routers, SwOS switches, SSH settings or maintenance windows, use `MIKROMCP_ROUTERS` or `routers.yaml`.
+
+---
+
 ## Credentials
 
 Set environment variables matching each router's `envPrefix`:
@@ -156,6 +213,8 @@ Credentials are never logged or included in tool responses.
 | `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry YAML |
 | `MIKROMCP_READ_ONLY` | `false` | `true` registers only read-only tools: no client of this server can call a write tool, and the tool list is about a third the size. See [Tool catalogue](#tool-catalogue) |
 | `MIKROMCP_TOOLSETS` | — (all) | Comma-separated toolsets to register, e.g. `firewall,dhcp`; `list_routers` and `check_router_health` are always kept. An unknown name stops the server at startup. See [Tool catalogue](#tool-catalogue) |
+| `MIKROMCP_ROUTERS` | — | The router registry inline, as YAML or JSON in the `routers.yaml` shape. Takes precedence over the config file — see [Routers from environment variables](#routers-from-environment-variables) |
+| `MIKROMCP_ROUTER_HOST`, `MIKROMCP_ROUTER_USER`, `MIKROMCP_ROUTER_PASS` | — | One router without a config file, used when neither `MIKROMCP_ROUTERS` nor the config file is present. Optional `MIKROMCP_ROUTER_ID`, `_PORT`, `_TLS`, `_TLS_FINGERPRINT`, `_TLS_INSECURE`, `_ROS_VERSION`, `_TAGS` — see [the variable table](#variables-for-a-single-router) |
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId`; falls back to the sole configured router when only one exists |
 | `MIKROMCP_DATA_DIR` | `~/.mikromcp/data` | Base directory for snapshots, the write journal and `swos/` (SwOS backups and firmware images, owner-only) |
 | `MIKROMCP_LOG_LEVEL` | `info` | Log verbosity: `trace` `debug` `info` `warn` `error` |
@@ -182,7 +241,7 @@ Credentials are never logged or included in tool responses.
 
 ### Default router resolution
 
-When a tool call omits `routerId`, MikroMCP resolves the target router in two steps: first it checks `MIKROMCP_DEFAULT_ROUTER`; if that is unset it falls back to the sole configured router (when exactly one is defined in `routers.yaml`). If neither condition is met (multiple routers, no default set) the call is rejected with a `VALIDATION` error (`MISSING_ROUTER_ID`) that lists the available routers. `mikromcp init` writes `MIKROMCP_DEFAULT_ROUTER` into `~/.mikromcp/.env` automatically, so single-router setups work without specifying `routerId` in every prompt.
+When a tool call omits `routerId`, MikroMCP resolves the target router in two steps: first it checks `MIKROMCP_DEFAULT_ROUTER`; if that is unset it falls back to the sole configured router (when exactly one is defined, in whichever [router source](#precedence) is used). If neither condition is met (multiple routers, no default set) the call is rejected with a `VALIDATION` error (`MISSING_ROUTER_ID`) that lists the available routers. `mikromcp init` writes `MIKROMCP_DEFAULT_ROUTER` into `~/.mikromcp/.env` automatically, so single-router setups work without specifying `routerId` in every prompt.
 
 ---
 

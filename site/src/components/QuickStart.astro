@@ -1,7 +1,29 @@
 ---
 import { SITE } from "../data/content.ts";
 
+// The Claude Desktop tab is a config snippet, not shell commands: no prompt, and
+// copied verbatim so it pastes as valid JSON.
 const tabs = [
+  {
+    id: "desktop",
+    label: "Claude Desktop",
+    config: true,
+    lines: [
+      "{",
+      '  "mcpServers": {',
+      '    "mikromcp": {',
+      '      "command": "npx",',
+      '      "args": ["-y", "mikromcp"],',
+      '      "env": {',
+      '        "MIKROMCP_ROUTER_HOST": "192.168.88.1",',
+      '        "MIKROMCP_ROUTER_USER": "mcp",',
+      '        "MIKROMCP_ROUTER_PASS": "your-password"',
+      "      }",
+      "    }",
+      "  }",
+      "}",
+    ],
+  },
   { id: "npm", label: "npm", lines: ["npm install -g mikromcp", "mikromcp init"] },
   { id: "binary", label: "Binary", lines: ["# Download from GitHub releases, then", "chmod +x mikromcp-linux-x64", "./mikromcp-linux-x64 init"] },
   { id: "docker", label: "Docker", lines: ["docker pull ghcr.io/alikarami/mikromcp:latest"] },
@@ -13,7 +35,7 @@ const tabs = [
       <p class="eyebrow" data-reveal>Install</p>
       <h2 class="h2 head" data-reveal>Up and running in minutes</h2>
       <p class="note" data-reveal>
-        <code class="mono">mikromcp init</code> runs a guided wizard, then open your AI assistant and just ask.
+        One router? Paste one block into <code class="mono">claude_desktop_config.json</code> and restart Claude: no install, no config file. For more, <code class="mono">mikromcp init</code> runs a guided wizard. Then just ask.
       </p>
       <p class="docs" data-reveal>
         <a href={`${SITE.docs}/getting-started/`} target="_blank" rel="noopener">Full Getting Started guide →</a>
@@ -33,9 +55,9 @@ const tabs = [
         <div class={`panel ${i === 0 ? "active" : ""}`} role="tabpanel" id={`qs-panel-${i}`}
           aria-labelledby={`qs-tab-${i}`} hidden={i !== 0}>
           <div class="code">
-            <button class="copy mono" data-copy={t.lines.join("\n")} aria-label={`Copy ${t.label} install command`}>Copy</button>
+            <button class="copy mono" data-copy={t.lines.join("\n")} aria-label={`Copy ${t.label} ${t.config ? "config" : "install command"}`}>Copy</button>
             <pre class="mono">{t.lines.map((l, j) => (
-              <div class={l.startsWith("#") ? "cl comment" : "cl"}>{!l.startsWith("#") && <span class="p" aria-hidden="true">$</span>}<span>{l}</span></div>
+              <div class={l.startsWith("#") ? "cl comment" : "cl"}>{!t.config && !l.startsWith("#") && <span class="p" aria-hidden="true">$</span>}<span>{l}</span></div>
             ))}</pre>
           </div>
         </div>

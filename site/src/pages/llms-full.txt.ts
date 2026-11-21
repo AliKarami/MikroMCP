@@ -33,6 +33,7 @@ ${faqLines}
 
 ## Install
 
+- One router, no install and no config file: have the MCP client run \`npx -y mikromcp\` with \`MIKROMCP_ROUTER_HOST\`, \`MIKROMCP_ROUTER_USER\` and \`MIKROMCP_ROUTER_PASS\` in its \`env\` block (HTTPS on port 443 by default; see the Configuration docs for port, TLS and fingerprint variables).
 - npm: \`npm install -g mikromcp\` then run \`mikromcp init\` (guided wizard that configures your router and can register MikroMCP with Claude Desktop).
 - Binary: download the standalone binary from the GitHub releases page (Linux x64/arm64, macOS x64/arm64, Windows x64), \`chmod +x\`, then run \`./mikromcp-linux-x64 init\`.
 - Docker: \`docker pull ghcr.io/alikarami/mikromcp:latest\`.

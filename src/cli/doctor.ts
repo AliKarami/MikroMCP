@@ -2,7 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import * as net from "node:net";
 import chalk from "chalk";
-import { RouterRegistry } from "../config/router-registry.js";
+import {
+  ENV_ROUTER_PREFIX,
+  INLINE_ROUTERS_VAR,
+  RouterRegistry,
+} from "../config/router-registry.js";
 import { privateKeyIsShared, privateKeyReadError } from "../config/ssh-key.js";
 import { getCredentials } from "../config/secrets.js";
 import { HttpError, RouterOSRestClient } from "../adapter/rest-client.js";
@@ -97,21 +101,48 @@ function checkNodeVersion(): void {
 // ─── Routers config ────────────────────────────────────────────────────────
 
 function checkRoutersConfig(configPath: string): RouterRegistry | null {
-  if (!existsSync(configPath)) {
-    fail(`Config file not found: ${configPath}`);
-    return null;
-  }
-
+  let registry: RouterRegistry;
   try {
-    const registry = new RouterRegistry(configPath);
-    const routers = registry.listRouters();
-    ok(`Config: ${configPath} (${routers.length} router${routers.length !== 1 ? "s" : ""})`);
-    return registry;
+    registry = new RouterRegistry(configPath);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     fail(`Config parse error: ${msg}`);
     return null;
   }
+
+  const routers = registry.listRouters();
+  const count = `${routers.length} router${routers.length !== 1 ? "s" : ""}`;
+  switch (registry.source) {
+    case "inline":
+      ok(`Config: ${INLINE_ROUTERS_VAR} environment variable (${count})`);
+      break;
+    case "file":
+      ok(`Config: ${configPath} (${count})`);
+      break;
+    case "env":
+      ok(
+        `Config: ${ENV_ROUTER_PREFIX}_* environment variables (${count}: ` +
+          `${routers.map((r) => `${r.id} at ${r.host}:${r.port}`).join(", ")})`,
+      );
+      break;
+    default:
+      fail(
+        `Config file not found: ${configPath} — and neither ${INLINE_ROUTERS_VAR} nor ` +
+          `${ENV_ROUTER_PREFIX}_HOST is set`,
+      );
+      indent(
+        chalk.dim(
+          `Hint: run mikromcp init, or set ${ENV_ROUTER_PREFIX}_HOST, ${ENV_ROUTER_PREFIX}_USER ` +
+            `and ${ENV_ROUTER_PREFIX}_PASS`,
+        ),
+      );
+      return null;
+  }
+
+  for (const ignored of registry.ignoredSources) {
+    warn(`${ignored} set but ignored — routers come from the higher-precedence source above`);
+  }
+  return registry;
 }
 
 // ─── Env vars check ────────────────────────────────────────────────────────

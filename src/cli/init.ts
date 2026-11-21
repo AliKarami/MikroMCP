@@ -491,6 +491,13 @@ function registerClaudeDesktop(): { registered: boolean; snippet?: string } {
 
 export async function runInit(): Promise<void> {
   console.log(chalk.bold.cyan("\n🔧  MikroMCP — Interactive Setup Wizard\n"));
+  console.log(
+    chalk.dim(
+      "  One router? You can skip this wizard: set MIKROMCP_ROUTER_HOST, MIKROMCP_ROUTER_USER\n" +
+        "  and MIKROMCP_ROUTER_PASS in your MCP client's env. A routers.yaml written here\n" +
+        "  takes precedence over those variables.\n",
+    ),
+  );
 
   // Step 0: warn if ~/.mikromcp/ already has config files
   const configDir = mikromcpDir();
