@@ -2,6 +2,7 @@ import type { ToolDefinition } from "./tool-definition.js";
 import { systemTools } from "./system-tools.js";
 import { interfaceTools } from "./interface-tools.js";
 import { ipTools } from "./ip-tools.js";
+import { ipv6Tools } from "./ipv6-tools.js";
 import { dhcpTools } from "./dhcp-tools.js";
 import { routeTools } from "./route-tools.js";
 import { firewallTools } from "./firewall-tools.js";
@@ -58,7 +59,7 @@ const baseToolsets = {
   containers: [...containerTools, ...containerConfigTools],
   interfaces: [...interfaceTools, ...bridgeTools, ...vlanTools, ...interfaceListTools],
   wireless: [...wifiTools],
-  ip: [...ipTools, ...ipPoolTools, ...ipServiceTools, ...dnsTools],
+  ip: [...ipTools, ...ipv6Tools, ...ipPoolTools, ...ipServiceTools, ...dnsTools],
   dhcp: [...dhcpTools, ...dhcpServerTools, ...dhcpClientTools],
   routing: [...routeTools, ...policyRoutingTools, ...routingProtocolTools, ...vrrpTools],
   firewall: [...firewallTools, ...mangleTools, ...addressListTools],

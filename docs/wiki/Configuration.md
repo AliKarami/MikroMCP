@@ -267,7 +267,7 @@ The toolset names:
 | `containers` | Containers and their config, envs and mounts |
 | `interfaces` | Interfaces, bridges and bridge ports, VLANs, interface lists |
 | `wireless` | WiFi interfaces and clients |
-| `ip` | IP addresses, pools, IP services, DNS |
+| `ip` | IPv4 and IPv6 addresses, IPv6 neighbors, DHCPv6 clients, pools, IP services, DNS |
 | `dhcp` | DHCP leases, servers and clients |
 | `routing` | Routes, policy routing, routing tables, BGP/OSPF reads, VRRP |
 | `firewall` | Filter and NAT rules, mangle rules, address lists |

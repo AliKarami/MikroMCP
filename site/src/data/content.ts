@@ -6,7 +6,7 @@ export const SITE = {
   tagline: "Open Source MikroTik MCP Server for RouterOS",
   github: "https://github.com/AliKarami/MikroMCP",
   docs: "https://docs.mikromcp.com",
-  toolCount: 133,
+  toolCount: 137,
   version: VERSION,
 };
 
@@ -19,9 +19,9 @@ export const stats = [
 
 export const features = [
   { icon: "compass", title: "Router management", body: "System status, clock, reboot, packages, files, scripts, scheduler jobs, containers." },
-  { icon: "globe", title: "Network operations", body: "Interfaces, VLANs, IP addresses, DHCP leases, DNS static records, bridge ports, WiFi clients." },
+  { icon: "globe", title: "Network operations", body: "Interfaces, VLANs, IPv4 and IPv6 addresses (EUI-64 and DHCPv6-PD pools), IPv6 neighbors, DHCP leases, DHCPv6 clients, DNS static records, bridge ports, WiFi clients." },
   { icon: "flame", title: "Firewall & policy", body: "Filter/NAT rules, mangle rules, address lists, route tables, routing rules." },
-  { icon: "route", title: "Routing visibility", body: "Static routes, routing tables, BGP peers, OSPF neighbors." },
+  { icon: "route", title: "Routing visibility", body: "IPv4 and IPv6 static routes, routing tables, BGP peers, OSPF neighbors." },
   { icon: "lock", title: "Secure access", body: "HTTP bearer auth, SSH private keys, bcrypt token hashes, RBAC, router/tool restrictions, confirmation tokens." },
   { icon: "activity", title: "Diagnostics", body: "Router-originated ping, traceroute, torch, log filtering, guarded SSH command execution." },
   { icon: "shield", title: "Change safety", body: "Dry-run, idempotent writes, snapshots, a searchable write journal (list_journal), plan_changes, apply_plan, rollback_change, and auto-revert for firewall writes: a scheduler job undoes the change unless the router still answers afterwards." },

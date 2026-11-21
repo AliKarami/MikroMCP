@@ -84,6 +84,9 @@ means it is already there. Jump rules need `jumpTarget`; reject rules may set `r
 |---|---|---|---|
 | List IP addresses on interfaces | `list_ip_addresses` | `ip/address` | read |
 | Add/remove an IP address on an interface | `manage_ip_address` | `ip/address` | destructive |
+| List IPv6 addresses (static, link-local, SLAAC, DHCPv6) | `list_ipv6_addresses` | `ipv6/address` | read |
+| Add/update/remove an IPv6 address (plain, EUI-64, or suffix from a DHCPv6-PD pool) | `manage_ipv6_address` | `ipv6/address` | destructive |
+| List IPv6 neighbors (the IPv6 ARP table) | `list_ipv6_neighbors` | `ipv6/neighbor` | read |
 | Get DNS resolver settings | `get_dns_settings` | `ip/dns` | read |
 | Manage DNS resolver settings | `manage_dns_settings` | `ip/dns` | destructive |
 | List static DNS entries | `list_dns_entries` | `ip/dns/static` | read |
@@ -102,12 +105,13 @@ means it is already there. Jump rules need `jumpTarget`; reject rules may set `r
 | Add/remove/toggle a DHCP server | `manage_dhcp_server` | `ip/dhcp-server` | destructive |
 | List DHCP clients (WAN-side) | `list_dhcp_clients` | `ip/dhcp-client` | read |
 | Add/remove/toggle a DHCP client | `manage_dhcp_client` | `ip/dhcp-client` | destructive |
+| List DHCPv6 clients and delegated prefixes | `list_dhcpv6_clients` | `ipv6/dhcp-client` | read |
 
 ## Routing
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
-| List static routes | `list_routes` | `ip/route` | read |
-| Add/remove a static route | `manage_route` | `ip/route` | destructive |
+| List static routes (`family: ipv6` for IPv6) | `list_routes` | `ip/route`, `ipv6/route` | read |
+| Add/remove a static route (`family: ipv6` for IPv6) | `manage_route` | `ip/route`, `ipv6/route` | destructive |
 | List routing rules (policy routing) | `list_routing_rules` | `routing/rule` | read |
 | Add/remove a routing rule | `manage_routing_rule` | `routing/rule` | destructive |
 | List routing tables | `list_routing_tables` | `routing/table` | read |
