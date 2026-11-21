@@ -16,6 +16,7 @@ function makeContext(leases: Record<string, unknown>[]): ToolContext {
       get: vi.fn().mockResolvedValue(leases),
       create: vi.fn().mockResolvedValue({ ".id": "*1" }),
       update: vi.fn().mockResolvedValue(undefined),
+      execute: vi.fn().mockResolvedValue([]),
       remove: vi.fn().mockResolvedValue(undefined),
     } as unknown as RouterOSRestClient,
   };
@@ -212,9 +213,11 @@ describe("manage_dhcp_lease", () => {
     );
     const sc = result.structuredContent as Record<string, unknown>;
     expect(sc.action).toBe("made-static");
-    expect(ctx.routerClient.update).toHaveBeenCalledWith("ip/dhcp-server/lease", "*1", {
-      dynamic: "false",
+    expect(ctx.routerClient.execute).toHaveBeenCalledWith("ip/dhcp-server/lease/make-static", {
+      ".id": "*1",
     });
+    // `dynamic` is read-only on RouterOS; patching it is rejected with HTTP 400 (#158).
+    expect(ctx.routerClient.update).not.toHaveBeenCalled();
   });
 
   it("throws NOT_FOUND when MAC not in lease table", async () => {
@@ -269,6 +272,7 @@ describe("manage_dhcp_lease", () => {
     const sc = result.structuredContent as Record<string, unknown>;
     expect(sc.action).toBe("dry_run");
     expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    expect(ctx.routerClient.execute).not.toHaveBeenCalled();
   });
 
   it("dry_run for remove returns diff without removing", async () => {
@@ -314,6 +318,7 @@ describe("manage_dhcp_lease", () => {
     const sc = result.structuredContent as Record<string, unknown>;
     expect(sc.action).toBe("already_static");
     expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    expect(ctx.routerClient.execute).not.toHaveBeenCalled();
   });
 
   it("returns already_static when lease is already static (dynamic: boolean false)", async () => {
@@ -331,5 +336,6 @@ describe("manage_dhcp_lease", () => {
     const sc = result.structuredContent as Record<string, unknown>;
     expect(sc.action).toBe("already_static");
     expect(ctx.routerClient.update).not.toHaveBeenCalled();
+    expect(ctx.routerClient.execute).not.toHaveBeenCalled();
   });
 });
