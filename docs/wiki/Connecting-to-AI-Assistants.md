@@ -49,7 +49,7 @@ Verify registration:
 claude mcp list
 ```
 
-You should see `mikromcp` in the list. On the next `claude` session start, all 133 MikroMCP tools will be available automatically.
+You should see `mikromcp` in the list. On the next `claude` session start, all 137 MikroMCP tools will be available automatically.
 
 To pass environment variables directly in the registration (useful if you do not want to rely on shell exports):
 

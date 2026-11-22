@@ -81,6 +81,8 @@ export const SEMANTIC_KEYS: Record<string, readonly string[]> = {
   "ipv6/firewall/mangle": ["comment"],
   "ipv6/firewall/address-list": ["list", "address"],
   "ip/address": ["address", "interface"],
+  "ipv6/route": ["dst-address", "gateway", "routing-table"],
+  "ipv6/address": ["address", "interface"],
   "ip/dns/static": ["name", "type"],
   "routing/rule": ["src-address", "routing-table"],
   "routing/table": ["name"],

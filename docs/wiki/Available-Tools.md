@@ -1,6 +1,6 @@
 # Available Tools
 
-All 133 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 137 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them. Every write-tool response states what happened in an `applied` boolean: `true` when the call ran its write path, `false` on a dry run — and a dry run's text always starts with `NOT APPLIED — dry run only. Pass dryRun: false to write this change.`, so a preview cannot be mistaken for a write. Note that `write_swos_blob` and the SwOS maintenance tools default to `dryRun: true` (preview first); the RouterOS write tools default to `false`.
 
@@ -583,6 +583,78 @@ Add, update, or remove an IP address on an interface.
 
 ---
 
+## IPv6
+
+### `list_ipv6_addresses` — Read
+
+List IPv6 addresses (`/ipv6/address`), including dynamic ones (link-local, SLAAC, DHCPv6), with their EUI-64, advertise and from-pool settings.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Only addresses on this interface |
+| `disabled` | `true` \| `false` \| `all` | `all` | Filter by disabled state |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which IPv6 addresses does core-01 have on bridge?"
+
+---
+
+### `manage_ipv6_address` — Write · Destructive · Idempotent
+
+Add, update, or remove a static IPv6 address. Idempotent by address and interface, compared in canonical form (`2001:DB8:0::1/64` equals `2001:db8::1/64`): an identical add returns `already_exists`, the same address with other settings or on another interface is a `CONFLICT`, an update with nothing to change returns `no_change`, and updating or removing a missing address is `NOT_FOUND`. With `eui64`, `address` is the prefix and RouterOS generates the interface ID from the MAC; the address is matched by that prefix. With `fromPool`, `address` is only the suffix (e.g. `::1/64`, prefix bits zero) and the prefix comes from the pool, typically one a DHCPv6 client fills by prefix delegation; the address is matched by that suffix. An address read back from `list_ipv6_addresses` can always be updated or removed as printed, without `eui64` or `fromPool`. Dynamic addresses (link-local, SLAAC, DHCPv6) are refused. `eui64` and `fromPool` cannot be changed by `update`: remove and re-add.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `update` \| `remove` | — | Operation to perform |
+| `address` | string | — | IPv6 address with prefix length (e.g. `2001:db8::1/64`); with `eui64` the prefix (`2001:db8:1::/64`); with `fromPool` the suffix (`::1/64`) |
+| `interface` | string | — | Interface name |
+| `eui64` | boolean | `false` | Generate the last 64 bits from the interface MAC; prefix length must be 64 or shorter |
+| `fromPool` | string | — | IPv6 pool that supplies the prefix (e.g. filled by DHCPv6-PD) |
+| `advertise` | boolean | — | Advertise the prefix in router advertisements (SLAAC); omit to keep RouterOS's default |
+| `noDad` | boolean | — | Skip duplicate address detection; omit to keep RouterOS's default |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Whether the address should be disabled |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add 2001:db8:10::1/64 to bridge on core-01 and advertise it to clients." / "Give vlan10 on core-01 the address ::1/64 from the pd-pool prefix."
+
+---
+
+### `list_ipv6_neighbors` — Read
+
+List the IPv6 neighbor table (`/ipv6/neighbor`), the IPv6 counterpart of ARP: address, MAC, interface, state, and whether the neighbor is a router.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Only neighbors on this interface |
+| `status` | string | — | Only neighbors in this state (e.g. `reachable`, `stale`, `delay`, `probe`, `failed`, `noarp`) |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which IPv6 routers does core-01 see on ether1?"
+
+---
+
+### `list_dhcpv6_clients` — Read
+
+List DHCPv6 clients (`/ipv6/dhcp-client`): what each requests, its status, the delegated prefix, the pool it fills and its prefix length, and whether it adds a default route or uses the peer's DNS.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Only the client on this interface |
+| `status` | string | — | Only clients in this state (e.g. `bound`, `searching`, `stopped`) |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "What IPv6 prefix did core-01's ISP delegate on ether1?"
+
+---
+
 ## DNS
 
 ### `list_dns_entries` — Read
@@ -915,37 +987,39 @@ Enable or disable the OpenVPN server, or update its configuration. Enable/disabl
 
 ### `list_routes` — Read
 
-List the routing table with optional filtering.
+List the routing table with optional filtering. IPv4 (`/ip/route`) by default; `family: ipv6` reads `/ipv6/route`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
+| `family` | `ip` \| `ipv6` | `ip` | Address family: IPv4 or IPv6 routing table |
 | `activeOnly` | boolean | `false` | Only return active routes |
 | `staticOnly` | boolean | `false` | Only return static routes |
 | `limit` | integer | `100` | Results per page (1–500) |
 | `offset` | integer | `0` | Pagination offset |
 
-**Example prompt:** "Show me the active routes on core-01."
+**Example prompt:** "Show me the active routes on core-01." / "List the IPv6 routes on core-01."
 
 ---
 
 ### `manage_route` — Write · Destructive · Idempotent
 
-Add or remove a static route. Plain IP addresses without a prefix are auto-converted to `/32`.
+Add or remove a static route, IPv4 by default or IPv6 with `family: ipv6` (written to `/ipv6/route`). Plain addresses without a prefix become `/32` (IPv4) or `/128` (IPv6). IPv6 destinations and gateways are compared in canonical form, so `2001:DB8:0::/32` and `2001:db8::/32` are the same route. The destination and gateway must match `family`; a link-local IPv6 gateway needs its interface (`fe80::1%ether1`).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` | — | Operation to perform |
-| `dstAddress` | string | — | Destination network in CIDR (e.g. `10.0.0.0/8`); plain IP becomes `/32` |
-| `gateway` | string | — | Next-hop gateway IP |
+| `family` | `ip` \| `ipv6` | `ip` | Address family: `/ip/route` or `/ipv6/route` |
+| `dstAddress` | string | — | Destination network in CIDR (e.g. `10.0.0.0/8`, `2001:db8::/32`); a plain address becomes `/32` or `/128` |
+| `gateway` | string | — | Next hop: IPv4 address, IPv6 address, link-local address with interface (`fe80::1%ether1`), or interface name |
 | `distance` | integer | `1` | Administrative distance (1–255) |
 | `routingTable` | string | — | Routing table name (omit for main table) |
 | `comment` | string | — | Optional comment |
 | `disabled` | boolean | `false` | Whether the route should be disabled |
 | `dryRun` | boolean | `false` | Preview without applying |
 
-**Example prompt:** "Add a static route for 10.10.0.0/16 via 192.168.1.254 on core-01."
+**Example prompt:** "Add a static route for 10.10.0.0/16 via 192.168.1.254 on core-01." / "Add an IPv6 default route ::/0 via fe80::1%ether1 on core-01."
 
 ---
 
