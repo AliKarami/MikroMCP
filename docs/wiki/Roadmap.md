@@ -234,6 +234,10 @@ Contributed by [@f0086](https://github.com/f0086).
 
 ---
 
+## ✅ v1.18 — IPv6, Raw Firewall, Bridge VLANs, Lean Catalogues
+
+IPv6 addresses, neighbors, DHCPv6 clients and routes; the IPv4 and IPv6 filter, nat and raw tables, with rule reordering, `jump-target` and `reject-with`; and the bridge VLAN table with port PVIDs and `vlanFiltering` (133 → 140 tools). A single router runs from three `MIKROMCP_ROUTER_*` variables without a `routers.yaml`, `reload_config` and `SIGHUP` re-read the config files, and `MIKROMCP_READ_ONLY` / `MIKROMCP_TOOLSETS` shrink the tool list. The HTTP transport checks Host, Origin and client IP before authentication.
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

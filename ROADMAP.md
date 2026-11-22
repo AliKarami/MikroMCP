@@ -449,6 +449,15 @@ Contributed by [@f0086](https://github.com/f0086).
 
 ---
 
+## ✅ v1.18 — IPv6, Raw Firewall, Bridge VLANs, Lean Catalogues (133 → 140 tools)
+
+**Goal:** Close the largest RouterOS coverage gaps found in the competitive analysis, and make MikroMCP easier to start and cheaper to keep in context.
+
+- **IPv6 and firewall depth.** IPv6 addresses, neighbors, DHCPv6 clients and IPv6 routes; the IPv4 and IPv6 filter, nat and raw tables; rule reordering with `move` (guarded by auto-revert); `jump-target` and `reject-with`.
+- **Bridge VLAN filtering.** The bridge VLAN table, port PVID, frame types and ingress filtering, and `vlanFiltering` with lock-out warnings.
+- **Easier to run.** A single router from three `MIKROMCP_ROUTER_*` variables with no `routers.yaml`; `reload_config` and `SIGHUP` re-read `routers.yaml` and `identities.yaml`; `MIKROMCP_READ_ONLY` and `MIKROMCP_TOOLSETS` shrink the tool list to fit small context windows, and HTTP `tools/list` follows the caller's identity.
+- **Hardening.** Host, Origin and client-IP checks on the HTTP transport, and a read-back for SwOS management writes the switch no longer answers.
+
 ## Guiding principles
 
 - **Each milestone ships working tools.** No half-finished features held open across versions.

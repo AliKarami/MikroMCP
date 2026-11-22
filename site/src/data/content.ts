@@ -20,14 +20,14 @@ export const stats = [
 export const features = [
   { icon: "compass", title: "Router management", body: "System status, clock, reboot, packages, files, scripts, scheduler jobs, containers." },
   { icon: "globe", title: "Network operations", body: "Interfaces, VLANs, IPv4 and IPv6 addresses (EUI-64 and DHCPv6-PD pools), IPv6 neighbors, DHCP leases, DHCPv6 clients, DNS static records, bridge ports and bridge VLAN filtering with lock-out warnings, WiFi clients." },
-  { icon: "flame", title: "Firewall & policy", body: "Filter/NAT rules, mangle rules, address lists, route tables, routing rules." },
+  { icon: "flame", title: "Firewall & policy", body: "IPv4 and IPv6 filter, NAT and raw rules with reordering, mangle rules, address lists, route tables, routing rules." },
   { icon: "route", title: "Routing visibility", body: "IPv4 and IPv6 static routes, routing tables, BGP peers, OSPF neighbors." },
-  { icon: "lock", title: "Secure access", body: "HTTP bearer auth, SSH private keys, bcrypt token hashes, RBAC, router/tool restrictions, confirmation tokens." },
+  { icon: "lock", title: "Secure access", body: "HTTP bearer auth with Host, Origin and client-IP checks, SSH private keys, bcrypt token hashes, RBAC, router/tool restrictions, confirmation tokens, and a read-only tool catalogue." },
   { icon: "activity", title: "Diagnostics", body: "Router-originated ping, traceroute, torch, log filtering, guarded SSH command execution." },
   { icon: "shield", title: "Change safety", body: "Dry-run, idempotent writes, snapshots, a searchable write journal (list_journal), plan_changes, apply_plan, rollback_change, and auto-revert for firewall writes: a scheduler job undoes the change unless the router still answers afterwards." },
   { icon: "switch", title: "SwOS switches", body: "MikroTik SwOS and SwOS Lite switches over their .b HTTP API: port, PoE and SFP status, the whole switch config as one YAML document with dry-run and lockout checks, backups, firmware upgrades." },
   { icon: "layers", title: "Fleet operations", body: "Discover configured routers with list_routers, then fan a tool out across them by id or tag with bulk_execute, or with bulk_read, which runs read-only tools only." },
-  { icon: "settings", title: "Production behavior", body: "Retries for read tools, per-router circuit breakers, correlation IDs, structured logs, audit logs." },
+  { icon: "settings", title: "Production behavior", body: "Retries for read tools, per-router circuit breakers, correlation IDs, structured logs, audit logs, config reload without a restart, and per-area toolsets that fit small context windows." },
 ];
 
 export const examples = [
