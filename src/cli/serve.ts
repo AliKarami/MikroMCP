@@ -44,6 +44,9 @@ export async function runServe(): Promise<void> {
         bindHost: config.bindHost,
         maxBodyBytes: config.http.maxBodyBytes,
         rateLimitRpm: config.http.rateLimitRpm,
+        allowedHosts: config.http.allowedHosts,
+        allowedOrigins: config.http.allowedOrigins,
+        allowedIps: config.http.allowedIps,
       },
       identityRegistry,
     );

@@ -4,6 +4,10 @@ services:
     environment:
       MIKROMCP_TRANSPORT: http
       MIKROMCP_PORT: 3000
+      # The published port only reaches a server bound to all interfaces.
+      MIKROMCP_BIND_HOST: 0.0.0.0
+      # Names clients use to reach the server (DNS-rebinding check); add your host's DNS name.
+      MIKROMCP_HTTP_ALLOWED_HOSTS: localhost,127.0.0.1
       MIKROMCP_CONFIG_PATH: /app/config/routers.yaml
       MIKROMCP_IDENTITIES_PATH: /app/config/identities.yaml
       MIKROMCP_CONFIRMATION_SECRET: ${MIKROMCP_CONFIRMATION_SECRET}

@@ -8,6 +8,7 @@ import type { IdentityRegistry } from "../../config/identity-registry.js";
 import { authenticateHttp, withIdentity } from "../../middleware/auth.js";
 import { MikroMCPError } from "../../domain/errors/error-types.js";
 import { renderPrometheus } from "../../observability/metrics.js";
+import { createRequestGuard, isLoopbackBind } from "../../middleware/request-guard.js";
 
 const log = createLogger("transport-http");
 
@@ -150,6 +151,9 @@ export interface HttpTransportConfig {
   bindHost: string;
   maxBodyBytes: number;
   rateLimitRpm: number;
+  allowedHosts?: string[];
+  allowedOrigins?: string[];
+  allowedIps?: string[];
 }
 
 export async function connectHttp(
@@ -158,6 +162,18 @@ export async function connectHttp(
   identityRegistry: IdentityRegistry,
 ): Promise<Server> {
   const { port, bindHost, maxBodyBytes, rateLimitRpm } = config;
+  const guard = createRequestGuard({
+    bindHost,
+    allowedHosts: config.allowedHosts ?? [],
+    allowedOrigins: config.allowedOrigins ?? [],
+    allowedIps: config.allowedIps ?? [],
+  });
+  if (!guard.hostCheckActive && !isLoopbackBind(bindHost)) {
+    log.warn(
+      { bindHost },
+      "DNS-rebinding protection is off: the server is bound to a non-loopback address and MIKROMCP_HTTP_ALLOWED_HOSTS is not set. Set it to the name clients use (e.g. mcp.example.com) to check the Host and Origin headers.",
+    );
+  }
   const checkRateLimit = createRateLimiter(rateLimitRpm);
   const sweepTimer = setInterval(() => checkRateLimit.sweep(), 60_000);
   sweepTimer.unref();
@@ -186,6 +202,14 @@ export async function connectHttp(
     if (pathname === "/healthz") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    const verdict = guard.check(req);
+    if (!verdict.ok) {
+      log.warn({ ip, code: verdict.code, path: pathname }, "HTTP request refused by allow list");
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: verdict.error, code: verdict.code, hint: verdict.hint }));
       return;
     }
 
