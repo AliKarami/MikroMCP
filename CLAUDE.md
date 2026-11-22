@@ -225,6 +225,8 @@ Two transports:
 | `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry |
 | `MIKROMCP_READ_ONLY` | `false` | `true` registers only read-only tools (write tools cannot be called at all) |
 | `MIKROMCP_TOOLSETS` | — | Comma-separated toolsets to register (`toolsets` in `src/domain/tools/index.ts`); `list_routers` and `check_router_health` always stay |
+| `MIKROMCP_ROUTERS` | — | Router registry inline (YAML or JSON, `routers.yaml` shape); wins over the config file. Precedence: `MIKROMCP_ROUTERS` → config file → `MIKROMCP_ROUTER_*` (`RouterRegistry.source`) |
+| `MIKROMCP_ROUTER_HOST` | — | One router with no config file (id `default`, HTTPS 443, CA-verified); used only when neither of the above is present. Credentials `MIKROMCP_ROUTER_USER`/`_PASS`; optional `_ID`, `_PORT`, `_TLS`, `_TLS_FINGERPRINT`, `_TLS_INSECURE`, `_ROS_VERSION`, `_TAGS` |
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId` (falls back to the sole router if only one is configured) |
 | `MIKROMCP_LOG_LEVEL` | `info` | `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP transport only |

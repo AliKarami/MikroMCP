@@ -14,9 +14,10 @@ vi.mock("chalk", () => {
   return { default: chalkFn };
 });
 
-vi.mock("../../../src/config/router-registry.js", () => ({
-  RouterRegistry: vi.fn(),
-}));
+vi.mock("../../../src/config/router-registry.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/config/router-registry.js")>();
+  return { ...actual, RouterRegistry: vi.fn() };
+});
 
 vi.mock("../../../src/config/secrets.js", () => ({
   getCredentials: vi.fn(),
@@ -64,7 +65,7 @@ import * as fsModule from "node:fs";
 import * as netModule from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { RouterRegistry } from "../../../src/config/router-registry.js";
+import { RouterRegistry, type RouterSource } from "../../../src/config/router-registry.js";
 import { getCredentials } from "../../../src/config/secrets.js";
 import { HttpError, RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { SwosClient } from "../../../src/adapter/swos-client.js";
@@ -80,6 +81,14 @@ const mockLoadAppConfig = vi.mocked(loadAppConfig);
 const mockExistsSync = vi.mocked(fsModule.existsSync);
 const mockReadFileSync = vi.mocked(fsModule.readFileSync);
 const mockCreateConnection = vi.mocked(netModule.createConnection);
+
+function fakeRegistry(
+  routers: unknown[],
+  source: RouterSource = "file",
+  ignoredSources: string[] = [],
+): RouterRegistry {
+  return { listRouters: () => routers, source, ignoredSources } as unknown as RouterRegistry;
+}
 
 // ─── Test router fixture ─────────────────────────────────────────────────────
 
@@ -196,9 +205,7 @@ describe("runDoctor", () => {
     it("passes with current Node.js version ≥22", async () => {
       // Current test runner must be Node 22+ as required by engines
       mockExistsSync.mockReturnValue(false);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
 
       const { runDoctor } = await import("../../../src/cli/doctor.js");
       await runDoctor();
@@ -219,9 +226,7 @@ describe("runDoctor", () => {
         // config file missing, everything else can be false
         return false;
       });
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
 
       const { runDoctor } = await import("../../../src/cli/doctor.js");
       await runDoctor();
@@ -234,12 +239,7 @@ describe("runDoctor", () => {
     it("reports success with router count when config is valid", async () => {
       const router = makeRouter();
       mockExistsSync.mockImplementation(() => true);
-      MockRouterRegistry.mockImplementation(
-        () =>
-          ({
-            listRouters: () => [router],
-          }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([router]));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "secret" });
 
       const mockClient = {
@@ -267,9 +267,7 @@ describe("runDoctor", () => {
     it("warns about a RouterOS router binding a secret whose variable is unset", async () => {
       const router = { ...makeRouter(), secrets: ["BACKUP"] };
       mockExistsSync.mockImplementation(() => true);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [router] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([router]));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "secret" });
       MockRouterOSRestClient.mockImplementation(
         () =>
@@ -310,16 +308,87 @@ describe("runDoctor", () => {
     });
   });
 
+  describe("Router source", () => {
+    const envRouter = {
+      ...makeRouter({ id: "default", host: "192.0.2.1" }),
+      credentials: { source: "env" as const, envPrefix: "MIKROMCP_ROUTER" },
+    };
+
+    async function runWith(registry: RouterRegistry): Promise<string> {
+      mockExistsSync.mockReturnValue(false);
+      MockRouterRegistry.mockImplementation(() => registry);
+      MockRouterOSRestClient.mockImplementation(
+        () =>
+          ({
+            get: vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED")),
+            close: vi.fn(),
+          }) as unknown as RouterOSRestClient,
+      );
+      mockCreateConnection.mockReturnValue(makeTcpSocket(false) as unknown as net.Socket);
+      const { runDoctor } = await import("../../../src/cli/doctor.js");
+      await runDoctor();
+      return consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    }
+
+    it("reports routers synthesised from the MIKROMCP_ROUTER_* variables", async () => {
+      vi.stubEnv("MIKROMCP_ROUTER_USER", "mcp");
+      vi.stubEnv("MIKROMCP_ROUTER_PASS", "pw");
+      try {
+        mockGetCredentials.mockReturnValue({ username: "mcp", password: "pw" });
+        const output = await runWith(fakeRegistry([envRouter], "env"));
+        expect(output).toMatch(
+          /✅.*Config: MIKROMCP_ROUTER_\* environment variables \(1 router: default at 192\.0\.2\.1:443\)/,
+        );
+        expect(output).toMatch(/✅.*Env vars: all router credentials present/);
+        expect(output).toMatch(/Default router: default \(sole configured router/);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("names the MIKROMCP_ROUTER credential variables when they are missing", async () => {
+      vi.stubEnv("MIKROMCP_ROUTER_USER", undefined);
+      vi.stubEnv("MIKROMCP_ROUTER_PASS", undefined);
+      try {
+        const output = await runWith(fakeRegistry([envRouter], "env"));
+        expect(output).toMatch(
+          /❌.*Missing credential env vars: MIKROMCP_ROUTER_USER, MIKROMCP_ROUTER_PASS/,
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("reports routers from MIKROMCP_ROUTERS", async () => {
+      const output = await runWith(fakeRegistry([makeRouter(), makeRouter()], "inline"));
+      expect(output).toMatch(/✅.*Config: MIKROMCP_ROUTERS environment variable \(2 routers\)/);
+    });
+
+    it("warns about each lower-precedence source that is ignored", async () => {
+      const output = await runWith(
+        fakeRegistry([makeRouter()], "file", ["MIKROMCP_ROUTER_* variables"]),
+      );
+      expect(output).toMatch(/✅.*Config: config\/routers\.yaml \(1 router\)/);
+      expect(output).toMatch(
+        /⚠️.*MIKROMCP_ROUTER_\* variables set but ignored — routers come from the higher-precedence source/,
+      );
+    });
+
+    it("explains both ways to configure a router when no source is set", async () => {
+      const output = await runWith(fakeRegistry([], "none"));
+      expect(output).toMatch(
+        /❌.*Config file not found: config\/routers\.yaml — and neither MIKROMCP_ROUTERS nor MIKROMCP_ROUTER_HOST is set/,
+      );
+      expect(output).toMatch(/Hint: run mikromcp init, or set MIKROMCP_ROUTER_HOST/);
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
   describe("Router connectivity", () => {
     it("reports success for reachable router with read policy", async () => {
       const router = makeRouter({ host: "10.0.0.1" });
       mockExistsSync.mockReturnValue(true);
-      MockRouterRegistry.mockImplementation(
-        () =>
-          ({
-            listRouters: () => [router],
-          }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([router]));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "pass" });
 
       const mockClient = {
@@ -356,12 +425,7 @@ describe("runDoctor", () => {
     it("reports failure when REST API is unreachable — does not throw", async () => {
       const router = makeRouter({ host: "10.0.0.2" });
       mockExistsSync.mockReturnValue(true);
-      MockRouterRegistry.mockImplementation(
-        () =>
-          ({
-            listRouters: () => [router],
-          }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([router]));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "pass" });
 
       const mockClient = {
@@ -389,12 +453,7 @@ describe("runDoctor", () => {
     it("reports warning for SSH not reachable", async () => {
       const router = makeRouter({ sshPort: 2222 });
       mockExistsSync.mockReturnValue(true);
-      MockRouterRegistry.mockImplementation(
-        () =>
-          ({
-            listRouters: () => [router],
-          }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([router]));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "pass" });
 
       // REST ok, SSH fails
@@ -443,9 +502,7 @@ describe("runDoctor", () => {
     function setupSwitch(get: ReturnType<typeof vi.fn>) {
       const sw = makeSwitch();
       mockExistsSync.mockReturnValue(true);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [sw] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([sw]));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "pass" });
       const mockClient = { get, close: vi.fn() };
       MockSwosClient.mockImplementation(() => mockClient as unknown as SwosClient);
@@ -501,9 +558,7 @@ describe("runDoctor", () => {
           .mockResolvedValue({ identity: "access-sw", model: "CSS106-5G-1S", version: "2.16" }),
       );
       const bound = { ...makeSwitch(), secrets: ["SNMP_COMMUNITY"] };
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [bound] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([bound]));
       delete process.env.MIKROMCP_SECRET_SNMP_COMMUNITY;
       const { runDoctor } = await import("../../../src/cli/doctor.js");
       await runDoctor();
@@ -520,9 +575,7 @@ describe("runDoctor", () => {
       consoleSpy.mockClear();
       process.env.MIKROMCP_SECRET_SNMP_COMMUNITY = "c0mmunity";
       try {
-        MockRouterRegistry.mockImplementation(
-          () => ({ listRouters: () => [makeSwitch()] }) as unknown as RouterRegistry,
-        );
+        MockRouterRegistry.mockImplementation(() => fakeRegistry([makeSwitch()]));
         await runDoctor();
         allOutput = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
         expect(allOutput).not.toMatch(/binds secret/);
@@ -567,9 +620,7 @@ describe("runDoctor", () => {
         credentials: { source: "env" as const, envPrefix: "ROUTER_CORE" },
       };
       mockExistsSync.mockReturnValue(true);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [sw, router] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([sw, router]));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "" });
       MockSwosClient.mockImplementation(
         () => ({ get: vi.fn().mockResolvedValue({}), close: vi.fn() }) as unknown as SwosClient,
@@ -609,9 +660,7 @@ describe("runDoctor", () => {
   describe("Claude Desktop check", () => {
     it("reports registered when mikrotik-mcp-server key present", async () => {
       mockExistsSync.mockReturnValue(true);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
@@ -635,9 +684,7 @@ describe("runDoctor", () => {
         if (path === ".env" || path === ".env.local") return false;
         return false;
       });
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
@@ -655,9 +702,7 @@ describe("runDoctor", () => {
   describe("Default router check", () => {
     function setupRouters(routers: ReturnType<typeof makeRouter>[]) {
       mockExistsSync.mockReturnValue(true);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => routers }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry(routers));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "pass" });
       const mockClient = {
         get: vi.fn().mockResolvedValue([{ version: "7.14" }]),
@@ -738,9 +783,7 @@ describe("runDoctor", () => {
     async function runWithKey(keyPath: string): Promise<string> {
       const router = makeRouter({ sshPrivateKeyPath: keyPath });
       mockExistsSync.mockImplementation(() => true);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [router] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([router]));
       mockGetCredentials.mockReturnValue({ username: "admin", password: "secret" });
       const mockClient = {
         get: vi.fn().mockResolvedValue([{ version: "7.14" }]),
@@ -779,9 +822,7 @@ describe("runDoctor", () => {
   describe("Usage skill check", () => {
     it("reports installed when the skill exists in ~/.claude/skills", async () => {
       mockLoadAppConfig.mockReturnValue(makeAppConfig() as ReturnType<typeof loadAppConfig>);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
@@ -798,9 +839,7 @@ describe("runDoctor", () => {
 
     it("warns when the skill is not installed", async () => {
       mockLoadAppConfig.mockReturnValue(makeAppConfig() as ReturnType<typeof loadAppConfig>);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
@@ -817,9 +856,7 @@ describe("runDoctor", () => {
   describe("Update check", () => {
     it("reports up to date when versions match", async () => {
       mockExistsSync.mockReturnValue(false);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
@@ -843,9 +880,7 @@ describe("runDoctor", () => {
 
     it("is non-fatal when update fetch fails", async () => {
       mockExistsSync.mockReturnValue(false);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
@@ -863,9 +898,7 @@ describe("runDoctor", () => {
 
     it("warns when update is available", async () => {
       mockExistsSync.mockReturnValue(false);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
@@ -891,6 +924,7 @@ describe("runDoctor", () => {
         ...over,
       } as ReturnType<typeof loadAppConfig>);
       mockExistsSync.mockReturnValue(false);
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );
@@ -920,9 +954,7 @@ describe("runDoctor", () => {
       );
       const router = makeRouter();
       mockExistsSync.mockReturnValue(true);
-      MockRouterRegistry.mockImplementation(
-        () => ({ listRouters: () => [router] }) as unknown as RouterRegistry,
-      );
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([router]));
       // Set env vars so they pass
       process.env.ROUTER_CORE01_USER = "admin";
       process.env.ROUTER_CORE01_PASS = "pass";
@@ -962,6 +994,7 @@ describe("runDoctor", () => {
         http: { ...base.http, ...http },
       } as ReturnType<typeof loadAppConfig>);
       mockExistsSync.mockReturnValue(false);
+      MockRouterRegistry.mockImplementation(() => fakeRegistry([], "none"));
       MockIdentityRegistry.mockImplementation(
         () => ({ getIdentities: () => [] }) as unknown as IdentityRegistry,
       );

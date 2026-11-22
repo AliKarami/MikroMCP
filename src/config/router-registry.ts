@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { parse } from "yaml";
+import { parse, YAMLError } from "yaml";
 import { z } from "zod";
 import type { DeviceType, RouterConfig } from "../types.js";
 import { MikroMCPError, ErrorCategory } from "../domain/errors/error-types.js";
@@ -133,33 +133,256 @@ const ConfigFileSchema = z
   })
   .strict();
 
+/**
+ * Where the registry's routers came from, highest precedence first:
+ * `inline` (MIKROMCP_ROUTERS), `file` (routers.yaml), `env` (the flat
+ * MIKROMCP_ROUTER_* variables), or `none`.
+ */
+export type RouterSource = "inline" | "file" | "env" | "none";
+
+export const INLINE_ROUTERS_VAR = "MIKROMCP_ROUTERS";
+export const ENV_ROUTER_PREFIX = "MIKROMCP_ROUTER";
+const ENV_ROUTER_HOST_VAR = `${ENV_ROUTER_PREFIX}_HOST`;
+const ENV_ROUTER_DEFAULT_ID = "default";
+
+/** Router field -> the flat variable that sets it; `_USER` and `_PASS` are read by secrets.ts. */
+const ENV_ROUTER_FIELDS: Record<string, string> = {
+  host: "HOST",
+  port: "PORT",
+  "tls.enabled": "TLS",
+  "tls.rejectUnauthorized": "TLS_INSECURE",
+  "tls.fingerprint": "TLS_FINGERPRINT",
+  tags: "TAGS",
+  rosVersion: "ROS_VERSION",
+};
+const ENV_ROUTER_SETTINGS = [
+  "ID",
+  "HOST",
+  "PORT",
+  "TLS",
+  "TLS_INSECURE",
+  "TLS_FINGERPRINT",
+  "ROS_VERSION",
+  "TAGS",
+].map((name) => `${ENV_ROUTER_PREFIX}_${name}`);
+
+type ConfigFile = z.infer<typeof ConfigFileSchema>;
+
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function issueLines(error: z.ZodError, pathName: (path: (string | number)[]) => string): string {
+  return error.errors.map((e) => `  ${pathName(e.path)}: ${e.message}`).join("\n");
+}
+
+function dottedPath(path: (string | number)[]): string {
+  return path.length > 0 ? path.join(".") : "(root)";
+}
+
+/** `routers.<id>.port` -> `MIKROMCP_ROUTER_PORT`, so an error names the variable to fix. */
+function envVarPath(path: (string | number)[]): string {
+  const field = ENV_ROUTER_FIELDS[path.slice(2).join(".")] ?? ENV_ROUTER_FIELDS[String(path[2])];
+  return field ? `${ENV_ROUTER_PREFIX}_${field}` : dottedPath(path);
+}
+
+function envBoolean(env: NodeJS.ProcessEnv, name: string): boolean | undefined {
+  const raw = nonEmpty(env[name]);
+  if (raw === undefined) return undefined;
+  const value = raw.toLowerCase();
+  if (["true", "yes", "1"].includes(value)) return true;
+  if (["false", "no", "0"].includes(value)) return false;
+  throw new Error(`${name} must be true or false, got "${raw}".`);
+}
+
+function envPort(env: NodeJS.ProcessEnv, fallback: number): number {
+  const name = `${ENV_ROUTER_PREFIX}_PORT`;
+  const raw = nonEmpty(env[name]);
+  if (raw === undefined) return fallback;
+  const value = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new Error(`${name} must be an integer from 1 to 65535, got "${raw}".`);
+  }
+  return value;
+}
+
+/**
+ * Parse MIKROMCP_ROUTERS (YAML, or JSON, which YAML accepts). The parser's own
+ * message quotes the offending source line, which could hold anything the user
+ * pasted, so only its position and code are reported.
+ */
+function parseInlineRouters(raw: string): unknown {
+  try {
+    return parse(raw) as unknown;
+  } catch (err) {
+    if (err instanceof YAMLError) {
+      const pos = err.linePos?.[0];
+      const where = pos ? `line ${pos.line}, column ${pos.col}` : `offset ${err.pos[0]}`;
+      throw new Error(
+        `Invalid router config in ${INLINE_ROUTERS_VAR}: not valid YAML or JSON (${err.code} at ${where}).`,
+      );
+    }
+    throw err;
+  }
+}
+
+/** Build a one-router config file from the flat MIKROMCP_ROUTER_* variables. */
+function routersFromEnv(env: NodeJS.ProcessEnv, host: string): unknown {
+  const id = nonEmpty(env[`${ENV_ROUTER_PREFIX}_ID`]) ?? ENV_ROUTER_DEFAULT_ID;
+  const tlsVar = `${ENV_ROUTER_PREFIX}_TLS`;
+  const insecureVar = `${ENV_ROUTER_PREFIX}_TLS_INSECURE`;
+  const fingerprintVar = `${ENV_ROUTER_PREFIX}_TLS_FINGERPRINT`;
+  const tlsEnabled = envBoolean(env, tlsVar) ?? true;
+  const insecure = envBoolean(env, insecureVar) ?? false;
+  const fingerprint = nonEmpty(env[fingerprintVar]);
+
+  if (!tlsEnabled && (insecure || fingerprint !== undefined)) {
+    throw new Error(
+      `${tlsVar}=false turns TLS off, so ${insecure ? insecureVar : fingerprintVar} cannot apply. ` +
+        `Unset one of them.`,
+    );
+  }
+  if (!tlsEnabled) {
+    log.warn(
+      { routerId: id },
+      `TLS is DISABLED (${tlsVar}=false): the router password is sent over plain HTTP.`,
+    );
+  }
+
+  const tags = (env[`${ENV_ROUTER_PREFIX}_TAGS`] ?? "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  return {
+    routers: {
+      [id]: {
+        host,
+        port: envPort(env, tlsEnabled ? 443 : 80),
+        tls: {
+          enabled: tlsEnabled,
+          rejectUnauthorized: !insecure,
+          ...(fingerprint !== undefined ? { fingerprint } : {}),
+        },
+        credentials: { source: "env", envPrefix: ENV_ROUTER_PREFIX },
+        tags,
+        rosVersion: nonEmpty(env[`${ENV_ROUTER_PREFIX}_ROS_VERSION`]) ?? "7",
+      },
+    },
+  };
+}
+
 export class RouterRegistry {
   private routers: Map<string, RouterConfig>;
+  private routerSource: RouterSource = "none";
+  private readonly ignored: string[] = [];
 
-  constructor(configPath: string) {
+  /**
+   * Routers come from the first source that is set: MIKROMCP_ROUTERS (inline
+   * YAML/JSON), the file at `configPath`, then the flat MIKROMCP_ROUTER_*
+   * variables. `env` is injectable so tests need not touch process.env.
+   */
+  constructor(configPath: string, env: NodeJS.ProcessEnv = process.env) {
     this.routers = new Map();
 
-    if (!existsSync(configPath)) {
-      log.warn({ configPath }, "Router config file not found; starting with empty registry");
+    const inline = nonEmpty(env[INLINE_ROUTERS_VAR]);
+    const fileExists = existsSync(configPath);
+    const envHost = nonEmpty(env[ENV_ROUTER_HOST_VAR]);
+
+    if (inline !== undefined) {
+      this.routerSource = "inline";
+      if (fileExists) this.ignored.push(`config file ${configPath}`);
+      if (envHost !== undefined) this.ignored.push(`${ENV_ROUTER_PREFIX}_* variables`);
+    } else if (fileExists) {
+      this.routerSource = "file";
+      if (envHost !== undefined) this.ignored.push(`${ENV_ROUTER_PREFIX}_* variables`);
+    } else if (envHost !== undefined) {
+      this.routerSource = "env";
+    }
+
+    if (this.ignored.length > 0) {
+      log.warn(
+        { source: this.routerSource, ignored: this.ignored },
+        `Routers come from ${this.describeSource(configPath)}; ignoring ${this.ignored.join(" and ")}`,
+      );
+    }
+    if (envHost === undefined) {
+      const stray = ENV_ROUTER_SETTINGS.filter((name) => nonEmpty(env[name]) !== undefined);
+      if (stray.length > 0) {
+        log.warn(
+          { variables: stray },
+          `${stray.join(", ")} set without ${ENV_ROUTER_HOST_VAR}; they are ignored`,
+        );
+      }
+    }
+
+    if (inline !== undefined) {
+      this.load(parseInlineRouters(inline), `in ${INLINE_ROUTERS_VAR}`, dottedPath);
+    } else if (fileExists) {
+      this.load(
+        parse(readFileSync(configPath, "utf-8")) as unknown,
+        `at ${configPath}`,
+        dottedPath,
+      );
+    } else if (envHost !== undefined) {
+      this.load(routersFromEnv(env, envHost), `from ${ENV_ROUTER_PREFIX}_* variables`, envVarPath);
+    } else {
+      log.warn(
+        { configPath },
+        `Router config file not found and neither ${INLINE_ROUTERS_VAR} nor ` +
+          `${ENV_ROUTER_HOST_VAR} is set; starting with empty registry`,
+      );
       return;
     }
 
-    const raw = readFileSync(configPath, "utf-8");
-    const parsed = parse(raw) as unknown;
+    log.info(
+      {
+        source: this.routerSource,
+        ...(this.routerSource === "file" ? { configPath } : {}),
+        count: this.routers.size,
+      },
+      "Loaded routers",
+    );
+  }
 
-    const result = ConfigFileSchema.safeParse(parsed);
-    if (!result.success) {
-      const issues = result.error.errors
-        .map((e) => `  ${e.path.join(".")}: ${e.message}`)
-        .join("\n");
-      throw new Error(`Invalid router config at ${configPath}:\n${issues}`);
+  /** Where the routers came from; see {@link RouterSource}. */
+  get source(): RouterSource {
+    return this.routerSource;
+  }
+
+  /** Lower-precedence router sources that were set but ignored, e.g. `MIKROMCP_ROUTER_* variables`. */
+  get ignoredSources(): readonly string[] {
+    return this.ignored;
+  }
+
+  private describeSource(configPath: string): string {
+    switch (this.routerSource) {
+      case "inline":
+        return INLINE_ROUTERS_VAR;
+      case "file":
+        return `config file ${configPath}`;
+      default:
+        return `${ENV_ROUTER_PREFIX}_* variables`;
     }
+  }
+
+  private load(
+    data: unknown,
+    origin: string,
+    pathName: (path: (string | number)[]) => string,
+  ): void {
+    const result = ConfigFileSchema.safeParse(data);
+    if (!result.success) {
+      throw new Error(`Invalid router config ${origin}:\n${issueLines(result.error, pathName)}`);
+    }
+    const file: ConfigFile = result.data;
 
     // A key path that passed the schema can still be unusable — a typo, or a
     // Docker mount that was never made. Check it here so the mistake fails at
     // startup rather than surfacing as INTERNAL_ERROR on the first SSH call.
     const keyIssues: string[] = [];
-    for (const [id, config] of Object.entries(result.data.routers)) {
+    for (const [id, config] of Object.entries(file.routers)) {
       if (config.sshPrivateKeyPath === undefined) continue;
       const problem = privateKeyReadError(config.sshPrivateKeyPath);
       if (problem !== null) {
@@ -169,10 +392,10 @@ export class RouterRegistry {
       }
     }
     if (keyIssues.length > 0) {
-      throw new Error(`Invalid router config at ${configPath}:\n${keyIssues.join("\n")}`);
+      throw new Error(`Invalid router config ${origin}:\n${keyIssues.join("\n")}`);
     }
 
-    for (const [id, config] of Object.entries(result.data.routers)) {
+    for (const [id, config] of Object.entries(file.routers)) {
       const deviceType = deviceTypeOf(config.deviceType);
       // The schema guarantees tls and rosVersion for RouterOS devices, so these
       // fallbacks only ever apply to SwOS switches: plain HTTP, no ROS version.
@@ -201,7 +424,6 @@ export class RouterRegistry {
       }
       this.routers.set(id, routerConfig);
     }
-    log.info({ count: this.routers.size }, "Loaded routers from config");
   }
 
   getRouter(id: string): RouterConfig {
