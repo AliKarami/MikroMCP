@@ -67,7 +67,12 @@ export type FirewallRevert =
       sameComment: number;
     }
   /** After enable/disable: put the disabled flag back. */
-  | { kind: "set-disabled"; id: string; disabled: boolean };
+  | { kind: "set-disabled"; id: string; disabled: boolean }
+  /**
+   * After a move: move the rule back before the static rule that followed it, or
+   * to the end of the table when none did.
+   */
+  | { kind: "move-back"; id: string; before?: string };
 
 export interface AutoRevertReport {
   status: "disarmed" | "armed" | "expired" | "disarm_failed";
@@ -112,7 +117,7 @@ function rosValue(value: unknown): string {
   return rosString(String(value));
 }
 
-/** `/ip firewall filter` for `ip/firewall/filter`. */
+/** `/ip firewall filter` for `ip/firewall/filter`, `/ipv6 firewall raw` for `ipv6/firewall/raw`. */
 function menu(path: string): string {
   return `/${path.split("/").join(" ")}`;
 }
@@ -138,6 +143,12 @@ function revertBody(path: string, revert: FirewallRevert): string {
       return `${m} remove [find where .id=${rosId(revert.id)}]`;
     case "set-disabled":
       return `${m} set [find where .id=${rosId(revert.id)}] disabled=${revert.disabled ? "yes" : "no"}`;
+    case "move-back":
+      // Without destination RouterOS moves the rule to the end. Moving a rule to
+      // where it already is changes nothing, so a job that fires twice is harmless.
+      return revert.before === undefined
+        ? `${m} move numbers=${rosId(revert.id)}`
+        : `${m} move numbers=${rosId(revert.id)} destination=${rosId(revert.before)}`;
     case "remove-new": {
       const known = `,${revert.knownIds.map(rosId).join(",")},`;
       // RouterOS has no "not in" for ids, so look each one up in a delimited string.
@@ -300,7 +311,7 @@ async function probe(context: ToolContext, seconds: number): Promise<boolean> {
 
 export interface GuardOptions {
   seconds: number;
-  /** REST path of the table the write touches, e.g. `ip/firewall/filter`. */
+  /** REST path of the table the write touches, e.g. `ip/firewall/filter` or `ipv6/firewall/raw`. */
   path: string;
   revert: FirewallRevert;
   /** Human-readable summary for the job comment and router log. */

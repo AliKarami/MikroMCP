@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
-import { dryRun, routerId } from "./schema-fields.js";
+import { dryRun, firewallFamily, firewallPath, rawFamily, routerId } from "./schema-fields.js";
+import type { FirewallFamily } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
@@ -9,11 +10,14 @@ import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("address-list-tools");
 
-const ADDRESS_LIST_PATH = "ip/firewall/address-list";
+function addressListPath(family: FirewallFamily): string {
+  return firewallPath(family, "address-list");
+}
 
 const listAddressListInputSchema = z
   .object({
     routerId,
+    family: firewallFamily,
     list: z.string().optional().describe("Filter by address list name"),
     address: z.string().optional().describe("Filter by address (IP or CIDR)"),
   })
@@ -23,7 +27,7 @@ const listAddressListTool: ToolDefinition = {
   name: "list_address_list_entries",
   title: "List Address List Entries",
   description:
-    "List firewall address list entries on a MikroTik router. Supports filtering by list name and address.",
+    "List firewall address list entries on a MikroTik router, IPv4 (family ip, the default) or IPv6 (family ipv6). Supports filtering by list name and address.",
   inputSchema: listAddressListInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -40,22 +44,30 @@ const listAddressListTool: ToolDefinition = {
       if (parsed.list !== undefined) filter.list = parsed.list;
       if (parsed.address !== undefined) filter.address = parsed.address;
 
-      const entries = await context.routerClient.get<RouterOSRecord>(ADDRESS_LIST_PATH, {
-        filter: Object.keys(filter).length > 0 ? filter : undefined,
-        limit: undefined,
-        offset: undefined,
-      });
+      const entries = await context.routerClient.get<RouterOSRecord>(
+        addressListPath(parsed.family),
+        {
+          filter: Object.keys(filter).length > 0 ? filter : undefined,
+          limit: undefined,
+          offset: undefined,
+        },
+      );
 
       return {
         content: listContent(
-          "Address list entries",
+          parsed.family === "ipv6" ? "IPv6 address list entries" : "Address list entries",
           context.routerId,
           entries,
           entries.length,
           0,
           (e) => compactFields(e, ["list", "address", "timeout", "dynamic", "disabled", "comment"]),
         ),
-        structuredContent: { routerId: context.routerId, entries, total: entries.length },
+        structuredContent: {
+          routerId: context.routerId,
+          family: parsed.family,
+          entries,
+          total: entries.length,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "list_address_list_entries");
@@ -66,9 +78,12 @@ const listAddressListTool: ToolDefinition = {
 const manageAddressListInputSchema = z
   .object({
     routerId,
+    family: firewallFamily,
     action: z.enum(["add", "remove"]).describe("Action to perform"),
     list: z.string().describe("Address list name"),
-    address: z.string().describe("IP address or CIDR to add/remove"),
+    address: z
+      .string()
+      .describe("IP address or CIDR to add/remove (an IPv6 address or prefix for family ipv6)"),
     comment: z.string().optional().describe("Optional comment for the entry"),
     timeout: z.string().optional().describe("Expiry timeout (e.g. 1d, 2h30m) — omit for permanent"),
     dryRun,
@@ -79,7 +94,7 @@ const manageAddressListTool: ToolDefinition = {
   name: "manage_address_list_entry",
   title: "Manage Address List Entry",
   description:
-    "Add or remove a firewall address list entry. Idempotent by list name + address. Supports dry-run mode.",
+    "Add or remove a firewall address list entry, IPv4 (family ip, the default) or IPv6 (family ipv6). Idempotent by list name + address. Supports dry-run mode.",
   inputSchema: manageAddressListInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -87,15 +102,14 @@ const manageAddressListTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  snapshotPaths: ["ip/firewall/address-list"],
+  snapshotPaths: (params) => [addressListPath(rawFamily(params))],
   // An entry with a timeout is dynamic in RouterOS; bind the targeted one anyway.
   stateDynamicTargets: (params) => {
     if (typeof params.list !== "string" || typeof params.address !== "string") return undefined;
     const { list, address } = params;
+    const target = addressListPath(rawFamily(params));
     return (path, record) =>
-      path === "ip/firewall/address-list" &&
-      String(record.list) === list &&
-      String(record.address) === address;
+      path === target && String(record.list) === list && String(record.address) === address;
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageAddressListInputSchema.parse(params);
@@ -104,8 +118,10 @@ const manageAddressListTool: ToolDefinition = {
       "Managing address list entry",
     );
 
+    const path = addressListPath(parsed.family);
+
     try {
-      const existing = await context.routerClient.get<RouterOSRecord>(ADDRESS_LIST_PATH, {
+      const existing = await context.routerClient.get<RouterOSRecord>(path, {
         filter: { list: parsed.list, address: parsed.address },
       });
       const found = existing.length > 0 ? (existing[0] as Record<string, string>) : undefined;
@@ -134,7 +150,7 @@ const manageAddressListTool: ToolDefinition = {
           };
         }
 
-        const created = await context.routerClient.create(ADDRESS_LIST_PATH, body);
+        const created = await context.routerClient.create(path, body);
         log.info(
           { list: parsed.list, address: parsed.address, id: created[".id"] },
           "Address list entry added",
@@ -172,7 +188,7 @@ const manageAddressListTool: ToolDefinition = {
           };
         }
 
-        await context.routerClient.remove(ADDRESS_LIST_PATH, id);
+        await context.routerClient.remove(path, id);
         log.info({ id, list: parsed.list, address: parsed.address }, "Address list entry removed");
 
         return {

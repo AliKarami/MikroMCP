@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { mangleTools } from "../../../src/domain/tools/mangle-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
+import { snapshotPathsFor } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
 import { fromWire, type WireRecord } from "../helpers/wire.js";
 
@@ -919,5 +920,154 @@ describe("manage_mangle_rule - control characters in comment", () => {
       "ip/firewall/mangle",
       expect.objectContaining({ comment: "markweb" }),
     );
+  });
+});
+
+describe("mangle tools - IPv6 family", () => {
+  it("defaults family to ip", () => {
+    expect(listSchema.parse({})).toMatchObject({ family: "ip" });
+    expect(manageSchema.parse({ action: "add", comment: "c", chain: "prerouting" })).toMatchObject({
+      family: "ip",
+    });
+  });
+
+  it("lists IPv6 mangle rules from ipv6/firewall/mangle", async () => {
+    const ctx = makeContext([{ ".id": "*1", chain: "prerouting", action: "mark-packet" }]);
+    const result = await listMangleRulesTool.handler({ family: "ipv6" }, ctx);
+    expect(ctx.routerClient.get).toHaveBeenCalledWith("ipv6/firewall/mangle", expect.anything());
+    expect(result.structuredContent).toMatchObject({ family: "ipv6", total: 1 });
+  });
+
+  it("adds an IPv6 mangle rule at ipv6/firewall/mangle", async () => {
+    const ctx = makeContext([]);
+    await manageMangleRuleTool.handler(
+      {
+        action: "add",
+        family: "ipv6",
+        comment: "v6-mark",
+        chain: "prerouting",
+        newPacketMark: "v6",
+      },
+      ctx,
+    );
+    expect(ctx.routerClient.create).toHaveBeenCalledWith(
+      "ipv6/firewall/mangle",
+      expect.objectContaining({ action: "mark-packet", "new-packet-mark": "v6" }),
+    );
+  });
+
+  it("snapshots the family's mangle table", () => {
+    expect(snapshotPathsFor(manageMangleRuleTool, {})).toEqual(["ip/firewall/mangle"]);
+    expect(snapshotPathsFor(manageMangleRuleTool, { family: "ipv6" })).toEqual([
+      "ipv6/firewall/mangle",
+    ]);
+  });
+
+  it("still requires comment for add, remove, enable and disable", async () => {
+    const ctx = makeContext([]);
+    for (const action of ["add", "remove", "enable", "disable"]) {
+      await expect(
+        manageMangleRuleTool.handler({ action, chain: "prerouting" }, ctx),
+      ).rejects.toMatchObject({ code: "PARAM_REQUIRED", details: { param: "comment" } });
+    }
+    expect(ctx.routerClient.get).not.toHaveBeenCalled();
+  });
+});
+
+describe("manage_mangle_rule - move", () => {
+  const table: WireRecord[] = [
+    { ".id": "*D", chain: "prerouting", action: "passthrough", dynamic: "true" },
+    { ".id": "*1", chain: "prerouting", action: "mark-connection", comment: "a" },
+    { ".id": "*2", chain: "prerouting", action: "mark-routing", comment: "b" },
+    { ".id": "*3", chain: "prerouting", action: "mark-packet", comment: "c" },
+  ];
+
+  function moveContext(records: WireRecord[]): ToolContext {
+    const ctx = makeContext(records);
+    (ctx.routerClient as unknown as Record<string, unknown>).execute = vi
+      .fn()
+      .mockResolvedValue([]);
+    return ctx;
+  }
+
+  function execute(ctx: ToolContext): ReturnType<typeof vi.fn> {
+    return (ctx.routerClient as unknown as Record<string, ReturnType<typeof vi.fn>>).execute;
+  }
+
+  it("needs only ruleId and destination", () => {
+    expect(manageSchema.parse({ action: "move", ruleId: "*3", destination: "end" })).toMatchObject({
+      action: "move",
+      ruleId: "*3",
+      destination: "end",
+    });
+  });
+
+  it("moves a rule before another", async () => {
+    const ctx = moveContext(table);
+    const result = await manageMangleRuleTool.handler(
+      { action: "move", ruleId: "*3", destination: "*1" },
+      ctx,
+    );
+    expect(execute(ctx)).toHaveBeenCalledWith("ip/firewall/mangle/move", {
+      numbers: "*3",
+      destination: "*1",
+    });
+    expect(result.structuredContent).toMatchObject({
+      action: "moved",
+      position: { before: 3, after: 1 },
+    });
+  });
+
+  it("moves an IPv6 mangle rule to the end", async () => {
+    const ctx = moveContext(table);
+    await manageMangleRuleTool.handler(
+      { action: "move", family: "ipv6", ruleId: "*1", destination: "end" },
+      ctx,
+    );
+    expect(execute(ctx)).toHaveBeenCalledWith("ipv6/firewall/mangle/move", { numbers: "*1" });
+  });
+
+  it("returns no_change when the rule is already in place", async () => {
+    const ctx = moveContext(table);
+    const result = await manageMangleRuleTool.handler(
+      { action: "move", ruleId: "*3", destination: "end" },
+      ctx,
+    );
+    expect(result.structuredContent).toHaveProperty("action", "no_change");
+    expect(execute(ctx)).not.toHaveBeenCalled();
+  });
+
+  it("throws NOT_FOUND for an unknown rule and refuses a dynamic one", async () => {
+    const ctx = moveContext(table);
+    await expect(
+      manageMangleRuleTool.handler({ action: "move", ruleId: "*9", destination: "end" }, ctx),
+    ).rejects.toMatchObject({ code: "MANGLE_RULE_NOT_FOUND" });
+    await expect(
+      manageMangleRuleTool.handler({ action: "move", ruleId: "*D", destination: "*1" }, ctx),
+    ).rejects.toMatchObject({ code: "DYNAMIC_RULE_NOT_MOVABLE" });
+    expect(execute(ctx)).not.toHaveBeenCalled();
+  });
+
+  it("dry run reports the planned position and moves nothing", async () => {
+    const ctx = moveContext(table);
+    const result = await manageMangleRuleTool.handler(
+      { action: "move", ruleId: "*1", destination: "end", dryRun: true },
+      ctx,
+    );
+    expect(result.structuredContent).toMatchObject({
+      action: "dry_run",
+      position: { before: 1, after: 3 },
+    });
+    expect(execute(ctx)).not.toHaveBeenCalled();
+  });
+
+  it("rejects a comment with move", async () => {
+    const ctx = moveContext(table);
+    await expect(
+      manageMangleRuleTool.handler(
+        { action: "move", ruleId: "*1", destination: "end", comment: "a" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "PARAM_NOT_APPLICABLE", details: { param: "comment" } });
   });
 });
