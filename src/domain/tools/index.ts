@@ -47,59 +47,43 @@ import { swosConfigTools } from "./swos-config-tools.js";
 import { swosMaintenanceTools } from "./swos-maintenance-tools.js";
 import { createFleetTools } from "./fleet-tools.js";
 
-const baseTools: ToolDefinition[] = [
-  ...systemTools,
-  ...interfaceTools,
-  ...ipTools,
-  ...dhcpTools,
-  ...routeTools,
-  ...firewallTools,
-  ...diagnosticTools,
-  ...systemOpsTools,
-  ...bridgeTools,
-  ...wifiTools,
-  ...wireguardTools,
-  ...dnsTools,
-  ...mangleTools,
-  ...addressListTools,
-  ...policyRoutingTools,
-  ...routingProtocolTools,
-  ...scriptsTools,
-  ...schedulerTools,
-  ...packagesTools,
-  ...filesTools,
-  ...containerTools,
-  ...ipsecTools,
-  ...certificateTools,
-  ...userTools,
-  ...userGroupTools,
-  ...dhcpServerTools,
-  ...ipPoolTools,
-  ...queueTools,
-  ...vrrpTools,
-  ...networkServicesTools,
-  ...vlanTools,
-  ...dhcpClientTools,
-  ...ipServiceTools,
-  ...pppoeTools,
-  ...ovpnTools,
-  ...pppTools,
-  ...upgradeTools,
-  ...backupTools,
-  ...logTools,
-  ...networkTestTools,
-  ...containerConfigTools,
-  ...interfaceListTools,
-  ...swosTools,
-  ...swosConfigTools,
-  ...swosMaintenanceTools,
-];
+/**
+ * Tools grouped by area. MIKROMCP_TOOLSETS selects groups by these names to keep
+ * the catalogue small; every tool belongs to exactly one group (a unit test
+ * checks it), so a new tool file must be added to one of them.
+ */
+const baseToolsets = {
+  system: [...systemTools, ...systemOpsTools, ...packagesTools, ...upgradeTools, ...backupTools],
+  automation: [...scriptsTools, ...schedulerTools, ...filesTools],
+  containers: [...containerTools, ...containerConfigTools],
+  interfaces: [...interfaceTools, ...bridgeTools, ...vlanTools, ...interfaceListTools],
+  wireless: [...wifiTools],
+  ip: [...ipTools, ...ipPoolTools, ...ipServiceTools, ...dnsTools],
+  dhcp: [...dhcpTools, ...dhcpServerTools, ...dhcpClientTools],
+  routing: [...routeTools, ...policyRoutingTools, ...routingProtocolTools, ...vrrpTools],
+  firewall: [...firewallTools, ...mangleTools, ...addressListTools],
+  vpn: [...wireguardTools, ...ipsecTools, ...pppoeTools, ...ovpnTools, ...pppTools],
+  access: [...userTools, ...userGroupTools, ...certificateTools],
+  queues: [...queueTools],
+  monitoring: [...diagnosticTools, ...networkTestTools, ...logTools, ...networkServicesTools],
+  swos: [...swosTools, ...swosConfigTools, ...swosMaintenanceTools],
+} satisfies Record<string, ToolDefinition[]>;
 
-export const allTools: ToolDefinition[] = [
-  ...baseTools,
-  ...createChangeManagementTools(baseTools),
-  ...createFleetTools(baseTools),
-];
+const baseTools: ToolDefinition[] = Object.values(baseToolsets).flat();
+
+export const toolsets: Record<string, ToolDefinition[]> = {
+  ...baseToolsets,
+  change: createChangeManagementTools(baseTools),
+  fleet: createFleetTools(baseTools),
+};
+
+export const allTools: ToolDefinition[] = Object.values(toolsets).flat();
+
+/** Kept whatever MIKROMCP_TOOLSETS selects: the agent needs them to find its routers. */
+export const ALWAYS_ON_TOOLS: ReadonlySet<string> = new Set([
+  "list_routers",
+  "check_router_health",
+]);
 
 export type {
   ToolDefinition,

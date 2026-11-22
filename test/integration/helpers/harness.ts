@@ -55,6 +55,8 @@ export function createHarness(
     stdioIdentity: undefined,
     confirmationSecret: undefined,
     auditLogPath: undefined,
+    readOnly: false,
+    toolsets: [],
     http: {
       maxBodyBytes: 1024 * 1024,
       rateLimitRpm: 0,

@@ -13,6 +13,8 @@ import { MikroMCPError } from "../domain/errors/error-types.js";
 import type { RouterConfig } from "../types.js";
 import type { AppConfig } from "../config/app-config.js";
 import { isLoopbackBind, parseIpAllowlist } from "../middleware/request-guard.js";
+import { allTools } from "../domain/tools/index.js";
+import { assertKnownToolsets, catalogueNote, selectCatalogue } from "../mcp/tool-catalogue.js";
 
 declare const __MIKROMCP_VERSION__: string;
 const localVersion = __MIKROMCP_VERSION__;
@@ -204,6 +206,25 @@ function checkHttpAllowlists(appConfig: AppConfig): void {
       `Bound to ${appConfig.bindHost} without MIKROMCP_HTTP_ALLOWED_HOSTS — the Host/Origin (DNS-rebinding) check is off`,
     );
   }
+}
+
+// ─── Tool catalogue ───────────────────────────────────────────────────────
+
+function checkCatalogue(appConfig: AppConfig): void {
+  const options = { readOnly: appConfig.readOnly, toolsets: appConfig.toolsets };
+  try {
+    assertKnownToolsets(options.toolsets);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+    return;
+  }
+  if (catalogueNote(options) === undefined) return;
+  const count = selectCatalogue(options).length;
+  const parts = [
+    ...(options.readOnly ? ["read-only"] : []),
+    ...(options.toolsets.length > 0 ? [`toolsets ${options.toolsets.join(", ")}`] : []),
+  ];
+  ok(`Tool catalogue: ${count} of ${allTools.length} tools (${parts.join("; ")})`);
 }
 
 // ─── SSH key check ─────────────────────────────────────────────────────────
@@ -545,6 +566,7 @@ export async function runDoctor(): Promise<void> {
   console.log();
   checkIdentities(appConfig.identitiesPath, appConfig.transport);
   checkHttpAllowlists(appConfig);
+  checkCatalogue(appConfig);
 
   // 6. Claude Desktop registration
   checkClaudeDesktop();

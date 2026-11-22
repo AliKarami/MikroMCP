@@ -17,6 +17,8 @@ afterEach(() => {
   delete process.env.MIKROMCP_HTTP_ALLOWED_HOSTS;
   delete process.env.MIKROMCP_HTTP_ALLOWED_ORIGINS;
   delete process.env.MIKROMCP_HTTP_ALLOWED_IPS;
+  delete process.env.MIKROMCP_READ_ONLY;
+  delete process.env.MIKROMCP_TOOLSETS;
 });
 
 describe("loadAppConfig", () => {
@@ -75,6 +77,25 @@ describe("loadAppConfig", () => {
         allowedOrigins: ["https://app.example.com"],
         allowedIps: ["10.0.0.0/8", "192.0.2.7"],
       });
+    });
+
+    it("is not read-only and has no toolset filter by default", () => {
+      expect(loadAppConfig()).toMatchObject({ readOnly: false, toolsets: [] });
+    });
+
+    it.each(["true", "1", "YES"])("reads MIKROMCP_READ_ONLY=%s as true", (value) => {
+      process.env.MIKROMCP_READ_ONLY = value;
+      expect(loadAppConfig().readOnly).toBe(true);
+    });
+
+    it("throws a CONFIGURATION error for a non-boolean MIKROMCP_READ_ONLY", () => {
+      process.env.MIKROMCP_READ_ONLY = "maybe";
+      expect(() => loadAppConfig()).toThrow(/MIKROMCP_READ_ONLY/);
+    });
+
+    it("reads MIKROMCP_TOOLSETS as a lowercased list", () => {
+      process.env.MIKROMCP_TOOLSETS = "Firewall, dhcp,";
+      expect(loadAppConfig().toolsets).toEqual(["firewall", "dhcp"]);
     });
 
     it("reads MIKROMCP_SSH_COMMAND_TIMEOUT_MS", () => {
