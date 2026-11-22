@@ -4,7 +4,7 @@ import { connectStdio } from "../mcp/transports/stdio.js";
 import { connectHttp } from "../mcp/transports/http.js";
 import { IdentityRegistry } from "../config/identity-registry.js";
 import { reloadConfig } from "../config/reload.js";
-import { getStdioIdentity, withIdentity } from "../middleware/auth.js";
+import { getStdioIdentity } from "../middleware/auth.js";
 import { createLogger } from "../observability/logger.js";
 import { pruneSnapshots, rotateAndPruneJournal } from "../domain/snapshot/retention.js";
 
@@ -37,8 +37,11 @@ export async function runServe(): Promise<void> {
   );
 
   if (config.transport === "stdio") {
-    const stdioIdentity = getStdioIdentity(config.stdioIdentity, identityRegistry);
-    await withIdentity(stdioIdentity, () => connectStdio(makeServer()));
+    // Fail at startup if the named identity is missing, but do not bind it to
+    // the session: the executor looks the stdio identity up on every call, so
+    // a reload can demote or remove it.
+    getStdioIdentity(config.stdioIdentity, identityRegistry);
+    await connectStdio(makeServer());
     log.info("MikroMCP server running via stdio");
   } else if (config.transport === "http") {
     await connectHttp(

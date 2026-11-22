@@ -25,7 +25,7 @@ import {
   isEffectiveDryRun,
 } from "../domain/tools/tool-definition.js";
 import type { RouterRegistry } from "../config/router-registry.js";
-import type { RouterConfig } from "../types.js";
+import type { Identity, RouterConfig } from "../types.js";
 import type { ConnectionPool } from "../adapter/connection-pool.js";
 import type { AppConfig } from "../config/app-config.js";
 import type { IdentityRegistry } from "../config/identity-registry.js";
@@ -406,24 +406,34 @@ export async function executeToolCall(
       const shouldAudit = tool.annotations.destructiveHint || !tool.annotations.readOnlyHint;
       if (shouldAudit && error.category !== ErrorCategory.APPROVAL_REQUIRED) {
         const routerId = (args.routerId as string | undefined) ?? "unknown";
-        const identity =
-          getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
-        auditLog(
-          {
-            type: "audit",
-            ts: new Date().toISOString(),
-            correlationId,
-            identityId: identity.id,
-            role: identity.role,
-            tool: tool.name,
-            routerId,
-            phase: "failure",
-            params: loggedArgs,
-            outcome: error.code,
-            durationMs: Date.now() - startMs,
-          },
-          config.auditLogPath,
-        );
+        // The stdio identity is looked up per call, so a reload can remove it
+        // between the start of the call and this point. Without an identity
+        // there is nobody to audit; the failure is still logged below.
+        let identity: Identity | undefined;
+        try {
+          identity =
+            getCurrentIdentity() ?? getStdioIdentity(config.stdioIdentity, identityRegistry);
+        } catch {
+          identity = undefined;
+        }
+        if (identity) {
+          auditLog(
+            {
+              type: "audit",
+              ts: new Date().toISOString(),
+              correlationId,
+              identityId: identity.id,
+              role: identity.role,
+              tool: tool.name,
+              routerId,
+              phase: "failure",
+              params: loggedArgs,
+              outcome: error.code,
+              durationMs: Date.now() - startMs,
+            },
+            config.auditLogPath,
+          );
+        }
       }
 
       log.error({ err: error, tool: tool.name, correlationId }, "Tool execution failed");
