@@ -10,6 +10,16 @@ import { CircuitBreaker } from "../adapter/circuit-breaker.js";
 import type { AppConfig } from "../config/app-config.js";
 import type { IdentityRegistry } from "../config/identity-registry.js";
 import { VERSION } from "../version.js";
+import type { Identity } from "../types.js";
+import {
+  assertKnownToolsets,
+  catalogueNote,
+  selectCatalogue,
+  toolsForIdentity,
+} from "./tool-catalogue.js";
+import { createLogger } from "../observability/logger.js";
+
+const log = createLogger("server");
 
 /**
  * Always-on guidance sent to MCP clients in the initialize response. Kept short
@@ -31,7 +41,8 @@ export function createServerFactory(
   config: AppConfig,
   identityRegistry: IdentityRegistry,
 ): {
-  makeServer: () => McpServer;
+  /** Builds a server; with an identity, tools/list leaves out what its allowedToolPatterns refuse. */
+  makeServer: (identity?: Identity) => McpServer;
   pool: ConnectionPool;
   circuitBreakers: Map<string, CircuitBreaker>;
   registry: RouterRegistry;
@@ -40,15 +51,30 @@ export function createServerFactory(
   const pool = new ConnectionPool();
   const circuitBreakers = new Map<string, CircuitBreaker>();
 
-  const makeServer = (): McpServer => {
+  const catalogueOptions = { readOnly: config.readOnly, toolsets: config.toolsets };
+  assertKnownToolsets(catalogueOptions.toolsets);
+  const catalogue = selectCatalogue(catalogueOptions);
+  const note = catalogueNote(catalogueOptions);
+  const instructions = note ? `${SERVER_INSTRUCTIONS} ${note}` : SERVER_INSTRUCTIONS;
+  if (note) log.info({ tools: catalogue.length, ...catalogueOptions }, "Reduced tool catalogue");
+
+  const makeServer = (identity?: Identity): McpServer => {
     const server = new McpServer(
       {
         name: "mikromcp",
         version: VERSION,
       },
-      { instructions: SERVER_INSTRUCTIONS },
+      { instructions },
     );
-    registerAllTools(server, registry, pool, circuitBreakers, config, identityRegistry);
+    registerAllTools(
+      server,
+      toolsForIdentity(catalogue, identity),
+      registry,
+      pool,
+      circuitBreakers,
+      config,
+      identityRegistry,
+    );
     return server;
   };
 

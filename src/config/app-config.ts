@@ -14,9 +14,16 @@ export interface AppConfig {
   stdioIdentity: string | undefined;
   confirmationSecret: string | undefined;
   auditLogPath: string | undefined;
+  /** MIKROMCP_READ_ONLY: register only read-only tools. */
+  readOnly: boolean;
+  /** MIKROMCP_TOOLSETS: toolset names to register; empty = all. */
+  toolsets: string[];
   http: {
     maxBodyBytes: number;
     rateLimitRpm: number;
+    allowedHosts: string[];
+    allowedOrigins: string[];
+    allowedIps: string[];
   };
   ssh: {
     commandTimeoutMs: number;
@@ -76,6 +83,33 @@ function intEnv(name: string, fallback: number): number {
   return value;
 }
 
+/** A comma-separated env var as a list, blanks dropped. */
+function listEnv(name: string): string[] {
+  return (process.env[name] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** A boolean env var: true/1/yes or false/0/no (case-insensitive); unset is false. */
+function boolEnv(name: string): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return false;
+  const value = raw.trim().toLowerCase();
+  if (["true", "1", "yes"].includes(value)) return true;
+  if (["false", "0", "no"].includes(value)) return false;
+  throw new MikroMCPError({
+    category: ErrorCategory.CONFIGURATION,
+    code: "INVALID_ENV_BOOL",
+    message: `Environment variable ${name} must be true or false, got "${raw}".`,
+    details: { variable: name, value: raw },
+    recoverability: {
+      retryable: false,
+      suggestedAction: `Set ${name} to true or false, or unset it.`,
+    },
+  });
+}
+
 export function loadAppConfig(): AppConfig {
   const env = process.env;
   const dataDir = env.MIKROMCP_DATA_DIR ?? join(mikromcpDir(), "data");
@@ -90,21 +124,23 @@ export function loadAppConfig(): AppConfig {
     dataDir,
     snapshotDir: `${dataDir}/snapshots`,
     journalPath: `${dataDir}/write-journal.ndjson`,
-    cmdAllow: (env.MIKROMCP_CMD_ALLOW ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    cmdDeny: (env.MIKROMCP_CMD_DENY ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
+    cmdAllow: listEnv("MIKROMCP_CMD_ALLOW"),
+    cmdDeny: listEnv("MIKROMCP_CMD_DENY"),
     identitiesPath: env.MIKROMCP_IDENTITIES_PATH ?? join(mikromcpDir(), "identities.yaml"),
     stdioIdentity: env.MIKROMCP_STDIO_IDENTITY || undefined,
     confirmationSecret: env.MIKROMCP_CONFIRMATION_SECRET || undefined,
     auditLogPath: env.MIKROMCP_AUDIT_LOG_PATH || undefined,
+    readOnly: boolEnv("MIKROMCP_READ_ONLY"),
+    toolsets: (env.MIKROMCP_TOOLSETS ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
     http: {
       maxBodyBytes: intEnv("MIKROMCP_HTTP_MAX_BODY_BYTES", 1024 * 1024),
       rateLimitRpm: intEnv("MIKROMCP_HTTP_RATE_LIMIT_RPM", 60),
+      allowedHosts: listEnv("MIKROMCP_HTTP_ALLOWED_HOSTS"),
+      allowedOrigins: listEnv("MIKROMCP_HTTP_ALLOWED_ORIGINS"),
+      allowedIps: listEnv("MIKROMCP_HTTP_ALLOWED_IPS"),
     },
     ssh: {
       commandTimeoutMs: intEnv("MIKROMCP_SSH_COMMAND_TIMEOUT_MS", 30000),

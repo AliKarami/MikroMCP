@@ -129,7 +129,7 @@ src/
 | `container-config-tools.ts` | `get_container_config`, `manage_container_config`, `list_container_envs`, `manage_container_env`, `list_container_mounts`, `manage_container_mount` |
 | `interface-tools.ts` | `list_interfaces` |
 | `vlan-tools.ts` | `manage_vlan` |
-| `bridge-tools.ts` | `list_bridges`, `manage_bridge`, `manage_bridge_port` |
+| `bridge-tools.ts` | `list_bridges`, `manage_bridge`, `manage_bridge_port`, `list_bridge_ports`, `list_bridge_vlans`, `manage_bridge_vlan` |
 | `interface-list-tools.ts` | `list_interface_lists`, `manage_interface_list`, `manage_interface_list_member` |
 | `wifi-tools.ts` | `list_wifi_interfaces`, `list_wifi_clients`, `manage_wifi_interface` |
 | `wireguard-tools.ts` | `list_wireguard_interfaces`, `list_wireguard_peers`, `manage_wireguard_peer`, `manage_wireguard_interface` |
@@ -186,7 +186,7 @@ Test structure for each tool file:
 - `test/unit/docs/available-tools-sync.test.ts` — verifies `docs/wiki/Available-Tools.md` lists every registered tool and nothing else.
 - `test/unit/docs/available-tools-params-sync.test.ts` — verifies each tool's parameter table in `docs/wiki/Available-Tools.md` lists exactly the parameters its Zod input schema accepts.
 - `test/unit/docs/configuration-yaml-sync.test.ts` — loads every full `routers:` / `identities:` YAML example in `docs/wiki/Configuration.md` through the real registries, so a copied example always starts.
-- `test/unit/docs/tool-count-sync.test.ts` — verifies the tool count stated in `README.md`, the wiki, and the landing page matches the actual count (currently **134 tools**).
+- `test/unit/docs/tool-count-sync.test.ts` — verifies the tool count stated in `README.md`, the wiki, and the landing page matches the actual count (currently **140 tools**).
 - `test/unit/docs/site-version-sync.test.ts` — verifies the landing page's version matches `src/version.ts`.
 - `test/unit/skill/tool-map-sync.test.ts` — verifies `skills/mikromcp/references/tool-map.md` is in lockstep with the registered tools.
 
@@ -234,6 +234,6 @@ MIKROMCP_CONFIG_PATH=config/routers.yaml \
   npx @modelcontextprotocol/inspector node dist/main.js
 ```
 
-Inspector opens at `http://localhost:5173`. Browse all 134 tools, call them with sample inputs, and inspect raw responses including `structuredContent`.
+Inspector opens at `http://localhost:5173`. Browse all 140 tools, call them with sample inputs, and inspect raw responses including `structuredContent`.
 
 For hot-reload during tool development, replace `node dist/main.js` with `npm run dev`.

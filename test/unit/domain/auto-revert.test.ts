@@ -163,6 +163,36 @@ describe("revert scripts", () => {
     expect(addArguments(record)).not.toMatch(/bytes|packets|dynamic|invalid|\.id/);
   });
 
+  it("moves a moved rule back before its old successor, or to the end", () => {
+    const back = revertScript(
+      "job",
+      "ip/firewall/filter",
+      { kind: "move-back", id: "*3", before: "*4" },
+      "x",
+    );
+    expect(back).toContain("/ip firewall filter move numbers=*3 destination=*4");
+    const toEnd = revertScript("job", "ip/firewall/nat", { kind: "move-back", id: "*3" }, "x");
+    expect(toEnd).toContain("/ip firewall nat move numbers=*3\n");
+    expect(toEnd).not.toContain("destination=");
+  });
+
+  it("uses the menu of the path the write touched: raw and ipv6 tables", () => {
+    expect(revertScript("job", "ip/firewall/raw", { kind: "remove-id", id: "*2A" }, "x")).toContain(
+      "/ip firewall raw remove [find where .id=*2A]",
+    );
+    expect(
+      revertScript(
+        "job",
+        "ipv6/firewall/filter",
+        { kind: "set-disabled", id: "*5", disabled: false },
+        "x",
+      ),
+    ).toContain("/ipv6 firewall filter set [find where .id=*5] disabled=no");
+    expect(
+      revertScript("job", "ipv6/firewall/raw", { kind: "move-back", id: "*3", before: "*1" }, "x"),
+    ).toContain("/ipv6 firewall raw move numbers=*3 destination=*1");
+  });
+
   it("refuses to embed something that is not a RouterOS id", () => {
     expect(() =>
       revertScript(
@@ -471,6 +501,61 @@ describe("manage_firewall_rule auto-revert", () => {
       autoRevert: { wouldArm: true, seconds: 60 },
     });
     expect(client.create).not.toHaveBeenCalled();
+  });
+
+  it("ipv6 raw remove: the job re-adds the rule in /ipv6 firewall raw", async () => {
+    const { client, context } = makeClient({
+      rules: [
+        { ".id": "*4", chain: "prerouting", action: "drop", comment: "v6-bogons" },
+        { ".id": "*5", chain: "prerouting", action: "accept" },
+      ],
+    });
+    await manageFirewallRule.handler(
+      {
+        ...base,
+        family: "ipv6",
+        table: "raw",
+        chain: "prerouting",
+        action: "remove",
+        comment: "v6-bogons",
+      },
+      context,
+    );
+    const [, job] = client.create.mock.calls.find((c) => c[0] === SCHEDULER)!;
+    expect(job["on-event"]).toContain('/ipv6 firewall raw add chain="prerouting"');
+    expect(job["on-event"]).toContain("place-before=*5");
+    expect(client.remove).toHaveBeenCalledWith("ipv6/firewall/raw", "*4");
+  });
+
+  it("move: arms a move-back job before the move, and it moves the last rule back to the end", async () => {
+    const { client, events, context } = makeClient({
+      rules: [
+        { ".id": "*1", chain: "input", action: "accept" },
+        { ".id": "*2", chain: "input", action: "drop" },
+      ],
+    });
+    const execute = vi.fn(() => {
+      events.push("execute");
+      return Promise.resolve([]);
+    });
+    Object.assign(client, { execute });
+
+    const result = await manageFirewallRule.handler(
+      { routerId: "r1", action: "move", ruleId: "*2", destination: "*1" },
+      context,
+    );
+
+    const [, job] = client.create.mock.calls.find((c) => c[0] === SCHEDULER)!;
+    expect(job["on-event"]).toContain("/ip firewall filter move numbers=*2\n");
+    expect(execute).toHaveBeenCalledWith("ip/firewall/filter/move", {
+      numbers: "*2",
+      destination: "*1",
+    });
+    expect(events.indexOf(`create ${SCHEDULER}`)).toBeLessThan(events.indexOf("execute"));
+    expect(result.structuredContent).toMatchObject({
+      action: "moved",
+      autoRevert: { status: "disarmed", revert: "move-back" },
+    });
   });
 
   it("an idempotent no-op arms nothing", async () => {

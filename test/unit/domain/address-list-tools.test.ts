@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { addressListTools } from "../../../src/domain/tools/address-list-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
+import { snapshotPathsFor } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { fromWire } from "../helpers/wire.js";
 
 const listAddressListTool = addressListTools[0];
 const manageAddressListTool = addressListTools[1];
@@ -162,5 +164,56 @@ describe("address list tools", () => {
       );
       expect((result.structuredContent as Record<string, unknown>).action).toBe("already_removed");
     });
+  });
+});
+
+describe("address list tools - IPv6 family", () => {
+  it("defaults family to ip and accepts ipv6", () => {
+    expect(listSchema.parse({})).toMatchObject({ family: "ip" });
+    expect(
+      manageSchema.parse({ action: "add", list: "v6", address: "2001:db8::/32", family: "ipv6" }),
+    ).toMatchObject({ family: "ipv6" });
+    expect(() => listSchema.parse({ family: "inet6" })).toThrow();
+  });
+
+  it("lists entries from ipv6/firewall/address-list", async () => {
+    const ctx = makeContext(fromWire([{ ".id": "*1", list: "v6", address: "2001:db8::/32" }]));
+    const result = await listAddressListTool.handler({ family: "ipv6" }, ctx);
+    expect(ctx.routerClient.get).toHaveBeenCalledWith(
+      "ipv6/firewall/address-list",
+      expect.anything(),
+    );
+    expect(result.structuredContent).toMatchObject({ family: "ipv6", total: 1 });
+  });
+
+  it("adds and removes entries at the IPv6 path", async () => {
+    const add = makeContext([]);
+    await manageAddressListTool.handler(
+      { action: "add", family: "ipv6", list: "v6", address: "2001:db8::1" },
+      add,
+    );
+    expect(add.routerClient.create).toHaveBeenCalledWith("ipv6/firewall/address-list", {
+      list: "v6",
+      address: "2001:db8::1",
+    });
+
+    const remove = makeContext(fromWire([{ ".id": "*7", list: "v6", address: "2001:db8::1" }]));
+    await manageAddressListTool.handler(
+      { action: "remove", family: "ipv6", list: "v6", address: "2001:db8::1" },
+      remove,
+    );
+    expect(remove.routerClient.remove).toHaveBeenCalledWith("ipv6/firewall/address-list", "*7");
+  });
+
+  it("snapshots and binds the dynamic target at the family's path", () => {
+    const params = { action: "add", family: "ipv6", list: "v6", address: "2001:db8::1" };
+    expect(snapshotPathsFor(manageAddressListTool, params)).toEqual(["ipv6/firewall/address-list"]);
+    expect(snapshotPathsFor(manageAddressListTool, { ...params, family: undefined })).toEqual([
+      "ip/firewall/address-list",
+    ]);
+    const keep = manageAddressListTool.stateDynamicTargets!(params)!;
+    const record = { ".id": "*7", list: "v6", address: "2001:db8::1" };
+    expect(keep("ipv6/firewall/address-list", record)).toBe(true);
+    expect(keep("ip/firewall/address-list", record)).toBe(false);
   });
 });

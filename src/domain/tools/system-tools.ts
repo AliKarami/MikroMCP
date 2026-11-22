@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { routerId } from "./schema-fields.js";
 import { toolError } from "./tool-definition.js";
+import { recordRouterVersion } from "../router-observations.js";
 import { createLogger } from "../../observability/logger.js";
 
 const log = createLogger("system-tools");
@@ -153,6 +154,10 @@ const getSystemStatusTool: ToolDefinition = {
             _error: `Failed to fetch: ${err instanceof Error ? err.message : String(err)}`,
           };
         }
+      }
+
+      if (!context.swosClient) {
+        recordRouterVersion(context.routerId, context.routerConfig.host, results.resource?.version);
       }
 
       const content = buildTextSummary(results);

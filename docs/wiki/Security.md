@@ -27,6 +27,7 @@ An AI assistant with raw router CLI access can issue arbitrary, irreversible com
 When running with `MIKROMCP_TRANSPORT=http`:
 
 - **Run behind a trusted network boundary** (reverse proxy, VPN, or private network). Bind to `127.0.0.1` unless a proxy terminates TLS in front.
+- **Keep the Host and Origin checks on.** Bound to loopback, the server only answers `localhost` names, which stops DNS-rebinding pages in a browser from reaching it. Bound to any other address, set `MIKROMCP_HTTP_ALLOWED_HOSTS` to the name clients use; `MIKROMCP_HTTP_ALLOWED_IPS` restricts which client addresses may connect at all. See [Running](Running#host-origin-and-client-ip-allow-lists).
 - **Bearer-token auth is mandatory.** Every request must carry `Authorization: Bearer <token>`. Tokens are stored only as bcrypt hashes in `~/.mikromcp/identities.yaml`.
 - **Set `MIKROMCP_CONFIRMATION_SECRET`.** It signs the confirmation tokens that gate destructive operations. The server refuses to start in HTTP mode without it when any `readonly` or `operator` identity exists. With only `admin` identities it is optional for per-router calls. `bulk_execute` write fan-outs are gated for every role either way: without a configured secret the server signs fleet tokens with a random per-process secret, so those tokens stop working after a restart and do not verify on a sibling instance.
 
@@ -74,6 +75,7 @@ If a client should never run arbitrary RouterOS commands or script, take the too
 - [ ] TLS verification on, or certificate fingerprint pinned
 - [ ] Credentials only in `~/.mikromcp/.env`
 - [ ] HTTP mode behind a trusted boundary, `MIKROMCP_CONFIRMATION_SECRET` set
+- [ ] HTTP mode bound to a non-loopback address: `MIKROMCP_HTTP_ALLOWED_HOSTS` set (and `MIKROMCP_HTTP_ALLOWED_IPS` where the client range is known)
 - [ ] Identities scoped with minimal `allowedRouters` / `allowedToolPatterns`
 - [ ] Audit logging enabled
 - [ ] Write changes previewed with `dryRun: true` before applying

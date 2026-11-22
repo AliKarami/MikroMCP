@@ -200,6 +200,54 @@ describe("reloadConfig", () => {
   });
 });
 
+describe("RouterRegistry.prepareReload with other router sources", () => {
+  const inlineYaml = routersYaml({ inl: router("192.0.2.50") });
+
+  it("keeps routers from MIKROMCP_ROUTERS, whatever the file says now", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mikromcp-reload-"));
+    const path = join(dir, "routers.yaml");
+    const registry = new RouterRegistry(path, { MIKROMCP_ROUTERS: inlineYaml });
+    writeFileSync(path, routersYaml({ other: router("192.0.2.60") }));
+
+    const { changes, commit } = registry.prepareReload();
+    commit();
+
+    expect(changes).toEqual({ added: [], removed: [], changed: [], unchanged: ["inl"] });
+    expect(registry.routerIds()).toEqual(["inl"]);
+    expect(registry.source).toBe("inline");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("keeps routers from MIKROMCP_ROUTER_* variables while there is no file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mikromcp-reload-"));
+    const registry = new RouterRegistry(join(dir, "routers.yaml"), {
+      MIKROMCP_ROUTER_HOST: "192.0.2.70",
+    });
+
+    const { changes } = registry.prepareReload();
+
+    expect(changes.unchanged).toEqual(["default"]);
+    expect(changes.added).toEqual([]);
+    expect(changes.removed).toEqual([]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("moves to a routers.yaml that appears after startup, as it would at startup", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mikromcp-reload-"));
+    const path = join(dir, "routers.yaml");
+    const registry = new RouterRegistry(path, { MIKROMCP_ROUTER_HOST: "192.0.2.70" });
+    writeFileSync(path, routersYaml({ r1: router("192.0.2.1") }));
+
+    const { changes, commit } = registry.prepareReload();
+    commit();
+
+    expect(changes.added).toEqual(["r1"]);
+    expect(changes.removed).toEqual(["default"]);
+    expect(registry.source).toBe("file");
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe("reload_config tool", () => {
   function contextFor(env: ReturnType<typeof setup>, identity: Identity): ToolContext {
     return {

@@ -272,7 +272,9 @@ const runCommandInputSchema = z
     dryRun: z
       .boolean()
       .default(false)
-      .describe("Preview the command without executing (validates allow/deny policy only)"),
+      .describe(
+        "Preview the command without executing. Checks the allow/deny policy only: not the syntax, not the names it refers to, not what a [find ...] would match",
+      ),
   })
   .strict();
 
@@ -280,7 +282,7 @@ const runCommandTool: ToolDefinition = {
   name: "run_command",
   title: "Run Command",
   description:
-    "Execute an arbitrary RouterOS console command via SSH. Guarded by an allow/deny policy (built-in deny list blocks destructive commands; tighten via cmdAllow in routers.yaml or MIKROMCP_CMD_ALLOW). Prefer dedicated tools (reboot, etc.) where available. Output capped at 4000 characters. Journaled for audit like every write (see list_journal), but never snapshotted: arbitrary commands touch unknown config sections, so it cannot be rolled back via rollback_change — prefer a dedicated tool when one exists, and note the manual undo command in your own records.",
+    "Execute an arbitrary RouterOS console command via SSH. Guarded by an allow/deny policy (built-in deny list blocks destructive commands; tighten via cmdAllow in routers.yaml or MIKROMCP_CMD_ALLOW). Prefer dedicated tools (reboot, etc.) where available. Output capped at 4000 characters. dryRun checks the allow/deny policy only (the result says validated: policy, syntaxChecked: false): it does not check the syntax or what the command refers to, so a passing dry run does not show the command will work. Journaled for audit like every write (see list_journal), but never snapshotted: arbitrary commands touch unknown config sections, so it cannot be rolled back via rollback_change — prefer a dedicated tool when one exists, and note the manual undo command in your own records.",
   inputSchema: runCommandInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -300,11 +302,15 @@ const runCommandTool: ToolDefinition = {
 
     if (parsed.dryRun) {
       return {
-        content: `Dry run: Would execute command on ${context.routerId}: ${parsed.command}`,
+        content:
+          `Dry run: the allow/deny policy accepts this command on ${context.routerId}: ${parsed.command}\n` +
+          "Only the policy was checked. The syntax, the names it refers to and what a [find ...] matches were not, so a dry run that passes does not show the command will work.",
         structuredContent: {
           action: "dry_run",
           command: parsed.command,
           routerId: context.routerId,
+          validated: "policy",
+          syntaxChecked: false,
         },
       };
     }

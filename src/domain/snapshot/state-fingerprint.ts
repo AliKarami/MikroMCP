@@ -27,6 +27,7 @@ const UNBOUND_PATHS: ReadonlySet<string> = new Set(["system/clock"]);
 const VOLATILE_FIELDS_BY_PATH: Record<string, readonly string[]> = {
   // A dynamic-timeout entry reports the time it has left, which counts down.
   "ip/firewall/address-list": ["timeout"],
+  "ipv6/firewall/address-list": ["timeout"],
   "ip/dhcp-server/lease": [
     "status",
     "expires-after",

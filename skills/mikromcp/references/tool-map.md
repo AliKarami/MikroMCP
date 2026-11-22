@@ -41,13 +41,19 @@ Multi-tool patterns:
 ## Firewall & NAT
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
-| List filter/nat/mangle rules | `list_firewall_rules` | `ip/firewall/filter` | read |
-| Add/remove/toggle a filter or NAT rule | `manage_firewall_rule` | `ip/firewall/filter`, `ip/firewall/nat` | destructive |
-| List mangle rules | `list_mangle_rules` | `ip/firewall/mangle` | read |
-| Add/remove a mangle rule | `manage_mangle_rule` | `ip/firewall/mangle` | destructive |
-| List address-list entries | `list_address_list_entries` | `ip/firewall/address-list` | read |
-| Add/remove an address-list entry | `manage_address_list_entry` | `ip/firewall/address-list` | destructive |
+| List filter/nat/raw rules (IPv4 or IPv6) | `list_firewall_rules` | `ip/firewall/{filter,nat,raw}`, `ipv6/firewall/{filter,nat,raw}` | read |
+| Add/remove/toggle/move a filter, NAT or raw rule | `manage_firewall_rule` | `ip/firewall/{filter,nat,raw}`, `ipv6/firewall/{filter,nat,raw}` | destructive |
+| List mangle rules | `list_mangle_rules` | `ip/firewall/mangle`, `ipv6/firewall/mangle` | read |
+| Add/remove/toggle/move a mangle rule | `manage_mangle_rule` | `ip/firewall/mangle`, `ipv6/firewall/mangle` | destructive |
+| List address-list entries | `list_address_list_entries` | `ip/firewall/address-list`, `ipv6/firewall/address-list` | read |
+| Add/remove an address-list entry | `manage_address_list_entry` | `ip/firewall/address-list`, `ipv6/firewall/address-list` | destructive |
 | List active connections | `list_connections` | `ip/firewall/connection` | read |
+
+Pass `family: "ipv6"` for the `/ipv6 firewall` menus (ICMP there is `protocol: "icmpv6"`), and
+`table: "raw"` for pre-conntrack rules (`notrack`). To reorder a rule, list the table, then call
+`manage_firewall_rule` (or `manage_mangle_rule`) with `action: "move"`, the rule's `.id` as
+`ruleId` and the `.id` of the rule it should precede (or `end`) as `destination`; `no_change`
+means it is already there. Jump rules need `jumpTarget`; reject rules may set `rejectWith`.
 
 ## System
 | Intent | Tool | REST path | Class |
@@ -63,9 +69,11 @@ Multi-tool patterns:
 |---|---|---|---|
 | List all interfaces | `list_interfaces` | `interface` | read |
 | List bridge interfaces and settings | `list_bridges` | `interface/bridge` | read |
-| Add/remove/modify a bridge | `manage_bridge` | `interface/bridge` | destructive |
-| Add/remove a port to a bridge | `manage_bridge_port` | `interface/bridge/port` | destructive |
+| Create/update/remove a bridge; turn VLAN filtering on or off | `manage_bridge` | `interface/bridge` | destructive |
+| Add/update/remove a bridge port; set PVID, frame types, ingress filtering | `manage_bridge_port` | `interface/bridge/port` | destructive |
 | List bridge ports (membership, PVID, STP role) | `list_bridge_ports` | `interface/bridge/port` | read |
+| List the bridge VLAN table (tagged/untagged ports per VLAN) | `list_bridge_vlans` | `interface/bridge/vlan` | read |
+| Add/update/remove a bridge VLAN entry | `manage_bridge_vlan` | `interface/bridge/vlan` | destructive |
 | List interface lists | `list_interface_lists` | `interface/list` | read |
 | Add/remove an interface list | `manage_interface_list` | `interface/list` | destructive |
 | Add/remove a member from an interface list | `manage_interface_list_member` | `interface/list/member` | destructive |
@@ -78,6 +86,9 @@ Multi-tool patterns:
 |---|---|---|---|
 | List IP addresses on interfaces | `list_ip_addresses` | `ip/address` | read |
 | Add/remove an IP address on an interface | `manage_ip_address` | `ip/address` | destructive |
+| List IPv6 addresses (static, link-local, SLAAC, DHCPv6) | `list_ipv6_addresses` | `ipv6/address` | read |
+| Add/update/remove an IPv6 address (plain, EUI-64, or suffix from a DHCPv6-PD pool) | `manage_ipv6_address` | `ipv6/address` | destructive |
+| List IPv6 neighbors (the IPv6 ARP table) | `list_ipv6_neighbors` | `ipv6/neighbor` | read |
 | Get DNS resolver settings | `get_dns_settings` | `ip/dns` | read |
 | Manage DNS resolver settings | `manage_dns_settings` | `ip/dns` | destructive |
 | List static DNS entries | `list_dns_entries` | `ip/dns/static` | read |
@@ -96,12 +107,13 @@ Multi-tool patterns:
 | Add/remove/toggle a DHCP server | `manage_dhcp_server` | `ip/dhcp-server` | destructive |
 | List DHCP clients (WAN-side) | `list_dhcp_clients` | `ip/dhcp-client` | read |
 | Add/remove/toggle a DHCP client | `manage_dhcp_client` | `ip/dhcp-client` | destructive |
+| List DHCPv6 clients and delegated prefixes | `list_dhcpv6_clients` | `ipv6/dhcp-client` | read |
 
 ## Routing
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
-| List static routes | `list_routes` | `ip/route` | read |
-| Add/remove a static route | `manage_route` | `ip/route` | destructive |
+| List static routes (`family: ipv6` for IPv6) | `list_routes` | `ip/route`, `ipv6/route` | read |
+| Add/remove a static route (`family: ipv6` for IPv6) | `manage_route` | `ip/route`, `ipv6/route` | destructive |
 | List routing rules (policy routing) | `list_routing_rules` | `routing/rule` | read |
 | Add/remove a routing rule | `manage_routing_rule` | `routing/rule` | destructive |
 | List routing tables | `list_routing_tables` | `routing/table` | read |
@@ -253,6 +265,23 @@ Multi-tool patterns:
 | Intent | Tool | REST path | Class |
 |---|---|---|---|
 | Add/remove/enable/disable a VLAN interface | `manage_vlan` | `interface/vlan` | destructive |
+| List which bridge ports carry a VLAN, tagged or untagged | `list_bridge_vlans` | `interface/bridge/vlan` | read |
+| Put ports in a VLAN on a bridge (trunk = tagged, access = untagged) | `manage_bridge_vlan` | `interface/bridge/vlan` | destructive |
+| Set an access port's PVID / frame types | `manage_bridge_port` (`update`) | `interface/bridge/port` | destructive |
+| Turn bridge VLAN filtering on | `manage_bridge` (`update`, `vlanFiltering`) | `interface/bridge` | destructive |
+
+Bridge VLAN filtering workflow — order matters, because enabling filtering is the
+classic way to lock yourself out of a RouterOS router:
+1. Create the bridge VLAN entries with `manage_bridge_vlan` (trunk ports tagged,
+   access ports untagged). For every VLAN interface on the bridge (management VLAN
+   included), list the bridge itself as `tagged`.
+2. Set each access port's `pvid` (and `frameTypes`) with `manage_bridge_port` action
+   `update`. A management address directly on the bridge is reached untagged only
+   from ports whose PVID matches the bridge's.
+3. Check the result with `list_bridge_vlans` and `list_bridge_ports`.
+4. Enable `vlanFiltering` with `manage_bridge` action `update` **last**: dry-run it,
+   read every entry in `warnings`, and keep another way in (a port outside the
+   bridge, or MAC/serial console) before applying.
 
 ## SwOS
 SwOS / SwOS Lite switches (`deviceType: "swos"`) have no RouterOS REST — they

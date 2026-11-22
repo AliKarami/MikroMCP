@@ -37,11 +37,12 @@ export async function runServe(): Promise<void> {
   );
 
   if (config.transport === "stdio") {
-    // Fail at startup if the named identity is missing, but do not bind it to
-    // the session: the executor looks the stdio identity up on every call, so
-    // a reload can demote or remove it.
-    getStdioIdentity(config.stdioIdentity, identityRegistry);
-    await connectStdio(makeServer());
+    // Fail at startup if the named identity is missing. The identity shapes
+    // the tool list sent to the client, but it is not bound to the session:
+    // the executor looks it up again on every call, so a reload can demote or
+    // remove it.
+    const stdioIdentity = getStdioIdentity(config.stdioIdentity, identityRegistry);
+    await connectStdio(makeServer(stdioIdentity));
     log.info("MikroMCP server running via stdio");
   } else if (config.transport === "http") {
     await connectHttp(
@@ -51,6 +52,9 @@ export async function runServe(): Promise<void> {
         bindHost: config.bindHost,
         maxBodyBytes: config.http.maxBodyBytes,
         rateLimitRpm: config.http.rateLimitRpm,
+        allowedHosts: config.http.allowedHosts,
+        allowedOrigins: config.http.allowedOrigins,
+        allowedIps: config.http.allowedIps,
       },
       identityRegistry,
     );

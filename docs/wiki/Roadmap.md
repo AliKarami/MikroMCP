@@ -228,6 +228,10 @@ Contributed by [@f0086](https://github.com/f0086).
 
 `bulk_read`, `bulk_execute` and `list_routers` now honour an identity's `allowedToolPatterns` by their own name. The write journal rotates into dated segments, and old segments are deleted with the snapshot retention period, without ever rewriting a file another server process may be writing. `create_backup` can encrypt with `passwordSecret`, a server-side secret bound to the router, so the backup password never enters the conversation.
 
+## ✅ v1.17 — Self-Reverting Firewall Writes, State-Bound Approvals
+
+`manage_firewall_rule` arms a scheduler job before a real write and removes it only if the router still answers, so a rule that cuts the server off reverts itself. Confirmation tokens and `apply_plan` plan fingerprints are refused if the configuration they touch changed since the preview. Every write response says whether it was `applied` and whether `rollback_change` can undo it. SwOS Lite `vlan.b` is decoded, `write_swos_blob` guards management-address changes, `list_routers` shows the version a router reported, and `manage_dhcp_lease` make-static works.
+
 ---
 
 ## Guiding principles

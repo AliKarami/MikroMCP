@@ -86,7 +86,7 @@ maintenanceWindows:
 
 Edits to `routers.yaml` and `identities.yaml` take effect without restarting the server, so a changed `host` does not drop the MCP connection. Send the server process `SIGHUP` (`kill -HUP <pid>`, or `docker kill --signal=HUP <container>`), or call the `reload_config` tool (admin or superadmin; `dryRun: true` previews). Both files are checked before anything changes: if either is invalid, the running configuration stays in force and the server logs, or the tool returns, the problem. A file that was loaded at startup and has since been deleted is refused rather than treated as empty.
 
-A reload drops the pooled connection and circuit breaker of every changed or removed router, so the next call connects with the new settings, and clears cached identity tokens, so a revoked or rotated token stops working at once. It reports router ids and changed field names, never values. `MIKROMCP_*` environment variables, including the HTTP port, are read at startup only; changing those needs a restart. With a read-only mount (`:ro`), edit the file on the host. Windows has no `SIGHUP`; use `reload_config`. Over stdio, the identity named by `MIKROMCP_STDIO_IDENTITY` is looked up on every call, so a reload that demotes it or narrows its `allowedTools` applies to the running session at once; if the reload removes it, every later call fails with `STDIO_IDENTITY_NOT_FOUND` until the identity is added back and reloaded.
+A reload drops the pooled connection and circuit breaker of every changed or removed router, so the next call connects with the new settings, and clears cached identity tokens, so a revoked or rotated token stops working at once. It reports router ids and changed field names, never values. `MIKROMCP_*` environment variables, including the HTTP port, are read at startup only; changing those needs a restart. With a read-only mount (`:ro`), edit the file on the host. Windows has no `SIGHUP`; use `reload_config`. Routers given in `MIKROMCP_ROUTERS` or the `MIKROMCP_ROUTER_*` variables are fixed with the environment, so a reload does not change them; a `routers.yaml` that appears later takes over from the `MIKROMCP_ROUTER_*` variables, as it would at startup. The tool list a stdio client received when it connected does not change on a reload; what each call may do does. Over stdio, the identity named by `MIKROMCP_STDIO_IDENTITY` is looked up on every call, so a reload that demotes it or narrows its `allowedTools` applies to the running session at once; if the reload removes it, every later call fails with `STDIO_IDENTITY_NOT_FOUND` until the identity is added back and reloaded.
 
 ## SwOS switches
 
@@ -138,6 +138,63 @@ See [Available Tools](Available-Tools) for the SwOS tool reference.
 
 ---
 
+## Routers from environment variables
+
+A single router can be configured with environment variables alone, so an MCP client's `env` block is the whole setup and no `routers.yaml` is needed:
+
+```json
+{
+  "mcpServers": {
+    "mikromcp": {
+      "command": "npx",
+      "args": ["-y", "mikromcp"],
+      "env": {
+        "MIKROMCP_ROUTER_HOST": "192.168.88.1",
+        "MIKROMCP_ROUTER_USER": "mcp",
+        "MIKROMCP_ROUTER_PASS": "your-password"
+      }
+    }
+  }
+}
+```
+
+### Precedence
+
+MikroMCP reads routers from exactly one source, the first of these that is set:
+
+1. **`MIKROMCP_ROUTERS`** — the whole registry inline, as YAML or JSON, in the same shape as `routers.yaml` (`{ "routers": { "<id>": { ... } } }`). It is validated exactly like the file, SSH-key checks included, and errors name the variable (`Invalid router config in MIKROMCP_ROUTERS: ...`). Unparseable YAML fails at startup with the line and column, never the text.
+2. **The config file** at `MIKROMCP_CONFIG_PATH` (default `~/.mikromcp/routers.yaml`), when it exists.
+3. **The `MIKROMCP_ROUTER_*` variables**, when `MIKROMCP_ROUTER_HOST` is set: one router, described by the table below.
+
+When a source wins while a lower one is also set, the lower one is ignored and the server logs a warning naming it (never its values). A `routers.yaml` left behind by `mikromcp init` therefore hides the `MIKROMCP_ROUTER_*` variables until you remove it. `mikromcp doctor` reports which source was used.
+
+```bash
+# The inline form, e.g. for a container or a CI job:
+export MIKROMCP_ROUTERS='{"routers":{"lab":{"host":"10.0.0.1","port":443,"tls":{"enabled":true,"rejectUnauthorized":true},"credentials":{"source":"env","envPrefix":"ROUTER_LAB"},"rosVersion":"7"}}}'
+export ROUTER_LAB_USER=mcp ROUTER_LAB_PASS=your-password
+```
+
+### Variables for a single router
+
+| Variable | Default | Description |
+|---|---|---|
+| `MIKROMCP_ROUTER_HOST` | — | Router address. Setting it turns this source on |
+| `MIKROMCP_ROUTER_USER` | — | REST API username (read the same way as `<PREFIX>_USER`, with prefix `MIKROMCP_ROUTER`) |
+| `MIKROMCP_ROUTER_PASS` | — | REST API password. An empty value is a real (empty) password; only an unset variable counts as missing |
+| `MIKROMCP_ROUTER_ID` | `default` | Router id used in tool calls and logs |
+| `MIKROMCP_ROUTER_PORT` | `443` (`80` with TLS off) | REST API port, an integer from 1 to 65535 |
+| `MIKROMCP_ROUTER_TLS` | `true` | `false` connects over plain HTTP (the `www` service); the password then crosses the network unencrypted, and the server logs a warning |
+| `MIKROMCP_ROUTER_TLS_FINGERPRINT` | — | SHA-256 fingerprint of the router's certificate to pin (`tls.fingerprint`); the connection is refused on mismatch |
+| `MIKROMCP_ROUTER_TLS_INSECURE` | `false` | `true` skips CA validation (`tls.rejectUnauthorized: false`) and logs a warning. Needed for a self-signed certificate; combine it with `MIKROMCP_ROUTER_TLS_FINGERPRINT`, which is still enforced |
+| `MIKROMCP_ROUTER_ROS_VERSION` | `7` | RouterOS version (`rosVersion`), which picks version-dependent REST paths |
+| `MIKROMCP_ROUTER_TAGS` | — | Comma-separated tags, e.g. `home,edge` |
+
+Booleans accept `true`/`false`, `yes`/`no` or `1`/`0`. A bad value fails at startup with a message naming the variable, e.g. `MIKROMCP_ROUTER_PORT must be an integer from 1 to 65535`. `MIKROMCP_ROUTER_TLS=false` together with `MIKROMCP_ROUTER_TLS_FINGERPRINT` or `MIKROMCP_ROUTER_TLS_INSECURE=true` is refused, since neither can apply without TLS.
+
+With one router configured, tool calls can omit `routerId` (see [Default router resolution](#default-router-resolution)). For several routers, SwOS switches, SSH settings or maintenance windows, use `MIKROMCP_ROUTERS` or `routers.yaml`.
+
+---
+
 ## Credentials
 
 Set environment variables matching each router's `envPrefix`:
@@ -160,13 +217,20 @@ Credentials are never logged or included in tool responses.
 |---|---|---|
 | `MIKROMCP_TRANSPORT` | `stdio` | Transport mode: `stdio` or `http` |
 | `MIKROMCP_CONFIG_PATH` | `~/.mikromcp/routers.yaml` | Path to router registry YAML |
+| `MIKROMCP_READ_ONLY` | `false` | `true` registers only read-only tools: no client of this server can call a write tool, and the tool list is about a third the size. See [Tool catalogue](#tool-catalogue) |
+| `MIKROMCP_TOOLSETS` | — (all) | Comma-separated toolsets to register, e.g. `firewall,dhcp`; `list_routers` and `check_router_health` are always kept. An unknown name stops the server at startup. See [Tool catalogue](#tool-catalogue) |
+| `MIKROMCP_ROUTERS` | — | The router registry inline, as YAML or JSON in the `routers.yaml` shape. Takes precedence over the config file — see [Routers from environment variables](#routers-from-environment-variables) |
+| `MIKROMCP_ROUTER_HOST`, `MIKROMCP_ROUTER_USER`, `MIKROMCP_ROUTER_PASS` | — | One router without a config file, used when neither `MIKROMCP_ROUTERS` nor the config file is present. Optional `MIKROMCP_ROUTER_ID`, `_PORT`, `_TLS`, `_TLS_FINGERPRINT`, `_TLS_INSECURE`, `_ROS_VERSION`, `_TAGS` — see [the variable table](#variables-for-a-single-router) |
 | `MIKROMCP_DEFAULT_ROUTER` | — | Router id used when a tool call omits `routerId`; falls back to the sole configured router when only one exists |
 | `MIKROMCP_DATA_DIR` | `~/.mikromcp/data` | Base directory for snapshots, the write journal and `swos/` (SwOS backups and firmware images, owner-only) |
 | `MIKROMCP_LOG_LEVEL` | `info` | Log verbosity: `trace` `debug` `info` `warn` `error` |
 | `MIKROMCP_PORT` | `3000` | HTTP listen port (HTTP transport only) |
 | `MIKROMCP_BIND_HOST` | `127.0.0.1` | HTTP bind address (HTTP transport only) |
 | `MIKROMCP_HTTP_MAX_BODY_BYTES` | `1048576` (1 MB) | Maximum request body size for HTTP transport |
-| `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | Request rate limit in requests per minute (HTTP transport) |
+| `MIKROMCP_HTTP_ALLOWED_HOSTS` | — (loopback names when bound to loopback) | Comma-separated `Host` header values the HTTP server answers to, e.g. `mcp.example.com,10.0.0.5:3000` (no port = any port). Unset and bound to a loopback address: only `localhost`, `127.0.0.1` and `[::1]`. Unset and bound elsewhere: no Host check, with a startup warning. `*` turns the check off. A mismatch gets `403 HOST_NOT_ALLOWED`. See [Running](Running#host-origin-and-client-ip-allow-lists) |
+| `MIKROMCP_HTTP_ALLOWED_ORIGINS` | — (follows the host list) | Comma-separated browser origins allowed to call the server, e.g. `https://app.example.com`. Unset: an `Origin` is allowed when its host passes the Host check. Requests without an `Origin` header (non-browser clients) are not checked. `*` allows any origin. A mismatch gets `403 ORIGIN_NOT_ALLOWED` |
+| `MIKROMCP_HTTP_ALLOWED_IPS` | — (any client) | Comma-separated client IPs and CIDRs, IPv4 or IPv6, e.g. `10.0.0.0/8,192.0.2.7`. Other clients get `403 CLIENT_IP_NOT_ALLOWED`. Behind a reverse proxy the server sees the proxy's address. A malformed entry stops the server at startup |
+| `MIKROMCP_HTTP_RATE_LIMIT_RPM` | `60` | Requests allowed per 60 seconds for each client IP on `/mcp`, `/sse` and `/messages` (HTTP transport); every HTTP request counts, not only tool calls. `0` turns the limit off. Past it the server answers `429` with `Retry-After`; see [Running](Running#http-transport) |
 | `MIKROMCP_IDENTITIES_PATH` | `~/.mikromcp/identities.yaml` | Path to identity/token registry (HTTP transport) |
 | `MIKROMCP_STDIO_IDENTITY` | — | Named identity for stdio transport; omit for built-in superadmin |
 | `MIKROMCP_CONFIRMATION_SECRET` | — | HMAC secret that signs confirmation tokens for destructive tools. **Required at startup in HTTP mode when any identity has role `readonly` or `operator`**; when unset, the per-router confirmation gate is off, and `bulk_execute` write fan-outs are still gated with tokens signed by a random per-process secret (valid only until restart, and only on the instance that issued them) |
@@ -183,9 +247,45 @@ Credentials are never logged or included in tool responses.
 
 ### Default router resolution
 
-When a tool call omits `routerId`, MikroMCP resolves the target router in two steps: first it checks `MIKROMCP_DEFAULT_ROUTER`; if that is unset it falls back to the sole configured router (when exactly one is defined in `routers.yaml`). If neither condition is met (multiple routers, no default set) the call is rejected with a `VALIDATION` error (`MISSING_ROUTER_ID`) that lists the available routers. `mikromcp init` writes `MIKROMCP_DEFAULT_ROUTER` into `~/.mikromcp/.env` automatically, so single-router setups work without specifying `routerId` in every prompt.
+When a tool call omits `routerId`, MikroMCP resolves the target router in two steps: first it checks `MIKROMCP_DEFAULT_ROUTER`; if that is unset it falls back to the sole configured router (when exactly one is defined, in whichever [router source](#precedence) is used). If neither condition is met (multiple routers, no default set) the call is rejected with a `VALIDATION` error (`MISSING_ROUTER_ID`) that lists the available routers. `mikromcp init` writes `MIKROMCP_DEFAULT_ROUTER` into `~/.mikromcp/.env` automatically, so single-router setups work without specifying `routerId` in every prompt.
 
 ---
+
+## Tool catalogue
+
+Every registered tool is sent to the client in `tools/list`, and many clients put the whole list into the model's context. The full catalogue is about 150 KB of JSON (roughly 38k tokens), which is too much for many local models. Two variables shrink it:
+
+| Setting | Tools | `tools/list` size |
+|---|---|---|
+| default | all | ~150 KB (~38k tokens) |
+| `MIKROMCP_READ_ONLY=true` | read-only tools only | ~55 KB (~14k tokens) |
+| `MIKROMCP_TOOLSETS=firewall` | one toolset, plus `list_routers` and `check_router_health` | ~13 KB (~3k tokens) |
+| both | read-only tools of the selected toolsets | smaller still |
+
+`MIKROMCP_READ_ONLY` is enforced, not cosmetic: write tools are not registered, so no client of that server can call one. `MIKROMCP_TOOLSETS` is about context size only. `bulk_read` and `plan_changes` still work with tools from other toolsets, and the executor's authorization checks stay as they are.
+
+The toolset names:
+
+| Toolset | Contains |
+|---|---|
+| `system` | System status and clock, reboot, `run_command`, packages, upgrade, backup and export |
+| `automation` | Scripts, scheduler jobs, files |
+| `containers` | Containers and their config, envs and mounts |
+| `interfaces` | Interfaces, bridges, bridge ports and the bridge VLAN table, VLANs, interface lists |
+| `wireless` | WiFi interfaces and clients |
+| `ip` | IPv4 and IPv6 addresses, IPv6 neighbors, DHCPv6 clients, pools, IP services, DNS |
+| `dhcp` | DHCP leases, servers and clients |
+| `routing` | Routes, policy routing, routing tables, BGP/OSPF reads, VRRP |
+| `firewall` | Filter and NAT rules, mangle rules, address lists |
+| `vpn` | WireGuard, IPsec, PPPoE, OpenVPN, PPP profiles |
+| `access` | Users, user groups, certificates |
+| `queues` | Simple queues |
+| `monitoring` | Ping, traceroute, torch, logs and log rules, SNMP/NTP, netwatch, neighbors, ARP, bandwidth test, connections |
+| `swos` | SwOS / SwOS Lite switches |
+| `change` | `plan_changes`, `apply_plan`, `rollback_change`, `list_journal` |
+| `fleet` | `bulk_read`, `bulk_execute` |
+
+In HTTP mode, `tools/list` also leaves out the tools a caller's identity may not call under its `allowedToolPatterns`. This only hides them: a call to a hidden tool is still refused, as before.
 
 ## Identities (HTTP transport)
 

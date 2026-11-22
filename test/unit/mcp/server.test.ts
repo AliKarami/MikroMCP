@@ -6,8 +6,17 @@ import { tmpdir } from "node:os";
 import { createServerFactory, SERVER_INSTRUCTIONS } from "../../../src/mcp/server.js";
 import type { AppConfig } from "../../../src/config/app-config.js";
 import type { IdentityRegistry } from "../../../src/config/identity-registry.js";
+import type { Identity } from "../../../src/types.js";
+import { allTools } from "../../../src/domain/tools/index.js";
 
-function makeConfig(): AppConfig {
+function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
+  return {
+    ...defaults(),
+    ...overrides,
+  };
+}
+
+function defaults(): AppConfig {
   return {
     transport: "stdio",
     port: 3000,
@@ -24,7 +33,15 @@ function makeConfig(): AppConfig {
     stdioIdentity: undefined,
     confirmationSecret: undefined,
     auditLogPath: undefined,
-    http: { maxBodyBytes: 1048576, rateLimitRpm: 60 },
+    readOnly: false,
+    toolsets: [],
+    http: {
+      maxBodyBytes: 1048576,
+      rateLimitRpm: 60,
+      allowedHosts: [],
+      allowedOrigins: [],
+      allowedIps: [],
+    },
     ssh: { commandTimeoutMs: 30000, maxOutputBytes: 524288 },
     retry: { maxRetries: 3, baseDelayMs: 200, maxDelayMs: 5000 },
     circuitBreaker: { failureThreshold: 5, cooldownMs: 30000 },
@@ -85,6 +102,58 @@ describe("createServerFactory", () => {
     } finally {
       register.mockRestore();
     }
+  });
+
+  function registeredNames(config: AppConfig, identity?: Identity): string[] {
+    const register = vi.spyOn(McpServer.prototype, "registerTool");
+    try {
+      const server = createServerFactory(config, identityRegistry).makeServer(identity);
+      void server.close();
+      return register.mock.calls.map(([name]) => name);
+    } finally {
+      register.mockRestore();
+    }
+  }
+
+  it("registers every tool by default", () => {
+    expect(registeredNames(makeConfig())).toHaveLength(allTools.length);
+  });
+
+  it("registers only read-only tools with readOnly, and says so in the instructions", () => {
+    const config = makeConfig({ readOnly: true });
+    const names = registeredNames(config);
+    expect(names).toContain("list_firewall_rules");
+    expect(names).not.toContain("manage_firewall_rule");
+    const server = createServerFactory(config, identityRegistry).makeServer();
+    const instructions = (server.server as unknown as { _instructions?: string })._instructions;
+    expect(instructions).toMatch(/reduced tool catalogue/);
+    void server.close();
+  });
+
+  it("registers only the selected toolsets plus list_routers and check_router_health", () => {
+    const names = registeredNames(makeConfig({ toolsets: ["dhcp"] }));
+    expect(names).toContain("list_dhcp_leases");
+    expect(names).toContain("list_routers");
+    expect(names).toContain("check_router_health");
+    expect(names).not.toContain("list_routes");
+  });
+
+  it("refuses an unknown toolset at startup", () => {
+    expect(() => createServerFactory(makeConfig({ toolsets: ["nope"] }), identityRegistry)).toThrow(
+      /UNKNOWN_TOOLSET|unknown toolsets/,
+    );
+  });
+
+  it("lists only what an identity's allowedToolPatterns permit", () => {
+    const identity = {
+      id: "dash",
+      role: "readonly",
+      allowedRouters: [],
+      allowedToolPatterns: ["list_*"],
+    } as Identity;
+    const names = registeredNames(makeConfig(), identity);
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.every((n) => n.startsWith("list_"))).toBe(true);
   });
 
   it("builds a server without throwing when config paths are absent", () => {

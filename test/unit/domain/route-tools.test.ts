@@ -2,6 +2,9 @@ import { describe, it, expect, vi, type MockedFunction } from "vitest";
 import { routeTools } from "../../../src/domain/tools/route-tools.js";
 import type { ToolContext } from "../../../src/domain/tools/tool-definition.js";
 import type { RouterOSRestClient } from "../../../src/adapter/rest-client.js";
+import { snapshotPathsFor } from "../../../src/domain/tools/tool-definition.js";
+import { ErrorCategory } from "../../../src/domain/errors/error-types.js";
+import { fromWire } from "../helpers/wire.js";
 
 const listRoutesTool = routeTools[0];
 const manageRouteTool = routeTools[1];
@@ -384,6 +387,165 @@ describe("route tools", () => {
           ctx,
         ),
       ).rejects.toThrow();
+    });
+  });
+
+  describe("family: ipv6", () => {
+    const ipv6Route = {
+      ".id": "*A",
+      "dst-address": "2001:db8:100::/48",
+      gateway: "fe80::1%ether1",
+      distance: "1",
+      disabled: "false",
+      dynamic: "false",
+      active: "true",
+    };
+    const add = {
+      routerId: "test-router",
+      action: "add",
+      family: "ipv6",
+      dstAddress: "2001:db8:100::/48",
+      gateway: "fe80::1%ether1",
+    };
+
+    it("defaults family to ip on both tools", () => {
+      expect(listRoutesInputSchema.parse({}).family).toBe("ip");
+      expect(
+        manageRouteInputSchema.parse({
+          action: "add",
+          dstAddress: "10.0.0.0/8",
+          gateway: "1.1.1.1",
+        }).family,
+      ).toBe("ip");
+      expect(() => listRoutesInputSchema.parse({ family: "inet6" })).toThrow();
+    });
+
+    it("normalises an IPv6 destination and makes a bare address /128", () => {
+      expect(
+        manageRouteInputSchema.parse({ ...add, dstAddress: "2001:DB8:100:0::/48" }).dstAddress,
+      ).toBe("2001:db8:100::/48");
+      expect(manageRouteInputSchema.parse({ ...add, dstAddress: "2001:db8::5" }).dstAddress).toBe(
+        "2001:db8::5/128",
+      );
+    });
+
+    it("snapshots the path of the chosen family", () => {
+      expect(snapshotPathsFor(manageRouteTool, {})).toEqual(["ip/route"]);
+      expect(snapshotPathsFor(manageRouteTool, { family: "ip" })).toEqual(["ip/route"]);
+      expect(snapshotPathsFor(manageRouteTool, { family: "ipv6" })).toEqual(["ipv6/route"]);
+    });
+
+    it("list_routes reads ipv6/route", async () => {
+      const ctx = makeContext(fromWire([ipv6Route]));
+      const result = await listRoutesTool.handler({ family: "ipv6" }, ctx);
+      expect(ctx.routerClient.get).toHaveBeenCalledWith("ipv6/route", {
+        limit: undefined,
+        offset: undefined,
+      });
+      expect(result.content).toContain("IPv6 routes on test-router: 1-1 of 1.");
+      expect(result.content).toContain("dst-address=2001:db8:100::/48 gateway=fe80::1%ether1");
+      expect(result.structuredContent.family).toBe("ipv6");
+    });
+
+    it("creates the route on ipv6/route", async () => {
+      const ctx = makeContext([]);
+      const result = await manageRouteTool.handler(add, ctx);
+      expect(result.structuredContent.action).toBe("created");
+      expect(ctx.routerClient.create).toHaveBeenCalledWith("ipv6/route", {
+        "dst-address": "2001:db8:100::/48",
+        gateway: "fe80::1%ether1",
+        distance: "1",
+        disabled: "false",
+      });
+    });
+
+    it("returns already_exists for the same route written differently", async () => {
+      const ctx = makeContext(fromWire([ipv6Route]));
+      const result = await manageRouteTool.handler(
+        { ...add, dstAddress: "2001:0DB8:0100::/48", gateway: "FE80:0::1%ether1" },
+        ctx,
+      );
+      expect(result.structuredContent.action).toBe("already_exists");
+      expect(ctx.routerClient.get).toHaveBeenCalledWith("ipv6/route", {
+        filter: { "dst-address": "2001:db8:100::/48" },
+      });
+      expect(ctx.routerClient.create).not.toHaveBeenCalled();
+    });
+
+    it("throws CONFLICT when the IPv6 route differs", async () => {
+      const ctx = makeContext(fromWire([ipv6Route]));
+      await expect(manageRouteTool.handler({ ...add, distance: 10 }, ctx)).rejects.toMatchObject({
+        category: ErrorCategory.CONFLICT,
+        code: "ROUTE_CONFLICT",
+      });
+    });
+
+    it("treats a link-local gateway on another interface as a different route", async () => {
+      const ctx = makeContext(fromWire([ipv6Route]));
+      const result = await manageRouteTool.handler({ ...add, gateway: "fe80::1%ether2" }, ctx);
+      expect(result.structuredContent.action).toBe("created");
+    });
+
+    it("accepts a global gateway and an interface name", async () => {
+      const ctx = makeContext([]);
+      await manageRouteTool.handler({ ...add, gateway: "2001:DB8::1", dryRun: true }, ctx);
+      const viaIface = await manageRouteTool.handler({ ...add, gateway: "pppoe-out1" }, ctx);
+      expect(viaIface.structuredContent.action).toBe("created");
+      expect(ctx.routerClient.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("dry run normalises the gateway in the diff", async () => {
+      const ctx = makeContext([]);
+      const result = await manageRouteTool.handler(
+        { ...add, gateway: "2001:DB8:0::1", dryRun: true },
+        ctx,
+      );
+      expect(result.structuredContent.diff).toContainEqual({
+        property: "gateway",
+        before: null,
+        after: "2001:db8::1",
+      });
+    });
+
+    it("removes from ipv6/route", async () => {
+      const ctx = makeContext(fromWire([ipv6Route]));
+      const result = await manageRouteTool.handler({ ...add, action: "remove" }, ctx);
+      expect(result.structuredContent.action).toBe("removed");
+      expect(ctx.routerClient.remove).toHaveBeenCalledWith("ipv6/route", "*A");
+    });
+
+    it("throws NOT_FOUND removing a missing IPv6 route", async () => {
+      const ctx = makeContext([]);
+      await expect(
+        manageRouteTool.handler({ ...add, action: "remove" }, ctx),
+      ).rejects.toMatchObject({ category: ErrorCategory.NOT_FOUND });
+    });
+
+    it.each([
+      [{ dstAddress: "10.0.0.0/8" }, "ROUTE_FAMILY_MISMATCH"],
+      [{ gateway: "192.0.2.1" }, "ROUTE_FAMILY_MISMATCH"],
+      [{ gateway: "fe80::1" }, "ROUTE_LINK_LOCAL_GATEWAY_NEEDS_INTERFACE"],
+      [{ gateway: "2001:db8::zz" }, "ROUTE_INVALID_GATEWAY"],
+      [{ gateway: "fe80::1%" }, "ROUTE_INVALID_GATEWAY"],
+      [{ gateway: "ether1%ether2" }, "ROUTE_INVALID_GATEWAY"],
+    ])("rejects %o with %s before touching the router", async (override, code) => {
+      const ctx = makeContext([]);
+      await expect(manageRouteTool.handler({ ...add, ...override }, ctx)).rejects.toMatchObject({
+        category: ErrorCategory.VALIDATION,
+        code,
+      });
+      expect(ctx.routerClient.get).not.toHaveBeenCalled();
+    });
+
+    it("rejects IPv6 values on an ip-family route", async () => {
+      const ctx = makeContext([]);
+      const v4 = { routerId: "test-router", action: "add" };
+      await expect(
+        manageRouteTool.handler({ ...v4, dstAddress: "2001:db8::/32", gateway: "ether1" }, ctx),
+      ).rejects.toMatchObject({ code: "ROUTE_FAMILY_MISMATCH" });
+      await expect(
+        manageRouteTool.handler({ ...v4, dstAddress: "10.0.0.0/8", gateway: "2001:db8::1" }, ctx),
+      ).rejects.toMatchObject({ code: "ROUTE_FAMILY_MISMATCH" });
     });
   });
 });

@@ -4,7 +4,7 @@
 
 MikroMCP is a [Model Context Protocol](https://modelcontextprotocol.io) server that connects AI assistants like Claude, Cursor, and Codex directly to your MikroTik RouterOS infrastructure. Instead of copying CLI snippets from chat into a terminal, your AI assistant calls typed, validated tools that talk to the router's REST API — with dry-run previews, idempotency checks, and audit logs built in.
 
-This guide takes you from zero to a working AI ↔ router connection in about 15 minutes.
+This guide takes you from zero to a working AI ↔ router connection in about 15 minutes. With one router, the [environment-variable setup](#fastest-environment-variables-only-one-router) needs no config file at all.
 
 ---
 
@@ -75,9 +75,39 @@ With the source install, replace `mikromcp` with `node /path/to/MikroMCP/dist/ma
 
 ---
 
-## Step 3 — Run the Setup Wizard
+## Step 3 — Point MikroMCP at Your Router
 
-MikroMCP ships with an interactive setup wizard that generates your config files and tests your router connection in one step:
+Pick one of three ways. They can't be mixed: if more than one is set, the first one in this order wins and MikroMCP logs a warning naming what it ignored — `MIKROMCP_ROUTERS`, then `routers.yaml`, then the `MIKROMCP_ROUTER_*` variables. See [Routers from environment variables](Configuration.md#routers-from-environment-variables).
+
+### Fastest: environment variables only (one router)
+
+No config file at all. Put the router in your MCP client's config. For Claude Desktop, add this to `claude_desktop_config.json` (Settings → Developer → Edit Config) and restart Claude:
+
+```json
+{
+  "mcpServers": {
+    "mikromcp": {
+      "command": "npx",
+      "args": ["-y", "mikromcp"],
+      "env": {
+        "MIKROMCP_ROUTER_HOST": "10.0.0.1",
+        "MIKROMCP_ROUTER_USER": "mcp-api",
+        "MIKROMCP_ROUTER_PASS": "choose-a-strong-password"
+      }
+    }
+  }
+}
+```
+
+That is one router with id `default`, over HTTPS on port 443, with the certificate verified against the system CA store. It is the only router, so tool calls can leave out `routerId`.
+
+The certificate from Step 1 is self-signed and will not verify that way. Pin it instead: add `"MIKROMCP_ROUTER_TLS_FINGERPRINT": "AA:BB:CC:..."` (its SHA-256 fingerprint — see [Fingerprint pinning](RouterOS-API-Setup.md#fingerprint-pinning-recommended-with-self-signed-certs)) and `"MIKROMCP_ROUTER_TLS_INSECURE": "true"`, which turns off CA validation while the pin still refuses any other certificate. The other variables (port, plain HTTP, id, tags, RouterOS version) are in the [variable table](Configuration.md#routers-from-environment-variables).
+
+With this setup, run `mikromcp doctor` (Step 4) with the same three variables exported in your shell. Then skip to [Step 5](#step-5--connect-to-your-ai-assistant).
+
+### Guided: the setup wizard
+
+For several routers, SSH keys or HTTP identities, the interactive wizard writes your config files and tests the connection:
 
 ```bash
 mikromcp init
@@ -164,7 +194,7 @@ curl -sk https://10.0.0.1/rest/system/resource \
 
 ## Step 5b — Install the Usage Skill (recommended)
 
-The MikroMCP usage skill teaches your AI assistant how to use all 134 tools safely — dry-run before write, rollback patterns, fleet operations, and more. It ships in the repository (not the npm package), so link it into Claude Code from a clone:
+The MikroMCP usage skill teaches your AI assistant how to use all 140 tools safely — dry-run before write, rollback patterns, fleet operations, and more. It ships in the repository (not the npm package), so link it into Claude Code from a clone:
 
 ```bash
 git clone https://github.com/AliKarami/MikroMCP.git

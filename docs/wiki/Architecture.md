@@ -121,7 +121,7 @@ flowchart TD
 |---|---|---|
 | Entry point | `src/main.ts` | Loads config, selects transport, starts server |
 | Tool registry | `src/mcp/tool-registry.ts` | Registers tools; injects circuit breaker, retry, correlation ID, credentials |
-| All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**134 typed tools**) |
+| All tools | `src/domain/tools/index.ts` | Aggregates the per-domain tool arrays into `allTools` (**140 typed tools**) |
 | REST client | `src/adapter/rest-client.ts` | `get`, `getOne`, `create`, `update`, `remove`, `execute` over HTTPS |
 | SSH adapter | `src/adapter/ssh-client.ts` | Runs `/tool/ping` and `run_command`; optionally uses a separate SSH username and local private key |
 | SFTP adapter | `src/adapter/sftp-client.ts` | Preferred encrypted transport for `upload_file`; shares the router's SSH username, key, port, and host-key fingerprint settings |
@@ -143,7 +143,7 @@ flowchart TD
 | **stdio** (default) | `mikromcp serve` (no env needed) | Local: Claude Desktop, Claude Code, Cursor — the assistant spawns MikroMCP as a child process |
 | **HTTP** | `MIKROMCP_TRANSPORT=http mikromcp serve` | Remote / shared: Docker, systemd, multiple clients connecting to one instance |
 
-HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) on `MIKROMCP_PORT` (default 3000). Every request must carry `Authorization: Bearer <token>`. Streamable HTTP sessions are bound to the identity that created them (a token cannot drive another identity's session) and are evicted after 30 minutes idle. `GET /healthz` is unauthenticated; `GET /metrics` (Prometheus) requires a bearer token whenever any identities are configured.
+HTTP transport listens at `POST /mcp` (call) and `GET /mcp` (SSE event stream) on `MIKROMCP_PORT` (default 3000). Every request must carry `Authorization: Bearer <token>`. Streamable HTTP sessions are bound to the identity that created them (a token cannot drive another identity's session) and are evicted after 30 minutes idle. `GET /healthz` is unauthenticated; `GET /metrics` (Prometheus) requires a bearer token whenever any identities are configured. Before authentication, every request but `/healthz` passes a Host, Origin and client-IP check (`src/middleware/request-guard.ts`): a loopback-bound server answers only `localhost` names, and `MIKROMCP_HTTP_ALLOWED_HOSTS`, `_ORIGINS` and `_IPS` set the lists for other binds; a refused request gets `403`.
 
 ## Safety Guarantees
 

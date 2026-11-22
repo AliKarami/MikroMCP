@@ -1,6 +1,6 @@
 # Available Tools
 
-All 134 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
+All 140 tools exposed by MikroMCP. Each router-scoped tool accepts a `routerId` parameter (string) matching an entry in your `routers.yaml`. `routerId` is optional: when omitted, the server uses `MIKROMCP_DEFAULT_ROUTER`, or the sole configured router when only one exists.
 
 Read tools are safe to call freely — they carry auto-retry with exponential backoff. Write tools are idempotent unless noted, and all write tools support `dryRun: true` to preview changes without applying them. Every write-tool response states what happened in an `applied` boolean: `true` when the call ran its write path, `false` on a dry run — and a dry run's text always starts with `NOT APPLIED — dry run only. Pass dryRun: false to write this change.`, so a preview cannot be mistaken for a write. Note that `write_swos_blob` and the SwOS maintenance tools default to `dryRun: true` (preview first); the RouterOS write tools default to `false`.
 
@@ -68,6 +68,12 @@ Trigger a controlled router reboot with an optional delay. Use this instead of `
 ### `run_command` — Write · Destructive
 
 Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
+
+### `run_command` — Write · Destructive
+
+Execute an arbitrary RouterOS console command via SSH. Protected by a configurable allow/deny policy. Output is capped at 4000 characters. Use dedicated tools (`reboot`, etc.) for controlled operations — prefer this only for gaps in tool coverage. Journaled for audit like every write (see `list_journal`), but **never snapshotted**: arbitrary commands touch unknown config sections, so it cannot be rolled back via `rollback_change` — note the manual undo command yourself when writing through it.
+
+`dryRun` checks the allow/deny policy and nothing else. The result says so (`validated: "policy"`, `syntaxChecked: false`, and the text starts with a reminder): the syntax, the names the command refers to and what a `[find ...]` would match are not checked, so a dry run that passes does not show the command will work. A malformed command, for example a port name containing brackets that is not quoted, passes a dry run and may do nothing when run.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -394,34 +400,40 @@ List bridge interfaces and their port members.
 
 ### `manage_bridge` — Write · Destructive · Idempotent
 
-Create or remove a bridge interface. Returns `already_exists` if the bridge already exists.
+Create, update, or remove a bridge interface, and turn bridge VLAN filtering on or off. `create` returns `already_exists` if the bridge already exists (`CONFLICT` if `vlanFiltering` is given and differs); `update` returns `no_change` when nothing differs and `NOT_FOUND` for a missing bridge.
+
+Enabling `vlanFiltering` is the classic management lock-out: traffic to the router's own address on the bridge stops unless the bridge itself is a tagged member of the management VLAN (for a VLAN interface on the bridge) or the management VLAN is untagged with a PVID that matches the bridge's. Configure the VLAN table (`manage_bridge_vlan`) and port PVIDs (`manage_bridge_port`) first and enable filtering last. The dry run and the real result of an `update` that enables it carry `warnings`: a general lock-out warning, plus specific gaps found in the current setup (no static bridge VLAN entries; a VLAN interface on the bridge whose VLAN does not list the bridge as tagged; ports whose PVID does not reach an address on the bridge).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `create` \| `remove` | — | Operation to perform |
-| `name` | string | — | Bridge interface name. `create`: letters/digits/`.`/`-`/`_`, max 64 chars; `remove`: any existing name verbatim |
-| `comment` | string | — | Optional comment |
-| `disabled` | boolean | `false` | Create the bridge in disabled state |
+| `action` | `create` \| `update` \| `remove` | — | Operation to perform |
+| `name` | string | — | Bridge interface name. `create`: letters/digits/`.`/`-`/`_`, max 64 chars; `update`/`remove`: any existing name verbatim |
+| `vlanFiltering` | boolean | — | Turn bridge VLAN filtering on or off (`create`/`update`) |
+| `comment` | string | — | Optional comment (`create`/`update`) |
+| `disabled` | boolean | — | Disable the bridge. `create`: defaults to `false`; `update`: unchanged when omitted |
 | `dryRun` | boolean | `false` | Preview without applying |
 
-**Example prompt:** "Create a bridge interface named bridge1 on core-01."
+**Example prompt:** "Dry-run enabling VLAN filtering on bridge1 on core-01 and tell me whether I would lose access to the router."
 
 ---
 
 ### `manage_bridge_port` — Write · Destructive · Idempotent
 
-Add or remove an interface as a bridge port. Returns `already_exists` if the interface is already a member.
+Add, update, or remove an interface as a bridge port, and set its VLAN-filtering port settings. `add` returns `already_exists` if the interface is already a member with the requested settings (`CONFLICT` if a given `pvid`/`frameTypes`/`ingressFiltering` differs; use `update`). `update` returns `no_change` when nothing differs and `NOT_FOUND` when the interface is not a port of that bridge; dynamic ports are refused. Results warn when the bridge has vlan-filtering off (the settings take effect once it is on) or on (changing the PVID or frame types of the port you manage the router through can cut the session).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `add` \| `remove` | — | Operation to perform |
+| `action` | `add` \| `update` \| `remove` | — | Operation to perform |
 | `bridge` | string | — | Bridge interface name |
-| `interface` | string | — | Interface to add or remove |
+| `interface` | string | — | Interface to add, update or remove |
+| `pvid` | integer | — | Port VLAN ID for untagged ingress traffic, 1–4094 (`add`/`update`) |
+| `frameTypes` | `admit-all` \| `admit-only-untagged-and-priority-tagged` \| `admit-only-vlan-tagged` | — | Which frames the port admits on ingress (`add`/`update`) |
+| `ingressFiltering` | boolean | — | Drop ingress frames for VLANs the port is not a member of (`add`/`update`) |
 | `dryRun` | boolean | `false` | Preview without applying |
 
-**Example prompt:** "Add ether2 and ether3 to bridge1 on core-01."
+**Example prompt:** "Add ether2 and ether3 to bridge1 on core-01, then make ether2 an access port with PVID 20 that only admits untagged frames."
 
 ---
 
@@ -438,6 +450,42 @@ List bridge port entries: interface membership, PVID, frame types, STP role and 
 | `offset` | integer | `0` | Pagination offset |
 
 **Example prompt:** "Is ether5 a port of bridge1 on core-01, and what is its PVID?"
+
+---
+
+### `list_bridge_vlans` — Read
+
+List the bridge VLAN table (`/interface/bridge/vlan`): per entry the bridge, `vlan-ids`, configured `tagged`/`untagged` ports, the `current-tagged`/`current-untagged` ports RouterOS actually applies, and whether the entry is dynamic (derived from port PVIDs).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `bridge` | string | — | Only entries of this bridge |
+| `vlanId` | integer | — | Only entries whose `vlan-ids` include this VLAN (1–4094; matched inside ranges and lists) |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which ports carry VLAN 20 on bridge1 of core-01, tagged and untagged?"
+
+---
+
+### `manage_bridge_vlan` — Write · Destructive · Idempotent
+
+Add, update, or remove a bridge VLAN table entry: which ports carry which VLANs tagged or untagged. Idempotent by `bridge` + `vlanIds`, compared as a set of VLAN ids (`10,20` equals `20,10`; `100-102` equals `100,101,102`), with port lists compared order-insensitively. `add` returns `already_exists` for an equal entry, and `CONFLICT` when the entry exists with different ports (`BRIDGE_VLAN_CONFLICT`) or overlaps another static entry's VLANs (`BRIDGE_VLAN_OVERLAP`). `update` returns `no_change` when nothing differs; `update` and `remove` return `NOT_FOUND` when no static entry has exactly those VLANs. Dynamic entries are refused (`BRIDGE_VLAN_DYNAMIC`). A port listed as both tagged and untagged is rejected (`BRIDGE_VLAN_PORT_OVERLAP`), as RouterOS rejects it. Results carry `warnings` when the bridge has vlan-filtering off (the entry has no effect until it is on) and when a change drops the bridge itself from a VLAN while filtering is on. Workflow: create the VLAN entries, set access-port PVIDs with `manage_bridge_port`, then enable vlan-filtering with `manage_bridge` last.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `update` \| `remove` | — | Operation to perform |
+| `bridge` | string | — | Bridge interface name |
+| `vlanIds` | integer \| string | — | A VLAN id (1–4094), a range (`100-110`) or a comma list (`10,20,100-110`). With `bridge`, the idempotency key; sent to RouterOS normalised (sorted, runs collapsed to ranges) |
+| `tagged` | string[] | — | Interfaces that carry these VLANs tagged (trunks). Include the bridge itself when the router has a VLAN interface on it. On `update`, replaces the list; `[]` clears it |
+| `untagged` | string[] | — | Interfaces that carry these VLANs untagged (access ports; set their PVID to match with `manage_bridge_port`). On `update`, replaces the list; `[]` clears it |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | — | Disable the entry (unchanged on `update` when omitted) |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Put ether2 as an untagged access port in VLAN 20 on bridge1 and trunk VLANs 10 and 20 on ether5, on core-01. Dry-run it first."
 
 ---
 
@@ -574,6 +622,78 @@ Add, update, or remove an IP address on an interface.
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add 10.0.0.1/24 to ether2 on core-01."
+
+---
+
+## IPv6
+
+### `list_ipv6_addresses` — Read
+
+List IPv6 addresses (`/ipv6/address`), including dynamic ones (link-local, SLAAC, DHCPv6), with their EUI-64, advertise and from-pool settings.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Only addresses on this interface |
+| `disabled` | `true` \| `false` \| `all` | `all` | Filter by disabled state |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which IPv6 addresses does core-01 have on bridge?"
+
+---
+
+### `manage_ipv6_address` — Write · Destructive · Idempotent
+
+Add, update, or remove a static IPv6 address. Idempotent by address and interface, compared in canonical form (`2001:DB8:0::1/64` equals `2001:db8::1/64`): an identical add returns `already_exists`, the same address with other settings or on another interface is a `CONFLICT`, an update with nothing to change returns `no_change`, and updating or removing a missing address is `NOT_FOUND`. With `eui64`, `address` is the prefix and RouterOS generates the interface ID from the MAC; the address is matched by that prefix. With `fromPool`, `address` is only the suffix (e.g. `::1/64`, prefix bits zero) and the prefix comes from the pool, typically one a DHCPv6 client fills by prefix delegation; the address is matched by that suffix. An address read back from `list_ipv6_addresses` can always be updated or removed as printed, without `eui64` or `fromPool`. Dynamic addresses (link-local, SLAAC, DHCPv6) are refused. `eui64` and `fromPool` cannot be changed by `update`: remove and re-add.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `action` | `add` \| `update` \| `remove` | — | Operation to perform |
+| `address` | string | — | IPv6 address with prefix length (e.g. `2001:db8::1/64`); with `eui64` the prefix (`2001:db8:1::/64`); with `fromPool` the suffix (`::1/64`) |
+| `interface` | string | — | Interface name |
+| `eui64` | boolean | `false` | Generate the last 64 bits from the interface MAC; prefix length must be 64 or shorter |
+| `fromPool` | string | — | IPv6 pool that supplies the prefix (e.g. filled by DHCPv6-PD) |
+| `advertise` | boolean | — | Advertise the prefix in router advertisements (SLAAC); omit to keep RouterOS's default |
+| `noDad` | boolean | — | Skip duplicate address detection; omit to keep RouterOS's default |
+| `comment` | string | — | Optional comment |
+| `disabled` | boolean | `false` | Whether the address should be disabled |
+| `dryRun` | boolean | `false` | Preview without applying |
+
+**Example prompt:** "Add 2001:db8:10::1/64 to bridge on core-01 and advertise it to clients." / "Give vlan10 on core-01 the address ::1/64 from the pd-pool prefix."
+
+---
+
+### `list_ipv6_neighbors` — Read
+
+List the IPv6 neighbor table (`/ipv6/neighbor`), the IPv6 counterpart of ARP: address, MAC, interface, state, and whether the neighbor is a router.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Only neighbors on this interface |
+| `status` | string | — | Only neighbors in this state (e.g. `reachable`, `stale`, `delay`, `probe`, `failed`, `noarp`) |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "Which IPv6 routers does core-01 see on ether1?"
+
+---
+
+### `list_dhcpv6_clients` — Read
+
+List DHCPv6 clients (`/ipv6/dhcp-client`): what each requests, its status, the delegated prefix, the pool it fills and its prefix length, and whether it adds a default route or uses the peer's DNS.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `routerId` | string | — | Target router |
+| `interface` | string | — | Only the client on this interface |
+| `status` | string | — | Only clients in this state (e.g. `bound`, `searching`, `stopped`) |
+| `limit` | integer | `100` | Results per page (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+
+**Example prompt:** "What IPv6 prefix did core-01's ISP delegate on ether1?"
 
 ---
 
@@ -909,37 +1029,39 @@ Enable or disable the OpenVPN server, or update its configuration. Enable/disabl
 
 ### `list_routes` — Read
 
-List the routing table with optional filtering.
+List the routing table with optional filtering. IPv4 (`/ip/route`) by default; `family: ipv6` reads `/ipv6/route`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
+| `family` | `ip` \| `ipv6` | `ip` | Address family: IPv4 or IPv6 routing table |
 | `activeOnly` | boolean | `false` | Only return active routes |
 | `staticOnly` | boolean | `false` | Only return static routes |
 | `limit` | integer | `100` | Results per page (1–500) |
 | `offset` | integer | `0` | Pagination offset |
 
-**Example prompt:** "Show me the active routes on core-01."
+**Example prompt:** "Show me the active routes on core-01." / "List the IPv6 routes on core-01."
 
 ---
 
 ### `manage_route` — Write · Destructive · Idempotent
 
-Add or remove a static route. Plain IP addresses without a prefix are auto-converted to `/32`.
+Add or remove a static route, IPv4 by default or IPv6 with `family: ipv6` (written to `/ipv6/route`). Plain addresses without a prefix become `/32` (IPv4) or `/128` (IPv6). IPv6 destinations and gateways are compared in canonical form, so `2001:DB8:0::/32` and `2001:db8::/32` are the same route. The destination and gateway must match `family`; a link-local IPv6 gateway needs its interface (`fe80::1%ether1`).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` | — | Operation to perform |
-| `dstAddress` | string | — | Destination network in CIDR (e.g. `10.0.0.0/8`); plain IP becomes `/32` |
-| `gateway` | string | — | Next-hop gateway IP |
+| `family` | `ip` \| `ipv6` | `ip` | Address family: `/ip/route` or `/ipv6/route` |
+| `dstAddress` | string | — | Destination network in CIDR (e.g. `10.0.0.0/8`, `2001:db8::/32`); a plain address becomes `/32` or `/128` |
+| `gateway` | string | — | Next hop: IPv4 address, IPv6 address, link-local address with interface (`fe80::1%ether1`), or interface name |
 | `distance` | integer | `1` | Administrative distance (1–255) |
 | `routingTable` | string | — | Routing table name (omit for main table) |
 | `comment` | string | — | Optional comment |
 | `disabled` | boolean | `false` | Whether the route should be disabled |
 | `dryRun` | boolean | `false` | Preview without applying |
 
-**Example prompt:** "Add a static route for 10.10.0.0/16 via 192.168.1.254 on core-01."
+**Example prompt:** "Add a static route for 10.10.0.0/16 via 192.168.1.254 on core-01." / "Add an IPv6 default route ::/0 via fe80::1%ether1 on core-01."
 
 ---
 
@@ -1039,12 +1161,13 @@ List OSPF neighbors with state, interface, DR/BDR, and uptime. RouterOS 7+ only.
 
 ### `list_firewall_rules` — Read
 
-List firewall rules in evaluation order.
+List firewall rules in evaluation order, from the IPv4 (`/ip firewall`) or IPv6 (`/ipv6 firewall`) filter, nat or raw table. Each rule's `.id` is what `manage_firewall_rule` `action: "move"` takes.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `table` | `filter` \| `nat` | `filter` | Firewall table (mangle rules: `list_mangle_rules`) |
+| `family` | `ip` \| `ipv6` | `ip` | Address family: `ip` reads `ip/firewall/<table>`, `ipv6` reads `ipv6/firewall/<table>` |
+| `table` | `filter` \| `nat` \| `raw` | `filter` | Firewall table (mangle rules: `list_mangle_rules`) |
 | `chain` | string | — | Filter by chain name |
 | `disabled` | `true` \| `false` \| `all` | `all` | Filter by disabled state |
 | `limit` | integer | `100` | Results per page (1–500) |
@@ -1052,27 +1175,34 @@ List firewall rules in evaluation order.
 
 **Example prompt:** "Show me all forward chain rules on core-01."
 
+**Example prompt:** "List the IPv6 raw prerouting rules on core-01."
+
 ---
 
 ### `manage_firewall_rule` — Write · Destructive · Idempotent
 
-Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match, NAT-target config, or `disabled` state (when only `disabled` differs, the error points to `action=enable`/`disable`); a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`.
+Add, remove, disable, enable, or move a firewall rule in the filter, nat or raw table, IPv4 (`family: "ip"`, the default, `/ip firewall`) or IPv6 (`family: "ipv6"`, `/ipv6 firewall`). Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different match, NAT-target config, jump target, reject reply, or `disabled` state (when only `disabled` differs, the error points to `action=enable`/`disable`); a host address with or without `/32`, a reordered `connectionState`, and numeric vs string ports count as the same. Rules in the `nat` table can set `toAddresses`/`toPorts`, so a dst-nat port forward needs no `run_command`. The `raw` table (chains `prerouting` and `output`) is evaluated before connection tracking and takes actions such as `notrack` and `drop`.
 
-**Auto-revert (dead-man switch).** RouterOS Safe Mode belongs to a terminal or Winbox session and cannot be used over REST, so every real write (not a dry run, `already_exists` or `no_change`) is guarded by a scheduler job instead. Before the change, MikroMCP adds a `mikromcp-autorevert-<id>` entry to `/system scheduler` that undoes it after `autoRevertSeconds` (default `60`): an `add` removes the new rule, a `remove` re-adds the rule as it was before the rule that followed it (also when other rules share its comment), and `enable`/`disable` sets the flag back. The job's first run is pinned to the router's clock plus `autoRevertSeconds` (`start-date`/`start-time`), since a scheduler entry otherwise first runs the moment it is added; a clock MikroMCP cannot read counts as an arm failure. After the change it waits 3 seconds for it to take effect, then opens a **new** REST connection to the router (a connection that is already open survives a rule that drops new ones). If the router answers, the job is removed and the result carries `autoRevert: { status: "disarmed" }`. If it does not, the job is left in place, the router reverts itself, and the call fails with `AUTO_REVERT_PENDING`. Other outcomes: `AUTO_REVERT_ARM_FAILED` (the job could not be added, so nothing was changed; the REST user needs write access to `/system scheduler`), `AUTO_REVERT_EXPIRED` (the change and the check took longer than `autoRevertSeconds`, so the job has already run), and `AUTO_REVERT_DISARM_FAILED` (the router answers but the job could not be removed, so it will still undo the change; remove it with `manage_scheduled_job`). A write that times out leaves the job armed. The job's state is in the result's `autoRevert` field, in the error's `details.autoRevert`, and in the write journal's outcome entry. Pass `autoRevertSeconds: 0` to write without it. The same applies to `manage_firewall_rule` steps in `apply_plan`: each step is guarded and checked on its own.
+`chain` and `ruleAction` are required for `add`, `remove`, `enable` and `disable` (`PARAM_REQUIRED` otherwise). `ruleAction: "jump"` needs `jumpTarget` (`JUMP_TARGET_REQUIRED`), and `jumpTarget` with another action is refused (`JUMP_TARGET_NOT_APPLICABLE`). `rejectWith` applies only to `ruleAction: "reject"` and only with a reply of the rule's family (`REJECT_WITH_FAMILY_MISMATCH`): IPv4 `icmp-network-unreachable` (the default), `icmp-host-unreachable`, `icmp-port-unreachable`, `icmp-protocol-unreachable`, `icmp-network-prohibited`, `icmp-host-prohibited`, `icmp-admin-prohibited`, `tcp-reset`; IPv6 `icmp-no-route` (the default), `icmp-admin-prohibited`, `icmp-not-neighbour`, `icmp-address-unreachable`, `icmp-port-unreachable`, `tcp-reset`. On a repeated add of a reject rule, an omitted `rejectWith` and the family default count as the same. ICMP is `protocol: "icmp"` for IPv4 and `"icmpv6"` for IPv6; the other one is refused with `PROTOCOL_FAMILY_MISMATCH`. These checks run before any router call, so a dry run reports them.
+
+**Moving a rule.** `action: "move"` takes `ruleId` (the rule's `.id` from `list_firewall_rules`, e.g. `*1A`) and `destination`: the `.id` of the rule to place it before, or `end` for the bottom of the table. It runs RouterOS `move` (`POST <table>/move` with `numbers` and `destination`; for `end` without `destination`, which the RouterOS console `move` treats as the end of the list). It takes no `chain`, `ruleAction`, `comment` or match fields (`PARAM_NOT_APPLICABLE`). If the first static rule after `ruleId` is already `destination` (for `end`: no static rule follows it), it returns `no_change` and writes nothing. Dynamic rules cannot be moved or used as `destination` (`DYNAMIC_RULE_NOT_MOVABLE`, category `VALIDATION`); an unknown `ruleId` or `destination` is `FIREWALL_RULE_NOT_FOUND`. The result's `position` gives the rule's 0-based index in the table as listed (dynamic rules included) before and after the move; a dry run reports the same. `rollback_change` does not restore rule order (it re-creates rules at the end), so a move is undone by the auto-revert job or by moving the rule back.
+
+**Auto-revert (dead-man switch).** RouterOS Safe Mode belongs to a terminal or Winbox session and cannot be used over REST, so every real write (not a dry run, `already_exists` or `no_change`) is guarded by a scheduler job instead. Before the change, MikroMCP adds a `mikromcp-autorevert-<id>` entry to `/system scheduler` that undoes it after `autoRevertSeconds` (default `60`): an `add` removes the new rule, a `remove` re-adds the rule as it was before the rule that followed it (also when other rules share its comment), `enable`/`disable` sets the flag back, and a `move` moves the rule back before the static rule that followed it (or to the end if it was last). The job runs in the menu of the table and family the call used (`/ip firewall filter`, `/ipv6 firewall raw`, ...). The job's first run is pinned to the router's clock plus `autoRevertSeconds` (`start-date`/`start-time`), since a scheduler entry otherwise first runs the moment it is added; a clock MikroMCP cannot read counts as an arm failure. After the change it waits 3 seconds for it to take effect, then opens a **new** REST connection to the router (a connection that is already open survives a rule that drops new ones). If the router answers, the job is removed and the result carries `autoRevert: { status: "disarmed" }`. If it does not, the job is left in place, the router reverts itself, and the call fails with `AUTO_REVERT_PENDING`. Other outcomes: `AUTO_REVERT_ARM_FAILED` (the job could not be added, so nothing was changed; the REST user needs write access to `/system scheduler`), `AUTO_REVERT_EXPIRED` (the change and the check took longer than `autoRevertSeconds`, so the job has already run), and `AUTO_REVERT_DISARM_FAILED` (the router answers but the job could not be removed, so it will still undo the change; remove it with `manage_scheduled_job`). A write that times out leaves the job armed. The job's state is in the result's `autoRevert` field, in the error's `details.autoRevert`, and in the write journal's outcome entry. Pass `autoRevertSeconds: 0` to write without it. The same applies to `manage_firewall_rule` steps in `apply_plan`: each step is guarded and checked on its own.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `add` \| `remove` \| `disable` \| `enable` | — | Operation to perform |
-| `table` | `filter` \| `nat` | `filter` | Firewall table |
-| `chain` | string | — | Chain name (e.g. `input`, `forward`, `output`, `srcnat`) |
+| `action` | `add` \| `remove` \| `disable` \| `enable` \| `move` | — | Operation to perform |
+| `family` | `ip` \| `ipv6` | `ip` | Address family: `ip/firewall/<table>` or `ipv6/firewall/<table>` |
+| `table` | `filter` \| `nat` \| `raw` | `filter` | Firewall table |
+| `chain` | string | — | Chain name, required except for `move` (e.g. `input`, `forward`, `output`, `srcnat`; raw: `prerouting`, `output`) |
 | `comment` | string | — | Comment used as idempotency key; at least one printable character, omit for none |
-| `ruleAction` | string | — | RouterOS action (e.g. `accept`, `drop`, `masquerade`) |
+| `ruleAction` | string | — | RouterOS action, required except for `move` (e.g. `accept`, `drop`, `reject`, `jump`, `masquerade`; raw also `notrack`) |
 | `srcAddress` | string | — | Source IP or CIDR |
 | `dstAddress` | string | — | Destination IP or CIDR |
 | `srcPort` | string | — | Source port or range (e.g. `80`, `8000-9000`) |
 | `dstPort` | string | — | Destination port or range |
-| `protocol` | `tcp` \| `udp` \| `icmp` \| `gre` \| `ospf` \| `all` | — | Protocol to match |
+| `protocol` | `tcp` \| `udp` \| `icmp` \| `icmpv6` \| `gre` \| `ospf` \| `all` | — | Protocol to match; `icmp` for family `ip`, `icmpv6` for family `ipv6` |
 | `inInterface` | string | — | Incoming interface |
 | `outInterface` | string | — | Outgoing interface |
 | `inInterfaceList` | string | — | Incoming interface list (e.g. `WAN`, `!LAN`) |
@@ -1081,8 +1211,12 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 | `connectionNatState` | string | — | Connection NAT state: `srcnat`, `dstnat` or both, optionally negated (`!dstnat`) |
 | `toAddresses` | string | — | NAT target address or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same` |
 | `toPorts` | string | — | NAT target port or range; `nat` table with `dst-nat`, `src-nat`, `netmap`, `same`, `redirect`, `masquerade` |
+| `jumpTarget` | string | — | Chain to jump to (`jump-target`); required with `ruleAction: "jump"`, refused otherwise |
+| `rejectWith` | string | family default | Reply sent by a reject rule (`reject-with`); `ruleAction: "reject"` only, values per family as listed above |
 | `disabled` | boolean | `false` | Create the rule in disabled state; on `add`, part of the idempotency check |
 | `placeBefore` | string | — | Place the new rule before this rule ID |
+| `ruleId` | string | — | `move` only: the `.id` of the rule to move (e.g. `*1A`) |
+| `destination` | string | — | `move` only: the `.id` of the rule to place it before, or `end` |
 | `dryRun` | boolean | `false` | Preview without applying; the result's `autoRevert` says whether a real call would arm the job |
 | `autoRevertSeconds` | integer | `60` | Seconds after which the scheduler job undoes the change unless the router still answers; `30`–`3600`, or `0` for no job |
 
@@ -1092,17 +1226,24 @@ Add, remove, disable, or enable a firewall rule. Uses `comment` as the idempoten
 
 **Example prompt:** "Forward TCP 8443 arriving on the WAN interface list to 192.168.88.10:443 on core-01, comment it 'fwd-nas-https'."
 
+**Example prompt:** "On core-01, move the rule that drops SSH above the accept-established rule in the input chain." (list the rules, then `action: "move"` with the drop rule's `.id` as `ruleId` and the accept rule's `.id` as `destination`)
+
+**Example prompt:** "Add an IPv6 input rule on core-01 that accepts ICMPv6 echo requests, then one that drops all other ICMPv6." (`family: "ipv6"`, `protocol: "icmpv6"`)
+
+**Example prompt:** "Add a raw prerouting rule on core-01 that sets notrack for traffic from 10.0.0.0/8." (`table: "raw"`, `ruleAction: "notrack"`)
+
 ---
 
 ## Mangle Rules
 
 ### `list_mangle_rules` — Read
 
-List firewall mangle rules in evaluation order. Supports filtering by chain, action, and disabled state.
+List firewall mangle rules in evaluation order, IPv4 (`ip/firewall/mangle`) or IPv6 (`ipv6/firewall/mangle`). Supports filtering by chain, action, and disabled state.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
+| `family` | `ip` \| `ipv6` | `ip` | Address family |
 | `chain` | string | — | Filter by chain (e.g. `prerouting`, `forward`, `postrouting`) |
 | `action` | string | — | Filter by mangle action (e.g. `mark-routing`, `mark-connection`) |
 | `disabled` | boolean | — | Filter by disabled state |
@@ -1113,13 +1254,14 @@ List firewall mangle rules in evaluation order. Supports filtering by chain, act
 
 ### `manage_mangle_rule` — Write · Destructive · Idempotent
 
-Add, remove, enable, or disable a mangle rule. Each `new*` value belongs to one action: `newRoutingMark` → `mark-routing`, `newConnectionMark` → `mark-connection`, `newPacketMark` → `mark-packet`, `newDscpValue` → `change-dscp`, `newMss` → `change-mss`. `ruleAction` sets the rule's action; when it is omitted, the one `new*` value given implies its action, and with no value the action is `accept`, the RouterOS default. A `new*` value under another action, values of two different actions, and one of these actions without its value are rejected. `mark-routing` is rejected in the built-in chains `input`, `forward`, and `postrouting`, as RouterOS does (custom chains are allowed). `change-mss` needs `protocol: tcp` and `tcpFlags` with `syn`, and `tcpFlags` needs `protocol: tcp`, as RouterOS requires. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different chain, match fields (addresses, address lists, protocol, ports, interfaces, TCP flags), marks, `newDscpValue`, `newMss`, `passthrough`, or the given or implied action. With neither `ruleAction` nor a `new*` value, the existing rule's action is not compared. `newDscpValue`, `newMss`, and `passthrough` are compared only when the router reports them for the rule's action; an omitted `passthrough` counts as the RouterOS default `yes`.
+Add, remove, enable, disable, or move a mangle rule, IPv4 (`family: "ip"`, the default) or IPv6 (`family: "ipv6"`, `ipv6/firewall/mangle`). `action: "move"` takes `ruleId` and `destination` instead of `comment` and works as in `manage_firewall_rule` (`no_change` when the rule is already in place, dynamic rules refused, `MANGLE_RULE_NOT_FOUND` for an unknown id, dry run reports `position`); mangle writes have no auto-revert job. Each `new*` value belongs to one action: `newRoutingMark` → `mark-routing`, `newConnectionMark` → `mark-connection`, `newPacketMark` → `mark-packet`, `newDscpValue` → `change-dscp`, `newMss` → `change-mss`. `ruleAction` sets the rule's action; when it is omitted, the one `new*` value given implies its action, and with no value the action is `accept`, the RouterOS default. A `new*` value under another action, values of two different actions, and one of these actions without its value are rejected. `mark-routing` is rejected in the built-in chains `input`, `forward`, and `postrouting`, as RouterOS does (custom chains are allowed). `change-mss` needs `protocol: tcp` and `tcpFlags` with `syn`, and `tcpFlags` needs `protocol: tcp`, as RouterOS requires. Uses `comment` as the idempotency key. Throws `CONFLICT` if a rule with the same comment exists but with a different chain, match fields (addresses, address lists, protocol, ports, interfaces, TCP flags), marks, `newDscpValue`, `newMss`, `passthrough`, or the given or implied action. With neither `ruleAction` nor a `new*` value, the existing rule's action is not compared. `newDscpValue`, `newMss`, and `passthrough` are compared only when the router reports them for the rule's action; an omitted `passthrough` counts as the RouterOS default `yes`.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
-| `action` | `add` \| `remove` \| `enable` \| `disable` | — | Operation to perform |
-| `comment` | string | — | **Idempotency key** — required for all actions, non-empty |
+| `action` | `add` \| `remove` \| `enable` \| `disable` \| `move` | — | Operation to perform |
+| `family` | `ip` \| `ipv6` | `ip` | Address family |
+| `comment` | string | — | **Idempotency key** — required for every action except `move` (`PARAM_REQUIRED`), non-empty |
 | `chain` | string | — | Mangle chain (required on `add`): `prerouting`, `input`, `forward`, `output`, `postrouting` |
 | `ruleAction` | `accept` \| `passthrough` \| `mark-routing` \| `mark-connection` \| `mark-packet` \| `change-dscp` \| `change-mss` | implied by the `new*` value, else `accept` | Rule action, `add` only (rejected otherwise) |
 | `srcAddress` | string | — | Source IP/CIDR to match |
@@ -1138,6 +1280,8 @@ Add, remove, enable, or disable a mangle rule. Each `new*` value belongs to one 
 | `newDscpValue` | integer | — | DSCP value to set, 0–63 (`ruleAction: change-dscp`) |
 | `newMss` | integer \| `clamp-to-pmtu` | — | MSS to set, 0–65535 or `clamp-to-pmtu` (`ruleAction: change-mss`, `protocol: tcp`, `tcpFlags: syn`) |
 | `passthrough` | boolean | — | Whether to continue matching subsequent rules |
+| `ruleId` | string | — | `move` only: the `.id` of the rule to move |
+| `destination` | string | — | `move` only: the `.id` of the rule to place it before, or `end` |
 | `dryRun` | boolean | `false` | Preview without applying |
 
 **Example prompt:** "Add a mangle rule on core-01 that marks traffic from 10.10.0.0/24 with routing-mark 'vpn' in the prerouting chain." (`newRoutingMark: vpn`, which implies `ruleAction: mark-routing`)
@@ -1148,11 +1292,12 @@ Add, remove, enable, or disable a mangle rule. Each `new*` value belongs to one 
 
 ### `list_address_list_entries` — Read
 
-List firewall address list entries. Supports filtering by list name and address.
+List firewall address list entries, IPv4 (`ip/firewall/address-list`) or IPv6 (`ipv6/firewall/address-list`). Supports filtering by list name and address.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
+| `family` | `ip` \| `ipv6` | `ip` | Address family |
 | `list` | string | — | Filter by address list name |
 | `address` | string | — | Filter by address (IP or CIDR) |
 
@@ -1162,14 +1307,15 @@ List firewall address list entries. Supports filtering by list name and address.
 
 ### `manage_address_list_entry` — Write · Destructive · Idempotent
 
-Add or remove a firewall address list entry. Idempotent by list name + address.
+Add or remove a firewall address list entry, IPv4 or IPv6 (`family: "ipv6"` writes `ipv6/firewall/address-list`). Idempotent by list name + address.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
 | `action` | `add` \| `remove` | — | Operation to perform |
+| `family` | `ip` \| `ipv6` | `ip` | Address family |
 | `list` | string | — | Address list name |
-| `address` | string | — | IP address or CIDR to add/remove |
+| `address` | string | — | IP address or CIDR to add/remove (IPv6 address or prefix for `family: "ipv6"`) |
 | `comment` | string | — | Optional comment |
 | `timeout` | string | — | Expiry timeout (e.g. `1d`, `2h30m`) — omit for permanent |
 | `dryRun` | boolean | `false` | Preview without applying |
@@ -1696,6 +1842,8 @@ With `planFingerprint`, before the first step runs, `apply_plan` checks that `ro
 
 Restore the state captured before a previous write. On RouterOS that is the section state before an `apply_plan` run; on a SwOS switch the `.b` endpoints snapshotted before `apply_swos_config` or `write_swos_blob`, re-posted in a lockout-safe order (on full SwOS a VLAN table holding both the current and the old VLANs, then the per-port settings, then the old table). When one of those writes is not answered, the rest are still sent and the result is `SWOS_ROLLBACK_INCOMPLETE`, naming what was restored and what was not. Uses the snapshot stored in the write journal. The `journalId` comes from the write's result or from `list_journal`; a dry-run entry returns `dry_run_entry` and restores nothing, since its snapshot would undo any change made after the preview.
 
+**Which writes can be undone.** Every real write response says whether `rollback_change` can undo it, in a `rollback` field. `{ available: true, journalId, snapshotted }` means the configuration under those paths was snapshotted before the write (and the text carries the `Journal ID`). `{ available: false, reason, detail }` means there is nothing to restore: `NO_SNAPSHOT` for a tool that takes no snapshot, or `SNAPSHOT_FAILED` when the snapshot was attempted and failed (the write still ran). Dry runs, `plan_changes`, `apply_plan` (each step has its own `journalId`) and `rollback_change` carry no `rollback` field. These write tools take no snapshot, so their changes need an undo you note yourself: `run_command`, `run_script`, `reboot`, `manage_wifi_interface`, `manage_ip_service`, `manage_interface_list`, `manage_interface_list_member`, `manage_container_env`, `manage_container_mount`, `manage_upgrade`, `create_backup`, `export_config`, `delete_file`, `fetch_url` and the SwOS `save_swos_backup`, `restore_swos_backup`, `upgrade_swos_firmware` and `set_swos_password`. `write_swos_blob` and `apply_swos_config` snapshot the SwOS endpoints they write. Every other RouterOS write tool snapshots the section it changes. `run_command` is journaled for audit like every write (see `list_journal`) but is never snapshotted, whatever the command.
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `routerId` | string | — | Target router |
@@ -1728,7 +1876,7 @@ List recent entries from the server's write journal — every journaled write wi
 
 ### `list_routers` — Read
 
-List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`. The `rosVersion` is what `routers.yaml` states — it can lag a router upgrade, so ask `get_system_status` when the live version matters (e.g. before version-dependent commands).
+List the routers configured in the registry (`routers.yaml`) so you can discover valid `routerId` values and tags for targeting other tools. Reflects local config only — no RouterOS API call, and no credentials in the response. Results are scoped to the caller's `allowedRouters` (an unrestricted identity sees the whole fleet). Each row includes `id`, `host`, `port`, `tlsEnabled`, `tags`, `rosVersion`, and `isDefault`. The `rosVersion` is what `routers.yaml` states — it can lag a router upgrade, and it is still what MikroMCP uses to choose version-dependent REST paths. Once `get_system_status` or `check_router_health` has reached a RouterOS router, its row also carries `rosVersionSeen` and `rosVersionSeenAt` (an ISO timestamp): the version the router reported to this server, so a stale `routers.yaml` shows up next to the live value. The observation lives in memory only, so it is absent after a restart, and it is not shown after the router's `host` changes. SwOS switches never carry it. Ask `get_system_status` when the live version matters (e.g. before version-dependent commands).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1801,6 +1949,8 @@ Each per-router call runs through the same safety layers as a direct call: autho
 ### `bulk_read` — Read
 
 Fan out a read-only single-router tool to multiple routers by ID or tag — the same targeting, concurrency, and per-router safety layers as `bulk_execute`, restricted to reads. The server accepts an inner tool only if it is annotated `readOnlyHint: true` and is not one of the traffic-generating diagnostics `ping`, `traceroute`, `torch`, or `bandwidth_test`; anything else fails before any router is contacted with `BULK_READ_TOOL_NOT_READ_ONLY`, pointing at `bulk_execute`. Fleet tools are refused with `BULK_SELF_REFERENCE`. There is no confirmation token, snapshot, or journal entry, and, like a direct read, no audit record.
+
+It runs one tool with one set of parameters on many routers in a single request; it does not batch different queries against one router. When the HTTP rate limit is the concern (see [Running](Running#http-transport)), many routers in one `bulk_read` cost one request, while many queries to one router are better combined into one filtered query.
 
 Because the restriction is enforced by the server, a client that approves tools by name (for example a Claude Code permission rule for `mcp__mikromcp__bulk_read`) can allow fleet-wide reads without prompting, while `bulk_execute` stays behind a prompt.
 

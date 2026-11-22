@@ -222,8 +222,9 @@ const manageDhcpLeaseTool: ToolDefinition = {
           };
         }
 
-        await context.routerClient.update("ip/dhcp-server/lease", existing[".id"], {
-          dynamic: "false",
+        // `dynamic` is a read-only flag; RouterOS converts a lease only through its make-static command.
+        await context.routerClient.execute("ip/dhcp-server/lease/make-static", {
+          ".id": existing[".id"],
         });
         log.info({ macAddress: upperMac, id: existing[".id"] }, "DHCP lease converted to static");
         return {

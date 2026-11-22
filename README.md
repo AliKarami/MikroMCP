@@ -1,4 +1,4 @@
-# MikroMCP
+# MikroMCP — MikroTik MCP Server
 
 <p align="center">
   <picture>
@@ -8,17 +8,18 @@
   </picture>
 </p>
 
-> **AI-native network automation for MikroTik RouterOS and SwOS.** MikroMCP exposes RouterOS routers and SwOS switches as a typed, auditable [Model Context Protocol](https://modelcontextprotocol.io) server so Claude, Cursor, Codex, and other MCP clients can inspect, diagnose, and safely operate MikroTik gear in natural language.
+> **The MikroTik MCP server: AI-native network automation for MikroTik RouterOS and SwOS.** MikroMCP exposes RouterOS routers and SwOS switches as a typed, auditable [Model Context Protocol](https://modelcontextprotocol.io) server so Claude, Cursor, Codex, and other MCP clients can inspect, diagnose, and safely operate MikroTik gear in natural language.
 
 [![CI](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/ci.yml)
 [![Release](https://github.com/AliKarami/MikroMCP/actions/workflows/release.yml/badge.svg)](https://github.com/AliKarami/MikroMCP/actions/workflows/release.yml)
-[![Version](https://img.shields.io/badge/version-v1.16.1-2DD4BF)](package.json)
+[![Version](https://img.shields.io/badge/version-v1.17.0-2DD4BF)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-339933)](package.json)
 [![RouterOS 7.x](https://img.shields.io/badge/RouterOS-7.x-293239)](https://help.mikrotik.com/docs/display/ROS/REST+API)
 [![MCP Server](https://img.shields.io/badge/MCP-server-6f42c1)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/MCP%20tools-134-0f766e)](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)
+[![Tools](https://img.shields.io/badge/MCP%20tools-140-0f766e)](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)
 [![MikroMCP MCP server](https://glama.ai/mcp/servers/AliKarami/MikroMCP/badges/score.svg)](https://glama.ai/mcp/servers/AliKarami/MikroMCP)
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.AliKarami%2Fmikromcp.svg)](https://mcptoplist.com/server/io.github.AliKarami%2Fmikromcp)
 
 MikroMCP exists because raw router CLI access is the wrong abstraction for AI agents. RouterOS is powerful, but asking an LLM to improvise shell commands against production network gear is risky. MikroMCP gives agents a controlled tool surface: strict schemas, idempotent writes, dry-run previews, per-router circuit breakers, retry policies, RBAC, audit logs, snapshots, and rollback-aware change workflows.
 
@@ -34,7 +35,14 @@ MikroMCP exists because raw router CLI access is the wrong abstraction for AI ag
   <img src="docs/assets/quickstart.svg" alt="MikroMCP quick start: npm install -g mikromcp, mikromcp init, then ask Claude Desktop about your router" width="760">
 </p>
 
-That's the whole setup for a single-router stdio deployment. For standalone binaries, Docker, HTTP/SSE mode, the RouterOS API prerequisites, and the full 15-minute walkthrough, see the **[Getting Started guide](https://github.com/AliKarami/MikroMCP/wiki/Getting-Started)**.
+That's the whole setup for a single-router stdio deployment. Or skip the install and the config file: with one router, this block in `claude_desktop_config.json` is enough (other variables in [Configuration](https://github.com/AliKarami/MikroMCP/wiki/Configuration#routers-from-environment-variables)):
+
+```json
+{ "mcpServers": { "mikromcp": { "command": "npx", "args": ["-y", "mikromcp"],
+  "env": { "MIKROMCP_ROUTER_HOST": "192.168.88.1", "MIKROMCP_ROUTER_USER": "mcp", "MIKROMCP_ROUTER_PASS": "your-password" } } } }
+```
+
+For standalone binaries, Docker, HTTP/SSE mode, the RouterOS API prerequisites, and the full 15-minute walkthrough, see the **[Getting Started guide](https://github.com/AliKarami/MikroMCP/wiki/Getting-Started)**.
 
 ---
 
@@ -43,9 +51,9 @@ That's the whole setup for a single-router stdio deployment. For standalone bina
 | Category                   | What MikroMCP covers                                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------------------------------- |
 | 🧭 **Router management**   | System status, clock, reboot, packages, files, scripts, scheduler jobs, containers                    |
-| 🌐 **Network operations**  | Interfaces, VLANs, IP addresses, DHCP leases, DNS static records, bridge ports, WiFi clients          |
+| 🌐 **Network operations**  | Interfaces, VLANs, IPv4 and IPv6 addresses, IPv6 neighbors, DHCP leases, DHCPv6 clients, DNS static records, bridge ports and bridge VLAN filtering (VLAN table, PVIDs, lock-out warnings), WiFi clients |
 | 🔥 **Firewall and policy** | Filter/NAT rules, mangle rules, address lists, route tables, routing rules                            |
-| 🛰️ **Routing visibility**  | Static routes, routing tables, BGP peers, OSPF neighbors                                              |
+| 🛰️ **Routing visibility**  | IPv4 and IPv6 static routes, routing tables, BGP peers, OSPF neighbors                                |
 | 🔀 **SwOS switches**       | *Experimental.* MikroTik SwOS and SwOS Lite switches (`deviceType: "swos"`) over the reverse-engineered `.b` HTTP API: port links, PoE, SFP diagnostics, guarded whole-blob writes with a firmware-compatibility check, the whole switch config as one YAML document (export, dry-run, apply), backups and firmware upgrades |
 | 🔐 **Secure access**       | HTTP bearer auth, bcrypt token hashes, RBAC, router/tool restrictions, confirmation tokens            |
 | 🧪 **Diagnostics**         | Router-originated `ping`, `traceroute`, `torch`, log filtering, guarded SSH command execution         |
@@ -54,7 +62,7 @@ That's the whole setup for a single-router stdio deployment. For standalone bina
 | 🤖 **AI-agent fit**        | Human-readable responses plus structured JSON content for reasoning, chaining, and automation; server advertises an `instructions` string on MCP initialize so clients self-configure; optional [`routerId` resolved via `MIKROMCP_DEFAULT_ROUTER`](https://github.com/AliKarami/MikroMCP/wiki/Configuration) for single-router setups; [usage skill](docs/wiki/Using-the-Skill.md) for safe, guided tool use in Claude Code |
 | 🧩 **MCP compatibility**   | stdio for desktop clients, Streamable HTTP and legacy SSE for remote or service-style clients         |
 
-**134 typed tools** in total — browse the full catalog with parameters, defaults, and copy-paste example prompts in **[Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)**.
+**140 typed tools** in total — browse the full catalog with parameters, defaults, and copy-paste example prompts in **[Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)**.
 
 ---
 
@@ -140,7 +148,7 @@ AI assistants can use MikroMCP to:
 
 ### What is MikroMCP?
 
-MikroMCP is an open-source [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that exposes MikroTik RouterOS as 134 typed, auditable tools — letting AI assistants inspect, diagnose, and safely operate routers in natural language instead of improvising CLI commands.
+MikroMCP is an open-source [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that exposes MikroTik RouterOS as 140 typed, auditable tools — letting AI assistants inspect, diagnose, and safely operate routers in natural language instead of improvising CLI commands.
 
 ### MikroMCP vs RouterOS API
 
@@ -189,7 +197,7 @@ The README stays intentionally short. Everything below is documented in depth in
 | [Connecting to Claude Desktop](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-Claude-Desktop) | Register MikroMCP in Claude Desktop                      |
 | [Connecting to AI Assistants](https://github.com/AliKarami/MikroMCP/wiki/Connecting-to-AI-Assistants) | Claude Code, Cursor, Codex, HTTP/Docker/systemd            |
 | [Using the Skill](docs/wiki/Using-the-Skill.md)                                                        | Install the MikroMCP usage skill so your assistant drives the tools safely |
-| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 134 tools — parameters and example prompts             |
+| [Available Tools](https://github.com/AliKarami/MikroMCP/wiki/Available-Tools)                         | All 140 tools — parameters and example prompts             |
 | [Architecture](https://github.com/AliKarami/MikroMCP/wiki/Architecture)                               | System layers, request pipeline, auth model                |
 | [Error Handling](https://github.com/AliKarami/MikroMCP/wiki/Error-Handling)                           | Error categories, retry engine, circuit breaker            |
 | [Security](https://github.com/AliKarami/MikroMCP/wiki/Security)                                       | Threat model, hardening checklist, vulnerability reporting |

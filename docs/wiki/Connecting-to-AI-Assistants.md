@@ -8,6 +8,10 @@ For Claude Desktop specifically, see [Connecting-to-Claude-Desktop.md](Connectin
 
 ---
 
+## Local models and small context windows
+
+The full tool list is about 38k tokens. For a local model (LM Studio, Ollama, llama.cpp) with a small context window, start the server with `MIKROMCP_READ_ONLY=true` (about 14k tokens) or `MIKROMCP_TOOLSETS` naming only the areas you need, e.g. `firewall,ip` (a few thousand). Put the variables in the client's `env` block. See [Configuration → Tool catalogue](Configuration#tool-catalogue).
+
 ## Claude Code (CLI)
 
 Claude Code reads MCP server registrations from its config. The easiest way to register MikroMCP is with the `claude mcp add` command.
@@ -45,7 +49,7 @@ Verify registration:
 claude mcp list
 ```
 
-You should see `mikromcp` in the list. On the next `claude` session start, all 134 MikroMCP tools will be available automatically.
+You should see `mikromcp` in the list. On the next `claude` session start, all 140 MikroMCP tools will be available automatically.
 
 To pass environment variables directly in the registration (useful if you do not want to rely on shell exports):
 
@@ -179,6 +183,7 @@ docker run -d \
   -e MIKROMCP_TRANSPORT=http \
   -e MIKROMCP_PORT=3000 \
   -e MIKROMCP_BIND_HOST=0.0.0.0 \
+  -e MIKROMCP_HTTP_ALLOWED_HOSTS=localhost,127.0.0.1 \
   -e MIKROMCP_CONFIG_PATH=/app/config/routers.yaml \
   -e MIKROMCP_IDENTITIES_PATH=/app/config/identities.yaml \
   -e MIKROMCP_CONFIRMATION_SECRET="$(openssl rand -hex 32)" \
@@ -188,6 +193,8 @@ docker run -d \
   -p 3000:3000 \
   ghcr.io/alikarami/mikromcp:latest
 ```
+
+Inside the container the server must bind to `0.0.0.0` for the published port to reach it, so it no longer gets the loopback-only Host check by default: `MIKROMCP_HTTP_ALLOWED_HOSTS` lists the names clients use (add your server's DNS name when it is reached from other machines). See [Running](Running#host-origin-and-client-ip-allow-lists).
 
 The image sets no default config paths, so `MIKROMCP_CONFIG_PATH` and `MIKROMCP_IDENTITIES_PATH` must point into the mounted directory — without them the container looks in `/root/.mikromcp/` and starts with an empty router registry. The directory must contain a `routers.yaml` and an `identities.yaml`: HTTP mode has no anonymous access, so at least one identity is needed before any client can connect (see [Configuration → Identities](Configuration#identities-http-transport)). The container reads router credentials from environment variables as usual.
 

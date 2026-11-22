@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.AliKarami/mikromcp",
   "title": "MikroMCP",
-  "description": "MCP server for MikroTik RouterOS and SwOS: typed tools, dry-run, RBAC, audit logs, and rollback.",
+  "description": "MikroTik MCP server for RouterOS and SwOS: typed tools, dry-run, RBAC, audit logs, rollback.",
   "repository": {
     "url": "https://github.com/AliKarami/MikroMCP",
     "source": "github"
   },
-  "version": "1.16.1",
+  "version": "1.17.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mikromcp",
-      "version": "1.16.1",
+      "version": "1.17.0",
       "transport": {
         "type": "stdio"
       },
@@ -23,6 +23,27 @@
           "isRequired": false,
           "format": "string",
           "isSecret": false
+        },
+        {
+          "name": "MIKROMCP_ROUTER_HOST",
+          "description": "Address of a single router to manage without a routers.yaml file (HTTPS on port 443 by default). Used only when MIKROMCP_ROUTERS is unset and no config file exists.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MIKROMCP_ROUTER_USER",
+          "description": "RouterOS REST API username for the router set by MIKROMCP_ROUTER_HOST.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MIKROMCP_ROUTER_PASS",
+          "description": "RouterOS REST API password for the router set by MIKROMCP_ROUTER_HOST. Never logged.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
         },
         {
           "name": "MIKROMCP_STDIO_IDENTITY",

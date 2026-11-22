@@ -3,16 +3,30 @@ import { listContent, compactFields } from "./pagination.js";
 import type { ToolDefinition, ToolContext, ToolResult } from "./tool-definition.js";
 import { isTrue } from "../../adapter/response-parser.js";
 import { protocolName, ruleActionAddOnly, sameRuleValue } from "./rule-match.js";
-import { dryRun, routerId, ruleComment } from "./schema-fields.js";
+import {
+  dryRun,
+  firewallFamily,
+  firewallPath,
+  rawFamily,
+  routerId,
+  ruleComment,
+} from "./schema-fields.js";
 import { findRuleByComment, ruleCommentKey } from "./rule-comment.js";
 import { toolError } from "./tool-definition.js";
 import type { RouterOSRecord } from "../../types.js";
 import { MikroMCPError, ErrorCategory } from "../errors/error-types.js";
 import { createLogger } from "../../observability/logger.js";
+import {
+  executeMove,
+  moveDestination,
+  moveDetails,
+  moveRuleId,
+  notForAction,
+  planMove,
+  requiredForAction,
+} from "./rule-move.js";
 
 const log = createLogger("mangle-tools");
-
-const MANGLE_PATH = "ip/firewall/mangle";
 
 /** Match parameters compared on a repeated add, mapped to their RouterOS property names. */
 const MANGLE_MATCH_FIELDS = [
@@ -110,7 +124,7 @@ function validationError(
  * turn a rule it would create and never apply into a VALIDATION error. Each check
  * says which it is (CHR 7.23.2 and 7.24.2).
  */
-function checkAddParams(parsed: z.infer<typeof manageMangleRuleInputSchema>): MangleAction {
+function checkAddParams(parsed: ManageMangleRuleParams): MangleAction {
   const values = ACTION_VALUE_PARAMS.filter(([, param]) => parsed[param] !== undefined);
   // Each value parameter belongs to exactly one action, so without ruleAction a lone
   // value names the action. RouterOS does not infer it: it would create the rule as
@@ -184,6 +198,7 @@ function checkAddParams(parsed: z.infer<typeof manageMangleRuleInputSchema>): Ma
 const listMangleRulesInputSchema = z
   .object({
     routerId,
+    family: firewallFamily,
     chain: z
       .string()
       .optional()
@@ -200,7 +215,7 @@ const listMangleRulesTool: ToolDefinition = {
   name: "list_mangle_rules",
   title: "List Mangle Rules",
   description:
-    "List firewall mangle rules on a MikroTik router in evaluation order. Supports filtering by chain, action, and disabled state.",
+    "List firewall mangle rules on a MikroTik router in evaluation order, IPv4 (family ip, the default) or IPv6 (family ipv6). Supports filtering by chain, action, and disabled state.",
   inputSchema: listMangleRulesInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -210,10 +225,10 @@ const listMangleRulesTool: ToolDefinition = {
   },
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = listMangleRulesInputSchema.parse(params);
-    log.info({ routerId: context.routerId }, "Listing mangle rules");
+    log.info({ routerId: context.routerId, family: parsed.family }, "Listing mangle rules");
 
     try {
-      let rules = await context.routerClient.get<RouterOSRecord>(MANGLE_PATH, {
+      let rules = await context.routerClient.get<RouterOSRecord>(mangleMenu(parsed.family), {
         limit: undefined,
         offset: undefined,
       });
@@ -236,7 +251,7 @@ const listMangleRulesTool: ToolDefinition = {
 
       return {
         content: listContent(
-          "Mangle rules",
+          parsed.family === "ipv6" ? "IPv6 mangle rules" : "Mangle rules",
           context.routerId,
           rules as Record<string, string>[],
           rules.length,
@@ -253,7 +268,12 @@ const listMangleRulesTool: ToolDefinition = {
               "comment",
             ]),
         ),
-        structuredContent: { routerId: context.routerId, rules, total: rules.length },
+        structuredContent: {
+          routerId: context.routerId,
+          family: parsed.family,
+          rules,
+          total: rules.length,
+        },
       };
     } catch (err) {
       throw toolError(err, context, "list_mangle_rules");
@@ -264,8 +284,15 @@ const listMangleRulesTool: ToolDefinition = {
 const manageMangleRuleInputSchema = z
   .object({
     routerId,
-    action: z.enum(["add", "remove", "enable", "disable"]).describe("Action to perform"),
-    comment: ruleComment.describe("Idempotency key — uniquely identifies this mangle rule"),
+    family: firewallFamily,
+    action: z
+      .enum(["add", "remove", "enable", "disable", "move"])
+      .describe(
+        "Action to perform: add, remove, enable, or disable a rule (found by comment), or move a rule (by ruleId) before another",
+      ),
+    comment: ruleComment
+      .optional()
+      .describe("Idempotency key — uniquely identifies this mangle rule; required except for move"),
     chain: z
       .string()
       .optional()
@@ -325,14 +352,78 @@ const manageMangleRuleInputSchema = z
         "MSS to set: a number or clamp-to-pmtu (ruleAction change-mss, with protocol tcp and tcpFlags syn)",
       ),
     passthrough: z.boolean().optional().describe("Whether to continue matching subsequent rules"),
+    ruleId: moveRuleId,
+    destination: moveDestination,
   })
   .strict();
+
+type ManageMangleRuleParams = z.infer<typeof manageMangleRuleInputSchema>;
+
+function mangleMenu(family: ManageMangleRuleParams["family"]): string {
+  return firewallPath(family, "mangle");
+}
+
+/** Parameters that describe a rule, which a move (by ruleId) does not take. */
+const NOT_FOR_MOVE = [
+  "comment",
+  "chain",
+  "ruleAction",
+  "passthrough",
+  ...MANGLE_MATCH_FIELDS.map(([key]) => key),
+  ...ACTION_VALUE_PARAMS.map(([, param]) => param),
+] as const;
+
+async function moveMangleRule(
+  parsed: ManageMangleRuleParams,
+  context: ToolContext,
+  path: string,
+): Promise<ToolResult> {
+  for (const param of NOT_FOR_MOVE) {
+    if (parsed[param] !== undefined) {
+      throw notForAction(
+        param,
+        "move",
+        `Drop ${param}; a move takes the rule's ruleId and a destination.`,
+      );
+    }
+  }
+  if (parsed.ruleId === undefined) throw requiredForAction("ruleId", "move");
+  if (parsed.destination === undefined) throw requiredForAction("destination", "move");
+
+  const label = parsed.family === "ipv6" ? "ipv6 mangle rule" : "mangle rule";
+  const plan = await planMove(context, path, parsed.ruleId, parsed.destination, {
+    rule: label,
+    notFoundCode: "MANGLE_RULE_NOT_FOUND",
+    listTool: "list_mangle_rules",
+  });
+  const where = plan.destination === "end" ? "at the end" : `before ${plan.destination}`;
+
+  if (plan.noChange) {
+    return {
+      content: `${label[0].toUpperCase()}${label.slice(1)} ${plan.id} is already ${where}. No changes made.`,
+      structuredContent: { action: "no_change", ...moveDetails(plan) },
+    };
+  }
+  if (parsed.dryRun) {
+    return {
+      content: `Dry run: Would move ${label} ${plan.id} from position ${plan.from} to ${plan.to} (${where}).`,
+      structuredContent: { action: "dry_run", ...moveDetails(plan) },
+    };
+  }
+
+  await executeMove(context, path, plan);
+  log.info({ id: plan.id, destination: plan.destination }, "Mangle rule moved");
+  return {
+    content: `Moved ${label} ${plan.id} ${where} (position ${plan.from} to ${plan.to}).`,
+    structuredContent: { action: "moved", ...moveDetails(plan) },
+  };
+}
 
 const manageMangleRuleTool: ToolDefinition = {
   name: "manage_mangle_rule",
   title: "Manage Mangle Rule",
   description:
-    "Add, remove, enable, or disable a firewall mangle rule. ruleAction sets the action; when it is omitted, a new* value implies its own (newRoutingMark → mark-routing), otherwise accept. Each new* value is accepted only under its action. Uses comment as idempotency key: a repeated add returns already_exists only when the chain, match fields, marks, DSCP, MSS, passthrough, and the given or implied action agree, otherwise CONFLICT. Supports dry-run mode.",
+    "Add, remove, enable, disable, or move a firewall mangle rule, IPv4 (family ip, the default) or IPv6 (family ipv6). ruleAction sets the action; when it is omitted, a new* value implies its own (newRoutingMark → mark-routing), otherwise accept. Each new* value is accepted only under its action. Uses comment as idempotency key: a repeated add returns already_exists only when the chain, match fields, marks, DSCP, MSS, passthrough, and the given or implied action agree, otherwise CONFLICT. move takes ruleId and destination (a rule .id to place it before, or end) instead of comment, and returns no_change when the rule is already there; dynamic rules cannot be moved. Supports dry-run mode.",
   inputSchema: manageMangleRuleInputSchema,
   annotations: {
     readOnlyHint: false,
@@ -340,7 +431,7 @@ const manageMangleRuleTool: ToolDefinition = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  snapshotPaths: ["ip/firewall/mangle"],
+  snapshotPaths: (params) => [firewallPath(rawFamily(params), "mangle")],
   async handler(params: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const parsed = manageMangleRuleInputSchema.parse(params);
     log.info(
@@ -348,7 +439,21 @@ const manageMangleRuleTool: ToolDefinition = {
       "Managing mangle rule",
     );
 
+    const path = mangleMenu(parsed.family);
+
     try {
+      if (parsed.action === "move") return await moveMangleRule(parsed, context, path);
+
+      for (const param of ["ruleId", "destination"] as const) {
+        if (parsed[param] !== undefined) {
+          throw notForAction(
+            param,
+            parsed.action,
+            `Drop ${param}; it is used only with action=move. add/remove/enable/disable find the rule by comment.`,
+          );
+        }
+      }
+      if (parsed.comment === undefined) throw requiredForAction("comment", parsed.action);
       const comment = ruleCommentKey(parsed.comment);
 
       if (parsed.action !== "add" && parsed.ruleAction !== undefined) {
@@ -375,7 +480,7 @@ const manageMangleRuleTool: ToolDefinition = {
         }
 
         const ruleAction = checkAddParams(parsed);
-        const existing = await findRuleByComment(context, MANGLE_PATH, comment);
+        const existing = await findRuleByComment(context, path, comment);
 
         if (existing) {
           // The action is compared when ruleAction is given or implied by a value
@@ -473,7 +578,7 @@ const manageMangleRuleTool: ToolDefinition = {
           };
         }
 
-        const created = await context.routerClient.create(MANGLE_PATH, body);
+        const created = await context.routerClient.create(path, body);
         log.info({ comment, id: created[".id"] }, "Mangle rule added");
 
         return {
@@ -483,7 +588,7 @@ const manageMangleRuleTool: ToolDefinition = {
       }
 
       if (parsed.action === "remove") {
-        const existing = await findRuleByComment(context, MANGLE_PATH, comment);
+        const existing = await findRuleByComment(context, path, comment);
         if (!existing) {
           return {
             content: `Mangle rule with comment "${comment}" does not exist. No changes made.`,
@@ -500,7 +605,7 @@ const manageMangleRuleTool: ToolDefinition = {
           };
         }
 
-        await context.routerClient.remove(MANGLE_PATH, id);
+        await context.routerClient.remove(path, id);
         log.info({ id, comment }, "Mangle rule removed");
 
         return {
@@ -511,7 +616,7 @@ const manageMangleRuleTool: ToolDefinition = {
 
       if (parsed.action === "enable" || parsed.action === "disable") {
         const wantDisabled = parsed.action === "disable";
-        const existing = await findRuleByComment(context, MANGLE_PATH, comment);
+        const existing = await findRuleByComment(context, path, comment);
 
         if (!existing) {
           throw new MikroMCPError({
@@ -547,7 +652,7 @@ const manageMangleRuleTool: ToolDefinition = {
           };
         }
 
-        await context.routerClient.update(MANGLE_PATH, id, {
+        await context.routerClient.update(path, id, {
           disabled: wantDisabled ? "true" : "false",
         });
         log.info({ id, comment, action: parsed.action }, "Mangle rule toggled");
@@ -564,7 +669,7 @@ const manageMangleRuleTool: ToolDefinition = {
         message: `Unknown action: ${parsed.action as string}`,
         recoverability: {
           retryable: false,
-          suggestedAction: "Use one of: add, remove, enable, disable.",
+          suggestedAction: "Use one of: add, remove, enable, disable, move.",
         },
       });
     } catch (err) {
