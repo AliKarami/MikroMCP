@@ -273,77 +273,77 @@ function routersFromEnv(env: NodeJS.ProcessEnv, host: string): unknown {
   };
 }
 
+/** What a reload would do to the registry, by router id. Field names only, never values. */
+export interface RouterChanges {
+  added: string[];
+  removed: string[];
+  changed: { id: string; fields: string[] }[];
+  unchanged: string[];
+}
+
+interface ResolvedRouters {
+  routers: Map<string, RouterConfig>;
+  source: RouterSource;
+  ignored: string[];
+}
+
 export class RouterRegistry {
   private routers: Map<string, RouterConfig>;
   private routerSource: RouterSource = "none";
-  private readonly ignored: string[] = [];
+  private ignored: string[] = [];
 
   /**
    * Routers come from the first source that is set: MIKROMCP_ROUTERS (inline
    * YAML/JSON), the file at `configPath`, then the flat MIKROMCP_ROUTER_*
    * variables. `env` is injectable so tests need not touch process.env.
    */
-  constructor(configPath: string, env: NodeJS.ProcessEnv = process.env) {
-    this.routers = new Map();
+  constructor(
+    private readonly configPath: string,
+    private readonly env: NodeJS.ProcessEnv = process.env,
+  ) {
+    const resolved = RouterRegistry.resolve(configPath, env, true);
+    this.routers = resolved.routers;
+    this.routerSource = resolved.source;
+    this.ignored = resolved.ignored;
+  }
 
-    const inline = nonEmpty(env[INLINE_ROUTERS_VAR]);
-    const fileExists = existsSync(configPath);
-    const envHost = nonEmpty(env[ENV_ROUTER_HOST_VAR]);
-
-    if (inline !== undefined) {
-      this.routerSource = "inline";
-      if (fileExists) this.ignored.push(`config file ${configPath}`);
-      if (envHost !== undefined) this.ignored.push(`${ENV_ROUTER_PREFIX}_* variables`);
-    } else if (fileExists) {
-      this.routerSource = "file";
-      if (envHost !== undefined) this.ignored.push(`${ENV_ROUTER_PREFIX}_* variables`);
-    } else if (envHost !== undefined) {
-      this.routerSource = "env";
+  /**
+   * Resolve the routers again from the same sources and report what differs
+   * from what is loaded. Nothing changes until `commit()`; a file that is
+   * invalid, or that was loaded at startup and is gone now, throws here, so
+   * the loaded routers stay in force. The environment is the one the server
+   * started with, so MIKROMCP_ROUTERS and MIKROMCP_ROUTER_* are not re-read.
+   */
+  prepareReload(): { changes: RouterChanges; commit: () => void } {
+    const resolved = RouterRegistry.resolve(this.configPath, this.env, false);
+    if (this.routerSource === "file" && resolved.source !== "file") {
+      throw new Error(`Router config file not found at ${this.configPath}`);
     }
-
-    if (this.ignored.length > 0) {
-      log.warn(
-        { source: this.routerSource, ignored: this.ignored },
-        `Routers come from ${this.describeSource(configPath)}; ignoring ${this.ignored.join(" and ")}`,
-      );
-    }
-    if (envHost === undefined) {
-      const stray = ENV_ROUTER_SETTINGS.filter((name) => nonEmpty(env[name]) !== undefined);
-      if (stray.length > 0) {
-        log.warn(
-          { variables: stray },
-          `${stray.join(", ")} set without ${ENV_ROUTER_HOST_VAR}; they are ignored`,
-        );
+    const next = resolved.routers;
+    const changes: RouterChanges = { added: [], removed: [], changed: [], unchanged: [] };
+    for (const [id, config] of next) {
+      const current = this.routers.get(id);
+      if (!current) {
+        changes.added.push(id);
+        continue;
       }
-    }
-
-    if (inline !== undefined) {
-      this.load(parseInlineRouters(inline), `in ${INLINE_ROUTERS_VAR}`, dottedPath);
-    } else if (fileExists) {
-      this.load(
-        parse(readFileSync(configPath, "utf-8")) as unknown,
-        `at ${configPath}`,
-        dottedPath,
+      const fields = [...new Set([...Object.keys(current), ...Object.keys(config)])].filter(
+        (key) =>
+          JSON.stringify((current as unknown as Record<string, unknown>)[key]) !==
+          JSON.stringify((config as unknown as Record<string, unknown>)[key]),
       );
-    } else if (envHost !== undefined) {
-      this.load(routersFromEnv(env, envHost), `from ${ENV_ROUTER_PREFIX}_* variables`, envVarPath);
-    } else {
-      log.warn(
-        { configPath },
-        `Router config file not found and neither ${INLINE_ROUTERS_VAR} nor ` +
-          `${ENV_ROUTER_HOST_VAR} is set; starting with empty registry`,
-      );
-      return;
+      if (fields.length > 0) changes.changed.push({ id, fields });
+      else changes.unchanged.push(id);
     }
-
-    log.info(
-      {
-        source: this.routerSource,
-        ...(this.routerSource === "file" ? { configPath } : {}),
-        count: this.routers.size,
+    for (const id of this.routers.keys()) if (!next.has(id)) changes.removed.push(id);
+    return {
+      changes,
+      commit: () => {
+        this.routers = next;
+        this.routerSource = resolved.source;
+        this.ignored = resolved.ignored;
       },
-      "Loaded routers",
-    );
+    };
   }
 
   /** Where the routers came from; see {@link RouterSource}. */
@@ -356,8 +356,8 @@ export class RouterRegistry {
     return this.ignored;
   }
 
-  private describeSource(configPath: string): string {
-    switch (this.routerSource) {
+  private static describeSource(source: RouterSource, configPath: string): string {
+    switch (source) {
       case "inline":
         return INLINE_ROUTERS_VAR;
       case "file":
@@ -367,7 +367,94 @@ export class RouterRegistry {
     }
   }
 
-  private load(
+  /** Pick the source, read and validate it. `announce` is false on a reload, which would only repeat the startup warnings. */
+  private static resolve(
+    configPath: string,
+    env: NodeJS.ProcessEnv,
+    announce: boolean,
+  ): ResolvedRouters {
+    const routers = new Map<string, RouterConfig>();
+    const ignored: string[] = [];
+    let source: RouterSource = "none";
+
+    const inline = nonEmpty(env[INLINE_ROUTERS_VAR]);
+    const fileExists = existsSync(configPath);
+    const envHost = nonEmpty(env[ENV_ROUTER_HOST_VAR]);
+
+    if (inline !== undefined) {
+      source = "inline";
+      if (fileExists) ignored.push(`config file ${configPath}`);
+      if (envHost !== undefined) ignored.push(`${ENV_ROUTER_PREFIX}_* variables`);
+    } else if (fileExists) {
+      source = "file";
+      if (envHost !== undefined) ignored.push(`${ENV_ROUTER_PREFIX}_* variables`);
+    } else if (envHost !== undefined) {
+      source = "env";
+    }
+
+    if (announce && ignored.length > 0) {
+      log.warn(
+        { source, ignored },
+        `Routers come from ${RouterRegistry.describeSource(source, configPath)}; ignoring ${ignored.join(" and ")}`,
+      );
+    }
+    if (announce && envHost === undefined) {
+      const stray = ENV_ROUTER_SETTINGS.filter((name) => nonEmpty(env[name]) !== undefined);
+      if (stray.length > 0) {
+        log.warn(
+          { variables: stray },
+          `${stray.join(", ")} set without ${ENV_ROUTER_HOST_VAR}; they are ignored`,
+        );
+      }
+    }
+
+    if (inline !== undefined) {
+      RouterRegistry.load(
+        routers,
+        parseInlineRouters(inline),
+        `in ${INLINE_ROUTERS_VAR}`,
+        dottedPath,
+      );
+    } else if (fileExists) {
+      RouterRegistry.load(
+        routers,
+        parse(readFileSync(configPath, "utf-8")) as unknown,
+        `at ${configPath}`,
+        dottedPath,
+      );
+    } else if (envHost !== undefined) {
+      RouterRegistry.load(
+        routers,
+        routersFromEnv(env, envHost),
+        `from ${ENV_ROUTER_PREFIX}_* variables`,
+        envVarPath,
+      );
+    } else {
+      if (announce) {
+        log.warn(
+          { configPath },
+          `Router config file not found and neither ${INLINE_ROUTERS_VAR} nor ` +
+            `${ENV_ROUTER_HOST_VAR} is set; starting with empty registry`,
+        );
+      }
+      return { routers, source, ignored };
+    }
+
+    if (announce) {
+      log.info(
+        {
+          source,
+          ...(source === "file" ? { configPath } : {}),
+          count: routers.size,
+        },
+        "Loaded routers",
+      );
+    }
+    return { routers, source, ignored };
+  }
+
+  private static load(
+    routers: Map<string, RouterConfig>,
     data: unknown,
     origin: string,
     pathName: (path: (string | number)[]) => string,
@@ -422,7 +509,7 @@ export class RouterRegistry {
           "SSH private key is readable by group or others — restrict it to the owner (chmod 0600).",
         );
       }
-      this.routers.set(id, routerConfig);
+      routers.set(id, routerConfig);
     }
   }
 

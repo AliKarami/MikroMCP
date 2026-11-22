@@ -3,7 +3,8 @@ import { createServerFactory } from "../mcp/server.js";
 import { connectStdio } from "../mcp/transports/stdio.js";
 import { connectHttp } from "../mcp/transports/http.js";
 import { IdentityRegistry } from "../config/identity-registry.js";
-import { getStdioIdentity, withIdentity } from "../middleware/auth.js";
+import { reloadConfig } from "../config/reload.js";
+import { getStdioIdentity } from "../middleware/auth.js";
 import { createLogger } from "../observability/logger.js";
 import { pruneSnapshots, rotateAndPruneJournal } from "../domain/snapshot/retention.js";
 
@@ -30,11 +31,18 @@ export async function runServe(): Promise<void> {
     }
   }
 
-  const { makeServer, pool } = createServerFactory(config, identityRegistry);
+  const { makeServer, pool, circuitBreakers, registry } = createServerFactory(
+    config,
+    identityRegistry,
+  );
 
   if (config.transport === "stdio") {
+    // Fail at startup if the named identity is missing. The identity shapes
+    // the tool list sent to the client, but it is not bound to the session:
+    // the executor looks it up again on every call, so a reload can demote or
+    // remove it.
     const stdioIdentity = getStdioIdentity(config.stdioIdentity, identityRegistry);
-    await withIdentity(stdioIdentity, () => connectStdio(makeServer(stdioIdentity)));
+    await connectStdio(makeServer(stdioIdentity));
     log.info("MikroMCP server running via stdio");
   } else if (config.transport === "http") {
     await connectHttp(
@@ -61,6 +69,26 @@ export async function runServe(): Promise<void> {
     pool.closeAll();
     process.exit(0);
   };
+
+  // Windows has no SIGHUP; there reload_config is the way.
+  if (process.platform !== "win32") {
+    process.on("SIGHUP", () => {
+      try {
+        reloadConfig({
+          routerRegistry: registry,
+          identityRegistry,
+          pool,
+          circuitBreakers,
+          config,
+        });
+      } catch (err) {
+        log.error(
+          { err },
+          "SIGHUP: configuration not reloaded; the running configuration is unchanged",
+        );
+      }
+    });
+  }
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);

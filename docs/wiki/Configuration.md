@@ -82,6 +82,12 @@ maintenanceWindows:
 
 ---
 
+### Reloading without a restart
+
+Edits to `routers.yaml` and `identities.yaml` take effect without restarting the server, so a changed `host` does not drop the MCP connection. Send the server process `SIGHUP` (`kill -HUP <pid>`, or `docker kill --signal=HUP <container>`), or call the `reload_config` tool (admin or superadmin; `dryRun: true` previews). Both files are checked before anything changes: if either is invalid, the running configuration stays in force and the server logs, or the tool returns, the problem. A file that was loaded at startup and has since been deleted is refused rather than treated as empty.
+
+A reload drops the pooled connection and circuit breaker of every changed or removed router, so the next call connects with the new settings, and clears cached identity tokens, so a revoked or rotated token stops working at once. It reports router ids and changed field names, never values. `MIKROMCP_*` environment variables, including the HTTP port, are read at startup only; changing those needs a restart. With a read-only mount (`:ro`), edit the file on the host. Windows has no `SIGHUP`; use `reload_config`. Routers given in `MIKROMCP_ROUTERS` or the `MIKROMCP_ROUTER_*` variables are fixed with the environment, so a reload does not change them; a `routers.yaml` that appears later takes over from the `MIKROMCP_ROUTER_*` variables, as it would at startup. The tool list a stdio client received when it connected does not change on a reload; what each call may do does. Over stdio, the identity named by `MIKROMCP_STDIO_IDENTITY` is looked up on every call, so a reload that demotes it or narrows its `allowedToolPatterns` applies to the running session at once; if the reload removes it, every later call fails with `STDIO_IDENTITY_NOT_FOUND` until the identity is added back and reloaded.
+
 ## SwOS switches
 
 > **Experimental.** MikroTik does not document the `.b` API; MikroMCP's schema was reverse-engineered from a **CSS610-8P-2S+ on SwOS Lite 2.21** (the device's own `engine.js` plus live captures). Full SwOS config writes are verified on a **CSS318-16G-2S+ on SwOS 2.19** (export, apply and read-back). Reads degrade gracefully on other models — unrecognised keys simply surface under `_raw`. Writes are model- and firmware-specific: preview with `dryRun` and keep the `rollback_change` journal ID before applying one to hardware this has not been tested on.

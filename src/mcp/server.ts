@@ -45,6 +45,7 @@ export function createServerFactory(
   makeServer: (identity?: Identity) => McpServer;
   pool: ConnectionPool;
   circuitBreakers: Map<string, CircuitBreaker>;
+  registry: RouterRegistry;
 } {
   const registry = new RouterRegistry(config.configPath);
   const pool = new ConnectionPool();
@@ -77,5 +78,5 @@ export function createServerFactory(
     return server;
   };
 
-  return { makeServer, pool, circuitBreakers };
+  return { makeServer, pool, circuitBreakers, registry };
 }

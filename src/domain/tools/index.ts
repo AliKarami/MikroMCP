@@ -6,6 +6,7 @@ import { ipv6Tools } from "./ipv6-tools.js";
 import { dhcpTools } from "./dhcp-tools.js";
 import { routeTools } from "./route-tools.js";
 import { firewallTools } from "./firewall-tools.js";
+import { configReloadTools } from "./config-reload-tools.js";
 import { diagnosticTools } from "./diagnostic-tools.js";
 import { systemOpsTools } from "./system-ops-tools.js";
 import { bridgeTools } from "./bridge-tools.js";
@@ -54,7 +55,14 @@ import { createFleetTools } from "./fleet-tools.js";
  * checks it), so a new tool file must be added to one of them.
  */
 const baseToolsets = {
-  system: [...systemTools, ...systemOpsTools, ...packagesTools, ...upgradeTools, ...backupTools],
+  system: [
+    ...systemTools,
+    ...systemOpsTools,
+    ...packagesTools,
+    ...upgradeTools,
+    ...backupTools,
+    ...configReloadTools,
+  ],
   automation: [...scriptsTools, ...schedulerTools, ...filesTools],
   containers: [...containerTools, ...containerConfigTools],
   interfaces: [...interfaceTools, ...bridgeTools, ...vlanTools, ...interfaceListTools],

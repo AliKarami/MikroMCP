@@ -467,6 +467,22 @@ describe("executeToolCall", () => {
     expect(result.content[0].text).toContain("fleet-ok");
   });
 
+  it("skipRouterContext — the handler gets the identity registry (reload_config needs it)", async () => {
+    let seen: unknown;
+    const tool = makeReadTool(
+      async (_params, context) => {
+        seen = context.identityRegistry;
+        return { content: "ok", structuredContent: {} };
+      },
+      { skipRouterContext: true },
+    );
+    const deps = makeDeps();
+
+    await executeToolCall(tool, {}, deps);
+
+    expect(seen).toBe(deps.identityRegistry);
+  });
+
   describe("skipRouterContext — allowedToolPatterns", () => {
     function scoped(patterns: string[]) {
       return {
@@ -502,6 +518,75 @@ describe("executeToolCall", () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content[0].text).toContain("fleet-ok");
+    });
+  });
+
+  describe("stdio identity follows a reload", () => {
+    function stdioDeps(identities: Identity[]) {
+      const state = { identities };
+      const deps = makeDeps({
+        identityRegistry: {
+          getIdentities: () => state.identities,
+        } as unknown as ToolExecutorDeps["identityRegistry"],
+      });
+      (deps.config as { stdioIdentity?: string }).stdioIdentity = "ci";
+      return { deps, state };
+    }
+    const ci = (role: Identity["role"], allowedToolPatterns: string[] = []): Identity => ({
+      id: "ci",
+      role,
+      allowedRouters: [],
+      allowedToolPatterns,
+    });
+
+    it("uses the identity as it is on each call, not as it was at startup", async () => {
+      const handler = vi.fn().mockResolvedValue({ content: "ok", structuredContent: {} });
+      const tool = makeReadTool(handler, { name: "get_thing" });
+      const { deps, state } = stdioDeps([ci("admin")]);
+
+      const before = await executeToolCall(tool, { routerId: "r1" }, deps);
+      expect(before.isError).toBeFalsy();
+
+      state.identities = [ci("readonly", ["list_*"])];
+      const after = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+      expect(after.isError).toBe(true);
+      expect(after.content[0].text).toContain("TOOL_NOT_ALLOWED");
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("fails closed once the identity is removed", async () => {
+      const handler = vi.fn().mockResolvedValue({ content: "ok", structuredContent: {} });
+      const tool = makeReadTool(handler);
+      const { deps, state } = stdioDeps([ci("admin")]);
+      expect((await executeToolCall(tool, { routerId: "r1" }, deps)).isError).toBeFalsy();
+
+      state.identities = [];
+      const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("STDIO_IDENTITY_NOT_FOUND");
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports a removed identity for a write tool instead of throwing from the error path", async () => {
+      const handler = vi.fn();
+      const tool = makeReadTool(handler, {
+        name: "test_write",
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      });
+      const { deps } = stdioDeps([]);
+
+      const result = await executeToolCall(tool, { routerId: "r1" }, deps);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("STDIO_IDENTITY_NOT_FOUND");
+      expect(handler).not.toHaveBeenCalled();
     });
   });
 

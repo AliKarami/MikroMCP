@@ -31,19 +31,74 @@ interface StoredIdentity {
   allowedToolPatterns: string[];
 }
 
+/** What a reload would do to the identities, by id. */
+export interface IdentityChanges {
+  added: string[];
+  removed: string[];
+  changed: string[];
+  unchanged: string[];
+}
+
 export class IdentityRegistry {
-  private identities: StoredIdentity[] = [];
+  private identities: StoredIdentity[];
   // Maps sha256(token) → resolved identity id. Avoids a bcrypt compare against
   // every identity on each authenticated request after the first match.
   private readonly tokenCache = new Map<string, string>();
 
-  constructor(configPath: string) {
+  // A file that was there when loaded and is gone now is more likely a mistake
+  // than a decision; one that never existed (stdio setups) stays optional.
+  private fileExisted: boolean;
+
+  constructor(private readonly configPath: string) {
+    this.fileExisted = existsSync(configPath);
+    this.identities = IdentityRegistry.load(configPath, true);
+  }
+
+  /**
+   * Read and validate the identity file again and report which identities differ
+   * from what is loaded. Nothing changes until `commit()`; a missing or invalid
+   * file throws here, so the identities in force stay in force.
+   */
+  prepareReload(): {
+    changes: IdentityChanges;
+    hasLimitedRoles: boolean;
+    commit: () => void;
+  } {
+    const next = IdentityRegistry.load(this.configPath, !this.fileExisted);
+    const current = new Map(this.identities.map((i) => [i.id, i]));
+    const changes: IdentityChanges = { added: [], removed: [], changed: [], unchanged: [] };
+    for (const identity of next) {
+      const before = current.get(identity.id);
+      if (!before) changes.added.push(identity.id);
+      else if (JSON.stringify(before) !== JSON.stringify(identity)) {
+        changes.changed.push(identity.id);
+      } else changes.unchanged.push(identity.id);
+    }
+    const kept = new Set(next.map((i) => i.id));
+    for (const id of current.keys()) if (!kept.has(id)) changes.removed.push(id);
+    return {
+      changes,
+      hasLimitedRoles: next.some((i) => i.role === "readonly" || i.role === "operator"),
+      commit: () => {
+        this.identities = next;
+        this.fileExisted = existsSync(this.configPath);
+        // A token revoked or re-roled by the new file must not stay cached.
+        this.tokenCache.clear();
+      },
+    };
+  }
+
+  private static load(configPath: string, missingIsEmpty: boolean): StoredIdentity[] {
+    const identities: StoredIdentity[] = [];
     if (!existsSync(configPath)) {
+      if (!missingIsEmpty) {
+        throw new Error(`Identity config file not found at ${configPath}`);
+      }
       log.warn(
         { configPath },
         "Identity config file not found; starting with empty registry (stdio callers do not require it)",
       );
-      return;
+      return identities;
     }
 
     const raw = readFileSync(configPath, "utf-8");
@@ -58,7 +113,7 @@ export class IdentityRegistry {
     }
 
     for (const [id, config] of Object.entries(result.data.identities)) {
-      this.identities.push({
+      identities.push({
         id,
         tokenHash: config.token,
         role: config.role as Role,
@@ -67,7 +122,8 @@ export class IdentityRegistry {
       });
     }
 
-    log.info({ count: this.identities.length }, "Loaded identities from config");
+    log.info({ count: identities.length }, "Loaded identities from config");
+    return identities;
   }
 
   getIdentities(): Identity[] {
@@ -95,13 +151,18 @@ export class IdentityRegistry {
       this.tokenCache.delete(cacheKey);
     }
 
-    for (const stored of this.identities) {
+    const loaded = this.identities;
+    for (const stored of loaded) {
       const match = await bcrypt.compare(token, stored.tokenHash);
       if (match) {
+        // A reload during the compare may have revoked this identity: look the
+        // token up again in the list now in force instead of caching the old answer.
+        if (loaded !== this.identities) return this.findIdentityByToken(token);
         this.tokenCache.set(cacheKey, stored.id);
         return toIdentity(stored);
       }
     }
+    if (loaded !== this.identities) return this.findIdentityByToken(token);
     return null;
   }
 }
