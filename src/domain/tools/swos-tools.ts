@@ -521,11 +521,22 @@ function isRouterTimeout(err: unknown): boolean {
   return err instanceof MikroMCPError && err.category === ErrorCategory.ROUTER_TIMEOUT;
 }
 
+/** The switch did not answer at all: the only read-back failure that means it moved away. */
+function isSilentSwitch(err: unknown): boolean {
+  return (
+    err instanceof MikroMCPError &&
+    (err.category === ErrorCategory.ROUTER_TIMEOUT ||
+      err.category === ErrorCategory.ROUTER_UNREACHABLE)
+  );
+}
+
 /**
  * After a write the switch did not answer, read the endpoint back through the
  * same client. A switch that still answers there either took the values
  * (`confirmed`) or did not (`mismatch`); one that does not answer may have
- * moved away from this client's address (`unreachable`).
+ * moved away from this client's address (`unreachable`). Any other read-back
+ * failure (authentication, an HTTP error, an undecodable answer) says nothing
+ * about where the switch is, so it is rethrown.
  */
 async function readBackMatches(
   client: SwosClient,
@@ -537,8 +548,9 @@ async function readBackMatches(
   let current: DecodedBlob;
   try {
     current = await client.readBlob(endpoint);
-  } catch {
-    return "unreachable";
+  } catch (err) {
+    if (isSilentSwitch(err)) return "unreachable";
+    throw err;
   }
   const same = modified.every(
     ([key]) => JSON.stringify(current[targetKeys[key]]) === JSON.stringify(wire[targetKeys[key]]),
@@ -842,8 +854,29 @@ const writeSwosBlobTool: ToolDefinition = {
         if (managementNames.size === 0 || !isRouterTimeout(err)) throw err;
         // The switch may stop answering this client because the write moved
         // it, so a timeout here is the expected outcome, not a failed write.
-        const landed = await readBackMatches(client, parsed.endpoint, wire, modified, targetKeys);
-        if (landed === "mismatch") throw err;
+        let landed: Awaited<ReturnType<typeof readBackMatches>>;
+        try {
+          landed = await readBackMatches(client, parsed.endpoint, wire, modified, targetKeys);
+        } catch (readErr) {
+          // The read-back failed for a reason that says nothing about the write:
+          // keep the original timeout, which is still true, and log the other.
+          log.warn({ err: readErr }, "Could not read sys.b back after a write that timed out");
+          throw err;
+        }
+        if (landed === "mismatch") {
+          throw new MikroMCPError({
+            category: ErrorCategory.ROUTER_ERROR,
+            code: "SWOS_WRITE_NOT_APPLIED",
+            message: `The switch did not answer the ${parsed.endpoint} write, and reading it back shows the previous values: the write was not applied.`,
+            details: { routerId: context.routerId, endpoint: parsed.endpoint },
+            recoverability: {
+              retryable: true,
+              suggestedAction:
+                "Nothing changed, so retrying the write is safe. If it keeps failing, check get_swos_status.",
+            },
+            cause: err,
+          });
+        }
         if (landed === "unreachable") {
           return {
             content:
