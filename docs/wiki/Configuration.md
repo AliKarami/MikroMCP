@@ -265,7 +265,7 @@ The toolset names:
 | `system` | System status and clock, reboot, `run_command`, packages, upgrade, backup and export |
 | `automation` | Scripts, scheduler jobs, files |
 | `containers` | Containers and their config, envs and mounts |
-| `interfaces` | Interfaces, bridges and bridge ports, VLANs, interface lists |
+| `interfaces` | Interfaces, bridges, bridge ports and the bridge VLAN table, VLANs, interface lists |
 | `wireless` | WiFi interfaces and clients |
 | `ip` | IPv4 and IPv6 addresses, IPv6 neighbors, DHCPv6 clients, pools, IP services, DNS |
 | `dhcp` | DHCP leases, servers and clients |
