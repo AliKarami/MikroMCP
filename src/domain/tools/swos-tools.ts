@@ -517,6 +517,47 @@ function managementWarnings(names: Set<string>, after: Record<string, unknown>):
   return warnings;
 }
 
+function isRouterTimeout(err: unknown): boolean {
+  return err instanceof MikroMCPError && err.category === ErrorCategory.ROUTER_TIMEOUT;
+}
+
+/** The switch did not answer at all: the only read-back failure that means it moved away. */
+function isSilentSwitch(err: unknown): boolean {
+  return (
+    err instanceof MikroMCPError &&
+    (err.category === ErrorCategory.ROUTER_TIMEOUT ||
+      err.category === ErrorCategory.ROUTER_UNREACHABLE)
+  );
+}
+
+/**
+ * After a write the switch did not answer, read the endpoint back through the
+ * same client. A switch that still answers there either took the values
+ * (`confirmed`) or did not (`mismatch`); one that does not answer may have
+ * moved away from this client's address (`unreachable`). Any other read-back
+ * failure (authentication, an HTTP error, an undecodable answer) says nothing
+ * about where the switch is, so it is rethrown.
+ */
+async function readBackMatches(
+  client: SwosClient,
+  endpoint: string,
+  wire: DecodedBlob,
+  modified: [string, { from: unknown; to: unknown }][],
+  targetKeys: Record<string, string>,
+): Promise<"confirmed" | "mismatch" | "unreachable"> {
+  let current: DecodedBlob;
+  try {
+    current = await client.readBlob(endpoint);
+  } catch (err) {
+    if (isSilentSwitch(err)) return "unreachable";
+    throw err;
+  }
+  const same = modified.every(
+    ([key]) => JSON.stringify(current[targetKeys[key]]) === JSON.stringify(wire[targetKeys[key]]),
+  );
+  return same ? "confirmed" : "mismatch";
+}
+
 /**
  * Resolve a field definition by decoded name or raw wire key. A raw key the
  * blob contains wins over a field of the same name: on full SwOS `ip` is the
@@ -806,7 +847,57 @@ const writeSwosBlobTool: ToolDefinition = {
         };
       }
 
-      const response = await client.writeBlob(parsed.endpoint, wire);
+      let response: string;
+      try {
+        response = await client.writeBlob(parsed.endpoint, wire);
+      } catch (err) {
+        if (managementNames.size === 0 || !isRouterTimeout(err)) throw err;
+        // The switch may stop answering this client because the write moved
+        // it, so a timeout here is the expected outcome, not a failed write.
+        let landed: Awaited<ReturnType<typeof readBackMatches>>;
+        try {
+          landed = await readBackMatches(client, parsed.endpoint, wire, modified, targetKeys);
+        } catch (readErr) {
+          // The read-back failed for a reason that says nothing about the write:
+          // keep the original timeout, which is still true, and log the other.
+          log.warn({ err: readErr }, "Could not read sys.b back after a write that timed out");
+          throw err;
+        }
+        if (landed === "mismatch") {
+          throw new MikroMCPError({
+            category: ErrorCategory.ROUTER_ERROR,
+            code: "SWOS_WRITE_NOT_APPLIED",
+            message: `The switch did not answer the ${parsed.endpoint} write, and reading it back shows the previous values: the write was not applied.`,
+            details: { routerId: context.routerId, endpoint: parsed.endpoint },
+            recoverability: {
+              retryable: true,
+              suggestedAction:
+                "Nothing changed, so retrying the write is safe. If it keeps failing, check get_swos_status.",
+            },
+            cause: err,
+          });
+        }
+        if (landed === "unreachable") {
+          return {
+            content:
+              `Sent ${parsed.endpoint} to ${context.routerId}:\n${diff}\n` +
+              `${warningText}\n` +
+              "The switch did not answer. That is expected when a write changes how it is reached, so the write has probably landed, but it is not confirmed. " +
+              "If the address changed, update the router's host in routers.yaml; then check with get_swos_status.\n" +
+              "The pre-write blob was snapshotted — undo with rollback_change using this call's journal ID, once the switch answers again.",
+            structuredContent: {
+              routerId: context.routerId,
+              endpoint: parsed.endpoint,
+              action: "written_unverified",
+              dryRun: false,
+              changes,
+              warnings,
+              compatibility,
+            },
+          };
+        }
+        response = "(no answer; confirmed by reading the endpoint back)";
+      }
       return {
         content:
           `Wrote ${parsed.endpoint} on ${context.routerId}:\n${diff}\n` +
