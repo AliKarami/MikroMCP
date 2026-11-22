@@ -786,6 +786,127 @@ describe("swosTools", () => {
       expect(warningsOf(result)).toEqual([]);
     });
 
+    describe("a write the switch does not answer (#144)", () => {
+      const timeout = () =>
+        new MikroMCPError({
+          category: ErrorCategory.ROUTER_TIMEOUT,
+          code: "SWOS_REQUEST_TIMEOUT",
+          message:
+            "SwOS POST request to /sys.b timed out after 15000ms — the write may still have been applied",
+          recoverability: { retryable: false },
+        });
+      const real = { dryRun: false, includeManagement: true };
+
+      it("reports written_unverified when the switch then stops answering", async () => {
+        const swos = makeSwosClient();
+        swos.client.writeBlob.mockRejectedValue(timeout());
+        swos.client.readBlob.mockRejectedValue(timeout());
+
+        const result = await writeTool.handler(
+          sysParams({ ip: "192.0.2.10" }, real),
+          makeContext(swos),
+        );
+
+        const sc = result.structuredContent as Record<string, unknown>;
+        expect(sc.action).toBe("written_unverified");
+        expect(sc.dryRun).toBe(false);
+        expect(result.content).toContain("not confirmed");
+        expect(result.content).toContain("routers.yaml");
+      });
+
+      it("reports written when the read-back shows the new values", async () => {
+        const swos = makeSwosClient();
+        swos.client.writeBlob.mockImplementation(async (endpoint: string, wire: unknown) => {
+          swos.written.push({ endpoint, body: dumpBlob(wire) });
+          throw timeout();
+        });
+        swos.client.readBlob.mockImplementation(async () => parseWireBlob(swos.written[0].body));
+
+        const result = await writeTool.handler(
+          sysParams({ allow_from_vlan: 20 }, real),
+          makeContext(swos),
+        );
+
+        expect((result.structuredContent as Record<string, unknown>).action).toBe("written");
+      });
+
+      it("reports written_unverified when the read-back finds the switch unreachable", async () => {
+        const swos = makeSwosClient();
+        swos.client.writeBlob.mockRejectedValue(timeout());
+        swos.client.readBlob.mockRejectedValue(
+          new MikroMCPError({
+            category: ErrorCategory.ROUTER_UNREACHABLE,
+            code: "SWOS_UNREACHABLE",
+            message: "no route to the switch",
+            recoverability: { retryable: true, suggestedAction: "check the network" },
+          }),
+        );
+
+        const result = await writeTool.handler(
+          sysParams({ ip: "192.0.2.10" }, real),
+          makeContext(swos),
+        );
+
+        expect((result.structuredContent as Record<string, unknown>).action).toBe(
+          "written_unverified",
+        );
+      });
+
+      it("says the write was not applied when the read-back still shows the old values", async () => {
+        const swos = makeSwosClient();
+        swos.client.writeBlob.mockRejectedValue(timeout());
+
+        const err = await writeTool
+          .handler(sysParams({ allow_from_vlan: 20 }, real), makeContext(swos))
+          .catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(MikroMCPError);
+        expect(err).toMatchObject({
+          code: "SWOS_WRITE_NOT_APPLIED",
+          recoverability: { retryable: true },
+        });
+        expect((err as MikroMCPError).message).not.toContain("may still have been applied");
+      });
+
+      it.each([
+        [
+          "an authentication failure",
+          new MikroMCPError({
+            category: ErrorCategory.ROUTER_AUTH_FAILED,
+            code: "SWOS_AUTH_FAILED",
+            message: "bad credentials",
+            recoverability: { retryable: false, suggestedAction: "check the password" },
+          }),
+        ],
+        ["an HTTP error", new HttpError(500, "server error")],
+        ["a plain error", new Error("cannot decode the blob")],
+      ])("keeps the timeout error when the read-back fails with %s", async (_name, readErr) => {
+        const swos = makeSwosClient();
+        swos.client.writeBlob.mockRejectedValue(timeout());
+        swos.client.readBlob.mockRejectedValue(readErr);
+
+        await expect(
+          writeTool.handler(sysParams({ ip: "192.0.2.10" }, real), makeContext(swos)),
+        ).rejects.toMatchObject({
+          category: ErrorCategory.ROUTER_TIMEOUT,
+          code: "SWOS_REQUEST_TIMEOUT",
+        });
+      });
+
+      it("keeps the timeout error for a write that does not change how the switch is reached", async () => {
+        const swos = makeSwosClient();
+        swos.client.writeBlob.mockRejectedValue(timeout());
+
+        await expect(
+          writeTool.handler(
+            sysParams({ bridge_priority: 0x4000 }, { dryRun: false }),
+            makeContext(swos),
+          ),
+        ).rejects.toMatchObject({ category: ErrorCategory.ROUTER_TIMEOUT });
+        expect(swos.client.readBlob).not.toHaveBeenCalled();
+      });
+    });
+
     it("lists the field notes in list_swos_endpoints", async () => {
       const result = await listTool.handler({ routerId: "switch-01" }, makeContext());
       const sys = (
